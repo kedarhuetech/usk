@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-label="General business discount offer marketing template preview">
+  <defs>
+    <clipPath id="offerPhoto">
+      <rect x="0" y="0" width="1080" height="1080"/>
+    </clipPath>
+    <linearGradient id="offerOverlay" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0b1220" stop-opacity=".82"/>
+      <stop offset=".52" stop-color="#0b1220" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#0b1220" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#offerPhoto)">
+    <image href="/marketing-studio/templates/business-discount-offer-01-photo.jpg" x="-70" y="0" width="1220" height="1080" preserveAspectRatio="xMidYMid slice"/>
+  </g>
+  <rect width="1080" height="1080" fill="url(#offerOverlay)"/>
+  <rect x="86" y="86" width="908" height="908" rx="52" fill="none" stroke="#ffffff" stroke-width="4" opacity=".5"/>
+  <text x="126" y="190" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="900" letter-spacing="4">LIMITED OFFER</text>
+  <text x="126" y="390" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="96" font-weight="700">Save Big</text>
+  <text x="126" y="474" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="80" font-style="italic">This Week</text>
+  <rect x="126" y="548" width="250" height="126" rx="28" fill="#f97316"/>
+  <text x="251" y="626" text-anchor="middle" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900">30% OFF</text>
+  <text x="126" y="748" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="29" font-weight="800">On selected services and products.</text>
+  <rect x="126" y="830" width="286" height="70" rx="35" fill="#ffffff"/>
+  <text x="269" y="875" text-anchor="middle" fill="#0b1220" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="900">Claim Offer</text>
+  <rect x="126" y="928" width="70" height="70" rx="16" fill="#ffffff"/>
+  <text x="214" y="970" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="900">Your Business</text>
+</svg>

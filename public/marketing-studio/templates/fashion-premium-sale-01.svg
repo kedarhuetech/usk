@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-label="Premium Fashion Sale marketing template preview">
+  <defs>
+    <clipPath id="heroClip">
+      <rect x="474" y="0" width="606" height="1080"/>
+    </clipPath>
+    <linearGradient id="imageShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#201811" stop-opacity="0.08"/>
+      <stop offset="0.7" stop-color="#201811" stop-opacity="0"/>
+      <stop offset="1" stop-color="#201811" stop-opacity="0.28"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1f2937" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+
+  <rect width="1080" height="1080" fill="#f7f1e8"/>
+  <g clip-path="url(#heroClip)">
+    <image href="/marketing-studio/templates/fashion-premium-sale-01-photo.jpg" x="430" y="-10" width="720" height="1100" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="474" y="0" width="606" height="1080" fill="url(#imageShade)"/>
+  </g>
+
+  <rect x="0" y="0" width="560" height="1080" fill="#fbf6ee"/>
+  <rect x="44" y="68" width="12" height="748" rx="6" fill="#c7834c"/>
+
+  <g filter="url(#softShadow)">
+    <rect x="90" y="70" width="92" height="92" rx="18" fill="#fffaf3" stroke="#d8c6af" stroke-width="2"/>
+    <path d="M124 123h24v-32h-24v32Zm-10 10h44v10h-44v-10Zm18-20h8v10h-8v-10Zm0-14h8v8h-8v-8Zm18 14h8v10h-8v-10Z" fill="#7a8f54"/>
+  </g>
+
+  <text x="202" y="112" fill="#2a2118" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">Your Boutique</text>
+  <text x="202" y="151" fill="#7a6450" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">+91 90000 00000</text>
+
+  <text x="90" y="306" fill="#211812" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700">
+    <tspan x="90" dy="0">End of</tspan>
+    <tspan x="90" dy="82">Season Sale</tspan>
+  </text>
+
+  <text x="92" y="496" fill="#8a5839" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800">
+    <tspan x="92" dy="0">Up to 40% Off</tspan>
+    <tspan x="92" dy="42">Selected Styles</tspan>
+  </text>
+
+  <circle cx="168" cy="651" r="76" fill="#2a2118" stroke="#d7b98d" stroke-width="5"/>
+  <text x="168" y="642" fill="#fff8ef" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="900">
+    <tspan x="168" dy="0">LIMITED</tspan>
+    <tspan x="168" dy="28">TIME</tspan>
+  </text>
+
+  <rect x="92" y="778" width="308" height="72" rx="36" fill="#c7834c"/>
+  <text x="246" y="824" fill="#ffffff" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="900">Shop the Collection</text>
+
+  <line x1="92" y1="918" x2="462" y2="918" stroke="#d8c6af" stroke-width="2"/>
+  <text x="92" y="989" fill="#2a2118" font-family="Inter, Arial, sans-serif" font-size="21" font-weight="800">www.mycompany.com</text>
+</svg>

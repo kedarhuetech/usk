@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-label="Service business promotion marketing template preview">
+  <defs>
+    <clipPath id="servicePhoto">
+      <rect x="70" y="92" width="490" height="896" rx="42"/>
+    </clipPath>
+    <linearGradient id="serviceBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eef7f4"/>
+      <stop offset="1" stop-color="#dbe8ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#serviceBg)"/>
+  <g clip-path="url(#servicePhoto)">
+    <image href="/marketing-studio/templates/service-business-promo-01-photo.jpg" x="42" y="58" width="560" height="960" preserveAspectRatio="xMidYMid slice"/>
+  </g>
+  <rect x="70" y="92" width="490" height="896" rx="42" fill="none" stroke="#ffffff" stroke-width="12"/>
+  <rect x="600" y="116" width="386" height="108" rx="28" fill="#ffffff"/>
+  <rect x="628" y="142" width="56" height="56" rx="14" fill="#1f6f63"/>
+  <text x="704" y="176" fill="#12312e" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="900">Your Service Co.</text>
+  <text x="704" y="204" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="700">+91 90000 00000</text>
+  <text x="604" y="386" fill="#0f172a" font-family="Georgia, 'Times New Roman', serif" font-size="72" font-weight="700">Reliable Service</text>
+  <text x="604" y="450" fill="#1f6f63" font-family="Georgia, 'Times New Roman', serif" font-size="68" font-style="italic">At Your Doorstep</text>
+  <text x="608" y="532" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">Repair, maintenance and support for busy homes and businesses.</text>
+  <rect x="608" y="632" width="286" height="72" rx="36" fill="#1f6f63"/>
+  <text x="751" y="678" text-anchor="middle" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="900">Book a Visit</text>
+  <path d="M616 796h334" stroke="#a7c7bf" stroke-width="3"/>
+  <text x="608" y="860" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="900">Fast booking • Trusted team • Clear pricing</text>
+</svg>

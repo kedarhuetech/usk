@@ -1,0 +1,25 @@
+<svg width="1080" height="1080" viewBox="0 0 1080 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1080" height="1080" fill="#8A1538"/>
+  <rect x="40" y="40" width="1000" height="1000" rx="42" fill="#A41D42"/>
+  <path d="M70 760C225 668 354 674 482 747C622 827 761 836 1010 684V1040H70V760Z" fill="#F97316"/>
+  <path d="M76 724C222 647 370 658 505 728C652 804 780 794 1004 662" stroke="#FFD89A" stroke-width="18" stroke-linecap="round" opacity=".55"/>
+  <circle cx="845" cy="247" r="162" fill="#FDBA74" opacity=".28"/>
+  <circle cx="836" cy="247" r="108" fill="#FFE7B8" opacity=".22"/>
+  <path d="M792 244c0-31 25-56 56-56s56 25 56 56-25 56-56 56-56-25-56-56Z" fill="#F8E6C6"/>
+  <path d="M835 193c-11 20-10 44 4 62 17 22 48 28 72 14-10 28-36 48-67 48-40 0-72-32-72-72 0-25 13-46 33-59 9-6 21-2 30 7Z" fill="#C2410C"/>
+  <path d="M185 302h492" stroke="#F8E6C6" stroke-width="5" stroke-linecap="round"/>
+  <path d="M185 326h382" stroke="#F8E6C6" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+  <text x="120" y="444" fill="#FFF8ED" font-family="Georgia, serif" font-size="92" font-weight="700">Festival</text>
+  <text x="120" y="534" fill="#FFF8ED" font-family="Georgia, serif" font-size="92" font-weight="700">Offer Poster</text>
+  <text x="124" y="606" fill="#FFD89A" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="800" letter-spacing="2">LOCKED ARTWORK TEST TEMPLATE</text>
+  <rect x="118" y="648" width="290" height="78" rx="39" fill="#FFF8ED"/>
+  <text x="263" y="700" text-anchor="middle" fill="#8A1538" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900">Visit Us Today</text>
+  <g opacity=".55">
+    <path d="M905 525c-33 0-60 27-60 60s27 60 60 60 60-27 60-60-27-60-60-60Zm0 28c18 0 32 14 32 32s-14 32-32 32-32-14-32-32 14-32 32-32Z" fill="#FFF8ED"/>
+    <path d="M785 585h72M953 585h72M905 465v72M905 633v72" stroke="#FFF8ED" stroke-width="14" stroke-linecap="round"/>
+  </g>
+  <rect x="72" y="72" width="128" height="128" rx="28" fill="#FFF8ED" opacity=".25"/>
+  <rect x="220" y="86" width="450" height="84" rx="18" fill="#FFF8ED" opacity=".14"/>
+  <rect x="110" y="740" width="860" height="150" rx="28" fill="#000000" opacity=".16"/>
+  <text x="540" y="972" text-anchor="middle" fill="#FFF8ED" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" opacity=".76">Personalize logo, business name and heading only</text>
+</svg>

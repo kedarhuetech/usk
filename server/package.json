@@ -1,0 +1,24 @@
+{
+  "name": "vyapar-ui-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "seed:whatsapp-marketing": "node scripts/seedWhatsAppMarketingTemplates.js",
+    "migrate:growth-fields": "node scripts/migrateBusinessGrowthRecordFields.js",
+    "db:views": "node scripts/createBusinessGrowthViews.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "googleapis": "^174.0.1",
+    "multer": "^2.4.0",
+    "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}

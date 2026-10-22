@@ -1,0 +1,42 @@
+{
+  "defaultOverlayConfig": {
+    "logo": { "x": 8, "y": 7, "width": 14, "height": 14 },
+    "businessName": { "x": 23, "y": 8.5, "width": 42, "fontSize": 4.2, "color": "#163c2b", "weight": 700, "align": "left" },
+    "contactNumber": { "x": 23, "y": 14, "width": 42, "fontSize": 2.9, "color": "#36584a", "weight": 600, "align": "left" },
+    "additionalText": { "x": 10, "y": 78, "width": 78, "fontSize": 4.4, "color": "#ffffff", "weight": 700, "align": "center" }
+  },
+  "templates": [
+    { "id": "sankranti", "title": "Makar Sankranti", "imageFile": "sankranti.jpeg", "category": "Greetings", "subcategory": "Festival" },
+    { "id": "holi", "title": "Holi", "imageFile": "holi.jpeg", "category": "Greetings", "subcategory": "Festival" },
+    { "id": "GC", "title": "Ganesh Chaturthi", "imageFile": "Ganesh Chaturthi.jpg", "category": "Greetings", "subcategory": "Festival" },
+    { "id": "Gc2", "title": "Ganesh Chaturti", "imageFile": "Ganesh chaturti2.jpg", "category": "Greetings", "subcategory": "Festival" },
+    { "id": "whatsapp-yoga-wellness-01", "title": "Yoga Wellness Class", "imageFile": "Yoga Flow Wellness Class - Made with PosterMyWall.jpg", "category": "Greetings", "subcategory": "Fitness" },
+    {
+      "id": "whatsapp-fitness-gym-01",
+      "title": "Personal Training Fitness Gym",
+      "imageFile": "Personal Training Fitness Gym - Made with PosterMyWall.jpg",
+      "category": "Offers",
+      "subcategory": "Fitness",
+      "overlayConfig": {
+        "logo": { "x": 7, "y": 73, "width": 15, "height": 15 },
+        "businessName": { "x": 25, "y": 74, "width": 45, "fontSize": 4.4, "color": "#ffffff", "weight": 800, "align": "left" },
+        "contactNumber": { "x": 25, "y": 80, "width": 45, "fontSize": 3, "color": "#f4f4f5", "weight": 600, "align": "left" },
+        "additionalText": { "x": 10, "y": 14, "width": 58, "fontSize": 4.8, "color": "#fef08a", "weight": 800, "align": "left" }
+      }
+    },
+    { "id": "diwali", "title": "happy diwali", "imageFile": "diwali.jpg", "category": "Greetings", "subcategory": "Festival" },
+    {
+      "id": "whatsapp-school-admission-01",
+      "title": "Modern School Admission",
+      "imageFile": "Modern School Admission Trifold Back - Made with PosterMyWall.jpg",
+      "category": "Business",
+      "subcategory": "Education",
+      "overlayConfig": {
+        "logo": { "x": 72, "y": 8, "width": 14, "height": 14 },
+        "businessName": { "x": 12, "y": 72, "width": 52, "fontSize": 4.3, "color": "#0f172a", "weight": 800, "align": "left" },
+        "contactNumber": { "x": 12, "y": 78, "width": 52, "fontSize": 3, "color": "#1e293b", "weight": 700, "align": "left" },
+        "additionalText": { "x": 12, "y": 84, "width": 68, "fontSize": 3.6, "color": "#be123c", "weight": 800, "align": "left" }
+      }
+    }
+  ]
+}

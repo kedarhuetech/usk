@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080" role="img" aria-label="Customer review trust poster marketing template preview">
+  <defs>
+    <clipPath id="reviewPortrait">
+      <rect x="650" y="160" width="318" height="432" rx="40"/>
+    </clipPath>
+    <linearGradient id="reviewBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#e8eef8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="1080" fill="url(#reviewBg)"/>
+  <rect x="80" y="114" width="920" height="852" rx="48" fill="#ffffff"/>
+  <rect x="118" y="152" width="84" height="84" rx="20" fill="#1a1f71"/>
+  <text x="226" y="203" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="900">Your Business</text>
+  <text x="226" y="238" fill="#64748b" font-family="Inter, Arial, sans-serif" font-size="20" font-weight="700">Trusted by local customers</text>
+  <g clip-path="url(#reviewPortrait)">
+    <image href="/marketing-studio/templates/customer-review-trust-01-photo.jpg" x="610" y="126" width="390" height="500" preserveAspectRatio="xMidYMid slice"/>
+  </g>
+  <text x="126" y="438" fill="#1a1f71" font-family="Georgia, 'Times New Roman', serif" font-size="126" font-weight="700">“</text>
+  <text x="126" y="520" fill="#0f172a" font-family="Georgia, 'Times New Roman', serif" font-size="58" font-weight="700">
+    <tspan x="126" dy="0">Loved the service,</tspan>
+    <tspan x="126" dy="68">quality and care.</tspan>
+  </text>
+  <text x="130" y="678" fill="#475569" font-family="Inter, Arial, sans-serif" font-size="28" font-weight="800">A polished review post for building trust and confidence.</text>
+  <g fill="#f59e0b">
+    <text x="130" y="770" font-family="Inter, Arial, sans-serif" font-size="40" font-weight="900">★★★★★</text>
+  </g>
+  <rect x="130" y="838" width="310" height="62" rx="31" fill="#1a1f71"/>
+  <text x="285" y="878" text-anchor="middle" fill="#ffffff" font-family="Inter, Arial, sans-serif" font-size="23" font-weight="900">Share Your Feedback</text>
+  <text x="650" y="650" fill="#0f172a" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="900">+91 90000 00000</text>
+</svg>
