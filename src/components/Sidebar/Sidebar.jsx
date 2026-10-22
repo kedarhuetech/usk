@@ -9,9 +9,11 @@ import {
   sidebarTrial,
 } from "./SidebarData";
 import SidebarItem from "./SidebarItem";
+import { getCompanyProfile } from "../../services/companyProfileStorage";
 
 function Sidebar() {
   const navigate = useNavigate();
+  const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef(null);
@@ -55,6 +57,12 @@ function Sidebar() {
     }
   }, [searchOpen]);
 
+  useEffect(() => {
+    const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
+    window.addEventListener("storage", refreshCompanyProfile);
+    return () => window.removeEventListener("storage", refreshCompanyProfile);
+  }, []);
+
   const openSearch = () => {
     setQuery("");
     setSearchOpen(true);
@@ -75,7 +83,7 @@ function Sidebar() {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{sidebarBrand.name}</p>
-            <p className="truncate text-xs text-white/60">{sidebarBrand.companyName}</p>
+            <p className="truncate text-xs text-white/60">{companyProfile.companyName}</p>
           </div>
         </div>
 
@@ -104,6 +112,7 @@ function Sidebar() {
           </div>
           <button
             type="button"
+            onClick={() => navigate("/plans-pricing")}
             className="mt-2 flex w-full items-center justify-between rounded-md bg-[#1A1F71] px-2.5 py-2 text-[13px] font-semibold text-white"
           >
             <span className="flex items-center gap-2">
@@ -121,7 +130,7 @@ function Sidebar() {
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1A1F71]">
             <CompanyIcon className="h-4 w-4" />
           </span>
-          <span className="min-w-0 flex-1 truncate">{companySwitcher.label}</span>
+          <span className="min-w-0 flex-1 truncate">{companyProfile.companyName}</span>
           <FiChevronRight className="h-4 w-4 text-white/60" />
         </button>
       </div>

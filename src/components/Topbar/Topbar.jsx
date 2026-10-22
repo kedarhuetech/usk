@@ -1,5 +1,7 @@
 import { FiBell, FiHelpCircle, FiRefreshCw, FiSearch, FiUser } from "react-icons/fi";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { getCompanyProfile } from "../../services/companyProfileStorage";
 
 const navItems = ["Company", "Help", "Versions", "Shortcuts"];
 const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purchase-bills/new"];
@@ -7,10 +9,17 @@ const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purcha
 export default function Topbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
   const openTransaction = (path) => {
     const state = transactionRoutes.includes(pathname) ? undefined : { from: pathname };
     navigate(path, state ? { state } : undefined);
   };
+
+  useEffect(() => {
+    const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
+    window.addEventListener("storage", refreshCompanyProfile);
+    return () => window.removeEventListener("storage", refreshCompanyProfile);
+  }, []);
 
   return (
     <header className="shrink-0 border-b border-slate-200 bg-white">
@@ -37,7 +46,7 @@ export default function Topbar() {
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span className="h-2 w-2 rounded-full bg-rose-500" />
           <span className="hidden text-sm font-medium text-slate-500 sm:block">
-            Enter Business Name
+            {companyProfile.companyName}
           </span>
           <div className="ml-3 hidden h-9 max-w-md flex-1 items-center gap-2 rounded-lg bg-slate-100 px-3 lg:flex">
             <FiSearch className="h-4 w-4 text-slate-400" />
