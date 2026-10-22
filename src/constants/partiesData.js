@@ -60,6 +60,7 @@ export const partyFormDefaults = {
   billingAddress: "",
   shippingAddress: "",
   openingBalance: "",
+  openingBalanceType: "to-receive",
   asOfDate: "",
   creditLimitType: "no-limit",
   creditLimit: "",

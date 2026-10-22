@@ -71,4 +71,9 @@ export function saveSaleInvoice(invoice) {
   return normalized;
 }
 
+export function deleteSaleInvoice(invoiceId) {
+  if (!canUseStorage()) return;
+  writeInvoices(readInvoices().filter((invoice) => invoice.id !== invoiceId && invoice.invoiceId !== invoiceId));
+}
+
 export const saleInvoicesStorageKey = SALE_INVOICES_KEY;
