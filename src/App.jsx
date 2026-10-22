@@ -20,6 +20,7 @@ import AddSale from "./pages/Sales/AddSale";
 import SalePreview from "./pages/Sales/SalePreview";
 import SaleInvoices from "./pages/Sales/SaleInvoices";
 import BarcodeGenerator from "./pages/Utilities/BarcodeGenerator";
+import PlansPricing from "./pages/PlansPricing/PlansPricing";
 import {
   DataDeletion,
   PrivacyPolicy,
@@ -86,6 +87,7 @@ function App() {
             path="utilities/barcode-generator"
             element={<BarcodeGenerator />}
           />
+          <Route path="plans-pricing" element={<PlansPricing />} />
           <Route path="reports" element={<ComingSoon />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
