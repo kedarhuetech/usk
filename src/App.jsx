@@ -19,6 +19,7 @@ import AddPurchase from "./pages/Purchase/AddPurchase";
 import AddSale from "./pages/Sales/AddSale";
 import SalePreview from "./pages/Sales/SalePreview";
 import SaleInvoices from "./pages/Sales/SaleInvoices";
+import EstimateQuotation from "./pages/Sales/EstimateQuotation";
 import BarcodeGenerator from "./pages/Utilities/BarcodeGenerator";
 import {
   DataDeletion,
@@ -72,6 +73,7 @@ function App() {
           </Route>
 
           <Route path="sales/sale-invoices" element={<SaleInvoices />} />
+          <Route path="sales/estimate-quotation" element={<EstimateQuotation />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
           <Route

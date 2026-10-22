@@ -43,6 +43,7 @@ import {
   saveBusinessPurchaseBill,
   saveBusinessSaleInvoice,
 } from "../../services/businessRecords";
+import { getParties } from "../../services/partiesStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 
 const termsAppliesTo = [
@@ -59,6 +60,11 @@ const defaultTerms = [
   { title: "Payment Due On Receipt", text: "Payment is due on receipt of this invoice." },
   { title: "Standard Terms", text: "Goods once sold will not be taken back without approval." },
 ];
+
+function currentLocalDate() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+}
 
 const purchaseShareActions = ["Share", "Print", "Save & New", "Save & Generate Barcode"];
 
@@ -263,6 +269,7 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
   const rootRef = useRef(null);
   const query = value.toLowerCase();
   const filtered = parties.filter((party) => `${party.name} ${party.phone}`.toLowerCase().includes(query));
+  const exactMatch = parties.some((party) => party.name.trim().toLowerCase() === value.trim().toLowerCase());
   useDismiss(open, rootRef, () => setOpen(false));
 
   return (
@@ -287,6 +294,7 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
           <button type="button" onClick={() => { setOpen(false); onAddParty(); }} className="mb-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
             <FiPlus /> Add Party
           </button>
+          {value.trim() && !exactMatch && <button type="button" onClick={() => { onChange(value.trim()); setOpen(false); }} className="mb-1 w-full rounded-md px-3 py-2 text-left text-[13px] text-slate-600 hover:bg-slate-50">Use new name: <span className="font-semibold text-slate-800">{value.trim()}</span></button>}
           <div className="max-h-36 overflow-y-auto">
             {filtered.length ? (
               filtered.map((party) => (
@@ -306,6 +314,10 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
       )}
     </div>
   );
+}
+
+function partyOption(party) {
+  return { id: party.id, name: party.partyName || party.name || "", phone: party.phone || "", balance: party.openingBalance || 0 };
 }
 
 function TransactionTabs({ tabs, activeTab, setActiveTab, addTab, closeTab }) {
@@ -377,37 +389,22 @@ function CustomerDetails({ saleType, form, errors, setField, config, parties = [
       <div className="grid gap-3 lg:grid-cols-[minmax(220px,300px)_180px] xl:max-w-2xl">
         <label>
           <span className="mb-1 block text-[13px] font-semibold text-slate-600">{isPurchase ? config.partyLabel : isCredit ? config.partyLabel : config.cashPartyLabel}</span>
-          {isPurchase ? (
-            <>
-              <PartyPicker
-                error={errors.customer}
-                value={form.customer}
-                parties={parties}
-                onAddParty={onAddParty}
-                onChange={(value) => {
-                  setField("customer", value);
-                  setField("partyBalance", "");
-                }}
-                onSelect={(party) => {
-                  setField("customer", party.name);
-                  setField("phone", party.phone);
-                  setField("partyBalance", party.balance);
-                }}
-              />
-              {form.partyBalance !== "" && <span className="mt-1 block text-xs font-semibold text-emerald-600">BAL: {form.partyBalance}</span>}
-            </>
-          ) : (
-            <div className="relative">
-              <TextInput
-                error={errors.customer}
-                value={form.customer}
-                onChange={(event) => setField("customer", event.target.value)}
-                placeholder={isCredit ? config.partyPlaceholder : config.cashPartyPlaceholder}
-                className="pr-10"
-              />
-              {isCredit && <FiChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-600" />}
-            </div>
-          )}
+          <PartyPicker
+            error={errors.customer}
+            value={form.customer}
+            parties={parties}
+            onAddParty={onAddParty}
+            onChange={(value) => {
+              setField("customer", value);
+              setField("partyBalance", "");
+            }}
+            onSelect={(party) => {
+              setField("customer", party.name);
+              setField("phone", party.phone);
+              setField("partyBalance", party.balance);
+            }}
+          />
+          {form.partyBalance !== "" && <span className="mt-1 block text-xs font-semibold text-emerald-600">BAL: {form.partyBalance}</span>}
         </label>
         <label>
           <span className="mb-1 block text-[13px] font-semibold text-slate-600">Phone No.</span>
@@ -839,7 +836,7 @@ function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOff
         <input readOnly value={totals.finalTotal.toFixed(2)} className="h-10 w-full max-w-56 rounded-md border border-slate-300 bg-white px-3 text-right text-[13px] font-bold outline-none" />
       </div>
       <div className="flex flex-wrap items-center justify-end gap-3">
-        <input type="checkbox" checked={receivedEnabled} onChange={(event) => setReceivedEnabled(event.target.checked)} className="h-4 w-4 accent-blue-600" />
+        <input type="checkbox" checked={receivedEnabled} onChange={(event) => { const checked = event.target.checked; setReceivedEnabled(checked); setReceivedAmount(checked ? totals.finalTotal.toFixed(2) : ""); }} className="h-4 w-4 accent-blue-600" />
         <span className="text-sm font-bold text-slate-700">Received</span>
         <input inputMode="decimal" disabled={!receivedEnabled} value={receivedAmount} onChange={(event) => setReceivedAmount(sanitizeDecimal(event.target.value))} className="h-10 w-full max-w-56 rounded-md border border-slate-300 bg-white px-3 text-right text-[13px] outline-none disabled:bg-slate-100" />
       </div>
@@ -1081,32 +1078,34 @@ function AddSale({ mode = "sale" }) {
   const location = useLocation();
   const config = transactionConfigs[mode] || transactionConfigs.sale;
   const isPurchase = config.type === "purchase";
+  const editInvoice = !isPurchase ? location.state?.editInvoice || null : null;
   const onlineOrderConversion = !isPurchase ? location.state?.onlineOrderConversion : null;
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
   const [tabs, setTabs] = useState([{ id: `${config.type}-1`, label: `${config.tabPrefix} #1` }]);
   const [activeTab, setActiveTab] = useState(`${config.type}-1`);
-  const [saleType, setSaleType] = useState("credit");
+  const [saleType, setSaleType] = useState(editInvoice?.saleType || "credit");
   const [rows, setRows] = useState(() => {
+    if (editInvoice?.rows?.length) return editInvoice.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
     if (!onlineOrderConversion?.items?.length) return [createRow(), createRow()];
     return onlineOrderConversion.items.map(createRowFromOrderItem);
   });
   const [items, setItems] = useState([]);
-  const [parties, setParties] = useState([]);
+  const [parties, setParties] = useState(() => getParties().map(partyOption).filter((party) => party.name));
   const [addItemRowId, setAddItemRowId] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [businessMode, setBusinessMode] = useState("");
   const [roundOff, setRoundOff] = useState(true);
-  const [roundOffValue, setRoundOffValue] = useState("");
-  const [receivedEnabled, setReceivedEnabled] = useState(false);
-  const [receivedAmount, setReceivedAmount] = useState("");
+  const [roundOffValue, setRoundOffValue] = useState(() => editInvoice?.totals?.roundOffAmount != null ? String(editInvoice.totals.roundOffAmount) : "");
+  const [receivedEnabled, setReceivedEnabled] = useState(() => Number(editInvoice?.totals?.received || 0) > 0);
+  const [receivedAmount, setReceivedAmount] = useState(() => editInvoice?.totals?.received != null ? String(editInvoice.totals.received) : "");
   const [billingType, setBillingType] = useState("Full Sale");
-  const [transactionId, setTransactionId] = useState(() => crypto.randomUUID());
-  const [files, setFiles] = useState({ image: "", document: "" });
+  const [transactionId, setTransactionId] = useState(() => editInvoice?.id || crypto.randomUUID());
+  const [files, setFiles] = useState(() => editInvoice?.files || { image: "", document: "" });
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
   const [termsTemplates, setTermsTemplates] = useState(defaultTerms);
-  const [business, setBusiness] = useState(initialBusiness);
+  const [business, setBusiness] = useState(() => editInvoice?.business || initialBusiness);
   const [uploadBillOpen, setUploadBillOpen] = useState(false);
   const [uploadAttentionOpen, setUploadAttentionOpen] = useState(false);
   const [uploadedBillFile, setUploadedBillFile] = useState("");
@@ -1118,7 +1117,7 @@ function AddSale({ mode = "sale" }) {
     billingAddress: onlineOrderConversion?.address || "",
     shippingAddress: onlineOrderConversion?.address || "",
     invoiceNumber: isPurchase ? "1" : "1",
-    invoiceDate: "2026-08-10",
+    invoiceDate: currentLocalDate(),
     stateOfSupply: "None",
     partyBalance: "",
     showTerms: false,
@@ -1129,6 +1128,8 @@ function AddSale({ mode = "sale" }) {
       ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
       : "",
     paymentType: "Cash",
+    ...(editInvoice?.form || {}),
+    invoiceDate: editInvoice?.form?.invoiceDate || currentLocalDate(),
   }));
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
@@ -1144,17 +1145,21 @@ function AddSale({ mode = "sale" }) {
       });
     loadBusinessParties()
       .then((records) => {
-        if (active) setParties(records.map((party) => ({
-          id: party.id,
-          name: party.partyName,
-          phone: party.phone || "",
-          balance: party.openingBalance || 0,
-        })));
+        if (active) {
+          const remoteParties = records.map(partyOption);
+          const localParties = getParties().map(partyOption);
+          const merged = new Map();
+          [...remoteParties, ...localParties].filter((party) => party.name).forEach((party) => {
+            const key = String(party.id || party.name).toLowerCase();
+            merged.set(key, party);
+          });
+          setParties([...merged.values()]);
+        }
       })
       .catch((error) => {
         if (active) setToast(error.message || "Could not load parties from MySQL.");
       });
-    (isPurchase ? nextPurchaseBillNumber() : nextSalesInvoiceNumber())
+    if (!editInvoice) (isPurchase ? nextPurchaseBillNumber() : nextSalesInvoiceNumber())
         .then((number) => {
           if (active) setForm((current) => ({ ...current, invoiceNumber: number }));
         })
@@ -1162,7 +1167,7 @@ function AddSale({ mode = "sale" }) {
           if (active) setToast(error.message || "Could not load invoice numbers from MySQL.");
         });
     return () => { active = false; };
-  }, [isPurchase]);
+  }, [isPurchase, editInvoice?.id]);
 
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
@@ -1240,7 +1245,7 @@ function AddSale({ mode = "sale" }) {
     setReceivedAmount("");
     setReceivedEnabled(false);
     setFiles({ image: "", document: "" });
-    setForm((current) => ({ ...current, invoiceNumber: String((Number(current.invoiceNumber) || 0) + 1), customer: "", phone: "", billingAddress: "", shippingAddress: "", partyBalance: "", showDescription: false, description: "", showTerms: false, termsTitle: "", terms: "", paymentType: "Cash" }));
+    setForm((current) => ({ ...current, invoiceNumber: String((Number(current.invoiceNumber) || 0) + 1), invoiceDate: currentLocalDate(), customer: "", phone: "", billingAddress: "", shippingAddress: "", partyBalance: "", showDescription: false, description: "", showTerms: false, termsTitle: "", terms: "", paymentType: "Cash" }));
     setToast(`Ready for a fresh ${config.title.toLowerCase()}.`);
   };
 
@@ -1255,6 +1260,24 @@ function AddSale({ mode = "sale" }) {
       return;
     }
     const invoice = buildInvoice();
+    if (editInvoice) {
+      try {
+        const key = "ledgerly:saleInvoiceUiActions.v1";
+        const current = JSON.parse(window.localStorage.getItem(key) || "{}");
+        const next = {
+          ...current,
+          edits: { ...(current.edits || {}), [invoice.id]: invoice },
+          history: [{ id: `${invoice.id}-${Date.now()}`, invoiceId: invoice.id, invoiceNumber: invoice.form.invoiceNumber, action: "View/Edit saved", at: new Date().toISOString() }, ...(current.history || [])],
+        };
+        window.localStorage.setItem(key, JSON.stringify(next));
+        sessionStorage.setItem(config.storageKey, JSON.stringify(invoice));
+        setToast("Sale updated in this browser.");
+        navigate(returnPath);
+      } catch (error) {
+        setToast(error.message || "Could not update this sale in local storage.");
+      }
+      return;
+    }
     let savedInvoice;
     try {
       savedInvoice = isPurchase
@@ -1346,7 +1369,7 @@ function AddSale({ mode = "sale" }) {
   return (
     <div className="min-h-full bg-slate-100">
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
-      <TransactionHeader title={config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
+      <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
       <CustomerDetails saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
       <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} />
 
@@ -1372,7 +1395,7 @@ function AddSale({ mode = "sale" }) {
             </button>
             {shareOpen && <ShareMenu actions={isPurchase ? purchaseShareActions : shareActions} onAction={handleShareAction} />}
           </div>
-          <Button onClick={saveSale} className="rounded-md bg-blue-600 px-10 py-2 text-[13px] text-white shadow-md hover:bg-blue-700"><FiSave /> Save</Button>
+          <Button onClick={saveSale} className="rounded-md bg-blue-600 px-10 py-2 text-[13px] text-white shadow-md hover:bg-blue-700"><FiSave /> {editInvoice ? "Update Sale" : "Save"}</Button>
         </div>
       </footer>
 
