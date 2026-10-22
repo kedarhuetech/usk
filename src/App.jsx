@@ -86,6 +86,7 @@ function App() {
             path="utilities/barcode-generator"
             element={<BarcodeGenerator />}
           />
+          <Route path="reports" element={<ComingSoon />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
       </Routes>
