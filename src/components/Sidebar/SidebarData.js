@@ -170,11 +170,7 @@ export const sidebarNavigation = [
         label: "Smart Ads",
         path: "/business-growth/smart-ads",
       },
-      {
-        id: "business-horoscope",
-        label: "Business Horoscope",
-        path: "/business-growth/business-horoscope",
-      },
+
     ],
   },
   {
@@ -253,16 +249,6 @@ export const sidebarNavigation = [
         path: "/utilities/import-items",
       },
       {
-        id: "set-up-my-business",
-        label: "Set Up My Business",
-        path: "/utilities/set-up-my-business",
-      },
-      {
-        id: "accountant-access",
-        label: "Accountant Access",
-        path: "/utilities/accountant-access",
-      },
-      {
         id: "barcode-generator",
         label: "Barcode Generator",
         path: "/utilities/barcode-generator",
@@ -283,11 +269,6 @@ export const sidebarNavigation = [
         path: "/utilities/import-parties",
       },
       {
-        id: "track-your-salesmen",
-        label: "Track Your Salesmen",
-        path: "/utilities/track-your-salesmen",
-      },
-      {
         id: "export-to-tally",
         label: "Export To Tally",
         path: "/utilities/export-to-tally",
@@ -301,11 +282,6 @@ export const sidebarNavigation = [
         id: "verify-my-data",
         label: "Verify My Data",
         path: "/utilities/verify-my-data",
-      },
-      {
-        id: "recycle-bin",
-        label: "Recycle Bin",
-        path: "/utilities/recycle-bin",
       },
     ],
   },
