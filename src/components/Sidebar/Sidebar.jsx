@@ -1,4 +1,6 @@
-import { FiChevronRight, FiZap } from "react-icons/fi";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FiChevronRight, FiZap, FiX } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 import {
   companySwitcher,
   sidebarBrand,
@@ -9,11 +11,63 @@ import {
 import SidebarItem from "./SidebarItem";
 
 function Sidebar() {
+  const navigate = useNavigate();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef(null);
   const SearchIcon = sidebarSearch.icon;
   const CompanyIcon = companySwitcher.icon;
 
+  const searchableItems = useMemo(
+    () =>
+      sidebarNavigation.flatMap((item) =>
+        item.path
+          ? [{ id: item.id, label: item.label, path: item.path }]
+          : (item.children || []).map((child) => ({
+              id: child.id,
+              label: child.label,
+              path: child.path,
+              parentLabel: item.label,
+            })),
+      ),
+    [],
+  );
+  const filteredItems = searchableItems.filter((item) =>
+    item.label.toLowerCase().includes(query.trim().toLowerCase()),
+  );
+
+  useEffect(() => {
+    const handleShortcut = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setQuery("");
+        setSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchOpen]);
+
+  const openSearch = () => {
+    setQuery("");
+    setSearchOpen(true);
+  };
+
+  const openSearchResult = (path) => {
+    setSearchOpen(false);
+    navigate(path);
+  };
+
   return (
-    <aside className="hidden h-screen w-52 shrink-0 flex-col bg-gradient-to-b from-[#1A1F71] to-[#14185D] text-white xl:w-56 lg:flex">
+    <>
+      <aside className="hidden h-screen w-52 shrink-0 flex-col bg-gradient-to-b from-[#1A1F71] to-[#14185D] text-white xl:w-56 lg:flex">
       <div className="shrink-0 px-3 py-3">
         <div className="mb-3 flex items-center gap-2.5 px-1">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-[#1A1F71]">
@@ -27,6 +81,7 @@ function Sidebar() {
 
         <button
           type="button"
+          onClick={openSearch}
           className="flex h-9 w-full items-center gap-2 rounded-lg bg-white/10 px-2.5 text-left text-[13px] text-white/80 hover:bg-white/15"
         >
           <SearchIcon className="h-4 w-4 shrink-0" />
@@ -70,7 +125,72 @@ function Sidebar() {
           <FiChevronRight className="h-4 w-4 text-white/60" />
         </button>
       </div>
-    </aside>
+      </aside>
+
+      {searchOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/40 px-4 pt-[12vh]"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSearchOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Open Anything"
+            className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl"
+          >
+            <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+              <SearchIcon className="h-5 w-5 shrink-0 text-slate-400" />
+              <input
+                ref={searchInputRef}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setSearchOpen(false);
+                  if (event.key === "Enter" && filteredItems[0]) {
+                    openSearchResult(filteredItems[0].path);
+                  }
+                }}
+                placeholder="Search pages"
+                aria-label="Search pages"
+                className="min-w-0 flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setSearchOpen(false)}
+                aria-label="Close search"
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <FiX className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto p-2">
+              {filteredItems.length > 0 ? (
+                filteredItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => openSearchResult(item.path)}
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-slate-100"
+                  >
+                    <span className="text-sm font-medium text-slate-700">{item.label}</span>
+                    {item.parentLabel && (
+                      <span className="text-xs text-slate-400">{item.parentLabel}</span>
+                    )}
+                  </button>
+                ))
+              ) : (
+                <p className="px-3 py-6 text-center text-sm text-slate-500">
+                  No pages found
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
