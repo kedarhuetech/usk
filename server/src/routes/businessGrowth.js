@@ -3,7 +3,19 @@ import multer from "multer";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
 
 const router = Router();
-const resources = new Set(["items", "online-store", "orders", "smart-ads", "designs", "google-profile", "whatsapp"]);
+const resources = new Set([
+  "items",
+  "online-store",
+  "orders",
+  "smart-ads",
+  "designs",
+  "google-profile",
+  "google-review-replies",
+  "whatsapp",
+  "parties",
+  "sales-invoices",
+  "purchase-bills",
+]);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 }, fileFilter: (_req, file, done) => done(null, ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype)) });
 const fail = (res, error) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Business Growth request failed." });
 
@@ -255,6 +267,22 @@ router.post("/assets", upload.single("file"), async (req, res) => {
     const id = crypto.randomUUID();
     await pool.execute("INSERT INTO business_growth_assets (id,business_id,entity_type,entity_id,original_filename,mime_type,size_bytes,data) VALUES (?,?,?,?,?,?,?,?)", [id, req.businessId, String(req.body.entityType || "asset").slice(0,64), req.body.entityId || null, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer]);
     res.status(201).json({ success: true, data: { id, name: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size, url: `/api/business-growth/assets/${id}` } });
+  } catch (error) { fail(res, error); }
+});
+router.get("/summary", async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT resource, outstanding_balance FROM business_data_financial_summary WHERE business_id = ?",
+      [req.businessId],
+    );
+    const totals = Object.fromEntries(rows.map((row) => [row.resource, Number(row.outstanding_balance || 0)]));
+    res.json({
+      success: true,
+      data: {
+        receivable: totals["sales-invoices"] || 0,
+        payable: totals["purchase-bills"] || 0,
+      },
+    });
   } catch (error) { fail(res, error); }
 });
 router.get("/:resource", async (req, res) => {

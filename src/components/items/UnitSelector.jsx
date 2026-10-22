@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
-import { units } from "../../constants/itemsData";
+import { getUnits } from "../../services/unitsStorage";
 
 function UnitSelector({ label, value, onChange, className = "" }) {
   const [open, setOpen] = useState(false);
@@ -8,7 +8,7 @@ function UnitSelector({ label, value, onChange, className = "" }) {
   const rootRef = useRef(null);
 
   const filteredUnits = useMemo(
-    () => units.filter((unit) => unit.toLowerCase().includes(query.toLowerCase())),
+    () => getUnits().filter((unit) => unit.toLowerCase().includes(query.toLowerCase())),
     [query]
   );
 

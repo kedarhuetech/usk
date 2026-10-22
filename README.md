@@ -7,8 +7,13 @@
 3. Open `server/database/schema.sql` in Workbench and execute it. It creates and selects the `vyapaar` database.
 4. If upgrading an existing database that has `business_growth_records.payload`, first run the schema to create the typed field table, then run `npm run migrate:growth-fields` from `server`. This copies each saved value into typed columns and nested field rows, and drops the old JSON payload column only after the copy succeeds. Back up the database before running the migration.
 5. If your database predates the tenant pagination index, run `server/database/migrations/2026_09_growth_tenant_page_index.sql` once in Workbench.
-6. Copy `server/.env.example` to `server/.env` and set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and an appropriate `DB_CONNECTION_LIMIT`. Never commit credentials. Total possible connections equal `DB_CONNECTION_LIMIT × number of API instances`, so size it against MySQL's connection capacity.
-7. The Business Growth API requires the authenticated business identifier in `X-Business-Id`. This project does not currently provide login/business authentication; configure `VITE_BUSINESS_ID` only for local development or add the header from your existing auth integration before deployment. Do not share a business identifier among unrelated tenants.
+6. The cleanup migration `server/database/migrations/2026_10_remove_unused_empty_tables.sql` removes legacy tables that the current backend does not use. Run it only after checking those tables have no data you need.
+7. Set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and an appropriate `DB_CONNECTION_LIMIT` in `server/.env`. Never commit credentials. Total possible connections equal `DB_CONNECTION_LIMIT × number of API instances`, so size it against MySQL's connection capacity.
+8. Demo and local runs use `demo-business` automatically when `VITE_BUSINESS_ID` is not set. All unauthenticated demo data is stored under that shared identifier. Before production, set a tenant-specific `VITE_BUSINESS_ID` and add authentication and authorization; do not use the shared demo identifier for unrelated tenants.
+
+### Current database coverage
+
+MySQL persists Parties, Items, Sale Invoices, Purchase Bills, and the active Business Growth records and poster catalog. Their nested form data is stored in typed fields and can be inspected through the section views in Workbench. Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most Utilities workflows are coming soon and have no implemented records to save yet. Items and sale invoices created before backend persistence are copied from local storage into MySQL when those records are first loaded.
 
 ### WhatsApp Marketing poster catalog
 
@@ -33,7 +38,7 @@ npm run dev
 
 ## Frontend
 
-Copy `.env.example` to `.env`, set `VITE_API_BASE_URL=https://9hdxck8r-5000.inc1.devtunnels.ms//api`, and set `VITE_BUSINESS_ID` to the business identifier your app uses. Then run:
+Set `VITE_API_BASE_URL=https://9hdxck8r-5000.inc1.devtunnels.ms//api` in `.env`. `VITE_BUSINESS_ID` is optional for the demo and defaults to `demo-business`; set it to the tenant identifier for production. Then run:
 
 ```bash
 npm install

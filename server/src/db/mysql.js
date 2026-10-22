@@ -21,7 +21,13 @@ export const pool = mysql.createPool({
 
 export function businessIdFromRequest(req) {
   const imageRead = req.method === "GET" && /^\/assets\/[^/]+$/.test(req.path);
-  const id = String(req.get("x-business-id") || (imageRead ? req.query.businessId : "") || "").trim();
+  const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
+  const id = String(
+    req.get("x-business-id") ||
+    (imageRead ? req.query.businessId : "") ||
+    (process.env.NODE_ENV !== "production" ? demoBusinessId : "") ||
+    ""
+  ).trim();
   if (!id || id.length > 64) throw Object.assign(new Error("A valid X-Business-Id header is required."), { status: 400 });
   return id;
 }

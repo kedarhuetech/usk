@@ -33,9 +33,16 @@ import {
   shareActions,
   stateOfSupplyOptions,
 } from "../../constants/salesData";
-import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
 import { markOnlineStoreOrderConverted } from "../../services/onlineStoreOrdersStorage";
-import { getNextSaleInvoiceNumber, saveSaleInvoice } from "../../services/salesStorage";
+import {
+  loadBusinessItems,
+  loadBusinessParties,
+  nextPurchaseBillNumber,
+  nextSalesInvoiceNumber,
+  saveBusinessItem,
+  saveBusinessPurchaseBill,
+  saveBusinessSaleInvoice,
+} from "../../services/businessRecords";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 
 const termsAppliesTo = [
@@ -96,11 +103,6 @@ const transactionConfigs = {
     saveMessage: "Purchase saved successfully.",
   },
 };
-
-const demoPurchaseParties = [
-  { id: "kartik", name: "kartik", phone: "7474858578", balance: 112 },
-  { id: "sssnjskks", name: "sssnjskks", phone: "4444771774", balance: 0 },
-];
 
 function createRow() {
   return {
@@ -1088,7 +1090,8 @@ function AddSale({ mode = "sale" }) {
     if (!onlineOrderConversion?.items?.length) return [createRow(), createRow()];
     return onlineOrderConversion.items.map(createRowFromOrderItem);
   });
-  const [items, setItems] = useState(() => getInventoryItems().map(saleItemFromInventory));
+  const [items, setItems] = useState([]);
+  const [parties, setParties] = useState([]);
   const [addItemRowId, setAddItemRowId] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -1098,6 +1101,7 @@ function AddSale({ mode = "sale" }) {
   const [receivedEnabled, setReceivedEnabled] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState("");
   const [billingType, setBillingType] = useState("Full Sale");
+  const [transactionId, setTransactionId] = useState(() => crypto.randomUUID());
   const [files, setFiles] = useState({ image: "", document: "" });
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
@@ -1113,7 +1117,7 @@ function AddSale({ mode = "sale" }) {
     phone: onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
     billingAddress: onlineOrderConversion?.address || "",
     shippingAddress: onlineOrderConversion?.address || "",
-    invoiceNumber: isPurchase ? "1" : getNextSaleInvoiceNumber(),
+    invoiceNumber: isPurchase ? "1" : "1",
     invoiceDate: "2026-08-10",
     stateOfSupply: "None",
     partyBalance: "",
@@ -1128,6 +1132,37 @@ function AddSale({ mode = "sale" }) {
   }));
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
+
+  useEffect(() => {
+    let active = true;
+    loadBusinessItems()
+      .then((records) => {
+        if (active) setItems(records.map(saleItemFromInventory));
+      })
+      .catch((error) => {
+        if (active) setToast(error.message || "Could not load items from MySQL.");
+      });
+    loadBusinessParties()
+      .then((records) => {
+        if (active) setParties(records.map((party) => ({
+          id: party.id,
+          name: party.partyName,
+          phone: party.phone || "",
+          balance: party.openingBalance || 0,
+        })));
+      })
+      .catch((error) => {
+        if (active) setToast(error.message || "Could not load parties from MySQL.");
+      });
+    (isPurchase ? nextPurchaseBillNumber() : nextSalesInvoiceNumber())
+        .then((number) => {
+          if (active) setForm((current) => ({ ...current, invoiceNumber: number }));
+        })
+        .catch((error) => {
+          if (active) setToast(error.message || "Could not load invoice numbers from MySQL.");
+        });
+    return () => { active = false; };
+  }, [isPurchase]);
 
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
@@ -1178,6 +1213,7 @@ function AddSale({ mode = "sale" }) {
   };
 
   const buildInvoice = () => ({
+    id: transactionId,
     saleType,
     transactionType: config.type,
     form,
@@ -1198,12 +1234,13 @@ function AddSale({ mode = "sale" }) {
   };
 
   const resetSale = () => {
+    setTransactionId(crypto.randomUUID());
     setRows([createRow(), createRow()]);
     setRoundOffValue("");
     setReceivedAmount("");
     setReceivedEnabled(false);
     setFiles({ image: "", document: "" });
-    setForm((current) => ({ ...current, customer: "", phone: "", billingAddress: "", shippingAddress: "", partyBalance: "", showDescription: false, description: "", showTerms: false, termsTitle: "", terms: "", paymentType: "Cash" }));
+    setForm((current) => ({ ...current, invoiceNumber: String((Number(current.invoiceNumber) || 0) + 1), customer: "", phone: "", billingAddress: "", shippingAddress: "", partyBalance: "", showDescription: false, description: "", showTerms: false, termsTitle: "", terms: "", paymentType: "Cash" }));
     setToast(`Ready for a fresh ${config.title.toLowerCase()}.`);
   };
 
@@ -1212,30 +1249,44 @@ function AddSale({ mode = "sale" }) {
     if (!localStorage.getItem("ledgerly:hidePurchaseUploadAttention")) setUploadAttentionOpen(true);
   };
 
-  const saveSale = () => {
+  const saveSale = async () => {
     if (!validate()) {
       setToast("Please fix highlighted fields.");
       return;
     }
     const invoice = buildInvoice();
-    const savedInvoice = isPurchase ? invoice : saveSaleInvoice(invoice);
-    if (onlineOrderConversion?.id && !onlineOrderConversion.convertedToSale) {
-      markOnlineStoreOrderConverted(onlineOrderConversion.id, {
-        saleId: savedInvoice.id,
-        invoiceId: savedInvoice.invoiceId,
-        invoiceNumber: savedInvoice.form?.invoiceNumber || savedInvoice.invoiceNumber,
-      });
+    let savedInvoice;
+    try {
+      savedInvoice = isPurchase
+        ? await saveBusinessPurchaseBill(invoice)
+        : await saveBusinessSaleInvoice(invoice);
+      if (onlineOrderConversion?.id && !onlineOrderConversion.convertedToSale) {
+        await markOnlineStoreOrderConverted(onlineOrderConversion.id, {
+          saleId: savedInvoice.id,
+          invoiceId: savedInvoice.invoiceId,
+          invoiceNumber: savedInvoice.form?.invoiceNumber || savedInvoice.invoiceNumber,
+        });
+      }
+    } catch (error) {
+      setToast(error.message || `Could not save ${config.title.toLowerCase()} to MySQL.`);
+      return;
     }
     sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
     setToast(config.saveMessage);
     if (!isPurchase) navigate("/sales/sale-invoices/preview", { state: { invoice: savedInvoice } });
   };
 
-  const handleShareAction = (action) => {
+  const handleShareAction = async (action) => {
     setShareOpen(false);
     if (action === "Save & Generate Barcode" && isPurchase) {
       if (!validate()) return;
-      const invoice = buildInvoice();
+      let invoice;
+      try {
+        invoice = await saveBusinessPurchaseBill(buildInvoice());
+      } catch (error) {
+        setToast(error.message || "Could not save purchase bill to MySQL.");
+        return;
+      }
       const barcodeItems = invoice.rows
         .filter((row) => row.item.trim() && toNumber(row.qty) > 0)
         .map((row) => ({
@@ -1260,7 +1311,15 @@ function AddSale({ mode = "sale" }) {
       return;
     }
     if (action === "Save & New") {
-      if (validate()) resetSale();
+      if (!validate()) return;
+      try {
+        const invoice = buildInvoice();
+        if (isPurchase) await saveBusinessPurchaseBill(invoice);
+        else await saveBusinessSaleInvoice(invoice);
+        resetSale();
+      } catch (error) {
+        setToast(error.message || `Could not save ${config.title.toLowerCase()} to MySQL.`);
+      }
       return;
     }
     if ((action === "Print" || action === "Share") && !isPurchase) {
@@ -1276,8 +1335,8 @@ function AddSale({ mode = "sale" }) {
     }
   };
 
-  const saveItemFromModal = (itemForm) => {
-    const savedInventoryItem = saveInventoryItem(itemForm);
+  const saveItemFromModal = async (itemForm) => {
+    const savedInventoryItem = await saveBusinessItem(itemForm);
     const newItem = saleItemFromInventory(savedInventoryItem);
     setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
     setRows((current) => current.map((row) => (row.id === addItemRowId ? syncDiscount({ ...row, item: newItem.name, unit: newItem.unit || row.unit, price: newItem.price || row.price, priceMode: newItem.priceMode || row.priceMode, taxRate: newItem.taxRate || row.taxRate, sourceItemId: newItem.id || "" }) : row)));
@@ -1288,7 +1347,7 @@ function AddSale({ mode = "sale" }) {
     <div className="min-h-full bg-slate-100">
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
       <TransactionHeader title={config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
-      <CustomerDetails saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={demoPurchaseParties} onAddParty={() => navigate("/parties/party-details")} />
+      <CustomerDetails saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
       <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} />
 
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">

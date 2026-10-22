@@ -11,7 +11,7 @@ import OnlineStore from "./pages/BusinessGrowth/OnlineStore/OnlineStore";
 import SmartAds from "./pages/BusinessGrowth/SmartAds/SmartAds";
 import WhatsAppMarketing from "./pages/BusinessGrowth/WhatsAppMarketing";
 import Home from "./pages/Home/Home";
-import AddItem from "./pages/Items/AddItem";
+import ItemsDashboard from "./pages/Items/ItemsDashboard";
 import VyaparNetwork from "./pages/Parties/VyaparNetwork";
 import PartyDetails from "./pages/Parties/PartyDetails";
 import WhatsAppConnect from "./pages/Parties/WhatsAppConnect";
@@ -38,7 +38,7 @@ function App() {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Home />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="items" element={<AddItem />} />
+          <Route path="items" element={<ItemsDashboard />} />
           <Route path="parties/party-details" element={<PartyDetails />} />
           <Route
             path="parties/whatsapp-connect"

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FiMapPin, FiPlus, FiSettings, FiUsers, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
+import { loadBusinessParties, saveBusinessParty } from "../../services/businessRecords";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -151,10 +152,12 @@ function AdditionalFieldsTab({ form, setAdditionalField }) {
   );
 }
 
-function AddPartyModal({ onClose }) {
+function AddPartyModal({ onClose, onSave }) {
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [showShipping, setShowShipping] = useState(false);
   const [form, setForm] = useState(partyFormDefaults);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
   const setAdditionalField = (index, field, value) => {
@@ -164,6 +167,27 @@ function AddPartyModal({ onClose }) {
         itemIndex === index ? { ...item, [field]: value } : item
       ),
     }));
+  };
+  const save = async (resetAfterSave = false) => {
+    if (!form.partyName.trim()) {
+      setError("Party name is required.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await onSave({ ...form, partyName: form.partyName.trim() });
+      if (resetAfterSave) {
+        setForm(partyFormDefaults);
+        setShowShipping(false);
+      } else {
+        onClose();
+      }
+    } catch (saveError) {
+      setError(saveError.message || "Could not save party to MySQL.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -211,8 +235,9 @@ function AddPartyModal({ onClose }) {
         </div>
 
         <footer className="flex justify-end gap-4 border-t border-slate-200 bg-white px-6 py-4">
-          <Button className="border border-blue-600 bg-white text-blue-600 hover:bg-blue-50">Save & New</Button>
-          <Button className="bg-blue-600 text-white shadow-sm hover:bg-blue-700">Save</Button>
+          {error && <p className="mr-auto self-center text-sm font-semibold text-red-600">{error}</p>}
+          <Button disabled={saving} onClick={() => save(true)} className="border border-blue-600 bg-white text-blue-600 hover:bg-blue-50">Save & New</Button>
+          <Button disabled={saving} onClick={() => save(false)} className="bg-blue-600 text-white shadow-sm hover:bg-blue-700">{saving ? "Saving…" : "Save"}</Button>
         </footer>
       </section>
     </div>
@@ -221,24 +246,50 @@ function AddPartyModal({ onClose }) {
 
 function PartyDetails() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [parties, setParties] = useState([]);
+  const [loadError, setLoadError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    loadBusinessParties()
+      .then((rows) => { if (active) setParties(rows); })
+      .catch((error) => { if (active) setLoadError(error.message || "Could not load parties from MySQL."); });
+    return () => { active = false; };
+  }, []);
+
+  const saveParty = async (party) => {
+    const saved = await saveBusinessParty(party);
+    setParties((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+    return saved;
+  };
 
   return (
     <div className="bg-slate-200 p-1">
       <Card className="flex min-h-[calc(100vh-7rem)] items-center justify-center p-6">
-        <div className="max-w-2xl text-center">
-          <h1 className="text-2xl font-bold text-slate-800">Party Details</h1>
-          <p className="mt-4 text-base leading-7 text-slate-500">
-            Add your customers and suppliers to manage your business easily.
-            <br />
-            Track payments and grow your business without any hassle.
-          </p>
-          <PartyIllustration />
-          <Button onClick={() => setIsModalOpen(true)} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700">
-            <FiPlus className="h-5 w-5" /> Add Your First Party
-          </Button>
-        </div>
+        {parties.length ? (
+          <div className="w-full self-stretch">
+            <div className="mb-5 flex items-center justify-between">
+              <div><h1 className="text-2xl font-bold text-slate-800">Party Details</h1><p className="mt-1 text-sm text-slate-500">Customers and suppliers saved in MySQL.</p></div>
+              <Button onClick={() => setIsModalOpen(true)} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus /> Add Party</Button>
+            </div>
+            {loadError && <p className="mb-3 text-sm text-red-600">{loadError}</p>}
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500"><tr>{["Party Name", "Phone", "Email", "GSTIN", "State"].map((label) => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+                <tbody>{parties.map((party) => <tr key={party.id} className="border-t border-slate-100"><td className="px-4 py-3 font-semibold text-slate-800">{party.partyName}</td><td className="px-4 py-3">{party.phone || "—"}</td><td className="px-4 py-3">{party.email || "—"}</td><td className="px-4 py-3">{party.gstin || "—"}</td><td className="px-4 py-3">{party.state || "—"}</td></tr>)}</tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-2xl text-center">
+            <h1 className="text-2xl font-bold text-slate-800">Party Details</h1>
+            <p className="mt-4 text-base leading-7 text-slate-500">Add your customers and suppliers to manage your business easily.<br />Track payments and grow your business without any hassle.</p>
+            {loadError ? <p className="mt-3 text-sm text-red-600">{loadError}</p> : <PartyIllustration />}
+            <Button onClick={() => setIsModalOpen(true)} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus className="h-5 w-5" /> Add Your First Party</Button>
+          </div>
+        )}
       </Card>
-      {isModalOpen && <AddPartyModal onClose={() => setIsModalOpen(false)} />}
+      {isModalOpen && <AddPartyModal onClose={() => setIsModalOpen(false)} onSave={saveParty} />}
     </div>
   );
 }

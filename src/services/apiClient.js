@@ -8,8 +8,8 @@ export async function apiRequest(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const businessId = import.meta.env.VITE_BUSINESS_ID;
-  if (businessId) headers.set("X-Business-Id", businessId);
+  const businessId = import.meta.env.VITE_BUSINESS_ID || "demo-business";
+  headers.set("X-Business-Id", businessId);
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   // Automatically prefixes /api if not present
@@ -66,4 +66,18 @@ export const businessGrowthApi = {
     if (entityId) body.append("entityId", entityId);
     return apiRequest("/business-growth/assets", { method: "POST", body });
   },
+};
+
+export const businessDataApi = {
+  summary: () => apiRequest("/business-data/summary"),
+  list: (resource) => apiRequest(`/business-data/${resource}`),
+  save: (resource, value) =>
+    apiRequest(`/business-data/${resource}`, {
+      method: "POST",
+      body: JSON.stringify(value),
+    }),
+  remove: (resource, id) =>
+    apiRequest(`/business-data/${resource}/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 };

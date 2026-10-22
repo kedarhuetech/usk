@@ -6,7 +6,7 @@ import Input from "../../components/Common/Input";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
 import { defaultCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
-import { saveInventoryItem } from "../../services/itemsStorage";
+import { saveBusinessItem } from "../../services/businessRecords";
 
 function SelectField({ label, value, options, onChange, className = "" }) {
   return (
@@ -501,7 +501,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     reader.readAsDataURL(file);
   };
 
-  const saveItem = (resetAfterSave = false) => {
+  const saveItem = async (resetAfterSave = false) => {
     const savedBatchRows = getFilledBatchRows(batchRows);
     const hasBatchStock = savedBatchRows.length > 0;
     const batchTotal = getBatchTotal(savedBatchRows);
@@ -523,8 +523,13 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
       minimumWholesaleQuantity: wholesaleVisible ? wholesale.minimumQty : "",
       batches: savedBatchRows,
     };
-    const savedItem = onSave ? onSave(itemPayload) : saveInventoryItem(itemPayload);
-    setSaveStatus(`${savedItem?.itemName || itemPayload.itemName || "Item"} saved.`);
+    try {
+      const savedItem = await (onSave ? onSave(itemPayload) : saveBusinessItem(itemPayload));
+      setSaveStatus(`${savedItem?.itemName || itemPayload.itemName || "Item"} saved to MySQL.`);
+    } catch (error) {
+      setSaveStatus(error.message || "Could not save item to MySQL.");
+      return;
+    }
     if (resetAfterSave && !isEditMode) {
       setForm(itemDefaults);
       setImage("");
@@ -642,7 +647,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
         </div>
 
         <footer className="flex justify-end gap-4 border-t border-slate-100 bg-white px-5 py-4">
-          {saveStatus && <p className="mr-auto self-center text-sm font-semibold text-emerald-600">{saveStatus}</p>}
+          {saveStatus && <p className={`mr-auto self-center text-sm font-semibold ${saveStatus.includes("Could not") ? "text-red-600" : "text-emerald-600"}`}>{saveStatus}</p>}
           {!isEditMode && <Button onClick={() => saveItem(true)} className="rounded-md border border-slate-200 bg-white text-slate-400">Save & New</Button>}
           <Button onClick={() => saveItem()} className="rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</Button>
         </footer>

@@ -25,7 +25,7 @@ export function normalizePersistedAssetUrls(value) {
   if (typeof value === "string") {
     const normalized = value.replace("/api/api/business-growth/assets/", "/api/business-growth/assets/");
     if (!normalized.includes("/api/business-growth/assets/") || normalized.includes("businessId=")) return normalized;
-    return `${normalized}${normalized.includes("?") ? "&" : "?"}businessId=${encodeURIComponent(import.meta.env.VITE_BUSINESS_ID || "")}`;
+    return `${normalized}${normalized.includes("?") ? "&" : "?"}businessId=${encodeURIComponent(import.meta.env.VITE_BUSINESS_ID || "demo-business")}`;
   }
   if (Array.isArray(value)) return value.map(normalizePersistedAssetUrls);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizePersistedAssetUrls(entry)]));
@@ -41,7 +41,7 @@ export async function persistInlineImages(value, entityType, entityId, cache = g
     const blob = await (await fetch(value)).blob();
     const file = new File([blob], `${entityId}-${Date.now()}.${mime.split("/")[1] || "png"}`, { type: mime });
     const asset = await businessGrowthApi.upload(file, entityType, entityId);
-    const url = `${API_BASE_URL.replace(/\/api\/?$/, "")}${asset.url}?businessId=${encodeURIComponent(import.meta.env.VITE_BUSINESS_ID || "")}`;
+    const url = `${API_BASE_URL.replace(/\/api\/?$/, "")}${asset.url}?businessId=${encodeURIComponent(import.meta.env.VITE_BUSINESS_ID || "demo-business")}`;
     rememberInlineAsset(cache, value, url);
     return url;
   }
