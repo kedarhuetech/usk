@@ -291,6 +291,12 @@ export const sidebarNavigation = [
     path: "/settings",
     icon: FiSettings,
   },
+  {
+    id: "plans-pricing",
+    label: "Plans & Pricing",
+    path: "/plans-pricing",
+    icon: FiGrid,
+  },
 ];
 
 export const sidebarTrial = {
