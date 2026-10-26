@@ -44,6 +44,8 @@ import {
   saveBusinessSaleInvoice,
 } from "../../services/businessRecords";
 import { getParties } from "../../services/partiesStorage";
+import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
+import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 
 const termsAppliesTo = [
@@ -1078,6 +1080,7 @@ function AddSale({ mode = "sale" }) {
   const location = useLocation();
   const config = transactionConfigs[mode] || transactionConfigs.sale;
   const isPurchase = config.type === "purchase";
+  const quotationConversion = !isPurchase ? location.state?.quotationConversion || null : null;
   const editInvoice = !isPurchase ? location.state?.editInvoice || null : null;
   const onlineOrderConversion = !isPurchase ? location.state?.onlineOrderConversion : null;
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
@@ -1086,10 +1089,11 @@ function AddSale({ mode = "sale" }) {
   const [saleType, setSaleType] = useState(editInvoice?.saleType || "credit");
   const [rows, setRows] = useState(() => {
     if (editInvoice?.rows?.length) return editInvoice.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
+    if (quotationConversion?.rows?.length) return quotationConversion.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
     if (!onlineOrderConversion?.items?.length) return [createRow(), createRow()];
     return onlineOrderConversion.items.map(createRowFromOrderItem);
   });
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState(() => quotationConversion ? getInventoryItems().map(saleItemFromInventory) : []);
   const [parties, setParties] = useState(() => getParties().map(partyOption).filter((party) => party.name));
   const [addItemRowId, setAddItemRowId] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -1112,21 +1116,22 @@ function AddSale({ mode = "sale" }) {
   const shareRef = useRef(null);
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
   const [form, setForm] = useState(() => ({
-    customer: onlineOrderConversion?.customerName || "",
-    phone: onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
-    billingAddress: onlineOrderConversion?.address || "",
-    shippingAddress: onlineOrderConversion?.address || "",
-    invoiceNumber: isPurchase ? "1" : "1",
-    invoiceDate: currentLocalDate(),
-    stateOfSupply: "None",
+    customer: quotationConversion?.customer || onlineOrderConversion?.customerName || "",
+    phone: quotationConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
+    billingAddress: quotationConversion?.billingAddress || onlineOrderConversion?.address || "",
+    shippingAddress: quotationConversion?.billingAddress || onlineOrderConversion?.address || "",
+    invoiceNumber: quotationConversion?.number || "1",
+    invoiceDate: quotationConversion?.date || currentLocalDate(),
+    stateOfSupply: quotationConversion?.state || "None",
     partyBalance: "",
     showTerms: false,
     termsTitle: "",
     terms: "",
-    showDescription: Boolean(onlineOrderConversion),
-    description: onlineOrderConversion
+    showDescription: Boolean(onlineOrderConversion || quotationConversion?.description),
+    description: quotationConversion?.description || (onlineOrderConversion
       ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
-      : "",
+      : ""),
+    terms: quotationConversion?.terms || "",
     paymentType: "Cash",
     ...(editInvoice?.form || {}),
     invoiceDate: editInvoice?.form?.invoiceDate || currentLocalDate(),
@@ -1136,6 +1141,10 @@ function AddSale({ mode = "sale" }) {
 
   useEffect(() => {
     let active = true;
+    if (quotationConversion) {
+      setItems(getInventoryItems().map(saleItemFromInventory));
+      return () => { active = false; };
+    }
     loadBusinessItems()
       .then((records) => {
         if (active) setItems(records.map(saleItemFromInventory));
@@ -1167,7 +1176,7 @@ function AddSale({ mode = "sale" }) {
           if (active) setToast(error.message || "Could not load invoice numbers from MySQL.");
         });
     return () => { active = false; };
-  }, [isPurchase, editInvoice?.id]);
+  }, [isPurchase, editInvoice?.id, quotationConversion]);
 
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
@@ -1260,6 +1269,18 @@ function AddSale({ mode = "sale" }) {
       return;
     }
     const invoice = buildInvoice();
+    if (quotationConversion) {
+      try {
+        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, quotationId: quotationConversion.id });
+        const estimates = JSON.parse(window.localStorage.getItem("ledgerly:estimateQuotations.v1") || "[]");
+        window.localStorage.setItem("ledgerly:estimateQuotations.v1", JSON.stringify(estimates.map((estimate) => estimate.id === quotationConversion.id ? { ...estimate, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id } : estimate)));
+        setToast("Sale invoice saved locally from this quotation.");
+        navigate(returnPath);
+      } catch (error) {
+        setToast(error.message || "Could not save the sale invoice locally.");
+      }
+      return;
+    }
     if (editInvoice) {
       try {
         const key = "ledgerly:saleInvoiceUiActions.v1";
@@ -1301,6 +1322,10 @@ function AddSale({ mode = "sale" }) {
 
   const handleShareAction = async (action) => {
     setShareOpen(false);
+    if (quotationConversion && action === "Save & New") {
+      await saveSale();
+      return;
+    }
     if (action === "Save & Generate Barcode" && isPurchase) {
       if (!validate()) return;
       let invoice;
@@ -1359,6 +1384,14 @@ function AddSale({ mode = "sale" }) {
   };
 
   const saveItemFromModal = async (itemForm) => {
+    if (quotationConversion) {
+      const savedInventoryItem = saveInventoryItem(itemForm);
+      const newItem = saleItemFromInventory(savedInventoryItem);
+      setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
+      setRows((current) => current.map((row) => (row.id === addItemRowId ? syncDiscount({ ...row, item: newItem.name, unit: newItem.unit || row.unit, price: newItem.price || row.price, priceMode: newItem.priceMode || row.priceMode, taxRate: newItem.taxRate || row.taxRate, sourceItemId: newItem.id || "" }) : row)));
+      setAddItemRowId(null);
+      return;
+    }
     const savedInventoryItem = await saveBusinessItem(itemForm);
     const newItem = saleItemFromInventory(savedInventoryItem);
     setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
