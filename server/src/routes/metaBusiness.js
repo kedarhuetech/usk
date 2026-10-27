@@ -1,3 +1,4 @@
+// Defines backend API routes for meta business.
 import { Router } from "express";
 import { getMetaOAuthConfig } from "../config/metaOAuth.js";
 import { fetchMetaAssets } from "../services/metaAssetsService.js";
@@ -12,6 +13,7 @@ import { getMetaPermissions, getMetaUser, normalizeMetaError } from "../services
 
 const router = Router();
 
+// Validates selection.
 function validateSelection(selection = {}, assets = {}) {
   const businesses = new Set((assets.businesses || []).map((item) => item.id));
   const pages = new Set((assets.pages || []).map((item) => item.id));
@@ -25,6 +27,7 @@ function validateSelection(selection = {}, assets = {}) {
   return "";
 }
 
+// This helper handles selection logic.
 function pruneSelection(selection = {}, assets = {}, requestedBusinessId = "") {
   const businesses = new Set((assets.businesses || []).map((item) => item.id));
   const pages = new Set((assets.pages || []).map((item) => item.id));

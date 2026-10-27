@@ -1,3 +1,4 @@
+// Provides the online store storage application service.
 import { businessGrowthApi } from "./apiClient.js";
 import { normalizePersistedAssetUrls, persistInlineImages } from "./businessGrowthData.js";
 const defaultOnlineStoreState = {
@@ -21,6 +22,7 @@ const defaultOnlineStoreState = {
   updatedAt: "",
 };
 
+// Creates prototype store id.
 function createPrototypeStoreId(value = "") {
   const slug = String(value || "store")
     .toLowerCase()
@@ -30,10 +32,12 @@ function createPrototypeStoreId(value = "") {
   return `${slug || "store"}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Gets online store state.
 export function getOnlineStoreState() {
   return businessGrowthApi.list("online-store").then((rows) => ({ ...defaultOnlineStoreState, ...(normalizePersistedAssetUrls(rows[0] || {})) }));
 }
 
+// Saves online store state.
 export async function saveOnlineStoreState(state) {
   const current = await getOnlineStoreState();
   const timestamp = new Date().toISOString();

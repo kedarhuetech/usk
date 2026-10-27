@@ -1,3 +1,4 @@
+// Implements the marketing studio home page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiAlertCircle,
@@ -47,18 +48,22 @@ const quickCreateIcons = {
   "blank-design": FiGrid,
 };
 
+// Makes the result value consistent.
 function normalize(value) {
   return value.toLowerCase().trim();
 }
 
+// This helper handles search logic.
 function matchesSearch(value, query) {
   return normalize(value || "").includes(query);
 }
 
+// Gets event date key.
 function getEventDateKey(event) {
   return `${String(event.monthNumber).padStart(2, "0")}-${String(event.day).padStart(2, "0")}`;
 }
 
+// Gets event date items.
 function getEventDateItems(events) {
   const byDate = new Map();
 
@@ -84,6 +89,7 @@ function getEventDateItems(events) {
   return [...byDate.values()].sort((a, b) => new Date(`${a.date}T00:00:00`) - new Date(`${b.date}T00:00:00`));
 }
 
+// Gets nearest relevant date key.
 function getNearestRelevantDateKey(dates) {
   if (!dates || !dates.length) return "";
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -91,6 +97,7 @@ function getNearestRelevantDateKey(dates) {
   return upcoming ? upcoming.key : dates[0].key;
 }
 
+// Renders the studio header interface.
 function StudioHeader({ searchQuery, onSearchChange }) {
   return (
     <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-5">
@@ -130,6 +137,7 @@ function StudioHeader({ searchQuery, onSearchChange }) {
   );
 }
 
+// Renders the section title interface.
 function SectionTitle({ icon: Icon, title, description, action, onAction }) {
   return (
     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -156,6 +164,7 @@ function SectionTitle({ icon: Icon, title, description, action, onAction }) {
   );
 }
 
+// Renders the quick create grid interface.
 function QuickCreateGrid() {
   return (
     <Card className="p-5 shadow-sm">
@@ -185,11 +194,13 @@ function QuickCreateGrid() {
   );
 }
 
+// Formats file size.
 function formatFileSize(bytes = 0) {
   if (!bytes) return "";
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Renders the image to layers beta card interface.
 function ImageToLayersBetaCard() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -208,6 +219,7 @@ function ImageToLayersBetaCard() {
     [previewUrl],
   );
 
+  // Handles result.
   const resetResult = () => {
     setResult(null);
     setSelectedLayerIds([]);
@@ -215,6 +227,7 @@ function ImageToLayersBetaCard() {
     setRequirements([]);
   };
 
+  // Handles file change.
   const handleFileChange = (event) => {
     const [nextFile] = event.target.files || [];
     event.target.value = "";
@@ -236,6 +249,7 @@ function ImageToLayersBetaCard() {
     setPreviewUrl(URL.createObjectURL(nextFile));
   };
 
+  // Handles convert.
   const handleConvert = async () => {
     if (!file || isProcessing) return;
 
@@ -255,10 +269,12 @@ function ImageToLayersBetaCard() {
     }
   };
 
+  // Toggles layer.
   const toggleLayer = (layerId) => {
     setSelectedLayerIds((current) => (current.includes(layerId) ? current.filter((id) => id !== layerId) : [...current, layerId]));
   };
 
+  // Handles open editor.
   const handleOpenEditor = async () => {
     if (!result || !selectedLayerIds.length) return;
     const design = createImageToLayersDesign(result, selectedLayerIds);
@@ -501,6 +517,7 @@ function ImageToLayersBetaCard() {
   );
 }
 
+// Renders the business category selector interface.
 function BusinessCategorySelector({ categories, selectedCategory, onCategoryChange }) {
   return (
     <Card className="px-5 py-4 shadow-sm">
@@ -531,6 +548,7 @@ function BusinessCategorySelector({ categories, selectedCategory, onCategoryChan
   );
 }
 
+// Renders the event date strip interface.
 function EventDateStrip({ dates, selectedDateKey, onSelectDate }) {
   return (
     <div className="overflow-x-auto pb-1">
@@ -558,6 +576,7 @@ function EventDateStrip({ dates, selectedDateKey, onSelectDate }) {
   );
 }
 
+// Renders the festival event cards interface.
 function FestivalEventCards({ events, selectedEventId, onSelectEvent }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -597,6 +616,7 @@ function FestivalEventCards({ events, selectedEventId, onSelectEvent }) {
   );
 }
 
+// Renders the empty festival date state interface.
 function EmptyFestivalDateState({ selectedDateLabel }) {
   return (
     <div className="grid min-h-40 place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
@@ -613,6 +633,7 @@ function EmptyFestivalDateState({ selectedDateLabel }) {
   );
 }
 
+// Renders the festival discovery interface.
 function FestivalDiscovery({
   events,
   dates,
@@ -654,6 +675,7 @@ function FestivalDiscovery({
   );
 }
 
+// Renders the discovery tabs interface.
 function DiscoveryTabs({ tabs, activeTab, onTabChange }) {
   return (
     <Card className="p-2 shadow-sm">
@@ -679,6 +701,7 @@ function DiscoveryTabs({ tabs, activeTab, onTabChange }) {
   );
 }
 
+// Renders the template card interface.
 function TemplateCard({ template }) {
   const navigate = useNavigate();
 
@@ -713,8 +736,10 @@ function TemplateCard({ template }) {
   );
 }
 
+// Renders the template rail interface.
 function TemplateRail({ children }) {
   const railRef = useRef(null);
+  // Handles rail.
   const scrollRail = (direction) => {
     railRef.current?.scrollBy({
       left: direction * 300,
@@ -749,6 +774,7 @@ function TemplateRail({ children }) {
   );
 }
 
+// Renders the filter chips interface.
 function FilterChips({ sectionId, filters, activeFilter, onFilterChange }) {
   if (!filters?.length) return null;
 
@@ -773,6 +799,7 @@ function FilterChips({ sectionId, filters, activeFilter, onFilterChange }) {
   );
 }
 
+// Renders the template section interface.
 function TemplateSection({ section, activeFilter, onFilterChange }) {
   const filteredTemplates = useMemo(() => {
     if (!activeFilter) return section.templates;
@@ -810,6 +837,7 @@ function TemplateSection({ section, activeFilter, onFilterChange }) {
   );
 }
 
+// Renders the dynamic sections renderer interface.
 function DynamicSectionsRenderer({ sections, activeFilters, onFilterChange, searchQuery, emptyTitle, emptyDescription }) {
   if (!sections.length) {
     return (
@@ -839,6 +867,7 @@ function DynamicSectionsRenderer({ sections, activeFilters, onFilterChange, sear
   );
 }
 
+// Gets search filtered sections.
 function getSearchFilteredSections(sections, query) {
   if (!query) return sections;
 
@@ -872,6 +901,7 @@ function getSearchFilteredSections(sections, query) {
     .filter(Boolean);
 }
 
+// Renders the marketing discovery interface.
 function MarketingDiscovery({ activeTab, onTabChange, searchQuery, selectedBusinessCategory }) {
   const eventYear = new Date().getFullYear();
   const [eventState, setEventState] = useState(() => ({
@@ -974,10 +1004,12 @@ function MarketingDiscovery({ activeTab, onTabChange, searchQuery, selectedBusin
     return getSearchFilteredSections(eventFilteredSections, normalizedQuery);
   }, [activeTab, normalizedQuery, selectedBusinessCategory, selectedEventId]);
 
+  // Handles filter change.
   const handleFilterChange = (sectionId, filter) => {
     setActiveFilters((current) => ({ ...current, [sectionId]: filter }));
   };
 
+  // Handles select date.
   const handleSelectDate = (dateKey) => {
     setSelectedDateKey(dateKey);
     setSelectedEventId("");
@@ -1027,6 +1059,7 @@ function MarketingDiscovery({ activeTab, onTabChange, searchQuery, selectedBusin
   );
 }
 
+// Renders the recent designs interface.
 function RecentDesigns() {
   return (
     <Card className="p-5 shadow-sm">
@@ -1054,6 +1087,7 @@ function RecentDesigns() {
   );
 }
 
+// Renders the recent image to layers interface.
 function RecentImageToLayers() {
   const navigate = useNavigate();
   const [designs, setDesigns] = useState([]);
@@ -1062,6 +1096,7 @@ function RecentImageToLayers() {
   const [deleteError, setDeleteError] = useState("");
   const [deletingId, setDeletingId] = useState("");
 
+  // Handles delete.
   const handleDelete = async (id) => {
     setDeletingId(id);
     setDeleteError("");
@@ -1143,6 +1178,7 @@ function RecentImageToLayers() {
   );
 }
 
+// Renders the marketing studio home interface.
 function MarketingStudioHome() {
   const [activeTab, setActiveTab] = useState("for-you");
   const [searchQuery, setSearchQuery] = useState("");

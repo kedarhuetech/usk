@@ -1,3 +1,4 @@
+// Defines shared brand kit data application data.
 export const defaultBrandKit = {
   business: {
     name: "My Company",

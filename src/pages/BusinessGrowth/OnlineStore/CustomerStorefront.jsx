@@ -1,3 +1,4 @@
+// Implements the customer storefront page.
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
@@ -18,30 +19,36 @@ import { getOnlineStoreState } from "../../../services/onlineStoreStorage";
 import { saveOnlineStoreOrder } from "../../../services/onlineStoreOrdersStorage";
 import { loadGrowthItems } from "../../../services/businessGrowthData.js";
 
+// Formats currency.
 function formatCurrency(value) {
   const amount = Number(value || 0);
   return Number.isFinite(amount) ? `Rs ${amount.toLocaleString("en-IN")}` : "Rs 0";
 }
 
+// This helper handles amount logic.
 function toAmount(value) {
   const amount = Number(value || 0);
   return Number.isFinite(amount) ? Math.max(amount, 0) : 0;
 }
 
+// This helper handles max quantity logic.
 function itemMaxQuantity(item) {
   const availability = getInventoryItemAvailability(item);
   return availability.showStock ? Math.max(availability.quantity || 0, 0) : 999;
 }
 
+// Checks whether add item.
 function canAddItem(item, storeState) {
   if (!storeState.acceptOnlineOrders) return false;
   return itemMaxQuantity(item) > 0;
 }
 
+// Cleans phone.
 function sanitizePhone(value = "") {
   return String(value).replace(/[^\d]/g, "");
 }
 
+// Renders the quantity control interface.
 function QuantityControl({ value, onChange, max = 999, disabled = false }) {
   const canDecrease = !disabled && value > 1;
   const canIncrease = !disabled && value < max;
@@ -71,6 +78,7 @@ function QuantityControl({ value, onChange, max = 999, disabled = false }) {
   );
 }
 
+// Renders the price block interface.
 function PriceBlock({ item, size = "normal" }) {
   const pricing = calculateInventoryItemPricing(item);
   const finalClass = size === "large" ? "text-2xl" : "text-lg";
@@ -91,6 +99,7 @@ function PriceBlock({ item, size = "normal" }) {
   );
 }
 
+// Renders the stock badge interface.
 function StockBadge({ item }) {
   const availability = getInventoryItemAvailability(item);
   if (!availability.showStock) return <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">Service</span>;
@@ -102,6 +111,7 @@ function StockBadge({ item }) {
   );
 }
 
+// Renders the store unavailable interface.
 function StoreUnavailable() {
   return (
     <main className="grid min-h-screen place-items-center bg-slate-100 p-4">
@@ -114,6 +124,7 @@ function StoreUnavailable() {
   );
 }
 
+// Renders the product card interface.
 function ProductCard({ item, storeState, onView, onAdd }) {
   const canAdd = canAddItem(item, storeState);
 
@@ -146,6 +157,7 @@ function ProductCard({ item, storeState, onView, onAdd }) {
   );
 }
 
+// Renders the product detail modal interface.
 function ProductDetailModal({ item, storeState, quantity, setQuantity, onAdd, onClose }) {
   const max = itemMaxQuantity(item);
   const canAdd = canAddItem(item, storeState);
@@ -192,6 +204,7 @@ function ProductDetailModal({ item, storeState, quantity, setQuantity, onAdd, on
   );
 }
 
+// Renders the cart panel interface.
 function CartPanel({
   open,
   storeState,
@@ -410,6 +423,7 @@ function CartPanel({
   );
 }
 
+// Renders the order success interface.
 function OrderSuccess({ order, storeState, onContinue }) {
   return (
     <main className="grid min-h-screen place-items-center bg-slate-100 p-4">
@@ -431,6 +445,7 @@ function OrderSuccess({ order, storeState, onContinue }) {
   );
 }
 
+// Renders the customer storefront interface.
 function CustomerStorefront() {
   const { storeId } = useParams();
   const [storeState, setStoreState] = useState({ selectedItemIds: [] });
@@ -485,6 +500,7 @@ function CustomerStorefront() {
   const phone = sanitizePhone(storeState.contactNumber);
 
   useEffect(() => {
+    // Refreshes shared data.
     const refreshSharedData = () =>
       Promise.all([getOnlineStoreState(), loadGrowthItems()])
         .then(([store, items]) => {
@@ -500,10 +516,12 @@ function CustomerStorefront() {
 
     refreshSharedData();
 
+    // Refreshes when visible.
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") refreshSharedData();
     };
 
+    // Refreshes when storage changes.
     const refreshWhenStorageChanges = (event) => {
       if (
         !event.key ||
@@ -525,10 +543,12 @@ function CustomerStorefront() {
     };
   }, []);
 
+  // Persists cart.
   const persistCart = (nextCart) => {
     setCart(nextCart);
   };
 
+  // Handles to cart.
   const addToCart = (item, quantity) => {
     if (!canAddItem(item, storeState)) return;
     const max = itemMaxQuantity(item);
@@ -541,6 +561,7 @@ function CustomerStorefront() {
     setActiveProductId(null);
   };
 
+  // Updates cart quantity.
   const updateCartQuantity = (item, quantity) => {
     const max = itemMaxQuantity(item);
     if (quantity < 1) {
@@ -550,13 +571,16 @@ function CustomerStorefront() {
     persistCart(cart.map((row) => row.itemId === item.id ? { ...row, quantity: Math.min(quantity, max) } : row));
   };
 
+  // Removes cart item.
   const removeCartItem = (itemId) => persistCart(cart.filter((row) => row.itemId !== itemId));
 
+  // Opens product.
   const openProduct = (item) => {
     setActiveProductId(item.id);
     setDetailQuantity(itemMaxQuantity(item) > 0 ? 1 : 0);
   };
 
+  // Validates customer.
   const validateCustomer = () => {
     const nextErrors = {};
     if (!customer.name.trim()) nextErrors.name = "Name is required.";
@@ -566,6 +590,7 @@ function CustomerStorefront() {
     return !Object.keys(nextErrors).length;
   };
 
+  // Handles order.
   const placeOrder = async () => {
     if (isPlacingOrder) return;
 

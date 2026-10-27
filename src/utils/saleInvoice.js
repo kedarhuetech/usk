@@ -1,13 +1,16 @@
+// This helper handles number logic.
 export function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// This helper handles percent logic.
 export function taxPercent(option = "") {
   const match = option.match(/\d+(\.\d+)?/);
   return match ? Number(match[0]) : 0;
 }
 
+// Calculates row.
 export function calculateRow(row) {
   const qty = Math.max(toNumber(row.qty), 0);
   const price = Math.max(toNumber(row.price), 0);
@@ -24,6 +27,7 @@ export function calculateRow(row) {
   return { qty, baseAmount, discount, taxable, tax, amount };
 }
 
+// Calculates invoice totals.
 export function calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedAmount) {
   const totals = rows.reduce(
     (sum, row) => {

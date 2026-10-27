@@ -1,3 +1,4 @@
+// Implements the party details page.
 import { useEffect, useState } from "react";
 import { FiDownload, FiFileText, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiSettings, FiUsers, FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
@@ -10,6 +11,7 @@ import { deleteSaleInvoice, getSaleInvoices, saveSaleInvoice } from "../../servi
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
+// Renders the select field interface.
 function SelectField({ label, value, onChange, options }) {
   return (
     <label className="block">
@@ -30,6 +32,7 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
+// Renders the textarea field interface.
 function TextareaField({ label, value, onChange, placeholder }) {
   return (
     <label className="block">
@@ -44,6 +47,7 @@ function TextareaField({ label, value, onChange, placeholder }) {
   );
 }
 
+// Renders the party illustration interface.
 function PartyIllustration() {
   return (
     <div className="relative mx-auto h-56 w-72">
@@ -66,6 +70,7 @@ function PartyIllustration() {
   );
 }
 
+// Renders the gst address tab interface.
 function GstAddressTab({ form, setField, showShipping, setShowShipping }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
@@ -105,6 +110,7 @@ function GstAddressTab({ form, setField, showShipping, setShowShipping }) {
   );
 }
 
+// Renders the credit balance tab interface.
 function CreditBalanceTab({ form, setField }) {
   return (
     <div className="grid max-w-3xl gap-5 md:grid-cols-2">
@@ -142,6 +148,7 @@ function CreditBalanceTab({ form, setField }) {
   );
 }
 
+// Renders the additional fields tab interface.
 function AdditionalFieldsTab({ form, setAdditionalField }) {
   return (
     <div className="space-y-3">
@@ -162,6 +169,7 @@ function AdditionalFieldsTab({ form, setAdditionalField }) {
   );
 }
 
+// Renders the add party modal interface.
 function AddPartyModal({ onClose, onSave, initialParty = null }) {
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [showShipping, setShowShipping] = useState(Boolean(initialParty?.shippingAddress));
@@ -169,7 +177,9 @@ function AddPartyModal({ onClose, onSave, initialParty = null }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Sets field.
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  // Sets additional field.
   const setAdditionalField = (index, field, value) => {
     setForm((current) => ({
       ...current,
@@ -178,6 +188,7 @@ function AddPartyModal({ onClose, onSave, initialParty = null }) {
       ),
     }));
   };
+  // Saves result.
   const save = async (resetAfterSave = false) => {
     if (!form.partyName.trim()) {
       setError("Party name is required.");
@@ -254,14 +265,17 @@ function AddPartyModal({ onClose, onSave, initialParty = null }) {
   );
 }
 
+// This helper handles result logic.
 function money(value) {
   return `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Escapes html.
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
 
+// Builds statement document.
 function buildStatementDocument(party, invoices) {
   const opening = Math.abs(Number(party?.openingBalance || 0));
   const openingType = party?.openingBalanceType === "to-pay" ? "Payable" : "Receivable";
@@ -273,6 +287,7 @@ function buildStatementDocument(party, invoices) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title><style>body{font:14px Arial,sans-serif;color:#111;margin:32px}header{text-align:center;margin-bottom:48px}h1{text-align:center;text-decoration:underline;font-size:24px;margin-bottom:36px}h2{font-size:20px}h3{margin-top:28px}table{border-collapse:collapse;width:100%;margin:10px 0 24px}th{background:#d6d6d6;text-align:left}th,td{padding:8px 6px;border-bottom:1px solid #888}button{padding:10px 18px;margin:10px 8px 0 0} @media print{button{display:none}body{margin:12mm}}</style></head><body><header><h2>My Company</h2><div>Party statement</div></header><h1>Party statement</h1><h2>Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</h2><p>Contact No.: ${escapeHtml(party?.phone || "")}</p><table><thead><tr><th>Date</th><th>Txn Type</th><th>Ref No.</th><th>Payment Status</th><th>Total</th><th>Received / Paid</th><th>Txn Balance</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="7">No transactions</td></tr>'}</tbody></table>${itemTables}<button onclick="window.print()">Print / Save PDF</button></body></html>`;
 }
 
+// Renders the party details interface.
 function PartyDetails() {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -304,6 +319,7 @@ function PartyDetails() {
     return () => window.clearTimeout(timer);
   }, [statementOpen, printStatementOnOpen]);
 
+  // Saves party.
   const saveParty = async (party) => {
     const saved = savePartyLocally(party);
     setParties((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
@@ -311,10 +327,14 @@ function PartyDetails() {
     return saved;
   };
 
+  // Refreshes local invoices.
   const refreshLocalInvoices = () => setInvoices(getSaleInvoices());
+  // Handles actions.
   const transactionActions = (invoice, type = "sale") => {
     const key = invoice?.id || `opening-${selectedParty?.id}`;
+    // Handles result.
     const preview = (printAfterOpen = false, targetInvoice = invoice) => navigate("/sales/sale-invoices/preview", { state: { invoice: targetInvoice, printAfterOpen } });
+    // Handles action.
     const handleAction = (action) => {
       setOpenTransactionMenu("");
       if (action === "View/Edit") {
@@ -375,6 +395,7 @@ function PartyDetails() {
   const cashSaleName = selectedParty?.partyName || "Cash Sale";
   const selectedOpeningBalance = Math.abs(Number(selectedParty?.openingBalance || 0));
   const selectedBalanceType = selectedParty?.openingBalanceType || "to-receive";
+  // Opens statement document.
   const openStatementDocument = (printWhenReady = false) => {
     const popup = window.open("", "_blank");
     if (!popup) {
@@ -386,6 +407,7 @@ function PartyDetails() {
     popup.document.close();
     if (printWhenReady) popup.addEventListener("load", () => popup.print(), { once: true });
   };
+  // Downloads excel.
   const downloadExcel = () => {
     const tableRows = [
       ["Date", "Type", "Number", "Payment Status", "Total", "Received / Paid", "Balance"],

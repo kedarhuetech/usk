@@ -1,3 +1,4 @@
+// Creates the shared MySQL connection pool and reads the business ID.
 /* global process */
 import dotenv from "dotenv";
 import path from "node:path";
@@ -19,6 +20,7 @@ export const pool = mysql.createPool({
   charset: "utf8mb4",
 });
 
+// This helper handles id from request logic.
 export function businessIdFromRequest(req) {
   const imageRead = req.method === "GET" && /^\/assets\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";

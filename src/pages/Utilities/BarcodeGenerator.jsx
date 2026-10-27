@@ -1,3 +1,4 @@
+// Implements the barcode generator page.
 import { useMemo, useState } from "react";
 import {
   FiAlertCircle,
@@ -18,10 +19,12 @@ const formats = [
 ];
 const maxLabels = 100;
 
+// This helper handles form logic.
 function initialForm() {
   return { itemName: "", sku: "", barcodeValue: "", format: "CODE128", quantity: "1" };
 }
 
+// Validates form.
 function validateForm(form) {
   const value = form.barcodeValue.trim();
   const quantity = Number(form.quantity);
@@ -47,6 +50,7 @@ function validateForm(form) {
   return "";
 }
 
+// Renders the barcode svg interface.
 function BarcodeSvg({ barcode, className = "" }) {
   if (!barcode) return null;
   return (
@@ -66,6 +70,7 @@ function BarcodeSvg({ barcode, className = "" }) {
   );
 }
 
+// Renders the barcode label interface.
 function BarcodeLabel({ form, barcode }) {
   return (
     <div className="barcode-print-label w-full max-w-sm rounded-lg border border-slate-200 bg-white p-4 text-center">
@@ -77,6 +82,7 @@ function BarcodeLabel({ form, barcode }) {
   );
 }
 
+// Renders the barcode generator interface.
 function BarcodeGenerator() {
 
   const [inventory] = useState(() => {
@@ -107,12 +113,14 @@ function BarcodeGenerator() {
 
   const selectedFormat = formats.find((format) => format.id === form.format);
 
+  // Updates form.
   const updateForm = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setError("");
     setNotice("");
   };
 
+  // Handles inventory item.
   const chooseInventoryItem = (event) => {
     const item = inventory.find((candidate) => candidate.id === event.target.value);
     if (!item) return;
@@ -125,6 +133,7 @@ function BarcodeGenerator() {
     }));
   };
 
+  // Generates result.
   const generate = () => {
     const validationError = validateForm(form);
     if (validationError) {
@@ -136,6 +145,7 @@ function BarcodeGenerator() {
     setNotice("Barcode generated in this browser. It was not saved to inventory.");
   };
 
+  // Downloads result.
   const download = () => {
     if (!generated?.barcode) {
       setError("Generate a valid barcode before downloading.");
@@ -156,6 +166,7 @@ function BarcodeGenerator() {
     }
   };
 
+  // Prints result.
   const print = () => {
     if (!generated?.barcode) {
       setError("Generate a valid barcode before printing.");

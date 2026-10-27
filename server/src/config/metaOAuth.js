@@ -1,3 +1,4 @@
+// Loads the meta OAuth settings.
 /* global process */
 
 const DEFAULT_GRAPH_API_VERSION = "v26.0";
@@ -10,11 +11,13 @@ export const META_AUTH_SCOPES = [
   "pages_read_engagement",
 ];
 
+// Makes the graph version value consistent.
 function normalizeGraphVersion(value) {
   const version = value || DEFAULT_GRAPH_API_VERSION;
   return version.startsWith("v") ? version : `v${version}`;
 }
 
+// This helper handles client origin logic.
 function firstClientOrigin() {
   return (process.env.CLIENT_ORIGIN || "https://9hdxck8r-5173.inc1.devtunnels.ms/")
     .split(",")
@@ -22,6 +25,7 @@ function firstClientOrigin() {
     .filter(Boolean)[0];
 }
 
+// Returns the meta OAuth settings.
 export function getMetaOAuthConfig() {
   const graphApiVersion = normalizeGraphVersion(process.env.META_GRAPH_API_VERSION);
   const appId = process.env.META_APP_ID || "";

@@ -1,3 +1,4 @@
+// Defines shared plans pricing data application data.
 export const plans = [
   {
     id: "basic",

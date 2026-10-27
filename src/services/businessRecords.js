@@ -1,12 +1,15 @@
+// Provides the business records application service.
 import { businessDataApi } from "./apiClient.js";
 import { persistInlineImages, normalizePersistedAssetUrls } from "./businessGrowthData.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
 
+// This helper handles id logic.
 function withId(record = {}) {
   return { ...record, id: record.id || crypto.randomUUID() };
 }
 
+// Loads business items.
 export async function loadBusinessItems() {
   const rows = await businessDataApi.list("items");
   if (rows.length) {
@@ -29,6 +32,7 @@ export async function loadBusinessItems() {
   return migrated;
 }
 
+// Saves business item.
 export async function saveBusinessItem(value) {
   const item = normalizeInventoryItem(value);
   const persisted = await persistInlineImages(item, "inventory-item", item.id);
@@ -37,18 +41,22 @@ export async function saveBusinessItem(value) {
   return normalizeInventoryItem(saved);
 }
 
+// Loads business parties.
 export async function loadBusinessParties() {
   return businessDataApi.list("parties");
 }
 
+// Loads business summary.
 export async function loadBusinessSummary() {
   return businessDataApi.summary();
 }
 
+// Saves business party.
 export async function saveBusinessParty(value) {
   return businessDataApi.save("parties", withId(value));
 }
 
+// Loads sales invoices.
 export async function loadSalesInvoices() {
   const rows = await businessDataApi.list("sales-invoices");
   const localInvoices = getSaleInvoices();
@@ -69,11 +77,13 @@ export async function loadSalesInvoices() {
   return migrated;
 }
 
+// This helper handles sales invoice number logic.
 export async function nextSalesInvoiceNumber() {
   const invoices = await loadSalesInvoices();
   return String(invoices.length + 1);
 }
 
+// Saves business sale invoice.
 export async function saveBusinessSaleInvoice(value) {
   const localInvoice = saveSaleInvoice(value);
   const saved = await businessDataApi.save("sales-invoices", localInvoice);
@@ -87,17 +97,21 @@ export async function saveBusinessSaleInvoice(value) {
   return saved;
 }
 
+// Loads purchase bills.
 export async function loadPurchaseBills() {
   return businessDataApi.list("purchase-bills");
 }
 
+// This helper handles purchase bill number logic.
 export async function nextPurchaseBillNumber() {
   const bills = await loadPurchaseBills();
   return String(bills.length + 1);
 }
 
+// Saves business purchase bill.
 export async function saveBusinessPurchaseBill(value) {
   const bill = withId({ ...value, transactionType: "purchase" });
+  // Handles result.
   const existing = (await loadPurchaseBills()).some((entry) => entry.id === bill.id);
   const saved = await businessDataApi.save("purchase-bills", bill);
   if (!existing) {

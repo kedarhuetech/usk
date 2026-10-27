@@ -1,8 +1,10 @@
+// Implements the legal pages page.
 const lastUpdated = "September 26, 2026";
 const appName = "Vyapaar";
 const productionDomain = "https://vyapar-ui.vercel.app";
 const contactEmail = "Replace with your support email";
 
+// Renders the legal layout interface.
 function LegalLayout({ title, description, children }) {
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-6 lg:px-8">
@@ -19,6 +21,7 @@ function LegalLayout({ title, description, children }) {
   );
 }
 
+// Renders the section interface.
 function Section({ title, children }) {
   return (
     <section>
@@ -28,6 +31,7 @@ function Section({ title, children }) {
   );
 }
 
+// Renders the bullet list interface.
 function BulletList({ items }) {
   return (
     <ul className="list-disc space-y-1 pl-5">
@@ -38,6 +42,7 @@ function BulletList({ items }) {
   );
 }
 
+// Renders the privacy policy interface.
 export function PrivacyPolicy() {
   return (
     <LegalLayout
@@ -125,6 +130,7 @@ export function PrivacyPolicy() {
     </LegalLayout>
   );
 }
+// Renders the terms of service interface.
 export function TermsOfService() {
   return (
     <LegalLayout title="Terms of Service" description="These terms describe the basic rules for using Vyapar UI and the Smart Ads integration.">
@@ -187,6 +193,7 @@ export function TermsOfService() {
   );
 }
 
+// Renders the data deletion interface.
 export function DataDeletion() {
   return (
     <LegalLayout

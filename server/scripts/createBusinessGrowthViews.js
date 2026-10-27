@@ -1,3 +1,4 @@
+// Runs the create business growth views database maintenance task.
 import { pool } from "../src/db/mysql.js";
 
 const statements = [

@@ -1,3 +1,4 @@
+// Provides the event calendar service application service.
 import { marketingEvents as localMarketingEvents } from "../../constants/marketingStudio/discoveryData.js";
 import { marketingTemplates } from "../../constants/marketingStudio/templateRegistry.js";
 
@@ -9,10 +10,12 @@ const calendarCache = new Map();
 const wikimediaCache = new Map();
 const eventCache = new Map();
 
+// Checks whether abort error.
 function isAbortError(error) {
   return error?.name === "AbortError" || /aborted/i.test(error?.message || "");
 }
 
+// Creates abort error.
 function createAbortError() {
   const error = new Error("Marketing events request was aborted.");
   error.name = "AbortError";
@@ -205,6 +208,7 @@ const LOCAL_DYNAMIC_EVENTS = [
   },
 ];
 
+// This helper handles calendarific error logic.
 function logCalendarificError(error) {
   if (isAbortError(error)) return;
   if (import.meta.env?.DEV) {
@@ -212,10 +216,12 @@ function logCalendarificError(error) {
   }
 }
 
+// This helper handles date iso logic.
 function toDateIso(year, month, day) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
+// This helper handles result logic.
 function slugify(value) {
   return String(value || "")
     .toLowerCase()
@@ -224,11 +230,13 @@ function slugify(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+// Gets canonical event id.
 function getCanonicalEventId(title) {
   const match = EVENT_ALIASES.find((entry) => entry.patterns.some((pattern) => pattern.test(title || "")));
   return match?.id || slugify(title);
 }
 
+// Gets date parts.
 function getDateParts(dateValue) {
   const date = new Date(`${dateValue}T00:00:00`);
   return {
@@ -240,17 +248,20 @@ function getDateParts(dateValue) {
   };
 }
 
+// This helper handles keyword logic.
 function includesKeyword(value, keywords) {
   const searchable = String(value || "").toLowerCase();
   return keywords.some((keyword) => searchable.includes(keyword));
 }
 
+// Gets template ids for event.
 function getTemplateIdsForEvent(eventId) {
   return marketingTemplates
     .filter((template) => template.eventId === eventId || template.eventIds?.includes(eventId))
     .map((template) => template.id);
 }
 
+// Gets visuals for event.
 function getVisualsForEvent(eventId, type = "") {
   const local = [...localMarketingEvents, ...LOCAL_DYNAMIC_EVENTS].find((event) => event.id === eventId);
   if (local?.visualClass && local?.accentClass) return { visualClass: local.visualClass, accentClass: local.accentClass };
@@ -266,6 +277,7 @@ function getVisualsForEvent(eventId, type = "") {
   return { visualClass: "from-slate-100 via-white to-blue-100", accentClass: "bg-blue-500" };
 }
 
+// Creates event.
 function createEvent(raw) {
   const id = raw.id || getCanonicalEventId(raw.title || raw.name);
   const title = raw.title || raw.name;
@@ -301,6 +313,7 @@ function createEvent(raw) {
   };
 }
 
+// Makes the calendarific holiday value consistent.
 function normalizeCalendarificHoliday(holiday) {
   const name = holiday.name || "";
   const description = holiday.description || "";
@@ -331,6 +344,7 @@ function normalizeCalendarificHoliday(holiday) {
   });
 }
 
+// Makes the curated event value consistent.
 function normalizeCuratedEvent(event, year) {
   const dynamic = LOCAL_DYNAMIC_EVENTS.find((item) => item.id === event.id);
   const date =
@@ -354,12 +368,14 @@ function normalizeCuratedEvent(event, year) {
   });
 }
 
+// Gets local events.
 function getLocalEvents(year) {
   const existingIds = new Set(localMarketingEvents.map((event) => event.id));
   const supplemental = LOCAL_DYNAMIC_EVENTS.filter((event) => !existingIds.has(event.id));
   return [...localMarketingEvents, ...supplemental].map((event) => normalizeCuratedEvent(event, year)).filter(Boolean);
 }
 
+// Fetches calendarific events.
 async function fetchCalendarificEvents(year, options = {}) {
   const cacheKey = `calendarific-IN-${year}`;
   const canUseCache = !options.signal;
@@ -387,6 +403,7 @@ async function fetchCalendarificEvents(year, options = {}) {
   return request;
 }
 
+// Makes the wikimedia entry value consistent.
 function normalizeWikimediaEntry(entry, probe, year) {
   const title = entry.text || entry.pages?.[0]?.normalizedtitle || "";
   const pageTitle = entry.pages?.[0]?.title || "";
@@ -412,6 +429,7 @@ function normalizeWikimediaEntry(entry, probe, year) {
   });
 }
 
+// Gets wikimedia marketing title.
 function getWikimediaMarketingTitle(searchable, probe) {
   if (/ambedkar/i.test(searchable)) return "Ambedkar Jayanti";
   if (/mahatma gandhi|mohandas/i.test(searchable)) return probe.type === "births" ? "Gandhi Jayanti" : "Gandhi Remembrance Day";
@@ -424,6 +442,7 @@ function getWikimediaMarketingTitle(searchable, probe) {
   return "";
 }
 
+// Fetches wikimedia probe.
 async function fetchWikimediaProbe(probe, year, options = {}) {
   const month = String(probe.month).padStart(2, "0");
   const day = String(probe.day).padStart(2, "0");
@@ -449,11 +468,13 @@ async function fetchWikimediaProbe(probe, year, options = {}) {
   return request;
 }
 
+// Fetches wikimedia events.
 async function fetchWikimediaEvents(year, options = {}) {
   const results = await Promise.allSettled(WIKIMEDIA_PROBES.map((probe) => fetchWikimediaProbe(probe, year, options)));
   return results.flatMap((result) => (result.status === "fulfilled" ? result.value : []));
 }
 
+// This helper handles events logic.
 function mergeEvents(eventGroups) {
   const merged = new Map();
 
@@ -490,6 +511,7 @@ function mergeEvents(eventGroups) {
   return [...merged.values()];
 }
 
+// Gets event rank.
 function getEventRank(event, today) {
   const eventDate = new Date(`${event.date}T00:00:00`);
   const daysFromToday = Math.round((eventDate.getTime() - today.getTime()) / 86400000);
@@ -499,6 +521,7 @@ function getEventRank(event, today) {
   return event.importance + upcomingBoost + sourceBoost + templateBoost;
 }
 
+// This helper handles and limit events logic.
 function rankAndLimitEvents(events, year) {
   const today = new Date();
   const relevantToday = today.getFullYear() === year ? new Date(today.getFullYear(), today.getMonth(), today.getDate()) : new Date(`${year}-01-01T00:00:00`);
@@ -522,16 +545,19 @@ function rankAndLimitEvents(events, year) {
   return selected;
 }
 
+// Gets local marketing events.
 export function getLocalMarketingEvents(year = new Date().getFullYear()) {
   return rankAndLimitEvents(getLocalEvents(year), year);
 }
 
+// Loads marketing events.
 export async function loadMarketingEvents(options = {}) {
   const year = options.year || new Date().getFullYear();
   const cacheKey = `marketing-events-${year}-${Boolean(options.forceFallback)}`;
   const canUseEventCache = !options.signal;
   if (canUseEventCache && !options.forceRefresh && eventCache.has(cacheKey)) return eventCache.get(cacheKey);
 
+  // Requests result.
   const request = (async () => {
     const localEvents = getLocalEvents(year);
 

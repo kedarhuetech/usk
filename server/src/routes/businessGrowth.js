@@ -1,3 +1,4 @@
+// Defines backend API routes for business growth.
 import { Router } from "express";
 import multer from "multer";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
@@ -17,10 +18,13 @@ const resources = new Set([
   "purchase-bills",
 ]);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 }, fileFilter: (_req, file, done) => done(null, ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype)) });
+// This helper handles result logic.
 const fail = (res, error) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Business Growth request failed." });
 
+// Escapes path part.
 function escapePathPart(value) { return String(value).replace(/~/g, "~0").replace(/\//g, "~1"); }
 
+// This helper handles record logic.
 function flattenRecord(value, parentPath = "", fieldName = "", ordinal = 0, output = []) {
   const path = parentPath ? `${parentPath}/${escapePathPart(fieldName)}` : `/${escapePathPart(fieldName)}`;
   if (path.length > 512) throw Object.assign(new Error("A saved field path exceeds the database limit."), { status: 400 });
@@ -42,6 +46,7 @@ function flattenRecord(value, parentPath = "", fieldName = "", ordinal = 0, outp
   return output;
 }
 
+// This helper handles record logic.
 function restoreRecord(rows) {
   const root = {};
   const containers = new Map([["", root]]);
@@ -64,6 +69,7 @@ function restoreRecord(rows) {
   return root;
 }
 
+// Attaches record fields.
 async function attachRecordFields(businessId, resource, rows) {
   if (!rows.length) return [];
   const ids = rows.map((row) => row.record_id);
@@ -87,6 +93,7 @@ async function attachRecordFields(businessId, resource, rows) {
   }));
 }
 
+// This helper handles record fields logic.
 async function insertRecordFields(connection, businessId, resource, recordId, payload) {
   const fields = [];
   Object.entries(payload).forEach(([key, value], index) => flattenRecord(value, "", key, index, fields));
@@ -99,6 +106,7 @@ async function insertRecordFields(connection, businessId, resource, recordId, pa
   }
 }
 
+// Loads template overlays.
 async function loadTemplateOverlays(ids) {
   if (!ids.length) return new Map();
   const placeholders = ids.map(() => "?").join(",");
@@ -115,6 +123,7 @@ async function loadTemplateOverlays(ids) {
   return new Map(ids.map((id) => [id, restoreRecord(grouped.get(id) || [])]));
 }
 
+// Saves template overlay.
 async function saveTemplateOverlay(connection, id, overlayConfig) {
   const values = [];
   Object.entries(overlayConfig).forEach(([key, value], index) => flattenRecord(value, "", key, index, values));
@@ -129,6 +138,7 @@ async function saveTemplateOverlay(connection, id, overlayConfig) {
 
 
 
+// Parses overlay config.
 function parseOverlayConfig(value) {
   if (!value) return {};
   try {
@@ -140,6 +150,7 @@ function parseOverlayConfig(value) {
   }
 }
 
+// Decodes cursor.
 function decodeCursor(value) {
   if (!value) return null;
   try {
@@ -152,6 +163,7 @@ function decodeCursor(value) {
   }
 }
 
+// Encodes cursor.
 function encodeCursor(row) {
   const updatedAt = Math.floor((row.updated_at instanceof Date ? row.updated_at.getTime() : Date.parse(row.updated_at)) / 1000);
   return Buffer.from(JSON.stringify({ updatedAt, id: row.record_id })).toString("base64url");
@@ -310,6 +322,7 @@ router.get("/:resource", async (req, res) => {
     res.json({ success: true, data: { items, nextCursor: hasMore && rows.length ? encodeCursor(rows[rows.length - 1]) : null, hasMore } });
   } catch (error) { fail(res, error); }
 });
+// Saves record.
 async function saveRecord(req, res) {
   const connection = await pool.getConnection();
   try {

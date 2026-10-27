@@ -1,3 +1,4 @@
+// Renders the button interface.
 function Button({ children, className = "", ...props }) {
   return (
     <button

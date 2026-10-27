@@ -1,3 +1,4 @@
+// Implements the export items page.
 import { useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
 import { FiAlertCircle, FiCheckCircle, FiDownload, FiFileText, FiSearch } from "react-icons/fi";
@@ -22,13 +23,16 @@ const fieldDefinitions = [
   ["purchaseTaxMode", "Purchase Tax Type"],
 ];
 
+// This helper handles for logic.
 const valueFor = (item, key) => {
   if (key === "stock") return item.openingQuantity ?? item.stock ?? "";
   return item[key] ?? "";
 };
 
+// This helper handles stamp logic.
 const dateStamp = () => new Date().toISOString().slice(0, 10);
 
+// Exports rows.
 function exportRows(items) {
   const activeFields = fieldDefinitions.filter(([key]) => (
     key === "itemName" || items.some((item) => String(valueFor(item, key)).trim())
@@ -39,6 +43,7 @@ function exportRows(items) {
   };
 }
 
+// Downloads pdf.
 function downloadPdf(items) {
   const { headers, rows } = exportRows(items);
   const document = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -47,6 +52,7 @@ function downloadPdf(items) {
   const pageHeight = document.internal.pageSize.getHeight();
   const columnWidth = (pageWidth - (margin * 2)) / headers.length;
   const rowHeight = 24;
+  // Draws header.
   const drawHeader = () => {
     document.setFillColor(26, 31, 113);
     document.rect(margin, 28, pageWidth - (margin * 2), 24, "F");
@@ -80,6 +86,7 @@ function downloadPdf(items) {
   document.save(`USV_Items_${dateStamp()}.pdf`);
 }
 
+// Renders the export items interface.
 function ExportItems() {
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -117,6 +124,7 @@ function ExportItems() {
   }, [filteredItems, selectedIds]);
   const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((item) => selectedIds.has(item.id));
 
+  // Toggles all.
   const toggleAll = () => {
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -126,6 +134,7 @@ function ExportItems() {
     });
   };
 
+  // Toggles item.
   const toggleItem = (id) => {
     setSelectedIds((current) => {
       const next = new Set(current);
@@ -135,6 +144,7 @@ function ExportItems() {
     });
   };
 
+  // Exports excel.
   const exportExcel = () => {
     if (!selectedItems.length) {
       setStatus({ type: "error", message: "There are no items matching the current selection." });
@@ -151,6 +161,7 @@ function ExportItems() {
     setStatus({ type: "success", message: `${selectedItems.length} item${selectedItems.length === 1 ? "" : "s"} exported to Excel.` });
   };
 
+  // Exports pdf.
   const exportPdf = () => {
     if (!selectedItems.length) {
       setStatus({ type: "error", message: "There are no items matching the current selection." });

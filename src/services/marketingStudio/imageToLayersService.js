@@ -21,6 +21,7 @@ const TEXT_DEFAULTS = {
   align: "left",
 };
 
+// Reads file as data url.
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -29,6 +30,7 @@ const readFileAsDataUrl = (file) =>
     reader.readAsDataURL(file);
   });
 
+// Validates image to layers file.
 export function validateImageToLayersFile(file) {
   if (!file) return "Choose an image first.";
   if (!ACCEPTED_TYPES.includes(file.type)) return "Choose a PNG, JPG, JPEG, or WebP image.";
@@ -36,6 +38,7 @@ export function validateImageToLayersFile(file) {
   return "";
 }
 
+// Converts image to layers.
 export async function convertImageToLayers(file) {
   const validationError = validateImageToLayersFile(file);
   if (validationError) throw new Error(validationError);
@@ -67,6 +70,7 @@ export async function convertImageToLayers(file) {
   return { ...payload, fileName: payload.fileName || file.name.replace(/\.[^.]+$/, ""), sourceSrc: dataUrl };
 }
 
+// This helper handles element logic.
 function toElement(layer, designId, zIndex) {
   const isText = layer.type === "text";
   const el = { ...(isText ? TEXT_DEFAULTS : IMAGE_DEFAULTS), ...layer };
@@ -89,6 +93,7 @@ function toElement(layer, designId, zIndex) {
   return el;
 }
 
+// Creates image to layers design.
 export function createImageToLayersDesign(result, keptLayerIds) {
   const { width, height } = result;
   const id = `image-to-layers-${Date.now()}`;

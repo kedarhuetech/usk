@@ -1,14 +1,16 @@
-const RAW_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+// Sends app requests to the existing backend with the active business context.
+const RAW_URL = import.meta.env?.VITE_API_BASE_URL || "/api";
 // Clean base URL without trailing slash or trailing /api
 export const API_BASE_URL = RAW_URL.replace(/\/api\/?$/, "").replace(/\/$/, "");
 
+// Adds the company header and sends a request through the shared API client.
 export async function apiRequest(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (!(options.body instanceof FormData) && options.body !== undefined) {
     headers.set("Content-Type", "application/json");
   }
 
-  const businessId = import.meta.env.VITE_BUSINESS_ID || "demo-business";
+  const businessId = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
   headers.set("X-Business-Id", businessId);
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
@@ -26,7 +28,7 @@ export async function apiRequest(path, options = {}) {
     });
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error(`Cannot reach the Vyapaar backend at ${API_BASE_URL || "the same-origin /api endpoint"}. Check that the backend is running and the Vite API proxy targets the correct port.`);
+      throw new Error(`Cannot reach the Vyapaar backend at ${API_BASE_URL || "the same-origin /api endpoint"}. Check that the backend is running and the Vite API proxy targets the correct port.`, { cause: error });
     }
     throw error;
   }
@@ -68,7 +70,9 @@ export const businessGrowthApi = {
   },
 };
 
+// Provides the existing API operations for company business records.
 export const businessDataApi = {
+  // Reuses the existing API for item, party, and transaction records.
   summary: () => apiRequest("/business-data/summary"),
   list: (resource) => apiRequest(`/business-data/${resource}`),
   save: (resource, value) =>

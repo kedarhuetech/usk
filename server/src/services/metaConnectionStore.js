@@ -1,3 +1,4 @@
+// Implements the backend meta connection store service.
 let metaConnection = {
   connected: false,
   user: null,
@@ -23,6 +24,7 @@ let metaConnection = {
 const REQUIRED_PUBLISH_PERMISSIONS = ["ads_management", "ads_read", "business_management", "pages_show_list", "pages_read_engagement"];
 const PAGE_ADVERTISE_TASKS = new Set(["ADVERTISE", "MANAGE", "CREATE_CONTENT", "MODERATE"]);
 
+// This helper handles assets logic.
 function emptyAssets() {
   return {
     businesses: [],
@@ -33,6 +35,7 @@ function emptyAssets() {
   };
 }
 
+// This helper handles selection logic.
 function emptySelection() {
   return {
     businessId: "",
@@ -42,6 +45,7 @@ function emptySelection() {
   };
 }
 
+// This helper handles permissions logic.
 function grantedPermissions(permissions = []) {
   return new Set(
     permissions
@@ -50,16 +54,19 @@ function grantedPermissions(permissions = []) {
   );
 }
 
+// Finds by id.
 function findById(records = [], id = "") {
   return records.find((record) => record.id === id) || null;
 }
 
+// This helper handles advertising access logic.
 function pageAdvertisingAccess(page = null) {
   const tasks = Array.isArray(page?.tasks) ? page.tasks : [];
   if (!tasks.length) return "unknown";
   return tasks.some((task) => PAGE_ADVERTISE_TASKS.has(task)) ? true : false;
 }
 
+// Builds meta readiness.
 export function buildMetaReadiness(connection = metaConnection) {
   const connected = Boolean(connection.connected);
   const assets = connection.assets || emptyAssets();
@@ -122,6 +129,7 @@ export function buildMetaReadiness(connection = metaConnection) {
   };
 }
 
+// This helper handles connection logic.
 function publicConnection() {
   return {
     connected: metaConnection.connected,
@@ -135,14 +143,17 @@ function publicConnection() {
   };
 }
 
+// Gets meta connection.
 export function getMetaConnection() {
   return metaConnection;
 }
 
+// Gets meta public connection.
 export function getMetaPublicConnection() {
   return publicConnection();
 }
 
+// Sets meta connection.
 export function setMetaConnection(nextConnection) {
   metaConnection = {
     ...metaConnection,
@@ -154,6 +165,7 @@ export function setMetaConnection(nextConnection) {
   return publicConnection();
 }
 
+// Sets meta connection error.
 export function setMetaConnectionError(message) {
   metaConnection = {
     ...metaConnection,
@@ -169,6 +181,7 @@ export function setMetaConnectionError(message) {
   return publicConnection();
 }
 
+// Updates meta assets.
 export function updateMetaAssets(assets) {
   metaConnection = {
     ...metaConnection,
@@ -177,6 +190,7 @@ export function updateMetaAssets(assets) {
   return publicConnection();
 }
 
+// Updates meta connection snapshot.
 export function updateMetaConnectionSnapshot({ user, permissions, assets, selection } = {}) {
   metaConnection = {
     ...metaConnection,
@@ -190,6 +204,7 @@ export function updateMetaConnectionSnapshot({ user, permissions, assets, select
   return publicConnection();
 }
 
+// This helper handles meta reconnect required logic.
 export function markMetaReconnectRequired(message) {
   metaConnection = {
     ...metaConnection,
@@ -203,6 +218,7 @@ export function markMetaReconnectRequired(message) {
   return publicConnection();
 }
 
+// Saves meta selection.
 export function saveMetaSelection(selection = {}) {
   metaConnection = {
     ...metaConnection,
@@ -216,6 +232,7 @@ export function saveMetaSelection(selection = {}) {
   return publicConnection();
 }
 
+// Disconnects meta connection.
 export function disconnectMetaConnection() {
   metaConnection = {
     connected: false,

@@ -1,3 +1,4 @@
+// Defines shared invoice preview data application data.
 export const invoicePreviewData = {
   invoiceNumber: "01",
   invoiceDate: "24-07-2026",

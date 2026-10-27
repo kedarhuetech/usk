@@ -1,3 +1,4 @@
+// Implements the dashboard page.
 import { useEffect, useState } from "react";
 import GraphPlaceholder from "../../components/Dashboard/GraphPlaceholder";
 import QuickActions from "../../components/Dashboard/QuickActions";
@@ -7,6 +8,7 @@ import WidgetCard from "../../components/Dashboard/WidgetCard";
 import { dashboardData } from "../../constants/dashboardData";
 import { loadBusinessSummary } from "../../services/businessRecords";
 
+// Renders the dashboard interface.
 function Dashboard() {
   const [summary, setSummary] = useState({ receivable: 0, payable: 0 });
   useEffect(() => {

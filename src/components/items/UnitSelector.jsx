@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronDown, FiSearch } from "react-icons/fi";
 import { getUnits } from "../../services/unitsStorage";
 
+// Renders the unit selector interface.
 function UnitSelector({ label, value, onChange, className = "" }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -15,10 +16,12 @@ function UnitSelector({ label, value, onChange, className = "" }) {
   useEffect(() => {
     if (!open) return undefined;
 
+    // Handles pointer down.
     const handlePointerDown = (event) => {
       if (!rootRef.current?.contains(event.target)) setOpen(false);
     };
 
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") setOpen(false);
     };

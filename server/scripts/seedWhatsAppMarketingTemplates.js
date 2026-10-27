@@ -1,3 +1,4 @@
+// Runs the seed whats app marketing templates database maintenance task.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,7 @@ const migrationPath = path.join(projectRoot, "server/database/migrations/2026_09
 const imageDirectory = path.join(projectRoot, "src/assets/home/whatsapp_marketing");
 const mimeByExtension = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" };
 
+// This helper handles result logic.
 function flatten(value, parentPath = "", fieldName = "", ordinal = 0, output = []) {
   const escapedName = String(fieldName).replace(/~/g, "~0").replace(/\//g, "~1");
   const path = parentPath ? `${parentPath}/${escapedName}` : `/${escapedName}`;

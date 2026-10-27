@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_marketing_templates (
   KEY idx_wa_marketing_category (category, is_active)
 );
 
+-- Defines database structure for business growth assets.
 CREATE TABLE IF NOT EXISTS business_growth_assets (
   id CHAR(36) PRIMARY KEY, business_id VARCHAR(64) NOT NULL, entity_type VARCHAR(64) NOT NULL, entity_id VARCHAR(64), original_filename VARCHAR(255) NOT NULL,
   mime_type VARCHAR(100) NOT NULL, size_bytes BIGINT UNSIGNED NOT NULL, data MEDIUMBLOB NOT NULL,
@@ -37,6 +38,7 @@ CREATE TABLE IF NOT EXISTS business_growth_assets (
   KEY idx_assets_entity (business_id,entity_type,entity_id), CONSTRAINT fk_asset_business FOREIGN KEY (business_id) REFERENCES businesses(id) ON DELETE CASCADE
 );
 
+-- Defines database structure for business growth records.
 CREATE TABLE IF NOT EXISTS business_growth_records (
   business_id VARCHAR(64) NOT NULL,
   resource VARCHAR(32) NOT NULL,
@@ -99,6 +101,7 @@ SELECT business_id, resource, record_id, field_path, field_name, value_type,
        END AS field_value
 FROM business_growth_record_fields;
 
+-- Defines database structure for business data parties.
 CREATE OR REPLACE VIEW business_data_parties AS
 SELECT r.business_id,
        r.record_id AS party_id,
@@ -115,6 +118,7 @@ LEFT JOIN business_growth_record_fields f
 WHERE r.resource = 'parties'
 GROUP BY r.business_id, r.record_id, r.created_at, r.updated_at;
 
+-- Defines database structure for business data sales invoices.
 CREATE OR REPLACE VIEW business_data_sales_invoices AS
 SELECT r.business_id,
        r.record_id AS invoice_id,
@@ -131,6 +135,7 @@ LEFT JOIN business_growth_record_fields f
 WHERE r.resource = 'sales-invoices'
 GROUP BY r.business_id, r.record_id, r.created_at, r.updated_at;
 
+-- Defines database structure for business data purchase bills.
 CREATE OR REPLACE VIEW business_data_purchase_bills AS
 SELECT r.business_id,
        r.record_id AS bill_id,
@@ -147,6 +152,7 @@ LEFT JOIN business_growth_record_fields f
 WHERE r.resource = 'purchase-bills'
 GROUP BY r.business_id, r.record_id, r.created_at, r.updated_at;
 
+-- Defines database structure for business data financial summary.
 CREATE OR REPLACE VIEW business_data_financial_summary AS
 SELECT business_id,
        resource,
@@ -157,6 +163,7 @@ FROM business_growth_record_fields
 WHERE resource IN ('sales-invoices','purchase-bills')
 GROUP BY business_id, resource;
 
+-- Defines database structure for business growth inventory items.
 CREATE OR REPLACE VIEW business_growth_inventory_items AS
 SELECT r.business_id,
        r.record_id AS item_id,
@@ -180,6 +187,7 @@ LEFT JOIN business_growth_record_fields f
 WHERE r.resource = 'items'
 GROUP BY r.business_id, r.record_id, r.created_at, r.updated_at;
 
+-- Defines database structure for business growth inventory item batches.
 CREATE OR REPLACE VIEW business_growth_inventory_item_batches AS
 SELECT parent.business_id,
        parent.record_id AS item_id,

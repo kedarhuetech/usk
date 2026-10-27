@@ -1,3 +1,4 @@
+// Implements the import parties page.
 import { useRef, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiDownload, FiTrash2, FiUpload } from "react-icons/fi";
 import * as XLSX from "xlsx";
@@ -21,7 +22,9 @@ const columns = [
   ["creditLimit", "Credit Limit", false],
 ];
 
+// This helper handles result logic.
 const normalized = (value) => String(value ?? "").trim();
+// This helper handles key logic.
 const headerKey = (value) => normalized(value).toLowerCase().replace(/[^a-z0-9]/g, "");
 const fieldAliases = {
   partyName: ["party name", "name", "customer name", "supplier name", "vendor name", "business name", "contact name"],
@@ -44,6 +47,7 @@ columns.forEach(([key, label]) => {
   [key, label, ...(fieldAliases[key] || [])].forEach((alias) => fieldByHeader.set(headerKey(alias), key));
 });
 
+// Resolves column mappings.
 function resolveColumnMappings(headerRow) {
   const mappedFields = new Map();
   const mapping = [];
@@ -67,6 +71,7 @@ function resolveColumnMappings(headerRow) {
   };
 }
 
+// Parses rows.
 function parseRows(rows) {
   if (!rows.length) throw new Error("The spreadsheet is empty.");
   const { indexes, mapping } = resolveColumnMappings(rows[0]);
@@ -78,6 +83,7 @@ function parseRows(rows) {
   return { rows: parsedRows, mapping };
 }
 
+// Validates rows.
 function validateRows(rows) {
   const seen = new Set();
   return rows.map((row) => {
@@ -90,6 +96,7 @@ function validateRows(rows) {
   });
 }
 
+// Renders the import parties interface.
 function ImportParties() {
   const inputRef = useRef(null);
   const [fileName, setFileName] = useState("");
@@ -99,6 +106,7 @@ function ImportParties() {
   const [status, setStatus] = useState({ type: "", message: "" });
   const [saving, setSaving] = useState(false);
 
+  // Downloads template.
   const downloadTemplate = () => {
     const headers = columns.map(([, label, required]) => required ? `${label} *` : label);
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
@@ -108,6 +116,7 @@ function ImportParties() {
     XLSX.writeFile(workbook, "USV_Parties_Template.xlsx");
   };
 
+  // Handles file.
   const chooseFile = async (file) => {
     if (!file) return;
     setFileError("");
@@ -131,6 +140,7 @@ function ImportParties() {
     }
   };
 
+  // Imports rows.
   const importRows = async () => {
     const validRows = rows.filter((row) => !row.errors.length);
     if (!validRows.length) {

@@ -1,12 +1,15 @@
+// Renders the date picker interface component.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiCalendar, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// This helper handles input date logic.
 function toInputDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
+// Renders the date picker interface.
 function DatePicker({ label, value, onChange }) {
   const initial = value ? new Date(value) : new Date();
   const [open, setOpen] = useState(false);
@@ -22,11 +25,13 @@ function DatePicker({ label, value, onChange }) {
     );
   }, [cursor]);
 
+  // Sets month.
   const setMonth = (month) => {
     setCursor(new Date(cursor.getFullYear(), month, 1));
     setView("days");
   };
 
+  // Sets year.
   const setYear = (year) => {
     setCursor(new Date(year, cursor.getMonth(), 1));
     setView("months");
@@ -35,10 +40,12 @@ function DatePicker({ label, value, onChange }) {
   useEffect(() => {
     if (!open) return undefined;
 
+    // Handles pointer down.
     const handlePointerDown = (event) => {
       if (!rootRef.current?.contains(event.target)) setOpen(false);
     };
 
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") setOpen(false);
     };

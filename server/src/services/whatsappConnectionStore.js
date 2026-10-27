@@ -1,3 +1,4 @@
+// Implements the backend whatsapp connection store service.
 const REQUIRED_WHATSAPP_PERMISSIONS = ["business_management", "whatsapp_business_management", "whatsapp_business_messaging"];
 
 let whatsappConnection = {
@@ -24,6 +25,7 @@ let whatsappConnection = {
   lastTestResult: null,
 };
 
+// This helper handles assets logic.
 function emptyAssets() {
   return {
     businesses: [],
@@ -34,6 +36,7 @@ function emptyAssets() {
   };
 }
 
+// This helper handles selection logic.
 function emptySelection() {
   return {
     businessId: "",
@@ -43,6 +46,7 @@ function emptySelection() {
   };
 }
 
+// This helper handles permissions logic.
 function grantedPermissions(permissions = []) {
   return new Set(
     permissions
@@ -51,14 +55,17 @@ function grantedPermissions(permissions = []) {
   );
 }
 
+// Gets required whats app permissions.
 export function getRequiredWhatsAppPermissions() {
   return [...REQUIRED_WHATSAPP_PERMISSIONS];
 }
 
+// Finds by id.
 function findById(records = [], id = "") {
   return records.find((record) => record.id === id) || null;
 }
 
+// Builds whats app readiness.
 export function buildWhatsAppReadiness(connection = whatsappConnection) {
   const connected = Boolean(connection.connected);
   const assets = connection.assets || emptyAssets();
@@ -66,6 +73,7 @@ export function buildWhatsAppReadiness(connection = whatsappConnection) {
   const selectedWaba = findById(assets.wabas, selection.wabaId);
   const selectedPhoneNumber = findById(assets.phoneNumbers, selection.phoneNumberId);
   const selectedTemplate = findById(assets.templates, selection.templateId);
+  // Handles templates.
   const approvedTemplates = (assets.templates || []).filter((template) => template.status === "APPROVED");
   const granted = grantedPermissions(connection.permissions);
   const missingPermissions = REQUIRED_WHATSAPP_PERMISSIONS.filter((permission) => !granted.has(permission));
@@ -112,6 +120,7 @@ export function buildWhatsAppReadiness(connection = whatsappConnection) {
   };
 }
 
+// This helper handles connection logic.
 function publicConnection() {
   return {
     connected: whatsappConnection.connected,
@@ -127,14 +136,17 @@ function publicConnection() {
   };
 }
 
+// Gets whats app connection.
 export function getWhatsAppConnection() {
   return whatsappConnection;
 }
 
+// Gets whats app public connection.
 export function getWhatsAppPublicConnection() {
   return publicConnection();
 }
 
+// Sets whats app connection.
 export function setWhatsAppConnection(nextConnection) {
   whatsappConnection = {
     ...whatsappConnection,
@@ -147,6 +159,7 @@ export function setWhatsAppConnection(nextConnection) {
   return publicConnection();
 }
 
+// Sets whats app connection error.
 export function setWhatsAppConnectionError(message) {
   whatsappConnection = {
     ...whatsappConnection,
@@ -164,6 +177,7 @@ export function setWhatsAppConnectionError(message) {
   return publicConnection();
 }
 
+// Updates whats app connection snapshot.
 export function updateWhatsAppConnectionSnapshot({ user, permissions, assets, selection } = {}) {
   whatsappConnection = {
     ...whatsappConnection,
@@ -177,6 +191,7 @@ export function updateWhatsAppConnectionSnapshot({ user, permissions, assets, se
   return publicConnection();
 }
 
+// This helper handles whats app reconnect required logic.
 export function markWhatsAppReconnectRequired(message) {
   whatsappConnection = {
     ...whatsappConnection,
@@ -191,6 +206,7 @@ export function markWhatsAppReconnectRequired(message) {
   return publicConnection();
 }
 
+// Saves whats app selection.
 export function saveWhatsAppSelection(selection = {}) {
   whatsappConnection = {
     ...whatsappConnection,
@@ -204,6 +220,7 @@ export function saveWhatsAppSelection(selection = {}) {
   return publicConnection();
 }
 
+// Saves whats app test result.
 export function saveWhatsAppTestResult(result) {
   whatsappConnection = {
     ...whatsappConnection,
@@ -212,6 +229,7 @@ export function saveWhatsAppTestResult(result) {
   return publicConnection();
 }
 
+// Disconnects whats app connection.
 export function disconnectWhatsAppConnection() {
   whatsappConnection = {
     connected: false,

@@ -1,5 +1,7 @@
+// Creates svg data url.
 const createSvgDataUrl = (svg) => `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 
+// Creates demo asset.
 const createDemoAsset = ({ id, title, subtitle, colors, width = 1600, height = 1200, tags = [], category = "stock" }) => {
   const [start, end, accent = "#ffffff"] = colors;
   const svg = `
@@ -123,10 +125,12 @@ export const STOCK_MEDIA_PROVIDERS = [
   },
 ];
 
+// Returns the provider settings.
 function getProviderConfig(provider = "pexels") {
   return STOCK_MEDIA_PROVIDERS.find((item) => item.id === provider) || STOCK_MEDIA_PROVIDERS[0];
 }
 
+// Gets stock media provider status.
 export function getStockMediaProviderStatus(provider = "pexels") {
   const providerConfig = getProviderConfig(provider);
 
@@ -148,6 +152,7 @@ export function getStockMediaProviderStatus(provider = "pexels") {
   };
 }
 
+// Makes the pexels photo value consistent.
 function normalizePexelsPhoto(photo) {
   return {
     id: `pexels-${photo.id}`,
@@ -168,6 +173,7 @@ function normalizePexelsPhoto(photo) {
   };
 }
 
+// Makes the pixabay image value consistent.
 function normalizePixabayImage(image) {
   return {
     id: `pixabay-${image.id}`,
@@ -188,6 +194,7 @@ function normalizePixabayImage(image) {
   };
 }
 
+// Makes the unsplash photo value consistent.
 function normalizeUnsplashPhoto(photo) {
   return {
     id: `unsplash-${photo.id}`,
@@ -210,6 +217,7 @@ function normalizeUnsplashPhoto(photo) {
   };
 }
 
+// Creates provider error.
 function createProviderError(providerLabel, response) {
   if (response.status === 401 || response.status === 403) {
     return `${providerLabel} rejected the request. Check the configured API key.`;
@@ -222,6 +230,7 @@ function createProviderError(providerLabel, response) {
   return `${providerLabel} stock image search failed. Try again.`;
 }
 
+// Creates search response.
 function createSearchResponse({ results, page, perPage, totalResults, hasMore, provider }) {
   return {
     results,
@@ -233,6 +242,7 @@ function createSearchResponse({ results, page, perPage, totalResults, hasMore, p
   };
 }
 
+// Searches pexels.
 async function searchPexels(query, options = {}) {
   const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
   const page = options.page || 1;
@@ -266,6 +276,7 @@ async function searchPexels(query, options = {}) {
   });
 }
 
+// Searches pixabay.
 async function searchPixabay(query, options = {}) {
   const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
   const page = options.page || 1;
@@ -298,6 +309,7 @@ async function searchPixabay(query, options = {}) {
   });
 }
 
+// Searches unsplash.
 async function searchUnsplash(query, options = {}) {
   const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
   const page = options.page || 1;
@@ -331,6 +343,7 @@ async function searchUnsplash(query, options = {}) {
   });
 }
 
+// Searches demo media.
 function searchDemoMedia(query, options = {}) {
   const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
   const page = options.page || 1;
@@ -357,6 +370,7 @@ function searchDemoMedia(query, options = {}) {
   });
 }
 
+// Searches images.
 export async function searchImages(query, options = {}) {
   const provider = options.provider || "pexels";
   const providerStatus = getStockMediaProviderStatus(provider);

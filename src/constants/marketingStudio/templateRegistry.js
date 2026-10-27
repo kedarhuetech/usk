@@ -1,3 +1,4 @@
+// Defines shared template registry application data.
 import ganeshPosterJoyfulFlyer from "../../assets/home/ganesh_chturthi/Joyful Ganesh Chaturthi Flyer (us Letter) - Made with PosterMyWall.jpg";
 import ganeshPosterOrangeJoyful from "../../assets/home/ganesh_chturthi/Orange Joyful Ganesh Chaturthi Poster - Made with PosterMyWall.jpg";
 import ganeshPosterRedMinimal from "../../assets/home/ganesh_chturthi/Red Modern  Minimal Ganesh Chaturthi  A4 - Made with PosterMyWall.jpg";
@@ -25,6 +26,7 @@ const categoryWeights = {
   general: ["business", "offer", "product", "festival", "review", "tips"],
 };
 
+// Creates ganesh quick personalize config.
 function createGaneshQuickPersonalizeConfig(canvas, headingDefault = "Ganesh Chaturthi Special") {
   return {
     headingDefault,
@@ -668,6 +670,7 @@ const templateRecords = [
   },
 ];
 
+// This helper handles title case logic.
 function toTitleCase(value) {
   return String(value || "")
     .replace(/[-_]/g, " ")
@@ -676,12 +679,14 @@ function toTitleCase(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+// Gets thumbnail path.
 function getThumbnailPath(fileName) {
   if (!fileName) return "";
   if (/^(https?:|data:|blob:|\/)/.test(fileName)) return fileName;
   return `${ASSET_BASE}/${fileName}`;
 }
 
+// Creates text element.
 function createTextElement(id, role, text, overrides = {}) {
   return {
     ...baseElement,
@@ -704,6 +709,7 @@ function createTextElement(id, role, text, overrides = {}) {
   };
 }
 
+// Creates image element.
 function createImageElement(id, role, src, overrides = {}) {
   return {
     ...baseElement,
@@ -728,6 +734,7 @@ function createImageElement(id, role, src, overrides = {}) {
   };
 }
 
+// Creates shape element.
 function createShapeElement(id, role, overrides = {}) {
   return {
     ...baseElement,
@@ -748,6 +755,7 @@ function createShapeElement(id, role, overrides = {}) {
   };
 }
 
+// Creates flat brand overlays.
 function createFlatBrandOverlays(record) {
   const width = record.canvas.width;
   const height = record.canvas.height;
@@ -790,6 +798,7 @@ function createFlatBrandOverlays(record) {
   ];
 }
 
+// Creates quick personalize overlays.
 function createQuickPersonalizeOverlays(record) {
   const fields = record.quickPersonalize?.fields || {};
 
@@ -836,6 +845,7 @@ function createQuickPersonalizeOverlays(record) {
   ];
 }
 
+// Creates editable elements.
 function createEditableElements(record) {
   const width = record.canvas.width;
   const height = record.canvas.height;
@@ -930,6 +940,7 @@ function createEditableElements(record) {
   ];
 }
 
+// Creates fashion premium sale elements.
 function createFashionPremiumSaleElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1131,6 +1142,7 @@ function createFashionPremiumSaleElements(record) {
   ];
 }
 
+// Creates restaurant food offer elements.
 function createRestaurantFoodOfferElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1273,6 +1285,7 @@ function createRestaurantFoodOfferElements(record) {
   ];
 }
 
+// Creates festival greeting celebration elements.
 function createFestivalGreetingCelebrationElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1398,6 +1411,7 @@ function createFestivalGreetingCelebrationElements(record) {
   ];
 }
 
+// Creates service business promo elements.
 function createServiceBusinessPromoElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1535,6 +1549,7 @@ function createServiceBusinessPromoElements(record) {
   ];
 }
 
+// Creates product launch new arrival elements.
 function createProductLaunchNewArrivalElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1664,6 +1679,7 @@ function createProductLaunchNewArrivalElements(record) {
   ];
 }
 
+// Creates customer review trust elements.
 function createCustomerReviewTrustElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1809,6 +1825,7 @@ function createCustomerReviewTrustElements(record) {
   ];
 }
 
+// Creates business discount offer elements.
 function createBusinessDiscountOfferElements(record) {
   const mainImage = getThumbnailPath(record.primaryImage);
 
@@ -1970,6 +1987,7 @@ function createBusinessDiscountOfferElements(record) {
   ];
 }
 
+// Creates template.
 function createTemplate(record) {
   const thumbnail = getThumbnailPath(record.thumbnail);
   const primaryImage = record.primaryImage ? getThumbnailPath(record.primaryImage) : undefined;
@@ -2039,10 +2057,12 @@ export const marketingTemplateRegistry = Object.fromEntries(templateRecords.map(
 
 export const marketingTemplates = Object.values(marketingTemplateRegistry);
 
+// Gets template by id.
 export function getTemplateById(id) {
   return marketingTemplateRegistry[id] || null;
 }
 
+// Gets category score.
 function getCategoryScore(template, businessCategory = "general") {
   const targetTokens = categoryWeights[businessCategory] || categoryWeights.general;
   const searchable = [
@@ -2059,6 +2079,7 @@ function getCategoryScore(template, businessCategory = "general") {
   return targetTokens.reduce((score, token) => score + (searchable.includes(token) ? 1 : 0), 0);
 }
 
+// Resolves templates.
 export function resolveTemplates(templateIds = []) {
   const seen = new Set();
   return templateIds
@@ -2071,6 +2092,7 @@ export function resolveTemplates(templateIds = []) {
     });
 }
 
+// Resolves discovery templates.
 export function resolveDiscoveryTemplates(templateIds = [], options = {}) {
   const templates = resolveTemplates(templateIds);
   const businessCategory = options.businessCategory || "general";

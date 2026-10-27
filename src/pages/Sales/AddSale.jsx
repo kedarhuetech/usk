@@ -1,3 +1,4 @@
+// Implements the add sale page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -112,6 +113,7 @@ const transactionConfigs = {
   },
 };
 
+// Creates row.
 function createRow() {
   return {
     id: crypto.randomUUID(),
@@ -128,10 +130,12 @@ function createRow() {
   };
 }
 
+// Formats money input.
 function formatMoneyInput(value) {
   return Number.isFinite(value) ? String(Math.round(value * 100) / 100) : "";
 }
 
+// Cleans decimal.
 function sanitizeDecimal(value, allowNegative = false) {
   let next = String(value).replace(allowNegative ? /[^\d.-]/g : /[^\d.]/g, "");
   if (allowNegative) next = next.replace(/(?!^)-/g, "");
@@ -139,15 +143,18 @@ function sanitizeDecimal(value, allowNegative = false) {
   return decimal.length ? `${whole}.${decimal.join("")}` : whole;
 }
 
+// This helper handles number logic.
 function clampNumber(value, min, max) {
   const number = toNumber(value);
   return Math.min(Math.max(number, min), max);
 }
 
+// This helper handles base amount logic.
 function rowBaseAmount(row) {
   return calculateRow({ ...row, discountPercent: "", discountAmount: "", discountMode: "percent" }).baseAmount;
 }
 
+// Synchronizes discount.
 function syncDiscount(row) {
   const baseAmount = rowBaseAmount(row);
   if (!baseAmount) return row;
@@ -165,12 +172,14 @@ function syncDiscount(row) {
   return row;
 }
 
+// This helper handles tax rate from order logic.
 function saleTaxRateFromOrder(item = {}) {
   const taxRate = item.taxRate || item.taxRateSnapshot || "NONE";
   if (!taxRate || taxRate === "None") return "NONE";
   return saleTaxOptions.includes(taxRate) ? taxRate : "NONE";
 }
 
+// Creates row from order item.
 function createRowFromOrderItem(item = {}) {
   const qty = Math.max(toNumber(item.quantity), 0);
   const originalPrice = Math.max(toNumber(item.unitPrice || item.itemPrice || item.finalUnitPrice), 0);
@@ -192,12 +201,14 @@ function createRowFromOrderItem(item = {}) {
   });
 }
 
+// This helper handles additional charge note logic.
 function orderAdditionalChargeNote(order) {
   const amount = toNumber(order?.additionalChargeAmount || order?.additionalCharge);
   if (!amount) return "";
   return `${order.additionalChargeName || "Additional Charge"} from Online Order: Rs ${formatMoneyInput(amount)}`;
 }
 
+// This helper handles item from inventory logic.
 function saleItemFromInventory(item = {}) {
   return {
     id: item.id,
@@ -210,13 +221,16 @@ function saleItemFromInventory(item = {}) {
   };
 }
 
+// Provides dismiss.
 function useDismiss(open, ref, onClose) {
   useEffect(() => {
     if (!open) return undefined;
 
+    // Handles pointer down.
     const handlePointerDown = (event) => {
       if (!ref.current?.contains(event.target)) onClose();
     };
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") onClose();
     };
@@ -230,6 +244,7 @@ function useDismiss(open, ref, onClose) {
   }, [open, ref, onClose]);
 }
 
+// Renders the text input interface.
 function TextInput({ error, className = "", ...props }) {
   return (
     <input
@@ -241,6 +256,7 @@ function TextInput({ error, className = "", ...props }) {
   );
 }
 
+// Renders the select input interface.
 function SelectInput({ value, onChange, options, className = "" }) {
   return (
     <select
@@ -255,6 +271,7 @@ function SelectInput({ value, onChange, options, className = "" }) {
   );
 }
 
+// Renders the text area interface.
 function TextArea({ error, className = "", ...props }) {
   return (
     <textarea
@@ -266,6 +283,7 @@ function TextArea({ error, className = "", ...props }) {
   );
 }
 
+// Renders the party picker interface.
 function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -318,10 +336,12 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
   );
 }
 
+// Converts a saved party into the fields used by transaction forms.
 function partyOption(party) {
   return { id: party.id, name: party.partyName || party.name || "", phone: party.phone || "", balance: party.openingBalance || 0 };
 }
 
+// Renders the transaction tabs interface.
 function TransactionTabs({ tabs, activeTab, setActiveTab, addTab, closeTab }) {
   return (
     <div className="flex min-h-8 items-end gap-1 bg-slate-100 px-3 pt-1">
@@ -353,6 +373,7 @@ function TransactionTabs({ tabs, activeTab, setActiveTab, addTab, closeTab }) {
   );
 }
 
+// Renders the transaction header interface.
 function TransactionHeader({ title, saleType, setSaleType, showSaleType, onSettings, onClose }) {
   return (
     <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
@@ -382,6 +403,7 @@ function TransactionHeader({ title, saleType, setSaleType, showSaleType, onSetti
   );
 }
 
+// Renders the customer details interface.
 function CustomerDetails({ saleType, form, errors, setField, config, parties = [], onAddParty }) {
   const isCredit = saleType === "credit";
   const isPurchase = config.type === "purchase";
@@ -446,6 +468,7 @@ function CustomerDetails({ saleType, form, errors, setField, config, parties = [
   );
 }
 
+// Renders the item picker interface.
 function ItemPicker({ value, items, onSelect, onChange, onAddItem }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -505,6 +528,7 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem }) {
   );
 }
 
+// Renders the cell input interface.
 function CellInput({ error, className = "", ...props }) {
   return (
     <input
@@ -516,7 +540,9 @@ function CellInput({ error, className = "", ...props }) {
   );
 }
 
+// Renders the invoice table interface.
 function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
+  // Updates row.
   const updateRow = (id, field, value) => {
     setRows((current) =>
       current.map((row) => {
@@ -543,6 +569,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
     );
   };
 
+  // Applies item.
   const applyItem = (id, item) => {
     setRows((current) =>
       current.map((row) =>
@@ -561,6 +588,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
     );
   };
 
+  // Deletes row.
   const deleteRow = (id) => {
     setRows((current) => (current.length === 1 ? [createRow()] : current.filter((row) => row.id !== id)));
   };
@@ -647,6 +675,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
   );
 }
 
+// Renders the terms title picker interface.
 function TermsTitlePicker({ value, templates, onSelect, onAddNew }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -674,6 +703,7 @@ function TermsTitlePicker({ value, templates, onSelect, onAddNew }) {
   );
 }
 
+// Renders the payment selector interface.
 function PaymentSelector({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -701,11 +731,13 @@ function PaymentSelector({ value, onChange }) {
   );
 }
 
+// Renders the terms modal interface.
 function TermsModal({ onClose, onSave }) {
   const [title, setTitle] = useState("");
   const [terms, setTerms] = useState("");
 
   useEffect(() => {
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") onClose();
     };
@@ -752,6 +784,7 @@ function TermsModal({ onClose, onSave }) {
   );
 }
 
+// Renders the add ons interface.
 function AddOns({ form, setField, files, setFiles, templates, setTemplates, showPayment }) {
   const imageRef = useRef(null);
   const documentRef = useRef(null);
@@ -823,6 +856,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
   );
 }
 
+// Renders the totals panel interface.
 function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount }) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
@@ -850,6 +884,7 @@ function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOff
   );
 }
 
+// Renders the share menu interface.
 function ShareMenu({ actions = shareActions, onAction }) {
   return (
     <div className="absolute bottom-12 right-0 z-30 w-56 overflow-hidden rounded-md border border-slate-200 bg-white py-1.5 shadow-xl">
@@ -865,8 +900,10 @@ function ShareMenu({ actions = shareActions, onAction }) {
   );
 }
 
+// Renders the settings drawer interface.
 function SettingsDrawer({ settings, setSettings, billingType, setBillingType, onClose }) {
   useEffect(() => {
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") onClose();
     };
@@ -906,11 +943,13 @@ function SettingsDrawer({ settings, setSettings, billingType, setBillingType, on
   );
 }
 
+// Renders the business modal interface.
 function BusinessModal({ mode, business, setBusiness, onClose }) {
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") onClose();
     };
@@ -918,11 +957,13 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  // Sets business field.
   const setBusinessField = (field, value) => {
     setBusiness((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "" }));
   };
 
+  // Saves result.
   const save = () => {
     const nextErrors = {};
     if (!business.name.trim()) nextErrors.name = "Business Name is required";
@@ -973,11 +1014,13 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
   );
 }
 
+// Renders the upload bill modal interface.
 function UploadBillModal({ selectedFile, setSelectedFile, onClose }) {
   const fileRef = useRef(null);
   const [mobileDemo, setMobileDemo] = useState(false);
 
   useEffect(() => {
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") onClose();
     };
@@ -1036,10 +1079,12 @@ function UploadBillModal({ selectedFile, setSelectedFile, onClose }) {
   );
 }
 
+// Renders the upload attention modal interface.
 function UploadAttentionModal({ onClose }) {
   const [dontShow, setDontShow] = useState(false);
 
   useEffect(() => {
+    // Handles key down.
     const handleKeyDown = (event) => {
       if (event.key === "Escape") onClose();
     };
@@ -1047,6 +1092,7 @@ function UploadAttentionModal({ onClose }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  // Closes result.
   const close = () => {
     if (dontShow) localStorage.setItem("ledgerly:hidePurchaseUploadAttention", "true");
     onClose();
@@ -1075,6 +1121,7 @@ function UploadAttentionModal({ onClose }) {
   );
 }
 
+// Renders the add sale interface.
 function AddSale({ mode = "sale" }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1181,11 +1228,13 @@ function AddSale({ mode = "sale" }) {
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
 
+  // Sets field.
   const setField = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "", rows: current.rows || {} }));
   };
 
+  // Handles tab.
   const addTab = () => {
     const nextIndex = tabs.length + 1;
     const nextTab = { id: `${config.type}-${Date.now()}`, label: `${config.tabPrefix} #${nextIndex}` };
@@ -1194,6 +1243,7 @@ function AddSale({ mode = "sale" }) {
     setField("invoiceNumber", String(nextIndex));
   };
 
+  // Closes tab.
   const closeTab = (id) => {
     if (tabs.length === 1) {
       navigate(returnPath);
@@ -1204,6 +1254,7 @@ function AddSale({ mode = "sale" }) {
     if (activeTab === id) setActiveTab(remaining[0].id);
   };
 
+  // Validates result.
   const validate = () => {
     const nextErrors = { rows: {} };
     if ((isPurchase || saleType === "credit") && !form.customer.trim()) nextErrors.customer = isPurchase ? "Party is required" : "Customer is required";
@@ -1226,6 +1277,7 @@ function AddSale({ mode = "sale" }) {
     return !nextErrors.customer && !nextErrors.invoiceNumber && Object.keys(nextErrors.rows).length === 0;
   };
 
+  // Builds invoice.
   const buildInvoice = () => ({
     id: transactionId,
     saleType,
@@ -1239,6 +1291,7 @@ function AddSale({ mode = "sale" }) {
     createdAt: new Date().toISOString(),
   });
 
+  // Opens preview.
   const openPreview = (printAfterOpen = false) => {
     if (!validate()) return false;
     const invoice = buildInvoice();
@@ -1247,6 +1300,7 @@ function AddSale({ mode = "sale" }) {
     return true;
   };
 
+  // Handles sale.
   const resetSale = () => {
     setTransactionId(crypto.randomUUID());
     setRows([createRow(), createRow()]);
@@ -1258,11 +1312,13 @@ function AddSale({ mode = "sale" }) {
     setToast(`Ready for a fresh ${config.title.toLowerCase()}.`);
   };
 
+  // Closes upload bill.
   const closeUploadBill = () => {
     setUploadBillOpen(false);
     if (!localStorage.getItem("ledgerly:hidePurchaseUploadAttention")) setUploadAttentionOpen(true);
   };
 
+  // Saves sale.
   const saveSale = async () => {
     if (!validate()) {
       setToast("Please fix highlighted fields.");
@@ -1320,6 +1376,7 @@ function AddSale({ mode = "sale" }) {
     if (!isPurchase) navigate("/sales/sale-invoices/preview", { state: { invoice: savedInvoice } });
   };
 
+  // Handles share action.
   const handleShareAction = async (action) => {
     setShareOpen(false);
     if (quotationConversion && action === "Save & New") {
@@ -1383,6 +1440,7 @@ function AddSale({ mode = "sale" }) {
     }
   };
 
+  // Saves item from modal.
   const saveItemFromModal = async (itemForm) => {
     if (quotationConversion) {
       const savedInventoryItem = saveInventoryItem(itemForm);

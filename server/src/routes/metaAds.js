@@ -1,3 +1,4 @@
+// Defines backend API routes for meta ads.
 import { Router } from "express";
 import { getMetaConnection, getMetaPublicConnection } from "../services/metaConnectionStore.js";
 import { publishMetaAdCampaign } from "../services/metaAdsService.js";

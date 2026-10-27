@@ -1,13 +1,16 @@
+// Provides the company profile storage application service.
 const COMPANY_PROFILE_KEY = "ledgerly:companyProfile.v1";
 export const companyProfileUpdatedEvent = "ledgerly:company-profile-updated";
 const defaultCompanyProfile = {
   companyName: "My Company",
 };
 
+// Checks whether use storage.
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+// Gets company profile.
 export function getCompanyProfile() {
   if (!canUseStorage()) return { ...defaultCompanyProfile };
 
@@ -27,6 +30,7 @@ export function getCompanyProfile() {
   }
 }
 
+// Saves company profile.
 export function saveCompanyProfile(profile) {
   const nextProfile = {
     ...getCompanyProfile(),

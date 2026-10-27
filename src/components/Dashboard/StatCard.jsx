@@ -1,6 +1,7 @@
 import { FiArrowDown, FiArrowUp } from "react-icons/fi";
 import Card from "../Common/Card";
 
+// Renders the stat card interface.
 function StatCard({ stat }) {
   const Icon = stat.tone === "emerald" ? FiArrowDown : FiArrowUp;
 

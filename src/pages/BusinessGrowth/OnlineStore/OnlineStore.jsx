@@ -1,3 +1,4 @@
+// Implements the online store page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -30,18 +31,21 @@ import {
 import { getOnlineStoreState, saveOnlineStoreState } from "../../../services/onlineStoreStorage";
 import { loadGrowthItems, saveGrowthItem, loadGrowthOrders, updateGrowthOrder } from "../../../services/businessGrowthData.js";
 
+// Formats currency.
 function formatCurrency(value, fallback = "Price not set") {
   const hasValue = value !== "" && value !== null && value !== undefined;
   const amount = Number(value || 0);
   return hasValue && Number.isFinite(amount) ? `Rs ${amount.toLocaleString("en-IN")}` : fallback;
 }
 
+// Formats date time.
 function formatDateTime(value) {
   if (!value) return "-";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 }
 
+// This helper handles status label logic.
 function orderStatusLabel(status = "new") {
   const value = String(status || "new").toLowerCase();
   if (value === "accepted") return "Accepted";
@@ -49,6 +53,7 @@ function orderStatusLabel(status = "new") {
   return "New";
 }
 
+// This helper handles status class logic.
 function orderStatusClass(status = "new") {
   const value = String(status || "new").toLowerCase();
   if (value === "accepted") return "bg-emerald-50 text-emerald-700";
@@ -56,10 +61,12 @@ function orderStatusClass(status = "new") {
   return "bg-amber-50 text-amber-700";
 }
 
+// This helper handles suffix logic.
 function unitSuffix(item) {
   return item.unit ? ` / ${item.unit}` : "";
 }
 
+// Renders the price summary interface.
 function PriceSummary({ item, className = "", finalClassName = "text-lg font-black text-slate-950" }) {
   const pricing = calculateInventoryItemPricing(item);
 
@@ -79,6 +86,7 @@ function PriceSummary({ item, className = "", finalClassName = "text-lg font-bla
   );
 }
 
+// Renders the stock pill interface.
 function StockPill({ item }) {
   const availability = getInventoryItemAvailability(item);
   if (!availability.showStock) return null;
@@ -90,22 +98,26 @@ function StockPill({ item }) {
   );
 }
 
+// Renders the tax note interface.
 function TaxNote({ item, className = "" }) {
   if (!item.taxRate || item.taxRate === "None") return null;
   return <p className={`text-xs font-semibold text-slate-500 ${className}`}>{item.taxRate} - {item.saleTaxMode || "Without Tax"}</p>;
 }
 
+// This helper handles store url logic.
 function prototypeStoreUrl(storeState) {
   if (typeof window === "undefined") return "";
   const id = storeState.prototypeStoreId || "preview";
   return `${window.location.origin}/store/${encodeURIComponent(id)}`;
 }
 
+// This helper handles product url logic.
 function prototypeProductUrl(storeState, item) {
   const baseUrl = prototypeStoreUrl(storeState);
   return `${baseUrl}?product=${encodeURIComponent(item.id)}`;
 }
 
+// This helper handles text logic.
 async function copyText(value) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
@@ -116,6 +128,7 @@ async function copyText(value) {
   return true;
 }
 
+// This helper handles link logic.
 async function shareLink({ title, text, url }) {
   if (navigator.share) {
     try {
@@ -130,6 +143,7 @@ async function shareLink({ title, text, url }) {
   return "Link copied.";
 }
 
+// Renders the add item modal interface.
 function AddItemModal({ item, onClose, onItemSaved }) {
   const editMode = Boolean(item?.id);
 
@@ -142,6 +156,7 @@ function AddItemModal({ item, onClose, onItemSaved }) {
   );
 }
 
+// Renders the empty online store interface.
 function EmptyOnlineStore({ onAddItem }) {
   return (
     <div className="grid min-h-[calc(100vh-9rem)] place-items-center p-4 sm:p-6">
@@ -180,6 +195,7 @@ function EmptyOnlineStore({ onAddItem }) {
   );
 }
 
+// Renders the admin header interface.
 function AdminHeader({ title, subtitle, children }) {
   return (
     <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
@@ -195,6 +211,7 @@ function AdminHeader({ title, subtitle, children }) {
   );
 }
 
+// Renders the dashboard stat interface.
 function DashboardStat({ label, value }) {
   return (
     <Card className="p-4 shadow-sm">
@@ -204,6 +221,7 @@ function DashboardStat({ label, value }) {
   );
 }
 
+// Renders the compact online item interface.
 function CompactOnlineItem({ item }) {
   return (
     <article className="flex gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
@@ -218,6 +236,7 @@ function CompactOnlineItem({ item }) {
   );
 }
 
+// Renders the store dashboard interface.
 function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onManageItems, onOrders, onEditDetails, onSettings, onCopyStoreLink, onShareStore, onRefresh }) {
   const orderCounts = {
     new: orders.filter((order) => order.status === "new").length,
@@ -333,6 +352,7 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
   );
 }
 
+// Renders the item card interface.
 function ItemCard({ item, selected, onToggle, onEdit }) {
   return (
     <article className={`overflow-hidden rounded-lg border bg-white shadow-sm transition ${selected ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-200"}`}>
@@ -381,6 +401,7 @@ function ItemCard({ item, selected, onToggle, onEdit }) {
   );
 }
 
+// Renders the store builder interface.
 function StoreBuilder({ items, storeState, setStoreState, onAddItem, onEditItem, onRefresh, onBack, onStoreCreated }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -396,11 +417,15 @@ function StoreBuilder({ items, storeState, setStoreState, onAddItem, onEditItem,
     );
   }, [category, items, query]);
 
+  // Updates store.
   const updateStore = async (patch) => setStoreState(await saveOnlineStoreState({ ...storeState, ...patch }));
+  // Toggles item.
   const toggleItem = (id) => {
     setDraftSelectedIds((current) => current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id]);
   };
+  // Saves selection.
   const saveSelection = () => updateStore({ selectedItemIds: draftSelectedIds, created: storeState.created });
+  // Creates store.
   const createStore = async () => {
     await updateStore({ created: true, selectedItemIds: draftSelectedIds });
     onStoreCreated?.();
@@ -524,11 +549,14 @@ function StoreBuilder({ items, storeState, setStoreState, onAddItem, onEditItem,
   );
 }
 
+// Renders the store details modal interface.
 function StoreDetailsModal({ storeState, onClose, onSave }) {
   const [form, setForm] = useState(storeState);
   const fileRef = useRef(null);
+  // Updates field.
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
+  // Handles logo upload.
   const handleLogoUpload = (event) => {
     const [file] = event.target.files || [];
     event.target.value = "";
@@ -538,6 +566,7 @@ function StoreDetailsModal({ storeState, onClose, onSave }) {
     reader.readAsDataURL(file);
   };
 
+  // Saves result.
   const save = () => onSave({
     storeName: form.storeName,
     businessName: form.businessName,
@@ -598,6 +627,7 @@ function StoreDetailsModal({ storeState, onClose, onSave }) {
   );
 }
 
+// Renders the toggle interface.
 function Toggle({ checked, onChange }) {
   return (
     <button
@@ -611,9 +641,12 @@ function Toggle({ checked, onChange }) {
   );
 }
 
+// Renders the store settings modal interface.
 function StoreSettingsModal({ storeState, onClose, onSave }) {
   const [form, setForm] = useState(storeState);
+  // Updates field.
   const updateField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+  // Saves result.
   const save = () => onSave({
     acceptOnlineOrders: Boolean(form.acceptOnlineOrders),
     minimumOrderAmount: String(form.minimumOrderAmount || "").replace(/[^\d.]/g, ""),
@@ -695,6 +728,7 @@ function StoreSettingsModal({ storeState, onClose, onSave }) {
   );
 }
 
+// Renders the order status badge interface.
 function OrderStatusBadge({ status }) {
   return (
     <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${orderStatusClass(status)}`}>
@@ -703,6 +737,7 @@ function OrderStatusBadge({ status }) {
   );
 }
 
+// Renders the order details modal interface.
 function OrderDetailsModal({ order, onClose, onAccept, onReject, onConvert }) {
   const canUpdate = order.status === "new";
   const canConvert = order.status === "accepted" && !order.convertedToSale;
@@ -807,6 +842,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onConvert }) {
   );
 }
 
+// Renders the online orders view interface.
 function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onReject, onConvert }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -829,10 +865,12 @@ function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onR
     rejected: storeOrders.filter((order) => order.status === "rejected").length,
   };
 
+  // Handles order.
   const acceptOrder = (orderId) => {
     onAccept(orderId);
     setActiveOrderId(orderId);
   };
+  // Handles order.
   const rejectOrder = (orderId) => {
     onReject(orderId);
     setActiveOrderId(orderId);
@@ -944,6 +982,7 @@ function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onR
   );
 }
 
+// Renders the storefront preview interface.
 function StorefrontPreview({ storeState, items, onBack, onShareProduct }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
@@ -1036,6 +1075,7 @@ function StorefrontPreview({ storeState, items, onBack, onShareProduct }) {
   );
 }
 
+// Renders the storefront product card interface.
 function StorefrontProductCard({ item, onView, onShare }) {
   const availability = getInventoryItemAvailability(item);
   const addDisabled = true;
@@ -1084,6 +1124,7 @@ function StorefrontProductCard({ item, onView, onShare }) {
   );
 }
 
+// Renders the product detail modal interface.
 function ProductDetailModal({ item, onShare, onClose }) {
   const availability = getInventoryItemAvailability(item);
 
@@ -1155,6 +1196,7 @@ function ProductDetailModal({ item, onShare, onClose }) {
   );
 }
 
+// Renders the share toast interface.
 function ShareToast({ message }) {
   if (!message) return null;
 
@@ -1168,6 +1210,7 @@ function ShareToast({ message }) {
   );
 }
 
+// Renders the online store interface.
 function OnlineStore() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
@@ -1194,10 +1237,13 @@ function OnlineStore() {
   }, []);
 
   useEffect(() => {
+    // Refreshes orders.
     const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => window.alert(error.message));
+    // Refreshes when visible.
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") refreshOrders();
     };
+    // Refreshes when storage changes.
     const refreshWhenStorageChanges = (event) => {
       if (!event.key || event.key.includes("onlineStoreOrders")) refreshOrders();
     };
@@ -1219,24 +1265,30 @@ function OnlineStore() {
   }, [items, storeState.selectedItemIds]);
   const storeOrders = useMemo(() => orders.filter((order) => order.storeId === storeState.prototypeStoreId), [orders, storeState.prototypeStoreId]);
 
+  // Refreshes items.
   const refreshItems = () => loadGrowthItems().then(setItems).catch((error) => window.alert(error.message));
+  // Refreshes orders.
   const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => window.alert(error.message));
 
+  // Opens new item.
   const openNewItem = () => {
     setEditingItem(null);
     setAddItemOpen(true);
   };
 
+  // Opens edit item.
   const openEditItem = (item) => {
     setEditingItem(item);
     setAddItemOpen(true);
   };
 
+  // Closes item editor.
   const closeItemEditor = () => {
     setAddItemOpen(false);
     setEditingItem(null);
   };
 
+  // Handles item saved.
   const handleItemSaved = async (itemForm) => {
     const item = await saveGrowthItem(itemForm);
     await refreshItems();
@@ -1247,6 +1299,7 @@ function OnlineStore() {
     return item;
   };
 
+  // Handles share status.
   const showShareStatus = (message) => {
     if (shareStatusTimer.current) window.clearTimeout(shareStatusTimer.current);
     setShareStatus(message);
@@ -1256,28 +1309,33 @@ function OnlineStore() {
     }, 2800);
   };
 
+  // Saves store details.
   const saveStoreDetails = async (details) => {
     setStoreState(await saveOnlineStoreState({ ...storeState, ...details }));
     setDetailsOpen(false);
   };
 
+  // Saves store settings.
   const saveStoreSettings = async (settings) => {
     setStoreState(await saveOnlineStoreState({ ...storeState, ...settings }));
     setSettingsOpen(false);
   };
 
+  // Ensures share ready store.
   const ensureShareReadyStore = async () => {
     const nextStoreState = await saveOnlineStoreState({ ...storeState });
     setStoreState(nextStoreState);
     return nextStoreState;
   };
 
+  // Handles store link.
   const copyStoreLink = async () => {
     const nextStoreState = await ensureShareReadyStore();
     await copyText(prototypeStoreUrl(nextStoreState));
     showShareStatus("Store link copied.");
   };
 
+  // Handles store.
   const shareStore = async () => {
     const nextStoreState = await ensureShareReadyStore();
     const status = await shareLink({
@@ -1288,6 +1346,7 @@ function OnlineStore() {
     showShareStatus(status);
   };
 
+  // Handles product.
   const shareProduct = async (item) => {
     const nextStoreState = await ensureShareReadyStore();
     const status = await shareLink({
@@ -1298,11 +1357,13 @@ function OnlineStore() {
     showShareStatus(status);
   };
 
+  // Updates order status.
   const updateOrderStatus = async (orderId, status) => {
     await updateGrowthOrder(orderId, { status });
     await refreshOrders();
   };
 
+  // Converts order to sale.
   const convertOrderToSale = (order) => {
     if (order.status !== "accepted" || order.convertedToSale) return;
     navigate("/sales/sale-invoices/new", {

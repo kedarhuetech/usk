@@ -1,3 +1,4 @@
+// Defines shared items data application data.
 export const units = ["PCS", "BOX", "KG", "GRAM", "LTR", "MTR", "PACK", "BAG"];
 
 export const taxOptions = [

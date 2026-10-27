@@ -1,3 +1,4 @@
+// Implements the sale preview page.
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FiDownload, FiMail, FiMessageCircle, FiPrinter, FiShare2, FiX } from "react-icons/fi";
@@ -8,6 +9,7 @@ import { normalizePersistedAssetUrls } from "../../services/businessGrowthData.j
 
 const colors = ["bg-indigo-400", "bg-sky-600", "bg-slate-400", "bg-zinc-500", "bg-lime-500", "bg-orange-500", "bg-rose-600", "bg-emerald-600"];
 
+// Reads stored invoice.
 function readStoredInvoice() {
   try {
     return JSON.parse(sessionStorage.getItem("ledgerly:lastSaleInvoice"));
@@ -16,6 +18,7 @@ function readStoredInvoice() {
   }
 }
 
+// Renders the sale preview interface.
 function SalePreview() {
   const navigate = useNavigate();
   const { state } = useLocation();

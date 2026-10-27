@@ -1,3 +1,4 @@
+// Renders the input interface.
 function Input({ label, prefix, className = "", ...props }) {
   return (
     <label className="block">

@@ -1,3 +1,4 @@
+// Defines shared sales data application data.
 export const stateOfSupplyOptions = [
   "None",
   "Andaman & Nicobar Islands",

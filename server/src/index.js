@@ -1,3 +1,4 @@
+// Starts the Express server and mounts its API routes.
 /* global process */
 import express from "express";
 import cors from "cors";

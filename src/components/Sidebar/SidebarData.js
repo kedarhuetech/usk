@@ -1,3 +1,4 @@
+// Renders the sidebar data interface component.
 import {
   FiBarChart2,
   FiBriefcase,

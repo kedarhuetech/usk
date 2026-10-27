@@ -1,9 +1,11 @@
+// Renders the invoice form interface component.
 import { FiBox, FiFilePlus } from "react-icons/fi";
 import Button from "../Common/Button";
 import Input from "../Common/Input";
 import InvoiceCalculation from "./InvoiceCalculation";
 import InvoiceHeader from "./InvoiceHeader";
 
+// Renders the invoice form interface.
 function InvoiceForm({ invoice, form, onChange, onSubmit }) {
   return (
     <section className="rounded-lg bg-white p-6">

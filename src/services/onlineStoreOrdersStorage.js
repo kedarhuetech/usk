@@ -1,9 +1,11 @@
 import { businessGrowthApi } from "./apiClient.js";
+// This helper handles number logic.
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Makes the status value consistent.
 function normalizeStatus(status = "new") {
   const value = String(status || "new").toLowerCase();
   if (value === "accepted") return "accepted";
@@ -11,6 +13,7 @@ function normalizeStatus(status = "new") {
   return "new";
 }
 
+// Makes the order item value consistent.
 function normalizeOrderItem(item = {}, index = 0) {
   const finalUnitPrice = toNumber(item.finalUnitPrice ?? item.itemPrice ?? item.unitPrice);
   const quantity = Math.max(toNumber(item.quantity), 0);
@@ -33,6 +36,7 @@ function normalizeOrderItem(item = {}, index = 0) {
   };
 }
 
+// Makes the order value consistent.
 function normalizeOrder(order = {}) {
   const items = (order.items || []).map(normalizeOrderItem);
   const additionalCharge = toNumber(order.additionalCharge ?? order.additionalChargeAmount);
@@ -66,10 +70,12 @@ function normalizeOrder(order = {}) {
   };
 }
 
+// Gets online store orders.
 export function getOnlineStoreOrders() {
   return businessGrowthApi.list("orders").then((orders) => orders.map(normalizeOrder));
 }
 
+// Saves online store order.
 export async function saveOnlineStoreOrder(order) {
   const timestamp = new Date().toISOString();
   const nextOrder = normalizeOrder({
@@ -83,6 +89,7 @@ export async function saveOnlineStoreOrder(order) {
   return businessGrowthApi.save("orders", nextOrder);
 }
 
+// Updates online store order status.
 export async function updateOnlineStoreOrderStatus(orderId, status) {
   const timestamp = new Date().toISOString();
   const orders = await getOnlineStoreOrders();
@@ -90,6 +97,7 @@ export async function updateOnlineStoreOrderStatus(orderId, status) {
   return order ? businessGrowthApi.save("orders", normalizeOrder({ ...order, status, updatedAt: timestamp })) : null;
 }
 
+// This helper handles online store order converted logic.
 export async function markOnlineStoreOrderConverted(orderId, saleReference) {
   const timestamp = new Date().toISOString();
   const orders = await getOnlineStoreOrders();

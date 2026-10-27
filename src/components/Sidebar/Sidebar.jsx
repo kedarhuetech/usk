@@ -1,3 +1,4 @@
+// Renders the sidebar interface component.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronRight, FiEdit3, FiZap, FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
@@ -15,6 +16,7 @@ import {
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
 
+// Renders the sidebar interface.
 function Sidebar() {
   const navigate = useNavigate();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
@@ -45,6 +47,7 @@ function Sidebar() {
   );
 
   useEffect(() => {
+    // Handles shortcut.
     const handleShortcut = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
@@ -64,7 +67,9 @@ function Sidebar() {
   }, [searchOpen]);
 
   useEffect(() => {
+    // Refreshes company profile.
     const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
+    // Refreshes profile from event.
     const refreshProfileFromEvent = () => {
       const profile = getCompanyProfile();
       setCompanyProfile(profile);
@@ -78,21 +83,25 @@ function Sidebar() {
     };
   }, []);
 
+  // Opens search.
   const openSearch = () => {
     setQuery("");
     setSearchOpen(true);
   };
 
+  // Opens search result.
   const openSearchResult = (path) => {
     setSearchOpen(false);
     navigate(path);
   };
 
+  // Opens company profile.
   const openCompanyProfile = () => {
     setCompanyName(companyProfile.companyName);
     setProfileOpen(true);
   };
 
+  // Saves company name.
   const saveCompanyName = (event) => {
     event.preventDefault();
     const nextName = companyName.trim();

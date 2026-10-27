@@ -43,6 +43,7 @@ export const getLiveGoogleBusinessDetails = async (req, res) => {
         );
         if (!match) return { day, open: "", close: "", isClosed: true };
 
+        // Handles result.
         const pad = (n) => String(n).padStart(2, "0");
         return {
           day,

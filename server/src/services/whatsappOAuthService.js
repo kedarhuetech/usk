@@ -1,3 +1,4 @@
+// Implements the backend whatsapp o auth service.
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
 import { getWhatsAppOAuthConfig, WHATSAPP_AUTH_SCOPES } from "../config/whatsappOAuth.js";
@@ -9,6 +10,7 @@ export const WHATSAPP_OAUTH_STATE_COOKIE = "vyapar_whatsapp_oauth_state";
 const oauthStates = new Map();
 const usedStateDigests = new Map();
 
+// This helper handles expired states logic.
 function cleanupExpiredStates() {
   const now = Date.now();
   for (const [state, value] of oauthStates.entries()) {
@@ -19,25 +21,30 @@ function cleanupExpiredStates() {
   }
 }
 
+// This helper handles return to logic.
 function safeReturnTo(returnTo = "/business-growth/whatsapp-marketing") {
   const value = String(returnTo || "").trim();
   return value.startsWith("/") && !value.startsWith("//") ? value : "/business-growth/whatsapp-marketing";
 }
 
+// This helper handles digest logic.
 function stateDigest(state) {
   return crypto.createHash("sha256").update(String(state || "")).digest("hex");
 }
 
+// This helper handles state payload logic.
 function signStatePayload(encodedPayload) {
   const config = getWhatsAppOAuthConfig();
   return crypto.createHmac("sha256", config.appSecret).update(encodedPayload).digest("base64url");
 }
 
+// Encodes state cookie.
 function encodeStateCookie(payload) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${encodedPayload}.${signStatePayload(encodedPayload)}`;
 }
 
+// Decodes state cookie.
 function decodeStateCookie(cookieValue = "") {
   const [encodedPayload, signature] = String(cookieValue || "").split(".");
   if (!encodedPayload || !signature) return null;
@@ -53,10 +60,12 @@ function decodeStateCookie(cookieValue = "") {
   }
 }
 
+// This helper handles state used logic.
 function markStateUsed(state, expiresAt) {
   usedStateDigests.set(stateDigest(state), { expiresAt: expiresAt || Date.now() + OAUTH_STATE_TTL_MS });
 }
 
+// Creates state.
 function createState(returnTo = "/business-growth/whatsapp-marketing") {
   cleanupExpiredStates();
   const state = crypto.randomBytes(24).toString("hex");
@@ -74,6 +83,7 @@ function createState(returnTo = "/business-growth/whatsapp-marketing") {
   };
 }
 
+// Reads meta response.
 async function readMetaResponse(response, fallback) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
@@ -91,6 +101,7 @@ async function readMetaResponse(response, fallback) {
   return payload;
 }
 
+// Builds whats app authorization request.
 export function buildWhatsAppAuthorizationRequest(returnTo) {
   const config = getWhatsAppOAuthConfig();
   if (!config.oauthConfigured) {
@@ -119,6 +130,7 @@ export function buildWhatsAppAuthorizationRequest(returnTo) {
   };
 }
 
+// Validates whats app o auth state.
 export function validateWhatsAppOAuthState(state, cookieValue = "") {
   cleanupExpiredStates();
   const stateValue = String(state || "");
@@ -142,6 +154,7 @@ export function validateWhatsAppOAuthState(state, cookieValue = "") {
   };
 }
 
+// Exchanges whats app code for access token.
 export async function exchangeWhatsAppCodeForAccessToken(code) {
   const config = getWhatsAppOAuthConfig();
   const url = new URL(`${config.graphBaseUrl}/oauth/access_token`);
@@ -154,6 +167,7 @@ export async function exchangeWhatsAppCodeForAccessToken(code) {
   return readMetaResponse(response, "WhatsApp authorization code exchange failed");
 }
 
+// Exchanges whats app embedded signup code.
 export async function exchangeWhatsAppEmbeddedSignupCode(code) {
   const config = getWhatsAppOAuthConfig();
   const url = new URL(`${config.graphBaseUrl}/oauth/access_token`);
@@ -165,6 +179,7 @@ export async function exchangeWhatsAppEmbeddedSignupCode(code) {
   return readMetaResponse(response, "WhatsApp Embedded Signup code exchange failed");
 }
 
+// Exchanges for long lived whats app token.
 export async function exchangeForLongLivedWhatsAppToken(accessToken) {
   const config = getWhatsAppOAuthConfig();
   const url = new URL(`${config.graphBaseUrl}/oauth/access_token`);
@@ -177,6 +192,7 @@ export async function exchangeForLongLivedWhatsAppToken(accessToken) {
   return readMetaResponse(response, "WhatsApp long-lived token exchange failed");
 }
 
+// This helper handles json post logic.
 export async function graphJsonPost(path, accessToken, payload = {}) {
   const config = getMetaOAuthConfig();
   const url = new URL(path.startsWith("http") ? path : `${config.graphBaseUrl}${path}`);

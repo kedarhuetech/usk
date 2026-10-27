@@ -2,14 +2,17 @@ import { getWhatsAppOAuthConfig } from "../config/whatsappOAuth.js";
 import { fetchWhatsAppTestAssets } from "./whatsappBusinessService.js";
 import { getRequiredWhatsAppPermissions, getWhatsAppConnection, setWhatsAppConnection } from "./whatsappConnectionStore.js";
 
+// This helper handles whats app test permissions logic.
 function grantedWhatsAppTestPermissions() {
   return getRequiredWhatsAppPermissions().map((permission) => ({ permission, status: "granted" }));
 }
 
+// Checks whether whats app test connection.
 export function isWhatsAppTestConnection(connection = getWhatsAppConnection()) {
   return connection.source === "test_env" && connection.token?.testMode;
 }
 
+// Ensures whats app test connection.
 export async function ensureWhatsAppTestConnection({ forceRefresh = false } = {}) {
   const config = getWhatsAppOAuthConfig();
   const connection = getWhatsAppConnection();
@@ -62,6 +65,7 @@ export async function ensureWhatsAppTestConnection({ forceRefresh = false } = {}
   return getWhatsAppConnection();
 }
 
+// Refreshes whats app test connection assets.
 export async function refreshWhatsAppTestConnectionAssets(connection = getWhatsAppConnection()) {
   const config = getWhatsAppOAuthConfig();
   const assets = await fetchWhatsAppTestAssets(connection.token.accessToken, {

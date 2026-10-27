@@ -1,3 +1,4 @@
+// Implements the plans pricing page.
 import { useEffect, useState } from "react";
 import {
   FiCheck,
@@ -13,6 +14,7 @@ import Card from "../../components/Common/Card";
 import { comparisonFeatures, plans } from "../../constants/plansPricingData";
 import { getSubscriptionStatus, startCheckout } from "../../services/subscriptionService";
 
+// Renders the feature icon interface.
 function FeatureIcon({ status }) {
   if (status === "included" || status === "Available") {
     return <FiCheck className="h-4 w-4 text-emerald-600" aria-hidden="true" />;
@@ -23,6 +25,7 @@ function FeatureIcon({ status }) {
   return <FiClock className="h-4 w-4 text-amber-600" aria-hidden="true" />;
 }
 
+// Renders the plan card interface.
 function PlanCard({ plan, onChoose, isSelected, message }) {
   return (
     <Card className={`relative flex h-full flex-col p-5 ${isSelected ? "border-[#343B9A] ring-2 ring-indigo-100" : plan.recommended ? "border-[#343B9A] shadow-md" : ""}`}>
@@ -61,6 +64,7 @@ function PlanCard({ plan, onChoose, isSelected, message }) {
   );
 }
 
+// Renders the plans pricing interface.
 function PlansPricing() {
   const [subscription, setSubscription] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,6 +89,7 @@ function PlansPricing() {
     };
   }, []);
 
+  // Handles choose plan.
   const handleChoosePlan = async (plan) => {
     setSelectedPlanId(plan.id);
     setSelectedPlanMessage("Checking checkout availability...");
