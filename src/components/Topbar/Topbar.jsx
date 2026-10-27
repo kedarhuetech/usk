@@ -1,7 +1,10 @@
 import { FiBell, FiHelpCircle, FiRefreshCw, FiSearch, FiUser } from "react-icons/fi";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { getCompanyProfile } from "../../services/companyProfileStorage";
+import {
+  companyProfileUpdatedEvent,
+  getCompanyProfile,
+} from "../../services/companyProfileStorage";
 
 const navItems = ["Company", "Help", "Versions", "Shortcuts"];
 const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purchase-bills/new"];
@@ -18,7 +21,11 @@ export default function Topbar() {
   useEffect(() => {
     const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
     window.addEventListener("storage", refreshCompanyProfile);
-    return () => window.removeEventListener("storage", refreshCompanyProfile);
+    window.addEventListener(companyProfileUpdatedEvent, refreshCompanyProfile);
+    return () => {
+      window.removeEventListener("storage", refreshCompanyProfile);
+      window.removeEventListener(companyProfileUpdatedEvent, refreshCompanyProfile);
+    };
   }, []);
 
   return (

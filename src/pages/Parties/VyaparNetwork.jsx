@@ -87,7 +87,7 @@ function VyaparNetwork() {
   return (
     <div className="bg-slate-200 p-1">
       <div className="mb-1 bg-white px-6 py-5">
-        <h1 className="text-xl font-bold text-slate-800">Your Ledgerly Network</h1>
+        <h1 className="text-xl font-bold text-slate-800">Your Business Network</h1>
       </div>
 
       <div className="grid gap-1 lg:grid-cols-[450px_1fr]">

@@ -16,7 +16,7 @@ import {
 } from "react-icons/fi";
 
 export const sidebarBrand = {
-  name: "Ledgerly",
+  name: "USK",
   companyName: "My Company",
 };
 

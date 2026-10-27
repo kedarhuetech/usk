@@ -1,0 +1,9 @@
+ src/App.jsx                             |   2 [32m+[m
+ src/components/Sidebar/Sidebar.jsx      |  13 [32m++[m[31m-[m
+ src/components/Sidebar/SidebarData.js   |   6 [32m+[m
+ src/components/Topbar/Topbar.jsx        |  11 [32m+[m[31m-[m
+ src/constants/plansPricingData.js       |  56 [32m+++++++++[m
+ src/pages/PlansPricing/PlansPricing.jsx | 199 [32m++++++++++++++++++++++++++++++++[m
+ src/services/companyProfileStorage.js   |  40 [32m+++++++[m
+ src/services/subscriptionService.js     |  16 [32m+++[m
+ 8 files changed, 340 insertions(+), 3 deletions(-)

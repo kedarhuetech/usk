@@ -139,7 +139,7 @@ function Home() {
         <section className="flex flex-col gap-4 rounded-xl bg-gradient-to-r from-[#1A1F71] to-[#343B9A] p-5 text-white sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-white/70">Business overview</p>
-            <h1 className="mt-1 text-2xl font-bold">Welcome back to Ledgerly</h1>
+            <h1 className="mt-1 text-2xl font-bold">Welcome back</h1>
             <p className="mt-2 max-w-xl text-sm text-white/75">
               Keep track of your sales, balances, and everyday business work from one place.
             </p>
