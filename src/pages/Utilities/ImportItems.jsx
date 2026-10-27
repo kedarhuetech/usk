@@ -1,3 +1,4 @@
+// Implements the import items page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
@@ -21,6 +22,7 @@ const cameraFormats = [
   BarcodeFormat.CODE_128,
 ];
 
+// Creates barcode reader.
 function createBarcodeReader() {
   const hints = new Map([
     [DecodeHintType.POSSIBLE_FORMATS, cameraFormats],
@@ -32,12 +34,15 @@ function createBarcodeReader() {
   });
 }
 
+// This helper handles to items logic.
 function rowsToItems(rows) {
   const cleanedRows = rows.map((row) => row.map((value) => String(value ?? "").trim()));
   const rowsWithValues = cleanedRows.filter((row) => row.some(Boolean));
   if (rowsWithValues.length < 2) throw new Error("The file must include a header row and at least one item.");
+  // Normalizes result.
   const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const headers = rowsWithValues[0].map(normalize);
+  // Handles result.
   const column = (...names) => headers.findIndex((header) => names.includes(header));
   const indexes = {
     name: column("item", "itemname", "name", "product", "productname"),
@@ -53,6 +58,7 @@ function rowsToItems(rows) {
     throw new Error("The file must include an Item Name column.");
   }
   return rowsWithValues.slice(1).map((values, rowIndex) => {
+    // Gets result.
     const get = (key) => indexes[key] < 0 ? "" : String(values[indexes[key]] || "").trim();
     const type = get("type").toLowerCase() === "service" ? "service" : "product";
     return {
@@ -69,6 +75,7 @@ function rowsToItems(rows) {
   });
 }
 
+// Parses csv.
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -97,6 +104,7 @@ function parseCsv(text) {
   return rowsToItems(rows);
 }
 
+// Parses excel.
 async function parseExcel(file) {
   const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -104,6 +112,7 @@ async function parseExcel(file) {
   return rowsToItems(XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "", raw: false }));
 }
 
+// Validates rows.
 function validateRows(rows) {
   const seen = new Set();
   return rows.map((row) => {
@@ -121,6 +130,7 @@ function validateRows(rows) {
   });
 }
 
+// This helper handles review from product logic.
 function barcodeReviewFromProduct(product, barcode, source) {
   const category = product.categories_tags?.[0]?.replace(/^[a-z]{2}:/, "").replace(/-/g, " ")
     || product.category
@@ -142,6 +152,7 @@ function barcodeReviewFromProduct(product, barcode, source) {
   };
 }
 
+// This helper handles with providers logic.
 async function lookupWithProviders(barcode) {
   const providers = [
     {
@@ -190,6 +201,7 @@ async function lookupWithProviders(barcode) {
   return null;
 }
 
+// This helper handles barcode review logic.
 function emptyBarcodeReview(barcode) {
   return {
     itemName: "",
@@ -204,6 +216,7 @@ function emptyBarcodeReview(barcode) {
   };
 }
 
+// Renders the import items interface.
 function ImportItems() {
   const fileInput = useRef(null);
   const [rows, setRows] = useState([]);
@@ -225,6 +238,7 @@ function ImportItems() {
   const validRows = useMemo(() => rows.filter((row) => !row.errors.length), [rows]);
   const invalidRows = rows.length - validRows.length;
 
+  // Stops camera.
   const stopCamera = () => {
     nativeScanActive.current = false;
     cameraControls.current?.stop();
@@ -263,6 +277,7 @@ function ImportItems() {
     const NativeDetector = globalThis.BarcodeDetector;
     const nativeFormats = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128"];
     const useNativeDetector = NativeDetector && typeof NativeDetector.getSupportedFormats === "function";
+    // Requests camera.
     const requestCamera = () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         return Promise.reject(new Error("Camera access is not supported by this browser."));
@@ -289,6 +304,7 @@ function ImportItems() {
         await cameraVideo.current.play();
         nativeScanActive.current = true;
         setCameraState({ status: "loading", message: "Scanning..." });
+        // Scans frame.
         const scanFrame = async () => {
           if (!active || !nativeScanActive.current) return;
           try {
@@ -321,6 +337,7 @@ function ImportItems() {
       startZxingScan();
     }
 
+    // Starts zxing scan.
     async function startZxingScan() {
       if (!active) return;
       const reader = createBarcodeReader();
@@ -372,11 +389,13 @@ function ImportItems() {
     };
   }, [cameraOpen]);
 
+  // Starts camera.
   const startCamera = () => {
     setCameraState({ status: "idle", message: "" });
     setCameraOpen(true);
   };
 
+  // Decodes image.
   const decodeImage = async (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -408,6 +427,7 @@ function ImportItems() {
     }
   };
 
+  // Handles barcode.
   const lookupBarcode = async () => {
     const value = barcode.trim();
     if (!/^\d{8,14}$/.test(value)) {
@@ -438,10 +458,12 @@ function ImportItems() {
     }
   };
 
+  // Updates review field.
   const updateReviewField = (field, value) => {
     setReviewItem((current) => ({ ...current, [field]: value }));
   };
 
+  // Handles barcode item.
   const approveBarcodeItem = async () => {
     if (!reviewItem?.itemName.trim()) {
       setLookupState({ status: "error", message: "Product name is required before saving." });
@@ -492,6 +514,7 @@ function ImportItems() {
     }
   };
 
+  // Selects file.
   const selectFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -514,6 +537,7 @@ function ImportItems() {
     }
   };
 
+  // Imports items.
   const importItems = async () => {
     if (!validRows.length) {
       setMessage("There are no valid rows to import.");

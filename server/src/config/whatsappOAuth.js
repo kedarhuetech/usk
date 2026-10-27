@@ -1,3 +1,4 @@
+// Loads the whatsapp OAuth settings.
 /* global process */
 
 import { getMetaOAuthConfig } from "./metaOAuth.js";
@@ -8,6 +9,7 @@ export const WHATSAPP_AUTH_SCOPES = [
   "whatsapp_business_messaging",
 ];
 
+// Returns the whats app OAuth settings.
 export function getWhatsAppOAuthConfig() {
   const metaConfig = getMetaOAuthConfig();
   const redirectUri = process.env.WHATSAPP_REDIRECT_URI || "";

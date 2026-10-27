@@ -1,9 +1,11 @@
+// Defines the main layout application layout.
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "../components/Sidebar/Sidebar";
 import Topbar from "../components/Topbar/Topbar";
 
 const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purchase-bills/new"];
 
+// Renders the main layout interface.
 function MainLayout() {
   const { pathname } = useLocation();
   const isTransactionRoute = transactionRoutes.includes(pathname);

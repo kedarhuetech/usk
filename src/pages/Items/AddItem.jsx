@@ -1,3 +1,4 @@
+// Implements the add item page.
 import { useRef, useState } from "react";
 import { FiCamera, FiChevronDown, FiPlus, FiSearch, FiSettings, FiTrash2, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
@@ -8,6 +9,7 @@ import UnitSelector from "../../components/items/UnitSelector";
 import { defaultCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
 import { saveBusinessItem } from "../../services/businessRecords";
 
+// Renders the select field interface.
 function SelectField({ label, value, options, onChange, className = "" }) {
   return (
     <label className={`block ${className}`}>
@@ -25,6 +27,7 @@ function SelectField({ label, value, options, onChange, className = "" }) {
   );
 }
 
+// Renders the category picker interface.
 function CategoryPicker({ value, categories, onSelect, onAddNew }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -92,6 +95,7 @@ function CategoryPicker({ value, categories, onSelect, onAddNew }) {
   );
 }
 
+// Renders the category modal interface.
 function CategoryModal({ onClose, onCreate }) {
   const [name, setName] = useState("");
 
@@ -115,6 +119,7 @@ function CategoryModal({ onClose, onCreate }) {
   );
 }
 
+// Renders the unit modal interface.
 function UnitModal({ form, setField, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
@@ -145,10 +150,12 @@ function UnitModal({ form, setField, onClose }) {
   );
 }
 
+// Creates batch row.
 function createBatchRow() {
   return { id: crypto.randomUUID(), batchNo: "", manufacturer: "", mfgDate: "", expDate: "", remarks: "", openingQty: "" };
 }
 
+// Makes the batch row value consistent.
 function normalizeBatchRow(row) {
   return {
     id: row.id || crypto.randomUUID(),
@@ -161,25 +168,30 @@ function normalizeBatchRow(row) {
   };
 }
 
+// This helper handles qty logic.
 function batchQty(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
 }
 
+// Checks whether value.
 function hasValue(value) {
   return value !== "" && value !== null && value !== undefined;
 }
 
+// Gets filled batch rows.
 function getFilledBatchRows(rows) {
   return rows
     .map(normalizeBatchRow)
     .filter((row) => Object.entries(row).some(([key, value]) => key !== "id" && String(value || "").trim()));
 }
 
+// Gets batch total.
 function getBatchTotal(rows) {
   return rows.reduce((total, row) => total + batchQty(row.openingQty), 0);
 }
 
+// Creates editable item form.
 function createEditableItemForm(initialItem) {
   if (!initialItem) return itemDefaults;
 
@@ -213,6 +225,7 @@ function createEditableItemForm(initialItem) {
   };
 }
 
+// Creates editable wholesale.
 function createEditableWholesale(initialItem) {
   const wholesale = initialItem?.wholesale || {};
   return {
@@ -222,18 +235,22 @@ function createEditableWholesale(initialItem) {
   };
 }
 
+// Checks whether wholesale.
 function hasWholesale(initialItem) {
   const wholesale = createEditableWholesale(initialItem);
   return Boolean(wholesale.price || wholesale.minimumQty);
 }
 
+// Creates editable batch rows.
 function createEditableBatchRows(initialItem) {
   if (!initialItem?.batches?.length) return [createBatchRow()];
   return initialItem.batches.map(normalizeBatchRow);
 }
 
+// Renders the batch modal interface.
 function BatchModal({ rows, setRows, onSave, onClose }) {
   const total = getBatchTotal(rows);
+  // Updates row.
   const updateRow = (index, field, value) => {
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)));
   };
@@ -323,6 +340,7 @@ function BatchModal({ rows, setRows, onSave, onClose }) {
   );
 }
 
+// Renders the price group interface.
 function PriceGroup({ inputProps, selectValue, onSelectChange }) {
   return (
     <div className="flex h-10 w-full max-w-sm overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
@@ -340,6 +358,7 @@ function PriceGroup({ inputProps, selectValue, onSelectChange }) {
   );
 }
 
+// Renders the discount group interface.
 function DiscountGroup({ form, setField }) {
   return (
     <div className="flex h-10 w-full max-w-sm overflow-hidden rounded-md border border-slate-300 bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
@@ -362,6 +381,7 @@ function DiscountGroup({ form, setField }) {
   );
 }
 
+// Renders the taxes section interface.
 function TaxesSection({ form, setField, compact = false }) {
   return (
     <Card className={`p-5 ${compact ? "" : "min-h-32"}`}>
@@ -370,6 +390,7 @@ function TaxesSection({ form, setField, compact = false }) {
   );
 }
 
+// Renders the pricing tab interface.
 function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleVisible, wholesale, setWholesale }) {
   return (
     <div className="space-y-4">
@@ -447,6 +468,7 @@ function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleV
   );
 }
 
+// Renders the stock tab interface.
 function StockTab({ form, setField, onBatch }) {
   return (
     <div className="grid max-w-5xl gap-5 lg:grid-cols-3">
@@ -465,6 +487,7 @@ function StockTab({ form, setField, onBatch }) {
   );
 }
 
+// Renders the add item interface.
 function AddItem({ embedded = false, mode = "create", initialItem = null, onClose, onSave }) {
   const fileRef = useRef(null);
   const [form, setForm] = useState(() => createEditableItemForm(initialItem));
@@ -485,14 +508,17 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
 
   const isProduct = form.type === "product";
   const isEditMode = mode === "edit";
+  // Sets field.
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
+  // Toggles type.
   const toggleType = () => {
     const nextType = isProduct ? "service" : "product";
     setField("type", nextType);
     if (nextType === "service") setActiveTab("pricing");
   };
 
+  // Handles image.
   const handleImage = (file) => {
     if (!file) return;
 
@@ -501,6 +527,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     reader.readAsDataURL(file);
   };
 
+  // Saves item.
   const saveItem = async (resetAfterSave = false) => {
     const savedBatchRows = getFilledBatchRows(batchRows);
     const hasBatchStock = savedBatchRows.length > 0;

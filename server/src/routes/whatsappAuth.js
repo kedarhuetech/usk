@@ -1,3 +1,4 @@
+// Defines backend API routes for whatsapp auth.
 import { Router } from "express";
 import { getWhatsAppOAuthConfig } from "../config/whatsappOAuth.js";
 import { fetchWhatsAppAssets, normalizeWhatsAppError } from "../services/whatsappBusinessService.js";
@@ -21,10 +22,12 @@ import { ensureWhatsAppTestConnection } from "../services/whatsappTestModeServic
 const router = Router();
 const OAUTH_COOKIE_PATH = "/api/auth/whatsapp";
 
+// Checks whether secure request.
 function isSecureRequest(req) {
   return req.secure || String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https";
 }
 
+// This helper handles cookie options logic.
 function oauthCookieOptions(req, maxAge) {
   return {
     httpOnly: true,
@@ -35,6 +38,7 @@ function oauthCookieOptions(req, maxAge) {
   };
 }
 
+// Reads cookie.
 function readCookie(req, name) {
   const cookies = String(req.headers.cookie || "").split(";");
   const found = cookies.find((cookie) => cookie.trim().startsWith(`${name}=`));
@@ -42,10 +46,12 @@ function readCookie(req, name) {
   return decodeURIComponent(found.trim().slice(name.length + 1));
 }
 
+// Clears whats app o auth state cookie.
 function clearWhatsAppOAuthStateCookie(req, res) {
   res.clearCookie(WHATSAPP_OAUTH_STATE_COOKIE, oauthCookieOptions(req));
 }
 
+// This helper handles redirect logic.
 function whatsappRedirect(status, message = "") {
   const config = getWhatsAppOAuthConfig();
   const url = new URL("/business-growth/whatsapp-marketing", config.clientOrigin);
@@ -54,6 +60,7 @@ function whatsappRedirect(status, message = "") {
   return url.toString();
 }
 
+// This helper handles whats app auth state logic.
 function publicWhatsAppAuthState(config = getWhatsAppOAuthConfig()) {
   return {
     ...getWhatsAppPublicConnection(),

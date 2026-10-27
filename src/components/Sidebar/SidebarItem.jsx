@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FiChevronDown } from "react-icons/fi";
 import { NavLink, useLocation } from "react-router-dom";
 
+// Renders the sidebar item interface.
 function SidebarItem({ item }) {
   const location = useLocation();
   const hasChildren = Boolean(item.children?.length);

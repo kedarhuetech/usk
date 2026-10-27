@@ -2,6 +2,7 @@ import { applySaleInvoiceStockUpdate } from "./itemsStorage.js";
 
 const SALE_INVOICES_KEY = "ledgerly:saleInvoices.v1";
 
+// This helper handles parse logic.
 function safeParse(value, fallback) {
   try {
     return JSON.parse(value) || fallback;
@@ -10,20 +11,24 @@ function safeParse(value, fallback) {
   }
 }
 
+// Checks whether use storage.
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+// Reads invoices.
 function readInvoices() {
   if (!canUseStorage()) return [];
   return safeParse(window.localStorage.getItem(SALE_INVOICES_KEY), []);
 }
 
+// Writes invoices.
 function writeInvoices(invoices) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(SALE_INVOICES_KEY, JSON.stringify(invoices));
 }
 
+// Makes the invoice value consistent.
 function normalizeInvoice(invoice = {}) {
   const timestamp = invoice.createdAt || new Date().toISOString();
   const invoiceNumber = invoice.form?.invoiceNumber || invoice.invoiceNumber || "1";
@@ -40,15 +45,18 @@ function normalizeInvoice(invoice = {}) {
   };
 }
 
+// Gets sale invoices.
 export function getSaleInvoices() {
   return readInvoices().map(normalizeInvoice).filter((invoice) => invoice.transactionType === "sale");
 }
 
+// Gets next sale invoice number.
 export function getNextSaleInvoiceNumber() {
   const nextNumber = getSaleInvoices().length + 1;
   return String(nextNumber);
 }
 
+// Saves sale invoice.
 export function saveSaleInvoice(invoice) {
   let normalized = normalizeInvoice({ ...invoice, updatedAt: new Date().toISOString() });
   const existing = readInvoices();
@@ -71,6 +79,7 @@ export function saveSaleInvoice(invoice) {
   return normalized;
 }
 
+// Deletes sale invoice.
 export function deleteSaleInvoice(invoiceId) {
   if (!canUseStorage()) return;
   writeInvoices(readInvoices().filter((invoice) => invoice.id !== invoiceId && invoice.invoiceId !== invoiceId));

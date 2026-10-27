@@ -1,3 +1,4 @@
+// Loads the google OAuth settings.
 import dotenv from "dotenv";
 import { google } from "googleapis";
 

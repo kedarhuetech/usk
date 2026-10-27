@@ -1,3 +1,4 @@
+// Implements the google profile manager page.
 import { useEffect, useMemo, useState } from "react";
 import {
   FiAlertCircle,
@@ -49,6 +50,7 @@ const metricIcons = {
 
 const defaultDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+// Renders the state switch interface.
 function StateSwitch({ status, setStatus }) {
   const states = [
     "disconnected",
@@ -78,6 +80,7 @@ function StateSwitch({ status, setStatus }) {
   );
 }
 
+// Renders the page header interface.
 function PageHeader({ status, setStatus, connected, onRefresh }) {
   return (
     <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -118,6 +121,7 @@ function PageHeader({ status, setStatus, connected, onRefresh }) {
   );
 }
 
+// Renders the access denied state interface.
 function AccessDeniedState({ userEmail, onRetry }) {
   return (
     <div className="grid min-h-[calc(100vh-184px)] place-items-center bg-slate-50 p-4">
@@ -161,7 +165,9 @@ function AccessDeniedState({ userEmail, onRetry }) {
   );
 }
 
+// Renders the disconnected state interface.
 function DisconnectedState({ setStatus }) {
+  // Handles connect google.
   const handleConnectGoogle = () => {
     window.location.href = `${API_BASE_URL}/api/auth/google`;
   };
@@ -234,6 +240,7 @@ function DisconnectedState({ setStatus }) {
   );
 }
 
+// Renders the status state interface.
 function StatusState({ type, setStatus }) {
   const content = {
     loading: [
@@ -269,6 +276,7 @@ function StatusState({ type, setStatus }) {
   );
 }
 
+// Renders the profile bar interface.
 function ProfileBar({ profile, dateRange, setDateRange }) {
   return (
     <section className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
@@ -305,6 +313,7 @@ function ProfileBar({ profile, dateRange, setDateRange }) {
   );
 }
 
+// Renders the section nav interface.
 function SectionNav({ active, setActive }) {
   return (
     <nav className="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2">
@@ -326,6 +335,7 @@ function SectionNav({ active, setActive }) {
   );
 }
 
+// Renders the metric grid interface.
 function MetricGrid({ metrics }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -358,6 +368,7 @@ function MetricGrid({ metrics }) {
   );
 }
 
+// Renders the performance card interface.
 function PerformanceCard({ data }) {
   return (
     <Card className="p-4 shadow-sm">
@@ -414,6 +425,7 @@ function PerformanceCard({ data }) {
   );
 }
 
+// Renders the reputation card interface.
 function ReputationCard({ reputation }) {
   return (
     <Card className="p-4 shadow-sm">
@@ -457,6 +469,7 @@ function ReputationCard({ reputation }) {
   );
 }
 
+// Renders the overview interface.
 function Overview({ data }) {
   return (
     <div className="space-y-3">
@@ -469,11 +482,13 @@ function Overview({ data }) {
   );
 }
 
+// Renders the reviews interface.
 function Reviews({ reviews, onReply }) {
   const [replyId, setReplyId] = useState("");
   const [replyText, setReplyText] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Handles send reply.
   const handleSendReply = async (reviewId) => {
     if (!replyText.trim()) return;
     setIsSubmitting(true);
@@ -579,6 +594,7 @@ function Reviews({ reviews, onReply }) {
   );
 }
 
+// Renders the photos interface.
 function Photos({ photos, onAddPhoto }) {
   return (
     <Card className="p-4 shadow-sm">
@@ -638,7 +654,9 @@ function Photos({ photos, onAddPhoto }) {
   );
 }
 
+// Renders the review qr interface.
 function ReviewQr({ qr }) {
+  // Handles copy.
   const handleCopy = () => {
     if (qr?.reviewLink) navigator.clipboard.writeText(qr.reviewLink);
   };
@@ -1080,6 +1098,7 @@ function BusinessDetails({ details, profile, onSave }) {
   );
 }
 
+// Renders the empty panel interface.
 function EmptyPanel({ title, text }) {
   return (
     <div className="grid min-h-52 place-items-center rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
@@ -1092,6 +1111,7 @@ function EmptyPanel({ title, text }) {
   );
 }
 
+// Renders the connected dashboard interface.
 function ConnectedDashboard({ data, onSave, onReply, onAddPhoto }) {
   const [active, setActive] = useState("overview");
   const [dateRange, setDateRange] = useState("Last 30 Days");
@@ -1131,12 +1151,14 @@ function ConnectedDashboard({ data, onSave, onReply, onAddPhoto }) {
   );
 }
 
+// Renders the google profile manager interface.
 function GoogleProfileManager() {
   const [status, setStatus] = useState("loading");
   const [data, setData] = useState(googleProfileMock);
   const [profileError, setProfileError] = useState("");
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
 
+  // Verifies and load data.
   const verifyAndLoadData = async () => {
     setStatus("loading");
     setProfileError("");
@@ -1184,6 +1206,7 @@ function GoogleProfileManager() {
     setData(updated);
   };
 
+  // Handles reply review.
   const handleReplyReview = async (reviewId, replyText) => {
     await googleProfileService.postReviewReply(reviewId, replyText);
     setData((prev) => ({
@@ -1194,6 +1217,7 @@ function GoogleProfileManager() {
     }));
   };
 
+  // Handles add photo.
   const handleAddPhoto = async () => {
     const newPhoto = {
       id: `photo-${Date.now()}`,

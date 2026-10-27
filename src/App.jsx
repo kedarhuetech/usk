@@ -1,6 +1,9 @@
+// Connects each application page to its route.
 import BusinessGrowthGuard from "./pages/BusinessGrowth/BusinessGrowthGuard";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
+import Settings from "./pages/Settings/Settings";
+import { AppPasscodeGuard, AppPasscodeProvider } from "./components/Passcode/AppPasscodeGate";
 import ComingSoon from "./pages/ComingSoon";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import GoogleProfileManager from "./pages/BusinessGrowth/GoogleProfileManager";
@@ -25,6 +28,8 @@ import ExportItems from "./pages/Utilities/ExportItems";
 import ExportToTally from "./pages/Utilities/ExportToTally";
 import ImportParties from "./pages/Utilities/ImportParties";
 import UpdateItemsInBulk from "./pages/Utilities/UpdateItemsInBulk";
+import ImportFromTally from "./pages/Utilities/ImportFromTally";
+import VerifyMyData from "./pages/Utilities/VerifyMyData";
 import PlansPricing from "./pages/PlansPricing/PlansPricing";
 import {
   DataDeletion,
@@ -32,16 +37,18 @@ import {
   TermsOfService,
 } from "./pages/Legal/LegalPages";
 
+// Renders the app interface.
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <AppPasscodeProvider>
+      <BrowserRouter>
+        <Routes>
         <Route path="/store/:storeId" element={<CustomerStorefront />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/data-deletion" element={<DataDeletion />} />
 
-        <Route path="/" element={<MainLayout />}>
+        <Route path="/" element={<AppPasscodeGuard><MainLayout /></AppPasscodeGuard>}>
           <Route index element={<Home />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="items" element={<ItemsDashboard />} />
@@ -96,13 +103,18 @@ function App() {
           <Route path="utilities/export-items" element={<ExportItems />} />
           <Route path="utilities/export-to-tally" element={<ExportToTally />} />
           <Route path="utilities/import-parties" element={<ImportParties />} />
+          {/* Tally imports live with the other Utilities pages. */}
+          <Route path="utilities/import-from-tally" element={<ImportFromTally />} />
+          <Route path="utilities/verify-my-data" element={<VerifyMyData />} />
           <Route path="utilities/update-items-in-bulk" element={<UpdateItemsInBulk />} />
           <Route path="plans-pricing" element={<PlansPricing />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="reports" element={<ComingSoon />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </AppPasscodeProvider>
   );
 }
 

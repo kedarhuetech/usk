@@ -1,5 +1,6 @@
 import Card from "../Common/Card";
 
+// Renders the widget card interface.
 function WidgetCard({ widget }) {
   return (
     <Card className="p-5">

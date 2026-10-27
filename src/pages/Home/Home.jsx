@@ -1,3 +1,4 @@
+// Implements the home page.
 import { useEffect, useMemo, useState } from "react";
 import {
   FiArrowRight,
@@ -35,6 +36,7 @@ const growthLinks = [
   { label: "Smart Ads", path: "/business-growth/smart-ads", icon: FiTrendingUp },
 ];
 
+// Renders the summary card interface.
 function SummaryCard({ label, value, note, icon: Icon, tone }) {
   const tones = {
     blue: "bg-blue-50 text-blue-600",
@@ -65,6 +67,7 @@ const actionTones = {
   emerald: "bg-emerald-50 text-emerald-600",
 };
 
+// Renders the home interface.
 function Home() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
@@ -75,6 +78,7 @@ function Home() {
   useEffect(() => {
     let active = true;
 
+    // Loads home data.
     async function loadHomeData() {
       const results = await Promise.allSettled([loadBusinessSummary(), loadSalesInvoices()]);
       if (!active) return;

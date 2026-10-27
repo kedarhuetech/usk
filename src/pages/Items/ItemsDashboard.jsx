@@ -1,3 +1,4 @@
+// Implements the items dashboard page.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -28,6 +29,7 @@ const ITEM_TRANSACTION_ACTIONS_KEY = "ledgerly:itemsTransactionActions.v1";
 const ITEM_UI_OVERRIDES_KEY = "ledgerly:itemsUiOverrides.v1";
 const ITEM_CSV_IMPORTS_KEY = "ledgerly:itemsCsvImports.v1";
 
+// Parses csv.
 function parseCsv(text) {
   const rows = [];
   let row = [];
@@ -49,8 +51,10 @@ function parseCsv(text) {
   row.push(cell.trim());
   if (row.some(Boolean)) rows.push(row);
   if (rows.length < 2) throw new Error("The CSV must include a header row and at least one item.");
+  // Normalizes result.
   const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const headers = rows[0].map(normalize);
+  // Handles result.
   const column = (...names) => headers.findIndex((header) => names.includes(header));
   const indexes = {
     name: column("item", "itemname", "name", "product", "productname", "servicename"),
@@ -65,6 +69,7 @@ function parseCsv(text) {
   };
   if (indexes.name < 0) throw new Error("Add an Item Name (or Name / Product Name) column to your CSV.");
   const parsed = rows.slice(1).map((values) => {
+    // Gets result.
     const get = (key) => indexes[key] < 0 ? "" : String(values[indexes[key]] || "").trim();
     const name = get("name");
     if (!name) return null;
@@ -86,6 +91,7 @@ function parseCsv(text) {
   return parsed;
 }
 
+// Reads csv imported items.
 function readCsvImportedItems() {
   try {
     const value = JSON.parse(window.localStorage.getItem(ITEM_CSV_IMPORTS_KEY) || "[]");
@@ -93,6 +99,7 @@ function readCsvImportedItems() {
   } catch { return []; }
 }
 
+// Reads item ui overrides.
 function readItemUiOverrides() {
   try {
     const value = JSON.parse(window.localStorage.getItem(ITEM_UI_OVERRIDES_KEY) || "{}");
@@ -102,16 +109,19 @@ function readItemUiOverrides() {
   }
 }
 
+// Writes item ui overrides.
 function writeItemUiOverrides(value) {
   window.localStorage.setItem(ITEM_UI_OVERRIDES_KEY, JSON.stringify(value));
 }
 
+// Applies item ui overrides.
 function applyItemUiOverrides(sourceItems) {
   const overrides = readItemUiOverrides();
   const deleted = new Set(overrides.deleted || []);
   return sourceItems.filter((item) => !deleted.has(item.id)).map((item) => ({ ...item, ...(overrides.edits?.[item.id] || {}) }));
 }
 
+// Reads transaction actions.
 function readTransactionActions() {
   try {
     const value = JSON.parse(window.localStorage.getItem(ITEM_TRANSACTION_ACTIONS_KEY) || "{}");
@@ -121,30 +131,37 @@ function readTransactionActions() {
   }
 }
 
+// Writes transaction actions.
 function writeTransactionActions(value) {
   window.localStorage.setItem(ITEM_TRANSACTION_ACTIONS_KEY, JSON.stringify(value));
 }
 
+// This helper handles label logic.
 function dateLabel(value) {
   if (!value) return "-";
   const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-IN");
 }
 
+// This helper handles result logic.
 function money(value) {
   return `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// This helper handles result logic.
 function quantity(item) {
   return Number(item?.openingQuantity ?? item?.stock ?? 0) || 0;
 }
 
+// This helper handles value logic.
 function stockValue(item) {
   return quantity(item) * (Number(item?.purchasePrice || 0) || 0);
 }
 
+// This helper handles rows logic.
 function transactionRows(item, sales, purchases) {
   if (!item) return [];
+  // Handles result.
   const matches = (row) => row.sourceItemId === item.id || String(row.item || "").trim().toLowerCase() === String(item.itemName || "").trim().toLowerCase();
   const saleRows = sales.flatMap((invoice) => (invoice.rows || []).filter(matches).map((row) => ({
     id: `${invoice.id}-${row.id}`,
@@ -205,7 +222,9 @@ function transactionRows(item, sales, purchases) {
     source: { type: "Opening Stock", quantity: originalOpeningQuantity, date: item.asOfDate, unit: item.unit || "" },
   }] : [];
   const actions = readTransactionActions();
+  // Handles rows.
   const copiedRows = (actions.copies || []).filter((entry) => entry.itemId === item.id).map((entry) => ({ ...entry.row, id: entry.id }));
+  // Handles rows.
   const returnedRows = (actions.returns || []).filter((entry) => entry.itemId === item.id).map((entry) => ({
     id: entry.id,
     type: "Sale Return",
@@ -226,7 +245,9 @@ function transactionRows(item, sales, purchases) {
   })).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 }
 
+// Downloads csv.
 function downloadCsv(filename, rows) {
+  // Handles result.
   const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const csv = rows.map((row) => row.map(quote).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
@@ -237,6 +258,7 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
+// Renders the modal interface.
 function Modal({ title, children, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -248,12 +270,14 @@ function Modal({ title, children, onClose }) {
   );
 }
 
+// Renders the adjustment modal interface.
 function AdjustmentModal({ item, onClose, onSave }) {
   const [direction, setDirection] = useState("add");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // Saves result.
   const save = async () => {
     const parsed = Number(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) { setError("Enter a quantity greater than zero."); return; }
@@ -277,6 +301,7 @@ function AdjustmentModal({ item, onClose, onSave }) {
   );
 }
 
+// Renders the items dashboard interface.
 function ItemsDashboard() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("product");
@@ -333,7 +358,9 @@ function ItemsDashboard() {
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
+    // Handles pointer down.
     const onPointerDown = (event) => { if (!menuRef.current?.contains(event.target) && !event.target.closest?.("[data-item-bulk-menu]") && !event.target.closest?.("[data-item-transaction-actions]") && !event.target.closest?.("[data-item-row-actions]")) { setMenuOpen(false); setRowMenu(""); } };
+    // Handles key down.
     const onKeyDown = (event) => { if (event.key === "Escape") { setMenuOpen(false); setRowMenu(""); setItemModal(null); setAdjustItem(null); setTransactionDetails(null); setTransactionHistory(null); setUnitModal(false); setConversionModal(false); } };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -366,6 +393,7 @@ function ItemsDashboard() {
   const selectedBulkItems = filteredItems.filter((item) => selectedBulkIds.includes(item.id));
   const conversions = useMemo(() => getUnitConversions(selectedUnit).filter((conversion) => `${conversion.toUnit} ${conversion.factor}`.toLowerCase().includes(conversionSearch.trim().toLowerCase())), [selectedUnit, units, conversionSearch]);
 
+  // Saves item.
   const saveItem = async (value) => {
     if (itemModal?.mode === "edit") {
       const saved = await saveBusinessItem(value);
@@ -385,6 +413,7 @@ function ItemsDashboard() {
     setNotice(`${saved.itemName} saved.`);
   };
 
+  // Imports items csv.
   const importItemsCsv = async (file) => {
     if (!file) return;
     try {
@@ -419,6 +448,7 @@ function ItemsDashboard() {
     }
   };
 
+  // Saves adjustment.
   const saveAdjustment = async (item, nextQuantity, adjustment) => {
     const updated = await saveBusinessItem({ ...item, openingQuantity: nextQuantity, stock: nextQuantity });
     saveInventoryAdjustment({ itemId: item.id, unit: item.unit || "", ...adjustment });
@@ -426,6 +456,7 @@ function ItemsDashboard() {
     setNotice("Stock adjustment saved.");
   };
 
+  // Creates unit.
   const createUnit = () => {
     const nextUnits = addCustomUnit(unitName);
     if (!unitName.trim()) return;
@@ -436,6 +467,7 @@ function ItemsDashboard() {
     setUnitModal(false);
   };
 
+  // Creates conversion.
   const createConversion = () => {
     const factor = Number(conversionFactor);
     if (!conversionUnit || !Number.isFinite(factor) || factor <= 0) return;
@@ -447,7 +479,9 @@ function ItemsDashboard() {
     setUnits((current) => [...current]);
   };
 
+  // Exports transactions.
   const exportTransactions = () => downloadCsv(`item-transactions-${selectedItem?.itemName || ""}.csv`, [["Type", "Invoice", "Name", "Date", "Quantity", "Unit", "Price", "Amount", "Status"], ...filteredTransactions.map((row) => [row.type, row.invoice, row.name, row.date, row.quantity, row.unit, row.price, row.amount, row.status])]);
+  // Applies bulk update.
   const applyBulkUpdate = (makeUpdate, message) => {
     const overrides = readItemUiOverrides();
     const edits = { ...(overrides.edits || {}) };
@@ -466,6 +500,7 @@ function ItemsDashboard() {
     setSelectedBulkIds((current) => current.filter((id) => !targetIds.has(id)));
     setBulkAction("");
   };
+  // Starts bulk action.
   const startBulkAction = (action) => {
     setMenuOpen(false);
     if (!filteredItems.length) { setNotice("There are no items available to select."); return; }
@@ -473,6 +508,7 @@ function ItemsDashboard() {
     setBulkAction(action);
     setBulkSelectionOpen(true);
   };
+  // Handles bulk selection.
   const continueBulkSelection = () => {
     if (!selectedBulkItems.length) { setNotice("Select one or more items to continue."); return; }
     setBulkSelectionOpen(false);
@@ -487,6 +523,7 @@ function ItemsDashboard() {
     }
     if (bulkAction === "code") setBulkCodes(Object.fromEntries(selectedBulkItems.map((item) => [item.id, item.itemCode || ""])));
   };
+  // Saves bulk action.
   const saveBulkAction = () => {
     if (bulkAction === "code") {
       const codes = selectedBulkItems.map((item) => String(bulkCodes[item.id] || "").trim());
@@ -558,6 +595,7 @@ function ItemsDashboard() {
               <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[920px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold uppercase text-slate-500"><tr>{["Type", "Invoice", "Name", "Date", "Quantity", "Price / Unit", "Amount", "Status", ""].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-3">{heading}</th>)}</tr></thead><tbody>
                 {filteredTransactions.map((row) => {
                   const actionKey = row.sourceId || row.id;
+                  // Handles action.
                   const localAction = (action) => {
                     const current = readTransactionActions();
                     if (action === "Cancel Invoice") current.cancelled = { ...current.cancelled, [actionKey]: true };

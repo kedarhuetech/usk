@@ -1,15 +1,18 @@
 import { businessGrowthApi } from "./apiClient.js";
 
+// Creates id.
 function createId() {
   if (globalThis.crypto?.randomUUID) return `smart-ad-${globalThis.crypto.randomUUID()}`;
   return `smart-ad-${Date.now()}-${Math.round(Math.random() * 100000)}`;
 }
 
+// This helper handles number logic.
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Makes the smart ads campaign value consistent.
 export function normalizeSmartAdsCampaign(campaign = {}) {
   const now = new Date().toISOString();
   const dailyBudget = toNumber(campaign.budget?.dailyBudget);
@@ -89,10 +92,12 @@ export function normalizeSmartAdsCampaign(campaign = {}) {
   };
 }
 
+// Gets smart ads campaigns.
 export function getSmartAdsCampaigns() {
   return businessGrowthApi.list("smart-ads").then((rows) => rows.map(normalizeSmartAdsCampaign));
 }
 
+// Saves smart ads campaign.
 export function saveSmartAdsCampaign(campaign) {
   const normalizedCampaign = normalizeSmartAdsCampaign(campaign);
   return businessGrowthApi.save("smart-ads", normalizedCampaign);

@@ -1,5 +1,6 @@
 import Card from "../Common/Card";
 
+// Renders the quick actions interface.
 function QuickActions({ actions }) {
   return (
     <Card className="p-5">

@@ -1,3 +1,4 @@
+// Defines shared marketing studio data application data.
 export {
   discoverySections,
   discoveryTabs,

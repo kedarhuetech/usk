@@ -1,3 +1,4 @@
+// Implements the backend image to layers service.
 /* global process */
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
@@ -16,10 +17,12 @@ const ACCEPTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 const VALID_OUTPUT_IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|webp);base64,[a-zA-Z0-9+/=]+$/;
 
+// Checks whether positive frame.
 function isPositiveFrame(layer) {
   return [layer?.x, layer?.y, layer?.width, layer?.height].every((value) => Number.isFinite(Number(value))) && Number(layer.width) > 0 && Number(layer.height) > 0;
 }
 
+// Checks whether valid output image data url.
 function isValidOutputImageDataUrl(value) {
   if (!VALID_OUTPUT_IMAGE_DATA_URL.test(String(value || ""))) return false;
 
@@ -31,12 +34,14 @@ function isValidOutputImageDataUrl(value) {
   }
 }
 
+// Checks whether valid raw layer.
 function isValidRawLayer(layer) {
   if (!isPositiveFrame(layer)) return false;
   if (layer?.type === "text") return typeof layer.text === "string" && layer.text.trim().length > 0;
   return isValidOutputImageDataUrl(layer?.src);
 }
 
+// Parses image data url.
 function parseImageDataUrl(dataUrl) {
   const match = /^data:(image\/(?:png|jpeg|webp));base64,([a-zA-Z0-9+/=]+)$/.exec(String(dataUrl || ""));
   if (!match) {
@@ -62,12 +67,14 @@ function parseImageDataUrl(dataUrl) {
   return { mimeType, buffer };
 }
 
+// Gets file extension.
 function getFileExtension(mimeType) {
   if (mimeType === "image/png") return "png";
   if (mimeType === "image/webp") return "webp";
   return "jpg";
 }
 
+// This helper handles python segmentation logic.
 function runPythonSegmentation(inputPath) {
   const configuredPython = process.env.PYTHON_BIN?.trim();
   const localVenvPython = path.resolve(__dirname, "../../.venv-image-to-layers", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
@@ -135,6 +142,7 @@ function runPythonSegmentation(inputPath) {
   });
 }
 
+// Makes the image layer value consistent.
 function normalizeImageLayer(layer, index) {
   return {
     id: `extracted-object-${index + 1}`,
@@ -174,6 +182,7 @@ function normalizeImageLayer(layer, index) {
   };
 }
 
+// Makes the text layer value consistent.
 function normalizeTextLayer(layer, index) {
   return {
     id: `extracted-text-${index + 1}`,
@@ -208,6 +217,7 @@ function normalizeTextLayer(layer, index) {
   };
 }
 
+// Makes the layer value consistent.
 function normalizeLayer(layer, index) {
   if (layer?.type === "text") {
     return normalizeTextLayer(layer, index);
@@ -216,6 +226,7 @@ function normalizeLayer(layer, index) {
   return normalizeImageLayer(layer, index);
 }
 
+// Creates image to layers design payload.
 export async function createImageToLayersDesignPayload({ dataUrl, fileName }) {
   const { mimeType, buffer } = parseImageDataUrl(dataUrl);
   const jobId = randomUUID();

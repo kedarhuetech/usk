@@ -1,3 +1,4 @@
+// Implements the sale invoices page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -22,22 +23,28 @@ import { loadSalesInvoices } from "../../services/businessRecords";
 
 const SALE_INVOICE_UI_KEY = "ledgerly:saleInvoiceUiActions.v1";
 
+// Reads sale invoice ui.
 function readSaleInvoiceUi() {
   try { const value = JSON.parse(window.localStorage.getItem(SALE_INVOICE_UI_KEY) || "{}"); return value && typeof value === "object" ? value : {}; }
   catch { return {}; }
 }
 
+// This helper handles invoice history logic.
 function recordInvoiceHistory(state, invoice, action) {
   return [{ id: `${invoice.id}-${Date.now()}`, invoiceId: invoice.id, invoiceNumber: invoice.form?.invoiceNumber || invoice.invoiceNumber || "—", action, at: new Date().toISOString() }, ...(state.history || [])];
 }
 
+// This helper handles date logic.
 function isoDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+// Starts of month.
 function startOfMonth(date) { return new Date(date.getFullYear(), date.getMonth(), 1); }
+// This helper handles of month logic.
 function endOfMonth(date) { return new Date(date.getFullYear(), date.getMonth() + 1, 0); }
 
+// This helper handles date logic.
 function invoiceDate(invoice) {
   const value = invoice.form?.invoiceDate || invoice.createdAt;
   if (!value) return null;
@@ -45,6 +52,7 @@ function invoiceDate(invoice) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+// Checks whether in date range.
 function isInDateRange(value, start, end) {
   if (!start && !end) return true;
   if (!value) return false;
@@ -54,40 +62,49 @@ function isInDateRange(value, start, end) {
   return (!start || iso >= start) && (!end || iso <= end);
 }
 
+// Formats date.
 function formatDate(value) {
   if (!value) return "—";
   return value.toLocaleDateString("en-GB");
 }
 
+// Formats money.
 function formatMoney(value) {
   return `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+// This helper handles amount logic.
 function invoiceAmount(invoice) {
   return Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? 0);
 }
 
+// This helper handles store logic.
 function invoiceStore(invoice) {
   const value = invoice.business?.name || invoice.business?.businessName || invoice.storeName || invoice.store;
   return typeof value === "string" ? value : value?.name || value?.businessName || "";
 }
 
+// This helper handles user logic.
 function invoiceUser(invoice) {
   const value = invoice.createdBy || invoice.createdByName || invoice.userName || invoice.user;
   return typeof value === "string" ? value : value?.name || value?.fullName || "";
 }
 
+// This helper handles received logic.
 function invoiceReceived(invoice) {
   if (invoice.saleType === "cash") return invoiceAmount(invoice);
   if (invoice.totals?.received != null) return Math.min(Math.max(Number(invoice.totals.received || 0), 0), invoiceAmount(invoice));
   return 0;
 }
 
+// This helper handles balance logic.
 function invoiceBalance(invoice) {
   return Math.max(invoiceAmount(invoice) - invoiceReceived(invoice), 0);
 }
 
+// Downloads csv.
 function downloadCsv(rows) {
+  // Handles result.
   const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const content = [["Date", "Invoice No", "Party Name", "Transaction", "Payment Type", "Amount", "Balance", "Status"], ...rows.map((invoice) => [
     formatDate(invoiceDate(invoice)), invoice.form?.invoiceNumber || invoice.invoiceNumber || "", invoice.form?.customer || "Cash Sale", "Sale", invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit"), invoiceAmount(invoice), invoiceBalance(invoice), invoiceBalance(invoice) > 0 ? "Unpaid" : "Paid",
@@ -96,12 +113,14 @@ function downloadCsv(rows) {
   const link = document.createElement("a"); link.href = url; link.download = "sale-invoices.csv"; link.click(); URL.revokeObjectURL(url);
 }
 
+// Renders the empty state interface.
 function EmptyState({ onAddSale }) {
   return <div className="flex min-h-[420px] flex-1 items-center justify-center px-5 py-12 text-center"><div className="max-w-sm"><div className="mx-auto grid h-32 w-32 place-items-center rounded-full bg-blue-50 text-blue-500"><FiTrendingUp className="h-16 w-16" /></div><h2 className="mt-6 text-lg font-bold text-slate-800">No sales recorded yet</h2><p className="mt-2 text-sm leading-6 text-slate-500">Create your first sale invoice to get started.</p><Button onClick={onAddSale} className="mt-6 bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus className="h-5 w-5" /> Add Sale</Button></div></div>;
 }
 
 const graphPeriods = ["Daily", "Weekly", "Monthly", "Yearly"];
 
+// Renders the sales graph view interface.
 function SalesGraphView({ invoices, from, to, setFrom, setTo, period, setPeriod, user, setUser, users, onClose }) {
   const buckets = useMemo(() => {
     const start = new Date(`${from}T00:00:00`);
@@ -142,7 +161,9 @@ function SalesGraphView({ invoices, from, to, setFrom, setTo, period, setPeriod,
   const plotH = height - pad.top - pad.bottom;
   const peak = Math.max(...buckets.map((bucket) => bucket.total), 0);
   const scale = Math.max(500, Math.ceil(peak / 500) * 500);
+  // Handles result.
   const x = (index) => pad.left + (buckets.length < 2 ? plotW / 2 : (index / (buckets.length - 1)) * plotW);
+  // Handles result.
   const y = (value) => pad.top + plotH - (value / scale) * plotH;
   const path = buckets.map((bucket, index) => `${index ? "L" : "M"} ${x(index)} ${y(bucket.total)}`).join(" ");
   const labelStep = Math.max(1, Math.ceil(buckets.length / (period === "Daily" ? 70 : 35)));
@@ -153,16 +174,19 @@ function SalesGraphView({ invoices, from, to, setFrom, setTo, period, setPeriod,
   </div>;
 }
 
+// Renders the invoice actions menu interface.
 function InvoiceActionsMenu({ invoice, open, onToggle, onAction }) {
   const rootRef = useRef(null);
   const [position, setPosition] = useState({ top: 0, right: 16 });
   useEffect(() => {
     if (!open) return undefined;
+    // Closes when outside.
     const closeWhenOutside = (event) => { if (!rootRef.current?.contains(event.target)) onToggle(false); };
     document.addEventListener("pointerdown", closeWhenOutside);
     return () => document.removeEventListener("pointerdown", closeWhenOutside);
   }, [open, onToggle]);
   const actions = ["View/Edit", "Generate e-Invoice", "Convert To Return", "Preview Delivery Challan", "Payment History", "Cancel Invoice", "Delete", "Duplicate", "Open PDF", "Preview", "Print", "View History"];
+  // Toggles result.
   const toggle = (event) => {
     if (open) { onToggle(false); return; }
     const rect = event.currentTarget.getBoundingClientRect();
@@ -174,6 +198,7 @@ function InvoiceActionsMenu({ invoice, open, onToggle, onAction }) {
   return <div ref={rootRef} className="relative"><button type="button" onClick={toggle} aria-label="More invoice actions" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiMoreVertical className="h-5 w-5" /></button>{open && <div style={{ top: position.top, right: position.right }} className="fixed z-[100] max-h-[min(560px,72vh)] w-60 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-xl">{actions.map((action) => <button key={action} type="button" onClick={() => onAction(action, invoice)} className="w-full rounded px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100">{action}</button>)}</div>}</div>;
 }
 
+// Renders the sale invoices interface.
 function SaleInvoices() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -194,11 +219,14 @@ function SaleInvoices() {
   const [graphPeriod, setGraphPeriod] = useState("Daily");
   const [graphUser, setGraphUser] = useState("All Users");
   const [activeDialog, setActiveDialog] = useState(null);
+  // Opens add sale.
   const openAddSale = () => navigate("/sales/sale-invoices/new", { state: { from: pathname } });
+  // Opens preview.
   const openPreview = (invoice, printAfterOpen = false) => navigate("/sales/sale-invoices/preview", { state: { invoice, printAfterOpen } });
 
   useEffect(() => {
     let active = true;
+    // Refreshes result.
     const refresh = async () => {
       try { const rows = await loadSalesInvoices(); if (active) setInvoices(rows.filter((invoice) => invoice.transactionType !== "purchase")); }
       catch (error) { console.error("Could not load sale invoices:", error); }
@@ -239,6 +267,7 @@ function SaleInvoices() {
       && (graphUser === "All Users" || invoiceUser(invoice) === graphUser);
   }), [shownInvoices, graphFrom, graphTo, graphUser]);
 
+  // Sets period range.
   const setPeriodRange = (value) => {
     setPeriod(value);
     const base = new Date();
@@ -248,12 +277,14 @@ function SaleInvoices() {
     else if (value === "All Time") { setDateFrom(""); setDateTo(""); }
   };
 
+  // Saves invoice ui.
   const saveInvoiceUi = (update) => setInvoiceUi((current) => {
     const next = update(current);
     window.localStorage.setItem(SALE_INVOICE_UI_KEY, JSON.stringify(next));
     return next;
   });
 
+  // Opens invoice action.
   const openInvoiceAction = (action, invoice) => {
     setRowMenu("");
     if (action === "Preview" || action === "Open PDF") { openPreview(invoice); return; }
@@ -276,6 +307,7 @@ function SaleInvoices() {
     } else if (["Generate e-Invoice", "Preview Delivery Challan", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
   };
 
+  // Handles invoice.
   const shareInvoice = async (invoice) => {
     const text = `Sale invoice ${invoice.form?.invoiceNumber || ""} for ${invoice.form?.customer || "Cash Sale"}: ${formatMoney(invoiceAmount(invoice))}`;
     try {

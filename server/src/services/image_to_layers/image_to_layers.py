@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Implements the backend image to layers service.
 """
 Image -> Layers ("Magic Layers" style).
 
@@ -69,10 +70,12 @@ COMMON_POSTER_WORDS = set(
 )
 
 
+# This helper handles result logic.
 def respond(payload):
     print(json.dumps(payload), flush=True)
 
 
+# This helper handles result logic.
 def unavailable(message):
     respond(
         {
@@ -114,30 +117,36 @@ def image_to_data_url(image, image_format="PNG", **save_options):
     return f"data:image/{mime_type};base64,{encoded}"
 
 
+# This helper handles result logic.
 def clamp(value, minimum, maximum):
     return max(minimum, min(maximum, value))
 
 
+# This helper handles result logic.
 def odd(value, minimum=3):
     value = max(int(minimum), int(round(value)))
     return value if value % 2 == 1 else value + 1
 
 
+# This helper handles kernel logic.
 def box_kernel(size):
     return np.ones((size, size), np.uint8)
 
 
+# This helper handles to hex logic.
 def rgb_to_hex(color):
     red, green, blue = [int(clamp(int(channel), 0, 255)) for channel in color[:3]]
     return f"#{red:02x}{green:02x}{blue:02x}"
 
 
+# This helper handles distance logic.
 def color_distance(hex_a, hex_b):
     a = [int(hex_a[i : i + 2], 16) for i in (1, 3, 5)]
     b = [int(hex_b[i : i + 2], 16) for i in (1, 3, 5)]
     return math.sqrt(sum((p - q) ** 2 for p, q in zip(a, b)))
 
 
+# Loads text corrections.
 def load_text_corrections(path):
     if not path:
         return
@@ -150,6 +159,7 @@ def load_text_corrections(path):
         pass
 
 
+# Cleans text.
 def sanitize_text(text):
     clean = " ".join(str(text).split())
     for bad, good in TEXT_CORRECTIONS.items():
@@ -157,6 +167,7 @@ def sanitize_text(text):
     return clean
 
 
+# Loads image.
 def load_image(input_path):
     image = Image.open(input_path)
     image = ImageOps.exif_transpose(image)  # match what browsers/editors display
@@ -184,6 +195,7 @@ def estimate_text_color(original_array, x, y, width, height):
         return "#0f172a"
 
 
+# This helper handles font candidates logic.
 def available_font_candidates(bold=False):
     """Return common editor fonts installed on this backend for raster matching."""
     windows_fonts = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts")
@@ -216,6 +228,7 @@ def available_font_candidates(bold=False):
             yield family, path
 
 
+# This helper handles font family logic.
 def estimate_font_family(glyph_mask, text, bold=False):
     """Find the closest installed editor font by comparing rendered glyph shapes."""
     try:
@@ -250,6 +263,7 @@ def estimate_font_family(glyph_mask, text, bold=False):
         return "Arial"
 
 
+# Checks whether clean text.
 def is_clean_text(text, score, y, total_height):
     text_clean = text.strip()
     if not text_clean or score < 0.65:
@@ -272,6 +286,7 @@ def is_clean_text(text, score, y, total_height):
     return True
 
 
+# Parses ocr box.
 def parse_ocr_box(item, total_height):
     if not isinstance(item, (list, tuple)) or len(item) < 3:
         return None
@@ -319,6 +334,7 @@ def parse_ocr_box(item, total_height):
     }
 
 
+# Groups text boxes into lines.
 def group_text_boxes_into_lines(parsed_boxes):
     """Merge OCR fragments that sit on the same baseline into one line. Rotated text stays as-is."""
     upright = sorted([b for b in parsed_boxes if b["angle"] == 0.0], key=lambda b: (b["y"], b["x"]))
@@ -370,6 +386,7 @@ def group_text_boxes_into_lines(parsed_boxes):
     return lines + rotated
 
 
+# This helper handles text lines logic.
 def detect_text_lines(rgb):
     if RapidOCR is None:
         return []
@@ -429,6 +446,7 @@ def detect_text_lines(rgb):
     return group_text_boxes_into_lines(kept)
 
 
+# This helper handles line glyphs logic.
 def analyze_line_glyphs(line, rgb):
     """
     Pixel-accurate text analysis for one line: which pixels are ink, what colour the ink is,
@@ -452,6 +470,7 @@ def analyze_line_glyphs(line, rgb):
     cv2.fillPoly(poly, [pts], 255)
     inside = poly > 0
 
+    # Handles result.
     def fallback():
         return {
             "origin": (x0, y0),
@@ -529,6 +548,7 @@ def analyze_line_glyphs(line, rgb):
     }
 
 
+# This helper handles ocr word spaces logic.
 def restore_ocr_word_spaces(text, glyphs):
     """Restore visually clear word gaps when OCR returns a joined phrase."""
     if not text or any(char.isspace() for char in text):
@@ -577,6 +597,7 @@ def restore_ocr_word_spaces(text, glyphs):
     return text
 
 
+# This helper handles inpainting quality logic.
 def evaluate_inpainting_quality(original_bgr, trial_inpainted_bgr, x, y, w, h):
     try:
         orig_crop = original_bgr[y : y + h, x : x + w]
@@ -594,6 +615,7 @@ def evaluate_inpainting_quality(original_bgr, trial_inpainted_bgr, x, y, w, h):
         return False
 
 
+# This helper handles cleanup ok logic.
 def local_cleanup_ok(bgr, glyphs):
     """Trial-inpaint just a small window around this text (not the whole image) and sanity check it."""
     try:
@@ -613,6 +635,7 @@ def local_cleanup_ok(bgr, glyphs):
         return False
 
 
+# This helper handles belong together logic.
 def lines_belong_together(prev, cur, image_width):
     """Would a designer have typed these as one multi-line text box?"""
     if prev["angle"] != 0.0 or cur["angle"] != 0.0:
@@ -637,6 +660,7 @@ def lines_belong_together(prev, cur, image_width):
     )
 
 
+# Builds text layers.
 def build_text_layers(lines, image_width, image_height):
     ordered = sorted(lines, key=lambda l: (l["y"], l["x"]))
     paragraphs = []
@@ -719,14 +743,17 @@ def build_text_layers(lines, image_width, image_height):
 # BACKGROUND RECONSTRUCTION PROVIDERS
 # ==============================================================================
 class BaseBackgroundReconstructionProvider:
+    # Handles result.
     def reconstruct(self, original_bgr, removal_mask):
         """Return (bgr_image, quality, provider_id)."""
         raise NotImplementedError
 
 
+# Represents the open cv basic provider data or behavior.
 class OpenCVBasicProvider(BaseBackgroundReconstructionProvider):
     """TELEA inpainting: good for thin/small holes such as text strokes and small objects."""
 
+    # Handles result.
     def reconstruct(self, original_bgr, removal_mask):
         if removal_mask is None or cv2.countNonZero(removal_mask) == 0:
             return original_bgr.copy(), "high", "opencv_basic"
@@ -737,6 +764,7 @@ class OpenCVBasicProvider(BaseBackgroundReconstructionProvider):
             return original_bgr.copy(), "low", "opencv_basic"
 
 
+# Represents the multi scale fill provider data or behavior.
 class MultiScaleFillProvider(BaseBackgroundReconstructionProvider):
     """
     Classical fill for large holes. TELEA alone smears streaks across big regions, so:
@@ -746,6 +774,7 @@ class MultiScaleFillProvider(BaseBackgroundReconstructionProvider):
     It cannot invent new patterns (mandalas, foliage...). Use the LaMa provider for that.
     """
 
+    # Handles result.
     def reconstruct(self, original_bgr, removal_mask):
         if removal_mask is None or cv2.countNonZero(removal_mask) == 0:
             return original_bgr.copy(), "high", "opencv_multiscale"
@@ -789,6 +818,7 @@ class MultiScaleFillProvider(BaseBackgroundReconstructionProvider):
             return OpenCVBasicProvider().reconstruct(original_bgr, removal_mask)
 
 
+# Represents the lama onnx provider data or behavior.
 class LamaOnnxProvider(BaseBackgroundReconstructionProvider):
     """
     Generative inpainting with a LaMa ONNX model (e.g. Carve/LaMa-ONNX lama_fp32.onnx:
@@ -796,6 +826,7 @@ class LamaOnnxProvider(BaseBackgroundReconstructionProvider):
     Each cluster of holes is inpainted from a square context window around it.
     """
 
+    # Initializes result.
     def __init__(self, model_path):
         self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
         inputs = self.session.get_inputs()
@@ -803,12 +834,14 @@ class LamaOnnxProvider(BaseBackgroundReconstructionProvider):
         shape = inputs[0].shape
         self.size = int(shape[2]) if len(shape) == 4 and isinstance(shape[2], int) else 512
 
+    # Handles result.
     @staticmethod
     def _window(center, size, limit):
         size = min(size, limit)
         start = int(clamp(center - size // 2, 0, limit - size))
         return start, start + size
 
+    # Handles result.
     def reconstruct(self, original_bgr, removal_mask):
         height, width = removal_mask.shape[:2]
         mask = (removal_mask > 0).astype("uint8") * 255
@@ -860,7 +893,9 @@ class LamaOnnxProvider(BaseBackgroundReconstructionProvider):
         return result, "high", "generative_inpaint"
 
 
+# Represents the background reconstruction provider factory data or behavior.
 class BackgroundReconstructionProviderFactory:
+    # Gets provider.
     @staticmethod
     def get_provider(removal_mask, lama_model=None):
         height, width = removal_mask.shape[:2]
@@ -876,6 +911,7 @@ class BackgroundReconstructionProviderFactory:
         return OpenCVBasicProvider(), "opencv_basic"
 
 
+# This helper handles background logic.
 def reconstruct_background(bgr, object_mask, text_mask, lama_model=None):
     """Fill the holes left by extracted objects first, then erase remaining text strokes."""
     height, width = bgr.shape[:2]
@@ -937,6 +973,7 @@ def split_mask_into_objects(mask, min_area):
     return objects
 
 
+# This helper handles claimed objects logic.
 def peel_claimed_objects(original, claimed):
     """Inpaint already-extracted objects away so the segmenter can 'see' the next layer down."""
     bgr = cv2.cvtColor(np.array(original.convert("RGB")), cv2.COLOR_RGB2BGR)
@@ -945,6 +982,7 @@ def peel_claimed_objects(original, claimed):
     return Image.fromarray(cv2.cvtColor(filled, cv2.COLOR_BGR2RGB)).convert("RGBA")
 
 
+# This helper handles objects logic.
 def discover_objects(original, session, text_rect_mask, passes):
     """
     A saliency segmenter only returns one 'main subject' per run. Magic Layers-style splitting
@@ -1065,6 +1103,7 @@ def discover_objects(original, session, text_rect_mask, passes):
     return found
 
 
+# Builds object layers.
 def build_object_layers(original, found, text_pixel_mask, max_objects):
     height, width = original.height, original.width
     original_rgba = np.array(original)
@@ -1125,6 +1164,7 @@ def build_object_layers(original, found, text_pixel_mask, max_objects):
     return layers, union_mask
 
 
+# This helper handles layers for editor logic.
 def order_layers_for_editor(object_layers, text_layers):
     """Bottom -> top: large objects, smaller objects, then text (top-to-bottom reading order)."""
     ordered = object_layers + sorted(text_layers, key=lambda t: (t["y"], t["x"]))
@@ -1167,6 +1207,7 @@ def create_segmentation_session():
     return new_session("isnet-general-use", providers=["CPUExecutionProvider"]), warning
 
 
+# Runs result.
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", required=True)

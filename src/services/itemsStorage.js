@@ -1,5 +1,6 @@
 const INVENTORY_ITEMS_KEY = "ledgerly:inventoryItems.v1";
 
+// This helper handles parse logic.
 function safeParse(value, fallback) {
   try {
     return JSON.parse(value) || fallback;
@@ -8,33 +9,40 @@ function safeParse(value, fallback) {
   }
 }
 
+// Checks whether use storage.
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+// Reads items.
 function readItems() {
   if (!canUseStorage()) return [];
   return safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), []);
 }
 
+// Writes items.
 function writeItems(items) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(INVENTORY_ITEMS_KEY, JSON.stringify(items));
 }
 
+// This helper handles number logic.
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Checks whether value.
 function hasValue(value) {
   return value !== "" && value !== null && value !== undefined;
 }
 
+// This helper handles type logic.
 function itemType(item = {}) {
   return String(item.type || "product").toLowerCase();
 }
 
+// Makes the discount type value consistent.
 function normalizeDiscountType(value = "") {
   const type = String(value || "").toLowerCase();
   if (type.includes("%") || type.includes("percent")) return "Percentage";
@@ -43,6 +51,7 @@ function normalizeDiscountType(value = "") {
   return "Percentage";
 }
 
+// Makes the batch value consistent.
 function normalizeBatch(row = {}) {
   return {
     id: row.id || crypto.randomUUID(),
@@ -55,21 +64,25 @@ function normalizeBatch(row = {}) {
   };
 }
 
+// This helper handles quantity logic.
 function batchQuantity(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(parsed, 0) : 0;
 }
 
+// This helper handles batches logic.
 function filledBatches(batches = []) {
   return batches
     .map(normalizeBatch)
     .filter((row) => Object.entries(row).some(([key, value]) => key !== "id" && String(value || "").trim()));
 }
 
+// This helper handles opening total logic.
 function batchOpeningTotal(batches = []) {
   return batches.reduce((total, row) => total + batchQuantity(row.openingQty), 0);
 }
 
+// Makes the inventory item value consistent.
 export function normalizeInventoryItem(itemForm = {}) {
   const type = itemType(itemForm);
   const itemName = itemForm.itemName?.trim() || itemForm.serviceName?.trim() || itemForm.name?.trim() || "New Item";
@@ -136,6 +149,7 @@ export function normalizeInventoryItem(itemForm = {}) {
   };
 }
 
+// Calculates inventory item pricing.
 export function calculateInventoryItemPricing(item = {}) {
   const originalPrice = Math.max(toNumber(item.salePrice || item.price), 0);
   const discountValue = Math.max(toNumber(item.discount), 0);
@@ -174,6 +188,7 @@ export function calculateInventoryItemPricing(item = {}) {
   };
 }
 
+// Gets inventory item availability.
 export function getInventoryItemAvailability(item = {}) {
   if (itemType(item) === "service") {
     return { showStock: false, label: "", inStock: true, quantity: null };
@@ -188,10 +203,12 @@ export function getInventoryItemAvailability(item = {}) {
   };
 }
 
+// Gets inventory items.
 export function getInventoryItems() {
   return readItems().map((item) => normalizeInventoryItem(item));
 }
 
+// Saves inventory item.
 export function saveInventoryItem(itemForm) {
   const item = normalizeInventoryItem(itemForm);
   const existingItems = readItems();
@@ -204,21 +221,26 @@ export function saveInventoryItem(itemForm) {
   return item;
 }
 
+// This helper handles name logic.
 function normalizedName(value = "") {
   return String(value || "").trim().toLowerCase();
 }
 
+// This helper handles row item id logic.
 function saleRowItemId(row = {}) {
   return row.sourceItemId || row.itemId || row.inventoryItemId || "";
 }
 
+// This helper handles row quantity logic.
 function saleRowQuantity(row = {}) {
   return Math.max(toNumber(row.qty ?? row.quantity), 0);
 }
 
+// Applies sale invoice stock update.
 export function applySaleInvoiceStockUpdate(invoice = {}) {
   if (String(invoice.transactionType || "sale").toLowerCase() !== "sale") return [];
 
+  // Handles rows.
   const saleRows = (invoice.rows || []).filter((row) => row.item && saleRowQuantity(row) > 0);
   if (!saleRows.length) return [];
 

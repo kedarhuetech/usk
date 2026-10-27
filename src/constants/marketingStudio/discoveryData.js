@@ -1,3 +1,4 @@
+// Defines shared discovery data application data.
 export const quickCreateActions = [
   {
     id: "festival-post",

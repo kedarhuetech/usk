@@ -1,3 +1,4 @@
+// Implements the marketing studio editor page.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Blur } from "konva/lib/filters/Blur";
 import { Brightness } from "konva/lib/filters/Brightness";
@@ -274,11 +275,13 @@ const SHAPE_PRESETS = [
   },
 ];
 
+// This helper handles design logic.
 function cloneDesign(template) {
   if (typeof structuredClone === "function") return structuredClone(template);
   return JSON.parse(JSON.stringify(template));
 }
 
+// Creates editor snapshot.
 function createEditorSnapshot(design, brandKit) {
   return {
     design,
@@ -286,6 +289,7 @@ function createEditorSnapshot(design, brandKit) {
   };
 }
 
+// Checks whether element interactive.
 function isElementInteractive(element) {
   return element.editable !== false && !element.locked;
 }
@@ -308,14 +312,17 @@ const BRAND_BINDING_PATHS = {
   "brand.accentColor": ["colors", "accent"],
 };
 
+// Checks whether logo binding.
 function isLogoBinding(binding) {
   return binding === "brand.logo" || binding === "business.logo";
 }
 
+// Gets value at path.
 function getValueAtPath(source, path) {
   return path.reduce((current, key) => current?.[key], source);
 }
 
+// Sets value at path.
 function setValueAtPath(source, path, value) {
   const [key, ...rest] = path;
   if (!key) return value;
@@ -326,12 +333,14 @@ function setValueAtPath(source, path, value) {
   };
 }
 
+// Gets brand binding value.
 function getBrandBindingValue(brandKit, binding) {
   const path = BRAND_BINDING_PATHS[binding];
   if (!path) return undefined;
   return getValueAtPath(brandKit, path);
 }
 
+// Applies bound style.
 function applyBoundStyle(element, property, value) {
   if (value === undefined || element.styleOverrides?.[property]) return element;
 
@@ -349,6 +358,7 @@ function applyBoundStyle(element, property, value) {
   };
 }
 
+// Applies brand kit to element.
 function applyBrandKitToElement(element, brandKit) {
   let nextElement = element;
 
@@ -380,6 +390,7 @@ function applyBrandKitToElement(element, brandKit) {
   return nextElement;
 }
 
+// Applies brand kit to design.
 function applyBrandKitToDesign(design, brandKit) {
   if (!design) return design;
 
@@ -389,6 +400,7 @@ function applyBrandKitToDesign(design, brandKit) {
   };
 }
 
+// Gets manual override updates.
 function getManualOverrideUpdates(element, updates) {
   const overrides = {};
 
@@ -416,30 +428,37 @@ function getManualOverrideUpdates(element, updates) {
   return overrides;
 }
 
+// Checks whether brand binding.
 function hasBrandBinding(element) {
   return Boolean(element?.binding || Object.keys(element?.styleBindings || {}).length > 0);
 }
 
+// Checks whether brand override.
 function hasBrandOverride(element) {
   return Boolean(element?.brandOverride || Object.keys(element?.styleOverrides || {}).length > 0);
 }
 
+// Checks whether quick personalize design.
 function isQuickPersonalizeDesign(design) {
   return design?.templateType === "flat" && design?.editMode === "quick-personalize";
 }
 
+// Gets quick personalize element.
 function getQuickPersonalizeElement(design, fieldId) {
   return design?.elements.find((element) => element.quickPersonalizeField === fieldId) || null;
 }
 
+// Returns the brand field settings.
 function getBrandFieldConfig(fieldId) {
   return BRAND_INSERT_FIELDS.find((field) => field.id === fieldId) || null;
 }
 
+// Gets export format.
 function getExportFormat(formatId) {
   return EXPORT_FORMATS.find((format) => format.id === formatId) || EXPORT_FORMATS[0];
 }
 
+// Creates download file name.
 function createDownloadFileName(design, format) {
   const safeName = String(design?.name || "marketing-design")
     .toLowerCase()
@@ -448,11 +467,13 @@ function createDownloadFileName(design, format) {
   return `${safeName || "marketing-design"}.${format.extension}`;
 }
 
+// This helper handles url to blob logic.
 async function dataUrlToBlob(dataUrl) {
   const response = await fetch(dataUrl);
   return response.blob();
 }
 
+// This helper handles browser download logic.
 function triggerBrowserDownload(url, fileName) {
   const link = document.createElement("a");
   link.href = url;
@@ -462,11 +483,13 @@ function triggerBrowserDownload(url, fileName) {
   link.remove();
 }
 
+// Gets element label.
 function getElementLabel(element) {
   if (!element) return "No selection";
   return element.role || element.type;
 }
 
+// This helper handles title case logic.
 function toTitleCase(value) {
   return String(value || "")
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -476,6 +499,7 @@ function toTitleCase(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+// Gets human layer label.
 function getHumanLayerLabel(layer) {
   if (layer.kind === "background") return "Template Background";
 
@@ -489,12 +513,14 @@ function getHumanLayerLabel(layer) {
   return toTitleCase(element.role || element.type || element.id);
 }
 
+// Gets layer type label.
 function getLayerTypeLabel(layer) {
   if (layer.kind === "background") return "Background";
   if (layer.element.type === "shape" && layer.element.shapeType) return toTitleCase(layer.element.shapeType);
   return toTitleCase(layer.element.type);
 }
 
+// Gets visual layers.
 function getVisualLayers(design) {
   const elementLayers = [...design.elements].reverse().map((element) => ({
     id: element.id,
@@ -520,10 +546,12 @@ function getVisualLayers(design) {
   ];
 }
 
+// Gets interactive elements.
 function getInteractiveElements(elements) {
   return elements.filter((element) => isElementInteractive(element));
 }
 
+// This helper handles array item logic.
 function moveArrayItem(items, fromIndex, toIndex) {
   const nextItems = [...items];
   const [movedItem] = nextItems.splice(fromIndex, 1);
@@ -531,6 +559,7 @@ function moveArrayItem(items, fromIndex, toIndex) {
   return nextItems;
 }
 
+// This helper handles interactive elements logic.
 function reorderInteractiveElements(elements, elementId, action) {
   const interactiveElements = getInteractiveElements(elements);
   const currentIndex = interactiveElements.findIndex((element) => element.id === elementId);
@@ -557,6 +586,7 @@ function reorderInteractiveElements(elements, elementId, action) {
   });
 }
 
+// This helper handles element above original logic.
 function insertElementAboveOriginal(elements, originalId, newElement) {
   const originalIndex = elements.findIndex((element) => element.id === originalId);
   if (originalIndex === -1) return [...elements, newElement];
@@ -566,6 +596,7 @@ function insertElementAboveOriginal(elements, originalId, newElement) {
   return nextElements;
 }
 
+// Gets layer state.
 function getLayerState(elements, elementId) {
   const interactiveElements = getInteractiveElements(elements);
   const currentIndex = interactiveElements.findIndex((element) => element.id === elementId);
@@ -594,10 +625,12 @@ function getLayerState(elements, elementId) {
   };
 }
 
+// This helper handles result logic.
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+// Gets konva font style.
 function getKonvaFontStyle(element) {
   const weight = Number(element.fontWeight) >= 700 ? "bold" : "normal";
   const style = element.fontStyle === "italic" ? "italic" : "normal";
@@ -607,6 +640,7 @@ function getKonvaFontStyle(element) {
   return "normal";
 }
 
+// Gets image frame.
 function getImageFrame(image, element) {
   const targetWidth = Math.max(MIN_ELEMENT_SIZE, element.width);
   const targetHeight = Math.max(MIN_ELEMENT_SIZE, element.height);
@@ -668,6 +702,7 @@ function getImageFrame(image, element) {
   };
 }
 
+// Gets image filters.
 function getImageFilters(element) {
   const filters = [];
   if ((element.brightness ?? BRIGHTNESS_DEFAULT) !== BRIGHTNESS_DEFAULT) filters.push(Brightness);
@@ -678,6 +713,7 @@ function getImageFilters(element) {
   return filters;
 }
 
+// Gets contained size.
 function getContainedSize(naturalWidth, naturalHeight, maxSize) {
   const scale = Math.min(maxSize / naturalWidth, maxSize / naturalHeight, 1);
   return {
@@ -686,6 +722,7 @@ function getContainedSize(naturalWidth, naturalHeight, maxSize) {
   };
 }
 
+// Gets centered canvas position.
 function getCenteredCanvasPosition(canvasWidth, canvasHeight, elementWidth, elementHeight) {
   return {
     x: Math.round(clamp((canvasWidth - elementWidth) / 2, 0, Math.max(0, canvasWidth - elementWidth))),
@@ -693,6 +730,7 @@ function getCenteredCanvasPosition(canvasWidth, canvasHeight, elementWidth, elem
   };
 }
 
+// Gets contained element size.
 function getContainedElementSize(canvasWidth, canvasHeight, preferredWidth, preferredHeight) {
   return {
     width: Math.round(Math.min(preferredWidth, Math.max(MIN_ELEMENT_SIZE, canvasWidth - 48))),
@@ -700,23 +738,28 @@ function getContainedElementSize(canvasWidth, canvasHeight, preferredWidth, pref
   };
 }
 
+// Creates unique suffix.
 function createUniqueSuffix() {
   if (typeof window !== "undefined" && window.crypto?.randomUUID) return window.crypto.randomUUID();
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Creates user element id.
 function createUserElementId(type, variant) {
   return `user-${type}-${variant}-${createUniqueSuffix()}`;
 }
 
+// Creates media id.
 function createMediaId() {
   return `session-media-${createUniqueSuffix()}`;
 }
 
+// Creates stock media id.
 function createStockMediaId(asset) {
   return `stock-media-${asset.source || "stock"}-${asset.id}`;
 }
 
+// Creates qr data url.
 async function createQrDataUrl(value, options = {}) {
   const text = String(value || "").trim() || "https://ledgerly.example";
   return QRCode.toDataURL(text, {
@@ -729,6 +772,7 @@ async function createQrDataUrl(value, options = {}) {
   });
 }
 
+// Creates media item from stock asset.
 function createMediaItemFromStockAsset(asset) {
   return {
     id: createStockMediaId(asset),
@@ -750,6 +794,7 @@ function createMediaItemFromStockAsset(asset) {
   };
 }
 
+// This helper handles unique assets logic.
 function mergeUniqueAssets(existingItems, nextItems) {
   const seen = new Set(existingItems.map((item) => item.id));
   const uniqueNextItems = nextItems.filter((item) => {
@@ -761,14 +806,17 @@ function mergeUniqueAssets(existingItems, nextItems) {
   return [...existingItems, ...uniqueNextItems];
 }
 
+// This helper handles history logic.
 function limitHistory(entries) {
   return entries.length > HISTORY_LIMIT ? entries.slice(entries.length - HISTORY_LIMIT) : entries;
 }
 
+// Checks whether element.
 function hasElement(design, elementId) {
   return Boolean(elementId && design?.elements.some((element) => element.id === elementId));
 }
 
+// Loads image file.
 function loadImageFile(file) {
   return new Promise((resolve, reject) => {
     if (!file || !ACCEPTED_IMAGE_TYPES.includes(file.type)) {
@@ -793,6 +841,7 @@ function loadImageFile(file) {
   });
 }
 
+// Provides canvas image.
 function useCanvasImage(src) {
   const [state, setState] = useState({ image: null, failed: false });
 
@@ -818,6 +867,7 @@ function useCanvasImage(src) {
   return src ? state : { image: null, failed: false };
 }
 
+// Provides element transform.
 function useElementTransform(selectedId, stageRef, transformerRef, design) {
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -830,6 +880,7 @@ function useElementTransform(selectedId, stageRef, transformerRef, design) {
   }, [design, selectedId, stageRef, transformerRef]);
 }
 
+// Provides workspace scale.
 function useWorkspaceScale(width, height) {
   const containerRef = useRef(null);
   const [size, setSize] = useState({ width: 900, height: 620 });
@@ -855,6 +906,7 @@ function useWorkspaceScale(width, height) {
   return { containerRef, fitScale, size };
 }
 
+// Renders the image element interface.
 function ImageElement({ element, commonProps, selected = false, onChange, exportMode = false }) {
   const { image, failed } = useCanvasImage(element.src);
   const imageRef = useRef(null);
@@ -896,6 +948,7 @@ function ImageElement({ element, commonProps, selected = false, onChange, export
       );
     }
 
+    // Gets crop from node.
     const getCropFromNode = (node) => {
       const left = element.flipX ? node.x() - frame.draw.width : node.x();
       const top = element.flipY ? node.y() - frame.draw.height : node.y();
@@ -906,6 +959,7 @@ function ImageElement({ element, commonProps, selected = false, onChange, export
       };
     };
 
+    // Handles crop node position.
     const clampCropNodePosition = (node) => {
       const left = element.flipX ? node.x() - frame.draw.width : node.x();
       const top = element.flipY ? node.y() - frame.draw.height : node.y();
@@ -1006,6 +1060,7 @@ function ImageElement({ element, commonProps, selected = false, onChange, export
   );
 }
 
+// Renders the background layer interface.
 function BackgroundLayer({ background, width, height, onClearSelection }) {
   const { image, failed } = useCanvasImage(background?.src);
 
@@ -1038,15 +1093,18 @@ function BackgroundLayer({ background, width, height, onClearSelection }) {
   );
 }
 
+// Renders the canvas element interface.
 function CanvasElement({ element, selected, onSelect, onChange, brandKit, exportMode = false }) {
   const interactive = isElementInteractive(element);
   const isLine = element.type === "shape" && element.shapeType === "line";
 
+  // Handles select.
   const handleSelect = (event) => {
     event.cancelBubble = true;
     if (interactive) onSelect(element.id);
   };
 
+  // Handles drag end.
   const handleDragEnd = (event) => {
     const node = event.target;
     onChange(
@@ -1059,6 +1117,7 @@ function CanvasElement({ element, selected, onSelect, onChange, brandKit, export
     );
   };
 
+  // Handles transform end.
   const handleTransformEnd = (event) => {
     const node = event.target;
     const scaleX = Math.abs(node.scaleX());
@@ -1136,6 +1195,7 @@ function CanvasElement({ element, selected, onSelect, onChange, brandKit, export
   return <ShapeElement element={element} commonProps={commonProps} selected={selected && !exportMode} brandKit={brandKit} />;
 }
 
+// Renders the shape element interface.
 function ShapeElement({ element, commonProps, selected, brandKit }) {
   if (element.shapeType === "frame") {
     return <BrandedFrameElement element={element} commonProps={commonProps} selected={selected} brandKit={brandKit} />;
@@ -1179,6 +1239,7 @@ function ShapeElement({ element, commonProps, selected, brandKit }) {
   );
 }
 
+// Renders the branded frame element interface.
 function BrandedFrameElement({ element, commonProps, selected, brandKit }) {
   const brandBusiness = brandKit?.business || {};
   const brandIsAvailable = Boolean(brandKit?.business);
@@ -1270,6 +1331,7 @@ function BrandedFrameElement({ element, commonProps, selected, brandKit }) {
   );
 }
 
+// Renders the qr element interface.
 function QrElement({ element, commonProps, selected }) {
   const { image, failed } = useCanvasImage(element.src);
   const borderWidth = element.borderWidth ?? 0;
@@ -1316,6 +1378,7 @@ function QrElement({ element, commonProps, selected }) {
   );
 }
 
+// Renders the barcode element interface.
 function BarcodeElement({ element, commonProps, selected }) {
   const encoded = getCode128Bars(element.value || element.text);
   const paddingX = element.paddingX ?? 18;
@@ -1388,6 +1451,7 @@ function BarcodeElement({ element, commonProps, selected }) {
   );
 }
 
+// Renders the table element interface.
 function TableElement({ element, commonProps, selected }) {
   const rows = clamp(Math.round(Number(element.rows) || 2), TABLE_ROWS_MIN, TABLE_ROWS_MAX);
   const columns = clamp(Math.round(Number(element.columns) || 2), TABLE_COLUMNS_MIN, TABLE_COLUMNS_MAX);
@@ -1452,6 +1516,7 @@ function TableElement({ element, commonProps, selected }) {
   );
 }
 
+// Renders the canvas stage interface.
 function CanvasStage({ design, selectedId, setSelectedId, updateElement, brandKit, stageRef, exportMode = false }) {
   const transformerRef = useRef(null);
   const [manualScale, setManualScale] = useState(null);
@@ -1459,6 +1524,7 @@ function CanvasStage({ design, selectedId, setSelectedId, updateElement, brandKi
   const scale = clamp(manualScale ?? fitScale, CANVAS_ZOOM_MIN, CANVAS_ZOOM_MAX);
   const zoomPercent = Math.round(scale * 100);
 
+  // Handles zoom.
   const changeZoom = (direction) => {
     setManualScale((current) => {
       const baseScale = current ?? fitScale;
@@ -1555,6 +1621,7 @@ function CanvasStage({ design, selectedId, setSelectedId, updateElement, brandKi
   );
 }
 
+// Renders the export panel interface.
 function ExportPanel({ design, options, status, busy, onOptionsChange, onDownload, onClose }) {
   const format = getExportFormat(options.format);
   const outputWidth = design.width * options.scale;
@@ -1641,6 +1708,7 @@ function ExportPanel({ design, options, status, busy, onOptionsChange, onDownloa
   );
 }
 
+// Renders the editor header interface.
 function EditorHeader({
   design,
   autosaveStatus,
@@ -1735,8 +1803,10 @@ function EditorHeader({
   );
 }
 
+// Renders the object toolbar interface.
 function ObjectToolbar({ selectedElement, onElementChange, onReplaceImage }) {
   const [openMenu, setOpenMenu] = useState("");
+  // Closes menu.
   const closeMenu = () => setOpenMenu("");
 
   if (!selectedElement || !isElementInteractive(selectedElement)) {
@@ -1747,11 +1817,14 @@ function ObjectToolbar({ selectedElement, onElementChange, onReplaceImage }) {
     );
   }
 
+  // Updates selected element.
   const updateSelectedElement = (updates, historyOptions = {}) => onElementChange(selectedElement.id, updates, historyOptions);
+  // Handles button.
   const controlButton = (active = false) =>
     `grid h-9 w-9 min-w-9 place-items-center rounded-md border px-0 text-xs font-bold transition duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#27308F]/20 ${
       active ? "border-[#27308F] bg-[#27308F] text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-[#27308F]/45 hover:bg-slate-50 hover:text-[#27308F]"
     }`;
+  // Handles button.
   const compactButton = (active = false) =>
     `inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-bold transition duration-150 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#27308F]/20 ${
       active ? "border-[#27308F] bg-[#27308F] text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-[#27308F]/45 hover:bg-slate-50 hover:text-[#27308F]"
@@ -2004,6 +2077,7 @@ function ObjectToolbar({ selectedElement, onElementChange, onReplaceImage }) {
   );
 }
 
+// Renders the layers panel interface.
 function LayersPanel({ design, selectedId, onSelectLayer }) {
   const layers = getVisualLayers(design);
 
@@ -2045,6 +2119,7 @@ function LayersPanel({ design, selectedId, onSelectLayer }) {
   );
 }
 
+// Renders the brand kit panel interface.
 function BrandKitPanel({ brandKit, onBrandFieldChange, onBrandLogoUpload, onAddBrandField }) {
   const businessFields = [
     { path: ["business", "name"], label: "Business Name", icon: FiBriefcase, insertId: "businessName" },
@@ -2195,6 +2270,7 @@ function BrandKitPanel({ brandKit, onBrandFieldChange, onBrandLogoUpload, onAddB
   );
 }
 
+// Renders the text tool panel interface.
 function TextToolPanel({ onAddText }) {
   return (
     <section className="space-y-4">
@@ -2219,6 +2295,7 @@ function TextToolPanel({ onAddText }) {
   );
 }
 
+// Renders the media tool panel interface.
 function MediaToolPanel({
   mediaItems,
   selectedImageId,
@@ -2228,6 +2305,7 @@ function MediaToolPanel({
 }) {
   const uploadItems = useMemo(() => mediaItems.filter((item) => item.source === "upload" || !item.source), [mediaItems]);
 
+  // Renders upload card.
   const renderUploadCard = (item) => (
     <article
       key={item.id}
@@ -2287,6 +2365,7 @@ function MediaToolPanel({
   );
 }
 
+// Renders the library tool panel interface.
 function LibraryToolPanel({
   selectedImageId,
   onUseStockImage,
@@ -2379,6 +2458,7 @@ function LibraryToolPanel({
     [backgroundQuery, backgroundState, stockProvider, stockQuery, stockState],
   );
 
+  // Renders library card.
   const renderLibraryCard = (item, category) => {
     const isBackgrounds = category === "backgrounds";
     const title = item.alt || (isBackgrounds ? "Background" : "Stock image");
@@ -2418,6 +2498,7 @@ function LibraryToolPanel({
     );
   };
 
+  // Renders stock grid.
   const renderStockGrid = (items, category) => {
     const state = category === "backgrounds" ? backgroundState : stockState;
     if (state.loading) {
@@ -2480,14 +2561,17 @@ function LibraryToolPanel({
   const activeQuery = activeTab === "backgrounds" ? backgroundQuery : stockQuery;
   const setActiveQuery = activeTab === "backgrounds" ? setBackgroundQuery : setStockQuery;
   const activeResults = activeTab === "backgrounds" ? backgroundResults : stockResults;
+  // Handles tab change.
   const handleTabChange = (tab) => {
     if (tab !== activeTab) resetSearchForTab(tab);
     setActiveTab(tab);
   };
+  // Handles query change.
   const handleQueryChange = (value) => {
     setActiveQuery(value);
     resetSearchForTab(activeTab);
   };
+  // Handles provider change.
   const handleProviderChange = (provider) => {
     if (provider === stockProvider) return;
     setStockProvider(provider);
@@ -2599,6 +2683,7 @@ function LibraryToolPanel({
   );
 }
 
+// Renders the elements tool panel interface.
 function ElementsToolPanel({ onAddShape }) {
   return (
     <section className="space-y-4">
@@ -2625,6 +2710,7 @@ function ElementsToolPanel({ onAddShape }) {
   );
 }
 
+// Renders the panel header interface.
 function PanelHeader({ title, description, icon: Icon }) {
   return (
     <div className="flex items-start gap-3 border-b border-slate-200/80 pb-3">
@@ -2639,6 +2725,7 @@ function PanelHeader({ title, description, icon: Icon }) {
   );
 }
 
+// Renders the editor tool rail interface.
 function EditorToolRail({ activeTool, onToolChange }) {
   const tools = [
     { id: "templates", label: "Templates", icon: FiGrid },
@@ -2679,6 +2766,7 @@ function EditorToolRail({ activeTool, onToolChange }) {
   );
 }
 
+// Renders the templates tool panel interface.
 function TemplatesToolPanel({ design }) {
   return (
     <section className="space-y-4">
@@ -2696,6 +2784,7 @@ function TemplatesToolPanel({ design }) {
   );
 }
 
+// Renders the frames tool panel interface.
 function FramesToolPanel({ onAddFrame }) {
   return (
     <section className="space-y-4">
@@ -2722,6 +2811,7 @@ function FramesToolPanel({ onAddFrame }) {
   );
 }
 
+// Renders the quick personalize panel interface.
 function QuickPersonalizePanel({
   design,
   brandKit,
@@ -2736,6 +2826,7 @@ function QuickPersonalizePanel({
   const [headingDraft, setHeadingDraft] = useState(design.quickPersonalize?.headingDefault || "Add your heading");
   const headingValue = headingElement?.text ?? headingDraft;
 
+  // Handles heading change.
   const handleHeadingChange = (value) => {
     if (headingElement) {
       onQuickPersonalizeElementChange(
@@ -2838,6 +2929,7 @@ function QuickPersonalizePanel({
   );
 }
 
+// Renders the tools panel interface.
 function ToolsPanel({ onAddQr, onAddBarcode, onAddTable }) {
   const [qrValue, setQrValue] = useState("https://ledgerly.example");
   const [qrForeground, setQrForeground] = useState("#0f172a");
@@ -3006,6 +3098,7 @@ function ToolsPanel({ onAddQr, onAddBarcode, onAddTable }) {
   );
 }
 
+// Renders the editor tools panel interface.
 function EditorToolsPanel({
   design,
   selectedId,
@@ -3085,10 +3178,12 @@ function EditorToolsPanel({
   );
 }
 
+// Renders the text controls interface.
 function TextControls({ element, onTextChange }) {
   const canEditText = element?.type === "text" && isElementInteractive(element);
   if (!canEditText) return null;
 
+  // Updates text element.
   const updateTextElement = (updates, historyOptions = {}) => onTextChange(element.id, updates, historyOptions);
   const boldActive = Number(element.fontWeight) >= 700;
   const italicActive = element.fontStyle === "italic";
@@ -3222,10 +3317,12 @@ function TextControls({ element, onTextChange }) {
   );
 }
 
+// Renders the image controls interface.
 function ImageControls({ element, onImageChange, onReplaceImage }) {
   const canEditImage = element?.type === "image" && isElementInteractive(element);
   if (!canEditImage) return null;
 
+  // Updates image element.
   const updateImageElement = (updates, historyOptions = {}) => onImageChange(element.id, updates, historyOptions);
   const fillActive = (element.fit || "cover") !== "contain" && element.fit !== "fit";
   const borderWidth = element.borderWidth ?? element.strokeWidth ?? 0;
@@ -3501,10 +3598,12 @@ function ImageControls({ element, onImageChange, onReplaceImage }) {
   );
 }
 
+// Renders the shape controls interface.
 function ShapeControls({ element, onShapeChange }) {
   const canEditShape = element?.type === "shape" && isElementInteractive(element);
   if (!canEditShape) return null;
 
+  // Updates shape element.
   const updateShapeElement = (updates, historyOptions = {}) => onShapeChange(element.id, updates, historyOptions);
   const isLine = element.shapeType === "line";
 
@@ -3598,11 +3697,14 @@ function ShapeControls({ element, onShapeChange }) {
   );
 }
 
+// Renders the qr controls interface.
 function QrControls({ element, onQrChange }) {
   const canEditQr = element?.type === "qr" && isElementInteractive(element);
   if (!canEditQr) return null;
 
+  // Updates qr element.
   const updateQrElement = (updates, historyOptions = {}) => onQrChange(element.id, updates, historyOptions);
+  // Updates qr value.
   const updateQrValue = async (updates, historyOptions = {}) => {
     const nextValue = updates.value ?? element.value;
     const nextForeground = updates.foreground ?? element.foreground ?? "#0f172a";
@@ -3678,10 +3780,12 @@ function QrControls({ element, onQrChange }) {
   );
 }
 
+// Renders the barcode controls interface.
 function BarcodeControls({ element, onBarcodeChange }) {
   const canEditBarcode = element?.type === "barcode" && isElementInteractive(element);
   if (!canEditBarcode) return null;
 
+  // Updates barcode element.
   const updateBarcodeElement = (updates, historyOptions = {}) => onBarcodeChange(element.id, updates, historyOptions);
 
   return (
@@ -3731,10 +3835,12 @@ function BarcodeControls({ element, onBarcodeChange }) {
   );
 }
 
+// Renders the table controls interface.
 function TableControls({ element, onTableChange }) {
   const canEditTable = element?.type === "table" && isElementInteractive(element);
   if (!canEditTable) return null;
 
+  // Updates table element.
   const updateTableElement = (updates, historyOptions = {}) => onTableChange(element.id, updates, historyOptions);
   const borderWidth = element.borderWidth ?? element.strokeWidth ?? 2;
   const rows = clamp(Math.round(Number(element.rows) || 2), TABLE_ROWS_MIN, TABLE_ROWS_MAX);
@@ -3897,6 +4003,7 @@ function TableControls({ element, onTableChange }) {
   );
 }
 
+// Renders the layer controls interface.
 function LayerControls({ layerState, onLayerAction }) {
   if (!layerState?.isLayerEditable) return null;
 
@@ -3937,6 +4044,7 @@ function LayerControls({ layerState, onLayerAction }) {
   );
 }
 
+// Renders the brand override controls interface.
 function BrandOverrideControls({ element, onResetToBrand }) {
   if (!hasBrandBinding(element)) return null;
   const overridden = hasBrandOverride(element);
@@ -3964,6 +4072,7 @@ function BrandOverrideControls({ element, onResetToBrand }) {
   );
 }
 
+// Renders the inspector interface.
 function Inspector({
   design,
   selectedElement,
@@ -4078,6 +4187,7 @@ function Inspector({
   );
 }
 
+// Renders the editor empty state interface.
 function EditorEmptyState({ onBack }) {
   return (
     <div className="grid min-h-full place-items-center bg-slate-100 p-5">
@@ -4093,6 +4203,7 @@ function EditorEmptyState({ onBack }) {
   );
 }
 
+// Renders the marketing studio editor loaded interface.
 function MarketingStudioEditorLoaded({ template, onBack }) {
   const [brandKit, setBrandKit] = useState(() => cloneDesign(defaultBrandKit));
   const [design, setDesign] = useState(() => (template ? applyBrandKitToDesign(cloneDesign(template), defaultBrandKit) : null));
@@ -4148,6 +4259,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     brandKitRef.current = brandKit;
   }, [brandKit]);
 
+  // Handles design change.
   const commitDesignChange = (change, options = {}) => {
     setDesign((current) => {
       const nextDesign = typeof change === "function" ? change(current) : change;
@@ -4180,6 +4292,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     });
   };
 
+  // Updates element.
   const updateElement = (elementId, updates, historyOptions = {}) => {
     commitDesignChange(
       (current) => ({
@@ -4192,20 +4305,24 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     );
   };
 
+  // Applies brand kit update.
   const applyBrandKitUpdate = (nextBrandKit, historyOptions = {}) => {
     commitDesignChange((current) => applyBrandKitToDesign(current, nextBrandKit), historyOptions);
     setBrandKit(nextBrandKit);
   };
 
+  // Handles brand field change.
   const handleBrandFieldChange = (path, value, historyOptions = {}) => {
     applyBrandKitUpdate(setValueAtPath(brandKit, path, value), historyOptions);
   };
 
+  // Updates export options.
   const updateExportOptions = (updates) => {
     setExportOptions((current) => ({ ...current, ...updates }));
     setExportStatus("");
   };
 
+  // Creates export data url.
   const createExportDataUrl = (options = exportOptions) => {
     const stage = stageRef.current;
     const activeDesign = designRef.current;
@@ -4226,6 +4343,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     });
   };
 
+  // Handles clean export stage.
   const withCleanExportStage = async (task) => {
     const previousSelection = selectedId;
     setSelectedId("");
@@ -4238,6 +4356,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     }
   };
 
+  // Handles download design.
   const handleDownloadDesign = async () => {
     setExportBusy(true);
     setExportStatus("");
@@ -4256,6 +4375,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     }
   };
 
+  // Handles share design.
   const handleShareDesign = async () => {
     setExportBusy(true);
     setExportStatus("");
@@ -4294,6 +4414,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     }
   };
 
+  // Handles reset element to brand.
   const handleResetElementToBrand = (elementId) => {
     commitDesignChange(
       (current) => ({
@@ -4312,10 +4433,12 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     );
   };
 
+  // Handles object url.
   const trackObjectUrl = (src) => {
     if (src?.startsWith("blob:")) objectUrlsRef.current.push(src);
   };
 
+  // Opens image picker.
   const openImagePicker = (targetId = null, mode = targetId ? "replace" : "insert") => {
     setUploadError("");
     setImageUploadTarget(targetId);
@@ -4323,6 +4446,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     fileInputRef.current?.click();
   };
 
+  // Handles element.
   const addElement = (element) => {
     commitDesignChange(
       (current) => ({
@@ -4334,6 +4458,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     setSelectedId(element.id);
   };
 
+  // Creates text element.
   const createTextElement = (presetId) => {
     const preset = TEXT_PRESETS.find((item) => item.id === presetId) || TEXT_PRESETS[0];
     const { width, height } = getContainedElementSize(design.width, design.height, preset.width || DEFAULT_TEXT_WIDTH, preset.height || DEFAULT_TEXT_HEIGHT);
@@ -4364,6 +4489,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates sticker element.
   const createStickerElement = (sticker) => {
     const { width, height } = getContainedElementSize(design.width, design.height, 220, 190);
     const position = getCenteredCanvasPosition(design.width, design.height, width, height);
@@ -4391,6 +4517,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates shape element.
   const createShapeElement = (shapeId) => {
     const preset = SHAPE_PRESETS.find((item) => item.id === shapeId) || SHAPE_PRESETS[0];
     const { width, height } = getContainedElementSize(design.width, design.height, preset.width, preset.height);
@@ -4419,6 +4546,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates frame element.
   const createFrameElement = (frameStyle) => {
     const width = design.width * 0.94;
     const height = design.height * 0.94;
@@ -4452,6 +4580,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates qr element.
   const createQrElement = async ({ value, foreground, background, src }) => {
     const { width, height } = getContainedElementSize(design.width, design.height, DEFAULT_QR_SIZE, DEFAULT_QR_SIZE);
     const position = getCenteredCanvasPosition(design.width, design.height, width, height);
@@ -4481,6 +4610,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates barcode element.
   const createBarcodeElement = (value) => {
     const { width, height } = getContainedElementSize(design.width, design.height, DEFAULT_BARCODE_WIDTH, DEFAULT_BARCODE_HEIGHT);
     const position = getCenteredCanvasPosition(design.width, design.height, width, height);
@@ -4513,6 +4643,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates table element.
   const createTableElement = ({ rows, columns }) => {
     const { width, height } = getContainedElementSize(design.width, design.height, DEFAULT_TABLE_WIDTH, DEFAULT_TABLE_HEIGHT);
     const position = getCenteredCanvasPosition(design.width, design.height, width, height);
@@ -4541,6 +4672,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates image element.
   const createImageElement = (mediaItem) => {
     const size = getContainedSize(mediaItem.naturalWidth, mediaItem.naturalHeight, IMAGE_SIZE_MAX);
     const position = getCenteredCanvasPosition(design.width, design.height, size.width, size.height);
@@ -4581,11 +4713,13 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Handles media item.
   const registerMediaItem = (mediaItem) => {
     setMediaItems((current) => (current.some((item) => item.id === mediaItem.id) ? current : [...current, mediaItem]));
     return mediaItem;
   };
 
+  // Handles image with media item.
   const replaceImageWithMediaItem = (elementId, mediaItem) => {
     if (!elementId) return;
 
@@ -4612,6 +4746,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     setSelectedId(elementId);
   };
 
+  // Sets background from media item.
   const setBackgroundFromMediaItem = (mediaItem) => {
     commitDesignChange(
       (current) => ({
@@ -4633,6 +4768,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     setSelectedId("");
   };
 
+  // Creates brand element.
   const createBrandElement = (fieldId) => {
     const field = getBrandFieldConfig(fieldId);
     if (!field) return null;
@@ -4704,6 +4840,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     };
   };
 
+  // Creates quick personalize element.
   const createQuickPersonalizeElement = (fieldId, overrides = {}) => {
     const field = design.quickPersonalize?.fields?.[fieldId];
     if (!field) return null;
@@ -4781,48 +4918,58 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     );
   };
 
+  // Handles add text.
   const handleAddText = (presetId) => {
     addElement(createTextElement(presetId));
   };
 
+  // Handles add shape.
   const handleAddShape = (shapeId) => {
     addElement(createShapeElement(shapeId));
   };
 
+  // Handles add qr.
   const handleAddQr = async (options) => {
     const qrElement = await createQrElement(options);
     addElement(qrElement);
   };
 
+  // Handles add barcode.
   const handleAddBarcode = (value) => {
     if (!getCode128Bars(value)) return;
     addElement(createBarcodeElement(value));
   };
 
+  // Handles add table.
   const handleAddTable = (options) => {
     addElement(createTableElement(options));
   };
 
+  // Handles add sticker.
   const handleAddSticker = (sticker) => {
     addElement(createStickerElement(sticker));
   };
 
+  // Handles add frame.
   const handleAddFrame = (frameStyle) => {
     addElement(createFrameElement(frameStyle));
   };
 
+  // Handles add media image.
   const handleAddMediaImage = (mediaId) => {
     const mediaItem = mediaItems.find((item) => item.id === mediaId);
     if (!mediaItem) return;
     addElement(createImageElement(mediaItem));
   };
 
+  // Handles replace media image.
   const handleReplaceMediaImage = (mediaId) => {
     const mediaItem = mediaItems.find((item) => item.id === mediaId);
     if (!mediaItem || !selectedImageId) return;
     replaceImageWithMediaItem(selectedImageId, mediaItem);
   };
 
+  // Handles use stock image.
   const handleUseStockImage = (asset, action = "insert") => {
     const mediaItem = registerMediaItem(createMediaItemFromStockAsset(asset));
 
@@ -4839,18 +4986,21 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     addElement(createImageElement(mediaItem));
   };
 
+  // Handles add brand field.
   const handleAddBrandField = (fieldId) => {
     const brandElement = createBrandElement(fieldId);
     if (!brandElement) return;
     addElement(brandElement);
   };
 
+  // Handles add quick personalize element.
   const handleAddQuickPersonalizeElement = (fieldId, overrides = {}) => {
     const personalizeElement = createQuickPersonalizeElement(fieldId, overrides);
     if (!personalizeElement) return;
     addElement(personalizeElement);
   };
 
+  // Handles image file change.
   const handleImageFileChange = async (event) => {
     const [file] = event.target.files || [];
     event.target.value = "";
@@ -4911,6 +5061,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     }
   };
 
+  // Handles reset.
   const handleReset = () => {
     if (!template) return;
     commitDesignChange(applyBrandKitToDesign(cloneDesign(template), brandKit), { historyLabel: "Reset design" });
@@ -4920,6 +5071,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     setImageUploadMode("insert");
   };
 
+  // Handles duplicate.
   const handleDuplicate = () => {
     if (!selectedElement || !isElementInteractive(selectedElement)) return;
     const duplicateId = `${selectedElement.id}-copy-${Date.now()}`;
@@ -4940,6 +5092,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     setSelectedId(duplicateId);
   };
 
+  // Handles layer action.
   const handleLayerAction = (action) => {
     if (!selectedElement || !isElementInteractive(selectedElement)) return;
 
@@ -4952,6 +5105,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     );
   };
 
+  // Handles undo.
   const handleUndo = () => {
     const activeDesign = designRef.current;
     const activeBrandKit = brandKitRef.current;
@@ -4979,6 +5133,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     });
   };
 
+  // Handles redo.
   const handleRedo = () => {
     const activeDesign = designRef.current;
     const activeBrandKit = brandKitRef.current;
@@ -5006,6 +5161,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
     });
   };
 
+  // Handles delete.
   const handleDelete = () => {
     if (!selectedElement || !isElementInteractive(selectedElement)) return;
     commitDesignChange(
@@ -5019,6 +5175,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
   };
 
   useEffect(() => {
+    // Handles key down.
     const handleKeyDown = (event) => {
       const target = event.target;
       const isTypingTarget =
@@ -5145,12 +5302,14 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
   );
 }
 
+// Renders the marketing studio editor interface.
 function MarketingStudioEditor() {
   const { templateId } = useParams();
   const navigate = useNavigate();
   const [savedTemplate, setSavedTemplate] = useState(null);
   useEffect(() => { getSessionDesignById(templateId).then(setSavedTemplate).catch(() => setSavedTemplate(null)); }, [templateId]);
   const template = useMemo(() => getTemplateById(templateId) || savedTemplate, [templateId, savedTemplate]);
+  // Handles back.
   const handleBack = () => navigate("/business-growth/marketing-tools");
 
   if (!template) return <EditorEmptyState onBack={handleBack} />;

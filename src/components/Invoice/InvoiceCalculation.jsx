@@ -1,6 +1,7 @@
 import { FiShield } from "react-icons/fi";
 import Input from "../Common/Input";
 
+// Renders the invoice calculation interface.
 function InvoiceCalculation({ form, onChange }) {
   return (
     <div>

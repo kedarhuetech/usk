@@ -1,3 +1,4 @@
+// Renders the card interface.
 function Card({ children, className = "", ...props }) {
   return (
     <section className={`rounded-lg border border-slate-200 bg-white ${className}`} {...props}>

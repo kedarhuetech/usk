@@ -1,3 +1,4 @@
+// Implements the backend meta o auth service.
 import crypto from "node:crypto";
 import { Buffer } from "node:buffer";
 import { getMetaOAuthConfig, META_AUTH_SCOPES } from "../config/metaOAuth.js";
@@ -7,6 +8,7 @@ export const META_OAUTH_STATE_COOKIE = "vyapar_meta_oauth_state";
 const oauthStates = new Map();
 const usedStateDigests = new Map();
 
+// This helper handles expired states logic.
 function cleanupExpiredStates() {
   const now = Date.now();
   for (const [state, value] of oauthStates.entries()) {
@@ -17,25 +19,30 @@ function cleanupExpiredStates() {
   }
 }
 
+// This helper handles return to logic.
 function safeReturnTo(returnTo = "/business-growth/smart-ads") {
   const value = String(returnTo || "").trim();
   return value.startsWith("/") && !value.startsWith("//") ? value : "/business-growth/smart-ads";
 }
 
+// This helper handles digest logic.
 function stateDigest(state) {
   return crypto.createHash("sha256").update(String(state || "")).digest("hex");
 }
 
+// This helper handles state payload logic.
 function signStatePayload(encodedPayload) {
   const config = getMetaOAuthConfig();
   return crypto.createHmac("sha256", config.appSecret).update(encodedPayload).digest("base64url");
 }
 
+// Encodes state cookie.
 function encodeStateCookie(payload) {
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${encodedPayload}.${signStatePayload(encodedPayload)}`;
 }
 
+// Decodes state cookie.
 function decodeStateCookie(cookieValue = "") {
   const [encodedPayload, signature] = String(cookieValue || "").split(".");
   if (!encodedPayload || !signature) return null;
@@ -51,10 +58,12 @@ function decodeStateCookie(cookieValue = "") {
   }
 }
 
+// This helper handles state used logic.
 function markStateUsed(state, expiresAt) {
   usedStateDigests.set(stateDigest(state), { expiresAt: expiresAt || Date.now() + OAUTH_STATE_TTL_MS });
 }
 
+// Creates state.
 function createState(returnTo = "/business-growth/smart-ads") {
   cleanupExpiredStates();
   const state = crypto.randomBytes(24).toString("hex");
@@ -72,6 +81,7 @@ function createState(returnTo = "/business-growth/smart-ads") {
   };
 }
 
+// Makes the meta error value consistent.
 export function normalizeMetaError(error, fallback = "Meta request failed") {
   const metaMessage = error?.error?.message || error?.message;
   const message = metaMessage || fallback;
@@ -87,10 +97,12 @@ export function normalizeMetaError(error, fallback = "Meta request failed") {
   };
 }
 
+// Builds meta authorization url.
 export function buildMetaAuthorizationUrl(returnTo) {
   return buildMetaAuthorizationRequest(returnTo).authorizationUrl;
 }
 
+// Builds meta authorization request.
 export function buildMetaAuthorizationRequest(returnTo, { rerequest = false } = {}) {
   const config = getMetaOAuthConfig();
   if (!config.configured) {
@@ -126,6 +138,7 @@ export function buildMetaAuthorizationRequest(returnTo, { rerequest = false } = 
   };
 }
 
+// Validates meta o auth state.
 export function validateMetaOAuthState(state, cookieValue = "") {
   cleanupExpiredStates();
   const stateValue = String(state || "");
@@ -149,6 +162,7 @@ export function validateMetaOAuthState(state, cookieValue = "") {
   };
 }
 
+// Reads meta response.
 async function readMetaResponse(response, fallback) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.error) {
@@ -166,6 +180,7 @@ async function readMetaResponse(response, fallback) {
   return payload;
 }
 
+// This helper handles get logic.
 export async function graphGet(path, accessToken, params = {}) {
   const config = getMetaOAuthConfig();
   const url = new URL(path.startsWith("http") ? path : `${config.graphBaseUrl}${path}`);
@@ -185,6 +200,7 @@ export async function graphGet(path, accessToken, params = {}) {
   return readMetaResponse(response, "Meta Graph API request failed");
 }
 
+// This helper handles post logic.
 export async function graphPost(path, accessToken, params = {}) {
   const config = getMetaOAuthConfig();
   const url = new URL(path.startsWith("http") ? path : `${config.graphBaseUrl}${path}`);
@@ -204,6 +220,7 @@ export async function graphPost(path, accessToken, params = {}) {
   return readMetaResponse(response, "Meta Graph API request failed");
 }
 
+// Exchanges code for access token.
 export async function exchangeCodeForAccessToken(code) {
   const config = getMetaOAuthConfig();
   const url = new URL(`${config.graphBaseUrl}/oauth/access_token`);
@@ -216,6 +233,7 @@ export async function exchangeCodeForAccessToken(code) {
   return readMetaResponse(response, "Meta authorization code exchange failed");
 }
 
+// Exchanges for long lived user token.
 export async function exchangeForLongLivedUserToken(accessToken) {
   const config = getMetaOAuthConfig();
   const url = new URL(`${config.graphBaseUrl}/oauth/access_token`);
@@ -228,10 +246,12 @@ export async function exchangeForLongLivedUserToken(accessToken) {
   return readMetaResponse(response, "Meta long-lived token exchange failed");
 }
 
+// Gets meta user.
 export async function getMetaUser(accessToken) {
   return graphGet("/me", accessToken, { fields: "id,name" });
 }
 
+// Gets meta permissions.
 export async function getMetaPermissions(accessToken) {
   const payload = await graphGet("/me/permissions", accessToken);
   return (payload.data || []).map((permission) => ({

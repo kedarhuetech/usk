@@ -1,3 +1,4 @@
+// Defines backend API routes for meta auth.
 import { Router } from "express";
 import { getMetaOAuthConfig } from "../config/metaOAuth.js";
 import { fetchMetaAssets } from "../services/metaAssetsService.js";
@@ -21,10 +22,12 @@ import {
 const router = Router();
 const OAUTH_COOKIE_PATH = "/api/auth/meta";
 
+// Checks whether secure request.
 function isSecureRequest(req) {
   return req.secure || String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https";
 }
 
+// This helper handles cookie options logic.
 function oauthCookieOptions(req, maxAge) {
   return {
     httpOnly: true,
@@ -35,6 +38,7 @@ function oauthCookieOptions(req, maxAge) {
   };
 }
 
+// Reads cookie.
 function readCookie(req, name) {
   const cookies = String(req.headers.cookie || "").split(";");
   const found = cookies.find((cookie) => cookie.trim().startsWith(`${name}=`));
@@ -42,10 +46,12 @@ function readCookie(req, name) {
   return decodeURIComponent(found.trim().slice(name.length + 1));
 }
 
+// Clears meta o auth state cookie.
 function clearMetaOAuthStateCookie(req, res) {
   res.clearCookie(META_OAUTH_STATE_COOKIE, oauthCookieOptions(req));
 }
 
+// This helper handles ads redirect logic.
 function smartAdsRedirect(status, message = "") {
   const config = getMetaOAuthConfig();
   const url = new URL("/business-growth/smart-ads", config.clientOrigin);

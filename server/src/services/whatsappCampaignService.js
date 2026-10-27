@@ -1,11 +1,14 @@
 import { buildWhatsAppReadiness } from "./whatsappConnectionStore.js";
 import { extractTemplateVariables, normalizeRecipient } from "./whatsappBusinessService.js";
 
+// This helper handles header format logic.
 function templateHeaderFormat(template = {}) {
+  // Handles result.
   const header = (template.components || []).find((component) => String(component.type || "").toUpperCase() === "HEADER");
   return String(header?.format || "").toUpperCase();
 }
 
+// Makes the approved template value consistent.
 export function normalizeApprovedTemplate(template = {}) {
   const headerFormat = templateHeaderFormat(template);
   return {
@@ -24,13 +27,16 @@ export function normalizeApprovedTemplate(template = {}) {
   };
 }
 
+// This helper handles templates for connection logic.
 export function approvedTemplatesForConnection(connection = {}) {
   return (connection.assets?.templates || []).filter((template) => template.status === "APPROVED").map(normalizeApprovedTemplate);
 }
 
+// Validates campaign payload.
 export function validateCampaignPayload({ connection, payload = {} }) {
   const readiness = buildWhatsAppReadiness(connection);
   const errors = [];
+  // Handles template.
   const selectedTemplate = (connection.assets?.templates || []).find((template) => template.id === payload.templateId);
   const recipients = Array.isArray(payload.recipients) ? payload.recipients : [];
   const validRecipients = [];
@@ -108,6 +114,7 @@ export function validateCampaignPayload({ connection, payload = {} }) {
   };
 }
 
+// This helper handles campaign payload logic.
 export function prepareCampaignPayload({ connection, payload = {} }) {
   const validation = validateCampaignPayload({ connection, payload });
   if (!validation.valid) return { validation, campaign: null };
@@ -132,6 +139,7 @@ export function prepareCampaignPayload({ connection, payload = {} }) {
   };
 }
 
+// This helper handles delivery not configured response logic.
 export function bulkDeliveryNotConfiguredResponse() {
   return {
     success: false,
@@ -142,6 +150,7 @@ export function bulkDeliveryNotConfiguredResponse() {
   };
 }
 
+// This helper handles not configured response logic.
 export function schedulingNotConfiguredResponse() {
   return {
     success: false,

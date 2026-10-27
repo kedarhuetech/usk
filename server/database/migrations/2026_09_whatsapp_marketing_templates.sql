@@ -1,3 +1,4 @@
+-- Defines database structure for whatsapp marketing templates.
 CREATE TABLE IF NOT EXISTS whatsapp_marketing_templates (
   id VARCHAR(64) NOT NULL PRIMARY KEY,
   title VARCHAR(180) NOT NULL,

@@ -1,3 +1,4 @@
+// Renders the invoice preview interface.
 function InvoicePreview({ invoice, form }) {
   return (
     <section className="rounded-lg bg-slate-100 p-6">

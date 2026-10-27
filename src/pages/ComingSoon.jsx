@@ -1,3 +1,4 @@
+// Renders the coming soon interface.
 function ComingSoon() {
   return (
     <div className="flex h-full items-center justify-center">

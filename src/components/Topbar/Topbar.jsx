@@ -1,3 +1,4 @@
+// Renders the topbar interface component.
 import { FiBell, FiHelpCircle, FiRefreshCw, FiSearch, FiUser } from "react-icons/fi";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -9,16 +10,19 @@ import {
 const navItems = ["Company", "Help", "Versions", "Shortcuts"];
 const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purchase-bills/new"];
 
+// Renders the topbar interface.
 export default function Topbar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
+  // Opens transaction.
   const openTransaction = (path) => {
     const state = transactionRoutes.includes(pathname) ? undefined : { from: pathname };
     navigate(path, state ? { state } : undefined);
   };
 
   useEffect(() => {
+    // Refreshes company profile.
     const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
     window.addEventListener("storage", refreshCompanyProfile);
     window.addEventListener(companyProfileUpdatedEvent, refreshCompanyProfile);

@@ -1,3 +1,4 @@
+// Implements the smart ads page.
 import { useEffect, useMemo, useState } from "react";
 import {
   FiAlertCircle,
@@ -73,20 +74,24 @@ const statusStyles = {
 
 const stepLabels = ["Ad Details", "Creative", "Audience", "Budget & Schedule", "Review"];
 
+// This helper handles input value logic.
 function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// This helper handles days logic.
 function addDays(dateValue, days) {
   const date = dateValue ? new Date(`${dateValue}T00:00:00`) : new Date();
   date.setDate(date.getDate() + Math.max(Number(days) || 0, 1) - 1);
   return date.toISOString().slice(0, 10);
 }
 
+// Formats currency.
 function formatCurrency(value) {
   return `Rs ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 }
 
+// This helper handles title case logic.
 function toTitleCase(value = "") {
   return String(value || "")
     .trim()
@@ -95,29 +100,35 @@ function toTitleCase(value = "") {
     .join(" ");
 }
 
+// This helper handles image logic.
 function itemImage(item = {}) {
   return item.imageUrl || item.image || "";
 }
 
+// This helper handles display name logic.
 function itemDisplayName(item = {}) {
   return toTitleCase(item.itemName || item.name || item.serviceName || "Selected Item");
 }
 
+// This helper handles price line logic.
 function itemPriceLine(item = {}) {
   const pricing = calculateInventoryItemPricing(item);
   if (!pricing.finalPrice) return "";
   return `${formatCurrency(pricing.finalPrice)}${item.unit ? ` / ${item.unit}` : ""}`;
 }
 
+// This helper handles meta line logic.
 function itemMetaLine(item = {}) {
   return [item.category, itemPriceLine(item)].filter(Boolean).join(" - ");
 }
 
+// Formats date.
 function formatDate(value) {
   if (!value) return "Not set";
   return new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// This helper handles label logic.
 function statusLabel(status) {
   if (status === "in-review") return "Local Demo";
   if (status === "published") return "Published to Meta";
@@ -128,10 +139,12 @@ function statusLabel(status) {
     .join(" ");
 }
 
+// This helper handles result logic.
 function cx(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
+// This helper handles meta assets logic.
 function emptyMetaAssets() {
   return {
     businesses: [],
@@ -142,6 +155,7 @@ function emptyMetaAssets() {
   };
 }
 
+// This helper handles meta selection logic.
 function emptyMetaSelection() {
   return {
     businessId: "",
@@ -151,6 +165,7 @@ function emptyMetaSelection() {
   };
 }
 
+// This helper handles meta readiness logic.
 function emptyMetaReadiness() {
   return {
     connected: false,
@@ -169,6 +184,7 @@ function emptyMetaReadiness() {
   };
 }
 
+// Resolves meta readiness.
 function resolveMetaReadiness(status = {}, assets = emptyMetaAssets(), selection = emptyMetaSelection()) {
   if (status.readiness) return status.readiness;
   const connected = Boolean(status.connected);
@@ -212,6 +228,7 @@ function resolveMetaReadiness(status = {}, assets = emptyMetaAssets(), selection
   };
 }
 
+// Reads meta callback notice.
 function readMetaCallbackNotice() {
   if (typeof window === "undefined") return { toast: "", error: "" };
   const params = new URLSearchParams(window.location.search);
@@ -223,6 +240,7 @@ function readMetaCallbackNotice() {
   return { toast: "", error: "" };
 }
 
+// This helper handles meta callback notice logic.
 function cleanMetaCallbackNotice() {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
@@ -232,6 +250,7 @@ function cleanMetaCallbackNotice() {
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+// Creates empty form.
 function createEmptyForm() {
   return {
     id: "",
@@ -273,6 +292,7 @@ function createEmptyForm() {
   };
 }
 
+// This helper handles from campaign logic.
 function formFromCampaign(campaign) {
   return {
     id: campaign.id,
@@ -314,6 +334,7 @@ function formFromCampaign(campaign) {
   };
 }
 
+// This helper handles from form logic.
 function campaignFromForm(form, status, inventoryItems, templateOptions, sessionDesigns) {
   const selectedItem = inventoryItems.find((item) => item.id === form.selectedItemId);
   const selectedTemplate = templateOptions.find((template) => template.id === form.templateId);
@@ -376,6 +397,7 @@ function campaignFromForm(form, status, inventoryItems, templateOptions, session
   };
 }
 
+// This helper handles with publish result logic.
 function campaignWithPublishResult(campaign, publish, status, message = "") {
   const ids = publish?.ids || {};
   return {
@@ -398,6 +420,7 @@ function campaignWithPublishResult(campaign, publish, status, message = "") {
   };
 }
 
+// Resolves creative image.
 function resolveCreativeImage(form, inventoryItems, templateOptions, sessionDesigns) {
   if (form.mediaType === "video") return "";
   if (form.creativeSource === "upload") return form.uploadDataUrl;
@@ -410,10 +433,12 @@ function resolveCreativeImage(form, inventoryItems, templateOptions, sessionDesi
   return selectedTemplate?.thumbnail || selectedSessionDesign?.thumbnail || selectedSessionDesign?.background?.src || "";
 }
 
+// Resolves creative video.
 function resolveCreativeVideo(form) {
   return form.mediaType === "video" ? form.videoDataUrl : "";
 }
 
+// Reads blob as data url.
 function readBlobAsDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -423,6 +448,7 @@ function readBlobAsDataUrl(blob) {
   });
 }
 
+// Resolves publishable creative data url.
 async function resolvePublishableCreativeDataUrl(imageUrl) {
   if (!imageUrl) throw new Error("Select or upload a creative image before publishing.");
   if (imageUrl.startsWith("data:image/")) return imageUrl;
@@ -433,11 +459,13 @@ async function resolvePublishableCreativeDataUrl(imageUrl) {
   return readBlobAsDataUrl(await response.blob());
 }
 
+// Checks whether supported video file.
 function isSupportedVideoFile(file) {
   const name = String(file?.name || "").toLowerCase();
   return supportedVideoTypes.includes(file?.type) || supportedVideoExtensions.some((extension) => name.endsWith(extension));
 }
 
+// This helper handles video mime type logic.
 function inferVideoMimeType(file) {
   if (file?.type) return file.type;
   const name = String(file?.name || "").toLowerCase();
@@ -446,6 +474,7 @@ function inferVideoMimeType(file) {
   return "video/mp4";
 }
 
+// Gets video metadata.
 function getVideoMetadata(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -467,6 +496,7 @@ function getVideoMetadata(file) {
   });
 }
 
+// Reads validated video file.
 async function readValidatedVideoFile(file) {
   if (!file) return null;
   const hasVideoMimeOrExtension = file.type ? file.type.startsWith("video/") : supportedVideoExtensions.some((extension) => String(file.name || "").toLowerCase().endsWith(extension));
@@ -491,6 +521,7 @@ async function readValidatedVideoFile(file) {
   };
 }
 
+// Resolves publishable video data url.
 function resolvePublishableVideoDataUrl(form) {
   if (form.mediaType !== "video") return "";
   if (!form.videoDataUrl && form.existingVideoId) return "";
@@ -499,6 +530,7 @@ function resolvePublishableVideoDataUrl(form) {
   return form.videoDataUrl;
 }
 
+// Checks whether publishable destination.
 function hasPublishableDestination(value = "") {
   try {
     const parsed = new URL(String(value || "").trim());
@@ -508,6 +540,7 @@ function hasPublishableDestination(value = "") {
   }
 }
 
+// Formats meta publish error.
 function formatMetaPublishError(error) {
   const details = error?.payload?.error || error?.payload?.publish?.error;
   if (!details) return error?.message || "Unable to publish Meta campaign.";
@@ -524,10 +557,12 @@ function formatMetaPublishError(error) {
   return [...lines, ...(codes.length ? [codes.join(" | ")] : [])].join("\n");
 }
 
+// This helper handles label logic.
 function objectiveLabel(value) {
   return goalOptions.find((goal) => goal.id === value)?.label || value;
 }
 
+// Renders the metric card interface.
 function MetricCard({ icon: Icon, label, value, helper, loading = false }) {
   return (
     <Card className="p-4 shadow-sm">
@@ -547,6 +582,7 @@ function MetricCard({ icon: Icon, label, value, helper, loading = false }) {
   );
 }
 
+// Renders the meta insights interface.
 function MetaInsights({ status, connectionError, campaignCount, onRefresh }) {
   const [datePreset, setDatePreset] = useState("last_30d");
   const [retry, setRetry] = useState(0);
@@ -576,6 +612,7 @@ function MetaInsights({ status, connectionError, campaignCount, onRefresh }) {
   const data = result?.status === status && result?.datePreset === datePreset && result?.retry === retry ? result.data : null;
   const state = status.loading ? "LOADING" : !status.connected ? (connectionError ? "CONNECTION_ERROR" : "NOT_CONNECTED") : !accountId ? "NO_AD_ACCOUNT" : data?.state || "LOADING";
   const available = ["DATA", "NO_ACTIVITY"].includes(state);
+  // Handles result.
   const metric = (key) => available && data.metrics[key] !== null ? data.metrics[key].toLocaleString("en-IN") : "--";
   const currency = data?.account?.currency;
   let spend = metric("spend");
@@ -631,6 +668,7 @@ function MetaInsights({ status, connectionError, campaignCount, onRefresh }) {
   );
 }
 
+// Renders the status badge interface.
 function StatusBadge({ status }) {
   return (
     <span className={cx("inline-flex rounded-full px-2.5 py-1 text-xs font-black", statusStyles[status] || statusStyles.draft)}>
@@ -639,6 +677,7 @@ function StatusBadge({ status }) {
   );
 }
 
+// Renders the meta asset select interface.
 function MetaAssetSelect({ label, value, onChange, options, emptyLabel, getOptionLabel, disabled = false }) {
   return (
     <label className="block">
@@ -660,6 +699,7 @@ function MetaAssetSelect({ label, value, onChange, options, emptyLabel, getOptio
   );
 }
 
+// Renders the meta requirement row interface.
 function MetaRequirementRow({ ok, optional = false, label, helper }) {
   const Icon = ok ? FiCheck : optional ? FiClock : FiX;
   return (
@@ -682,11 +722,13 @@ function MetaRequirementRow({ ok, optional = false, label, helper }) {
   );
 }
 
+// Finds asset warning.
 function findAssetWarning(assets, keyword) {
   const normalizedKeyword = keyword.toLowerCase();
   return (assets.warnings || []).find((warning) => String(warning.area || "").toLowerCase().includes(normalizedKeyword));
 }
 
+// Renders the meta connection card interface.
 function MetaConnectionCard({
   status,
   assets,
@@ -880,6 +922,7 @@ function MetaConnectionCard({
   );
 }
 
+// Renders the ad preview interface.
 function AdPreview({ form, creativeImage, creativeVideo, selectedItem, captionTouched = false }) {
   const isVideo = form.mediaType === "video";
   const hasItemCreative = !isVideo && form.creativeSource === "item-image" && selectedItem && creativeImage;
@@ -929,6 +972,7 @@ function AdPreview({ form, creativeImage, creativeVideo, selectedItem, captionTo
   );
 }
 
+// Renders the stepper interface.
 function Stepper({ step }) {
   return (
     <div className="grid gap-2 md:grid-cols-5">
@@ -950,18 +994,22 @@ function Stepper({ step }) {
   );
 }
 
+// Renders the field label interface.
 function FieldLabel({ children }) {
   return <label className="text-xs font-black uppercase tracking-wide text-slate-500">{children}</label>;
 }
 
+// Renders the text input interface.
 function TextInput(props) {
   return <input {...props} className={cx("h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500", props.className)} />;
 }
 
+// Renders the text area interface.
 function TextArea(props) {
   return <textarea {...props} className={cx("min-h-24 w-full resize-none rounded-lg border border-slate-300 p-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500", props.className)} />;
 }
 
+// Renders the smart ads interface.
 function SmartAds() {
   const callbackNotice = readMetaCallbackNotice();
   const [campaigns, setCampaigns] = useState([]);
@@ -1035,6 +1083,7 @@ function SmartAds() {
 
   const filteredCampaigns = filter === "all" ? campaigns : campaigns.filter((campaign) => campaign.status === filter);
 
+  // Handles campaigns.
   async function reloadCampaigns() {
     setCampaignsLoading(true);
     setCampaignsLoadError("");
@@ -1084,14 +1133,17 @@ function SmartAds() {
     };
   }, []);
 
+  // Updates form.
   function updateForm(patch) {
     setForm((current) => ({ ...current, ...patch }));
   }
 
+  // Updates form field.
   function updateFormField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  // Handles item select.
   function handleItemSelect(itemId) {
     const item = inventoryItems.find((current) => current.id === itemId);
     if (!item) {
@@ -1111,6 +1163,7 @@ function SmartAds() {
     }));
   }
 
+  // Handles image upload.
   function handleImageUpload(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1130,6 +1183,7 @@ function SmartAds() {
     reader.readAsDataURL(file);
   }
 
+  // Handles video upload.
   async function handleVideoUpload(event) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1160,6 +1214,7 @@ function SmartAds() {
     }
   }
 
+  // Handles location.
   function addLocation() {
     const nextLocation = locationInput.trim();
     if (!nextLocation || form.locations.includes(nextLocation)) return;
@@ -1167,6 +1222,7 @@ function SmartAds() {
     setLocationInput("");
   }
 
+  // Removes location.
   function removeLocation(location) {
     updateFormField(
       "locations",
@@ -1174,6 +1230,7 @@ function SmartAds() {
     );
   }
 
+  // Toggles interest.
   function toggleInterest(interest) {
     updateFormField(
       "interests",
@@ -1181,12 +1238,14 @@ function SmartAds() {
     );
   }
 
+  // Handles custom interest.
   function addCustomInterest() {
     const nextInterest = form.interestInput.trim();
     if (!nextInterest || form.interests.includes(nextInterest)) return;
     updateForm({ interests: [...form.interests, nextInterest], interestInput: "" });
   }
 
+  // Validates step.
   function validateStep(stepIndex) {
     if (stepIndex === 0) {
       if (!form.campaignName.trim()) return "Campaign name is required.";
@@ -1224,6 +1283,7 @@ function SmartAds() {
     return "";
   }
 
+  // Validates all steps.
   function validateAllSteps() {
     for (let index = 0; index < stepLabels.length - 1; index += 1) {
       const message = validateStep(index);
@@ -1235,6 +1295,7 @@ function SmartAds() {
     return "";
   }
 
+  // Handles next.
   function goNext() {
     const message = validateStep(step);
     if (message) {
@@ -1245,6 +1306,7 @@ function SmartAds() {
     setStep((current) => Math.min(current + 1, stepLabels.length - 1));
   }
 
+  // Saves campaign.
   async function saveCampaign(status) {
     const message = status === "draft" ? "" : validateAllSteps();
     if (message) {
@@ -1269,6 +1331,7 @@ function SmartAds() {
     } catch (saveError) { setError(saveError.message || "Unable to save the campaign."); }
   }
 
+  // Handles campaign to meta.
   async function publishCampaignToMeta() {
     const message = validateAllSteps();
     if (message) {
@@ -1337,6 +1400,7 @@ function SmartAds() {
     }
   }
 
+  // Starts new campaign.
   function startNewCampaign() {
     setForm(createEmptyForm());
     setTouched({ headline: false, caption: false, creative: false });
@@ -1346,6 +1410,7 @@ function SmartAds() {
     setView("builder");
   }
 
+  // Handles campaign.
   function editCampaign(campaign) {
     setForm(formFromCampaign(campaign));
     setTouched({ headline: true, caption: true, creative: true });
@@ -1355,6 +1420,7 @@ function SmartAds() {
     setView("builder");
   }
 
+  // Refreshes meta connection.
   async function refreshMetaConnection() {
     setMetaLoading(true);
     setMetaError("");
@@ -1386,6 +1452,7 @@ function SmartAds() {
     }
   }
 
+  // Handles connect meta.
   async function handleConnectMeta({ rerequest = false } = {}) {
     setMetaLoading(true);
     setMetaError("");
@@ -1407,10 +1474,12 @@ function SmartAds() {
     }
   }
 
+  // Handles reconnect meta.
   function handleReconnectMeta() {
     return handleConnectMeta({ rerequest: true });
   }
 
+  // Handles meta selection change.
   async function handleMetaSelectionChange(patch) {
     const nextSelection = { ...metaSelection, ...patch };
     setMetaSelection(nextSelection);
@@ -1460,6 +1529,7 @@ function SmartAds() {
       });
   }
 
+  // Handles save meta selection.
   async function handleSaveMetaSelection() {
     setMetaLoading(true);
     setMetaError("");
@@ -1477,6 +1547,7 @@ function SmartAds() {
     }
   }
 
+  // Handles disconnect meta.
   async function handleDisconnectMeta() {
     setMetaLoading(true);
     setMetaError("");
@@ -1494,6 +1565,7 @@ function SmartAds() {
     }
   }
 
+  // Renders ad details step.
   function renderAdDetailsStep() {
     return (
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -1575,6 +1647,7 @@ function SmartAds() {
     );
   }
 
+  // Renders creative step.
   function renderCreativeStep() {
     return (
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -1748,6 +1821,7 @@ function SmartAds() {
     );
   }
 
+  // Renders audience step.
   function renderAudienceStep() {
     return (
       <Card className="p-5 shadow-sm">
@@ -1847,6 +1921,7 @@ function SmartAds() {
     );
   }
 
+  // Renders budget step.
   function renderBudgetStep() {
     return (
       <div className="grid gap-5 lg:grid-cols-[1fr_340px]">
@@ -1907,6 +1982,7 @@ function SmartAds() {
     );
   }
 
+  // Renders review step.
   function renderReviewStep() {
     const creativeSourceLabel = form.mediaType === "video" ? "Uploaded Video" : form.creativeSource === "marketing-studio" ? "Marketing Studio" : form.creativeSource === "item-image" ? "Item Image" : "Uploaded Creative";
 
@@ -1945,6 +2021,7 @@ function SmartAds() {
     );
   }
 
+  // Renders step content.
   function renderStepContent() {
     if (step === 0) return renderAdDetailsStep();
     if (step === 1) return renderCreativeStep();

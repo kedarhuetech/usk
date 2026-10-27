@@ -1,9 +1,11 @@
+// Implements the vyapar network page.
 import { FiChevronDown, FiFileText, FiSearch } from "react-icons/fi";
 import Card from "../../components/Common/Card";
 
 const connectedUsers = [];
 const filters = ["All Invoices", "Sent Invoices", "Received Invoices"];
 
+// Renders the invoice empty state interface.
 function InvoiceEmptyState() {
   return (
     <div className="flex min-h-[520px] items-center justify-center p-6 text-center">
@@ -22,6 +24,7 @@ function InvoiceEmptyState() {
   );
 }
 
+// Renders the network users panel interface.
 function NetworkUsersPanel({ users }) {
   return (
     <Card className="min-h-[calc(100vh-11rem)] overflow-hidden">
@@ -60,6 +63,7 @@ function NetworkUsersPanel({ users }) {
   );
 }
 
+// Renders the invoice panel interface.
 function InvoicePanel() {
   return (
     <div className="space-y-1">
@@ -83,6 +87,7 @@ function InvoicePanel() {
   );
 }
 
+// Renders the vyapar network interface.
 function VyaparNetwork() {
   return (
     <div className="bg-slate-200 p-1">

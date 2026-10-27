@@ -1,3 +1,4 @@
+// Implements the backend meta ads insights service.test service.
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import express from "express";
@@ -16,6 +17,7 @@ const testToken = "insights-test-token-never-real";
 const account = { id: "act_123", name: "Test account", currency: "USD" };
 const row = { account_id: "123", account_name: "Test account", account_currency: "USD", date_start: "2026-08-01", date_stop: "2026-08-30", reach: "80", impressions: "100", clicks: "7", spend: "12.34" };
 
+// Connects result.
 function connect(patch = {}) {
   setMetaConnection({
     token: { accessToken: testToken },
@@ -26,6 +28,7 @@ function connect(patch = {}) {
   });
 }
 
+// Requests result.
 async function request(query = "") {
   const response = await nativeFetch(`${baseUrl}/api/meta/ads/insights${query}`);
   const data = await response.json();

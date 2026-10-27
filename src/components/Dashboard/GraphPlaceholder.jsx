@@ -1,5 +1,6 @@
 import Card from "../Common/Card";
 
+// Renders the graph placeholder interface.
 function GraphPlaceholder() {
   return (
     <Card className="p-6">

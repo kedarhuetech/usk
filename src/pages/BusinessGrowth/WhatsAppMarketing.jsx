@@ -1,3 +1,4 @@
+// Implements the whats app marketing page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiAlertCircle,
@@ -60,6 +61,7 @@ const shareBackgroundPresets = [
 
 const backgroundSwatches = ["#ffffff", "#f4f0ff", "#eff6ff", "#fff7ed", "#f8fafc", "#0f172a"];
 
+// This helper handles whats app assets logic.
 function emptyWhatsAppAssets() {
   return {
     businesses: [],
@@ -70,6 +72,7 @@ function emptyWhatsAppAssets() {
   };
 }
 
+// This helper handles whats app selection logic.
 function emptyWhatsAppSelection() {
   return {
     businessId: "",
@@ -79,6 +82,7 @@ function emptyWhatsAppSelection() {
   };
 }
 
+// This helper handles whats app status logic.
 function mergeWhatsAppStatus(previous = {}, next = {}) {
   return {
     ...previous,
@@ -92,6 +96,7 @@ function mergeWhatsAppStatus(previous = {}, next = {}) {
   };
 }
 
+// This helper handles whats app readiness logic.
 function emptyWhatsAppReadiness() {
   return {
     connected: false,
@@ -110,6 +115,7 @@ function emptyWhatsAppReadiness() {
   };
 }
 
+// Resolves whats app readiness.
 function resolveWhatsAppReadiness(status = {}, assets = emptyWhatsAppAssets(), selection = emptyWhatsAppSelection()) {
   if (status.readiness) return status.readiness;
   const connected = Boolean(status.connected);
@@ -159,6 +165,7 @@ function resolveWhatsAppReadiness(status = {}, assets = emptyWhatsAppAssets(), s
   };
 }
 
+// Reads whats app callback notice.
 function readWhatsAppCallbackNotice() {
   if (typeof window === "undefined") return { toast: "", error: "" };
   const params = new URLSearchParams(window.location.search);
@@ -170,6 +177,7 @@ function readWhatsAppCallbackNotice() {
   return { toast: "", error: "" };
 }
 
+// This helper handles whats app callback notice logic.
 function cleanWhatsAppCallbackNotice() {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
@@ -179,6 +187,7 @@ function cleanWhatsAppCallbackNotice() {
   window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+// Formats whats app request error.
 function formatWhatsAppRequestError(error, fallback) {
   const details = error?.payload?.error;
   const message = details?.userMessage || details?.message || error?.payload?.message || error?.message || fallback;
@@ -192,15 +201,18 @@ function formatWhatsAppRequestError(error, fallback) {
   return metaParts.length ? `${message} (${metaParts.join(", ")})` : message;
 }
 
+// Checks whether whats app auth or disconnected error.
 function isWhatsAppAuthOrDisconnectedError(error) {
   const category = error?.payload?.error?.category || error?.payload?.readiness?.blockingCode || "";
   return error?.status === 401 || ["WHATSAPP_NOT_CONNECTED", "TOKEN_EXPIRED"].includes(category);
 }
 
+// Checks whether whats app config error.
 function isWhatsAppConfigError(error) {
   return error?.status === 503 || error?.payload?.configured === false;
 }
 
+// Parses whats app embedded signup message.
 function parseWhatsAppEmbeddedSignupMessage(event) {
   if (!["https://www.facebook.com", "https://web.facebook.com"].includes(event.origin)) return null;
   let payload = event.data;
@@ -221,6 +233,7 @@ function parseWhatsAppEmbeddedSignupMessage(event) {
   };
 }
 
+// Loads facebook sdk.
 function loadFacebookSdk({ appId, graphApiVersion }) {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined") {
@@ -260,6 +273,7 @@ function loadFacebookSdk({ appId, graphApiVersion }) {
   });
 }
 
+// Starts whats app embedded signup.
 async function startWhatsAppEmbeddedSignup(embeddedSignup = {}) {
   const { appId, graphApiVersion, loginConfigId } = embeddedSignup;
   if (!appId || !graphApiVersion || !loginConfigId) {
@@ -270,6 +284,7 @@ async function startWhatsAppEmbeddedSignup(embeddedSignup = {}) {
   let signupData = {};
 
   return new Promise((resolve, reject) => {
+    // Handles signup message.
     const handleSignupMessage = (event) => {
       const parsed = parseWhatsAppEmbeddedSignupMessage(event);
       if (parsed) signupData = { ...signupData, ...parsed };
@@ -298,6 +313,7 @@ async function startWhatsAppEmbeddedSignup(embeddedSignup = {}) {
   });
 }
 
+// This helper handles parse json logic.
 function safeParseJson(value, fallback) {
   try {
     return JSON.parse(value) || fallback;
@@ -306,6 +322,7 @@ function safeParseJson(value, fallback) {
   }
 }
 
+// Makes the party recipient value consistent.
 function normalizePartyRecipient(record = {}, index = 0) {
   const name = record.partyName || record.name || record.customerName || record.displayName || "";
   const phone = record.phone || record.mobile || record.mobileNumber || record.contactNumber || "";
@@ -319,6 +336,7 @@ function normalizePartyRecipient(record = {}, index = 0) {
   };
 }
 
+// Loads party recipients.
 function loadPartyRecipients() {
   if (typeof window === "undefined" || !window.localStorage) return [];
   const storageKeys = ["ledgerly:parties", "vyapar:parties", "parties", "ledgerly:customers", "vyapar:customers"];
@@ -333,15 +351,19 @@ function loadPartyRecipients() {
   return Array.from(byId.values());
 }
 
+// This helper handles header format logic.
 function templateHeaderFormat(template = {}) {
+  // Handles result.
   const header = (template.components || []).find((component) => String(component.type || "").toUpperCase() === "HEADER");
   return String(header?.format || "").toUpperCase();
 }
 
+// This helper handles body text logic.
 function templateBodyText(template = {}) {
   return (template.components || []).find((component) => String(component.type || "").toUpperCase() === "BODY")?.text || "";
 }
 
+// This helper handles friendly name logic.
 function templateFriendlyName(template = {}) {
   const headerFormat = templateHeaderFormat(template);
   const channel = headerFormat === "IMAGE" ? "Poster image message" : headerFormat ? `${headerFormat.toLowerCase()} message` : "Text message";
@@ -349,16 +371,19 @@ function templateFriendlyName(template = {}) {
   return `${channel} - ${category}`;
 }
 
+// Renders template message.
 function renderTemplateMessage(template = {}, variables = {}, fallbackMessage = "") {
   const body = templateBodyText(template);
   if (!body) return fallbackMessage;
   return body.replace(/\{\{(\d+)\}\}/g, (_match, index) => variables[`body:${index}`] || `[${index}]`);
 }
 
+// This helper handles business phone logic.
 function selectedBusinessPhone(assets = emptyWhatsAppAssets(), selection = emptyWhatsAppSelection()) {
   return assets.phoneNumbers.find((phone) => phone.id === selection.phoneNumberId) || null;
 }
 
+// Renders the whats app connection unavailable interface.
 function WhatsAppConnectionUnavailable({ error, onRetry, loading }) {
   return (
     <section className="grid min-h-[420px] place-items-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
@@ -379,6 +404,7 @@ function WhatsAppConnectionUnavailable({ error, onRetry, loading }) {
   );
 }
 
+// Renders the whats app onboarding interface.
 function WhatsAppOnboarding({ status, loading, onContinueMeta, productionConnectionError }) {
   const canUseMeta = Boolean(status.embeddedSignupConfigured || status.oauthConfigured);
   return (
@@ -415,6 +441,7 @@ function WhatsAppOnboarding({ status, loading, onContinueMeta, productionConnect
   );
 }
 
+// Renders the whats app test mode starter interface.
 function WhatsAppTestModeStarter({ status, loading, error, onTestConnect }) {
   const testModeConfigured = Boolean(status.testModeConfigured);
   return (
@@ -447,6 +474,7 @@ function WhatsAppTestModeStarter({ status, loading, error, onTestConnect }) {
   );
 }
 
+// Renders the whats app configuration error interface.
 function WhatsAppConfigurationError({ onManageConnection }) {
   return (
     <section className="grid min-h-[420px] place-items-center rounded-2xl border border-amber-100 bg-white p-6 text-center shadow-sm">
@@ -467,6 +495,7 @@ function WhatsAppConfigurationError({ onManageConnection }) {
   );
 }
 
+// Renders the whats app setup incomplete interface.
 function WhatsAppSetupIncomplete({ readiness, assets, selection, onManageConnection }) {
   const phone = selectedBusinessPhone(assets, selection);
   return (
@@ -495,6 +524,7 @@ function WhatsAppSetupIncomplete({ readiness, assets, selection, onManageConnect
   );
 }
 
+// Renders the whats app connected bar interface.
 function WhatsAppConnectedBar({ status, assets, selection, onManageConnection }) {
   const phone = selectedBusinessPhone(assets, selection);
   const approvedCount = assets.templates.filter((template) => template.status === "APPROVED").length;
@@ -517,6 +547,7 @@ function WhatsAppConnectedBar({ status, assets, selection, onManageConnection })
   );
 }
 
+// This helper handles template variables logic.
 function extractTemplateVariables(template = {}) {
   const variables = [];
   (template.components || []).forEach((component) => {
@@ -531,6 +562,7 @@ function extractTemplateVariables(template = {}) {
   return variables.sort((a, b) => a.componentType.localeCompare(b.componentType) || a.index - b.index);
 }
 
+// This helper handles to rgb logic.
 function hexToRgb(hex = "#ffffff") {
   const cleanHex = hex.replace("#", "");
   const normalized = cleanHex.length === 3 ? cleanHex.split("").map((char) => char + char).join("") : cleanHex;
@@ -543,15 +575,18 @@ function hexToRgb(hex = "#ffffff") {
   };
 }
 
+// Checks whether dark color.
 function isDarkColor(hex) {
   const { r, g, b } = hexToRgb(hex);
   return (r * 299 + g * 587 + b * 114) / 1000 < 132;
 }
 
+// This helper handles preset logic.
 function selectedPreset(background) {
   return shareBackgroundPresets.find((preset) => preset.id === background.presetId) || shareBackgroundPresets[0];
 }
 
+// This helper handles card theme logic.
 function shareCardTheme(background) {
   const preset = selectedPreset(background);
   const dark = preset.tone === "dark" || isDarkColor(background.color);
@@ -566,6 +601,7 @@ function shareCardTheme(background) {
   };
 }
 
+// This helper handles style logic.
 function backgroundStyle(background) {
   const { preset } = shareCardTheme(background);
   const opacity = Math.max(Number(background.intensity || 0), 0) / 100;
@@ -609,6 +645,7 @@ function backgroundStyle(background) {
   };
 }
 
+// Renders the field interface.
 function Field({ label, icon: Icon, children }) {
   return (
     <label className="block">
@@ -621,6 +658,7 @@ function Field({ label, icon: Icon, children }) {
   );
 }
 
+// Draws contain.
 function drawContain(ctx, image, x, y, width, height) {
   const ratio = Math.min(width / image.naturalWidth, height / image.naturalHeight);
   const drawWidth = image.naturalWidth * ratio;
@@ -628,6 +666,7 @@ function drawContain(ctx, image, x, y, width, height) {
   ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
 }
 
+// Loads image.
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -638,11 +677,13 @@ function loadImage(src) {
   });
 }
 
+// This helper handles to rgba logic.
 function hexToRgba(hex, alpha) {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// Draws canvas background.
 function drawCanvasBackground(ctx, background, width, height) {
   const { preset } = shareCardTheme(background);
   const color = background.color || preset.base;
@@ -726,6 +767,7 @@ function drawCanvasBackground(ctx, background, width, height) {
   ctx.restore();
 }
 
+// Draws wrapped text.
 function drawWrappedText(ctx, value, x, y, width, { fontSize, color, weight = 700, align = "left", maxLines = 2 }) {
   if (!value?.trim()) return;
 
@@ -754,6 +796,7 @@ function drawWrappedText(ctx, value, x, y, width, { fontSize, color, weight = 70
   });
 }
 
+// Draws text element.
 function drawTextElement(ctx, textElement, canvasWidth, canvasHeight) {
   if (!textElement?.text?.trim()) return;
 
@@ -794,6 +837,7 @@ function drawTextElement(ctx, textElement, canvasWidth, canvasHeight) {
   ctx.restore();
 }
 
+// Renders the overlay preview interface.
 function OverlayPreview({
   template,
   values,
@@ -821,6 +865,7 @@ function OverlayPreview({
     return () => observer.disconnect();
   }, []);
 
+  // Handles text pointer down.
   function handleTextPointerDown(event, textElement) {
     event.stopPropagation();
     event.preventDefault();
@@ -831,6 +876,7 @@ function OverlayPreview({
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
+  // Handles text pointer move.
   function handleTextPointerMove(event) {
     const drag = dragStateRef.current;
     if (!drag) return;
@@ -842,6 +888,7 @@ function OverlayPreview({
     onUpdateTextPosition?.(id, xPercent, yPercent);
   }
 
+  // Handles text pointer up.
   function handleTextPointerUp() {
     dragStateRef.current = null;
   }
@@ -909,7 +956,9 @@ function OverlayPreview({
   );
 }
 
+// Renders the background panel interface.
 function BackgroundPanel({ background, setBackground, activeTab, setActiveTab }) {
+  // Updates background.
   const updateBackground = (updates) => setBackground((current) => ({ ...current, ...updates }));
 
   return (
@@ -1003,6 +1052,7 @@ function BackgroundPanel({ background, setBackground, activeTab, setActiveTab })
   );
 }
 
+// Renders the text element panel interface.
 function TextElementPanel({
   values,
   textElements,
@@ -1161,6 +1211,7 @@ function TextElementPanel({
   );
 }
 
+// Renders the whats app asset select interface.
 function WhatsAppAssetSelect({ label, value, options, emptyLabel, onChange, getOptionLabel, disabled = false }) {
   return (
     <label className="block">
@@ -1182,6 +1233,7 @@ function WhatsAppAssetSelect({ label, value, options, emptyLabel, onChange, getO
   );
 }
 
+// Renders the requirement row interface.
 function RequirementRow({ ok, label, helper }) {
   return (
     <div className="flex items-start gap-2 text-xs font-bold leading-5">
@@ -1196,6 +1248,7 @@ function RequirementRow({ ok, label, helper }) {
   );
 }
 
+// This helper handles status class logic.
 function templateStatusClass(status) {
   if (status === "APPROVED") return "bg-emerald-50 text-emerald-700";
   if (status === "REJECTED") return "bg-rose-50 text-rose-700";
@@ -1203,10 +1256,12 @@ function templateStatusClass(status) {
   return "bg-amber-50 text-amber-700";
 }
 
+// This helper handles whats app configured logic.
 function productionWhatsAppConfigured(status = {}) {
   return Boolean(status.embeddedSignupConfigured || status.oauthConfigured);
 }
 
+// This helper handles missing setup categories logic.
 function whatsappMissingSetupCategories(status = {}) {
   const missing = [];
   if (!productionWhatsAppConfigured(status)) missing.push("Production Meta WhatsApp onboarding");
@@ -1214,6 +1269,7 @@ function whatsappMissingSetupCategories(status = {}) {
   return missing;
 }
 
+// Resolves manage connection state.
 function resolveManageConnectionState(status = {}, readiness = emptyWhatsAppReadiness()) {
   if (!productionWhatsAppConfigured(status) && !status.connected) return "CONFIGURATION_ERROR";
   if (!status.connected && /token|permission|reconnect/i.test(status.lastError || readiness.blockingReason || "")) return "AUTH_ERROR";
@@ -1223,12 +1279,14 @@ function resolveManageConnectionState(status = {}, readiness = emptyWhatsAppRead
   return "CONNECTED_INCOMPLETE";
 }
 
+// This helper handles business name logic.
 function selectedBusinessName(assets = emptyWhatsAppAssets(), selection = emptyWhatsAppSelection(), status = {}) {
   const business = assets.businesses.find((item) => item.id === selection.businessId);
   const waba = assets.wabas.find((item) => item.id === selection.wabaId);
   return business?.name || waba?.name || waba?.businessName || status.user?.name || "WhatsApp Business";
 }
 
+// Checks whether show whats app developer tools.
 function canShowWhatsAppDeveloperTools(status = {}) {
   if (!status.testModeConfigured && status.source !== "test_env") return false;
   if (typeof window === "undefined") return false;
@@ -1237,6 +1295,7 @@ function canShowWhatsAppDeveloperTools(status = {}) {
   return host === "localhost" || host === "127.0.0.1" || params.get("whatsappDev") === "1" || window.localStorage?.getItem("vyapar:whatsapp-dev-tools") === "1";
 }
 
+// Renders the whats app business panel interface.
 function WhatsAppBusinessPanel({
   status,
   assets,
@@ -1510,6 +1569,7 @@ function WhatsAppBusinessPanel({
   );
 }
 
+// Splits recipient phone.
 function splitRecipientPhone(recipient = {}) {
   const raw = String(recipient.phone || "").trim();
   const digits = raw.replace(/[^\d]/g, "");
@@ -1525,6 +1585,7 @@ function splitRecipientPhone(recipient = {}) {
   };
 }
 
+// Resolves send connection state.
 function resolveSendConnectionState(status = {}, assets = emptyWhatsAppAssets(), selection = emptyWhatsAppSelection(), connectionCheck = {}) {
   if (connectionCheck.loading) return "LOADING";
   if (connectionCheck.error) return "TEMPORARILY_UNAVAILABLE";
@@ -1539,6 +1600,7 @@ function resolveSendConnectionState(status = {}, assets = emptyWhatsAppAssets(),
   return "CONNECTED_INCOMPLETE";
 }
 
+// Renders the send connection gate interface.
 function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConnection, onManageConnection }) {
   const content = {
     NOT_CONNECTED: {
@@ -1604,6 +1666,7 @@ function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConn
   );
 }
 
+// Renders the send on whats app modal interface.
 function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck, onClose, onContinueMeta, onRetryConnection, onManageConnection }) {
   const [step, setStep] = useState(0);
   const [query, setQuery] = useState("");
@@ -1624,11 +1687,13 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
   const connectionState = resolveSendConnectionState(status, assets, selection, connectionCheck);
   const connectionReady = connectionState === "READY";
 
+  // Toggles recipient.
   function toggleRecipient(recipient) {
     setCampaignResult({ loading: false, success: false, message: "", errors: [], prepared: null });
     setSelectedRecipientIds((current) => (current.includes(recipient.id) ? current.filter((id) => id !== recipient.id) : [...current, recipient.id]));
   }
 
+  // Toggles all visible.
   function toggleAllVisible() {
     const visibleIds = filteredRecipients.map((recipient) => recipient.id);
     const allVisibleSelected = visibleIds.length && visibleIds.every((id) => selectedIds.has(id));
@@ -1639,6 +1704,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
     });
   }
 
+  // Handles payload.
   function campaignPayload() {
     return {
       creative: {
@@ -1664,6 +1730,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
     };
   }
 
+  // Handles validate campaign.
   async function handleValidateCampaign() {
     setCampaignResult({ loading: true, success: false, message: "", errors: [], prepared: null });
     try {
@@ -1677,6 +1744,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
     }
   }
 
+  // Handles prepare campaign.
   async function handlePrepareCampaign() {
     setCampaignResult({ loading: true, success: false, message: "", errors: [], prepared: null });
     try {
@@ -1895,6 +1963,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
   );
 }
 
+// Renders the personalize modal interface.
 function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
   const fileInputRef = useRef(null);
   const [values, setValues] = useState(whatsappMarketingDefaults);
@@ -1913,15 +1982,18 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     [logoPreview],
   );
 
+  // Updates value.
   const updateValue = (key, value) => {
     setValues((current) => ({ ...current, [key]: value }));
   };
 
+  // Handles text id.
   function nextTextId() {
     textIdCounterRef.current += 1;
     return `text-${Date.now()}-${textIdCounterRef.current}`;
   }
 
+  // Handles text element.
   function addTextElement(initialText = "Enter your text") {
     const id = nextTextId();
     setTextElements((current) => {
@@ -1941,19 +2013,23 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     setSelectedTextId(id);
   }
 
+  // Updates text element.
   function updateTextElement(id, updates) {
     setTextElements((current) => current.map((textElement) => (textElement.id === id ? { ...textElement, ...updates } : textElement)));
   }
 
+  // Updates text position.
   function updateTextPosition(id, x, y) {
     setTextElements((current) => current.map((textElement) => (textElement.id === id ? { ...textElement, x, y } : textElement)));
   }
 
+  // Deletes text element.
   function deleteTextElement(id) {
     setTextElements((current) => current.filter((textElement) => textElement.id !== id));
     setSelectedTextId((current) => (current === id ? null : current));
   }
 
+  // Handles text element.
   function duplicateTextElement(id) {
     const newId = nextTextId();
     setTextElements((current) => {
@@ -1965,6 +2041,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     setSelectedTextId(newId);
   }
 
+  // Handles logo upload.
   const handleLogoUpload = (event) => {
     const [file] = event.target.files || [];
     event.target.value = "";
@@ -1973,6 +2050,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     setLogoPreview(URL.createObjectURL(file));
   };
 
+  // Handles image.
   const composeImage = async () => {
     const poster = await loadImage(template.image);
     const posterWidth = EXPORT_WIDTH - EXPORT_PADDING * 2;
@@ -2063,6 +2141,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     return canvas;
   };
 
+  // Handles download.
   const handleDownload = async () => {
     setStatus("");
     const canvas = await composeImage();
@@ -2074,6 +2153,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     setStatus("Downloaded poster image.");
   };
 
+  // Handles share.
   const handleShare = async () => {
     setStatus("");
     const canvas = await composeImage();
@@ -2091,6 +2171,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     setStatus("Image sharing is unavailable here, so WhatsApp text sharing was opened.");
   };
 
+  // Handles send on whats app.
   const handleSendOnWhatsApp = async () => {
     setStatus("");
     const canvas = await composeImage();
@@ -2207,6 +2288,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
   );
 }
 
+// Renders the template card interface.
 function TemplateCard({ template, onSelect }) {
   return (
     <button
@@ -2239,6 +2321,7 @@ function TemplateCard({ template, onSelect }) {
   );
 }
 
+// Renders the whats app marketing interface.
 function WhatsAppMarketing() {
   const callbackNotice = readWhatsAppCallbackNotice();
   const [activeCategory, setActiveCategory] = useState("All");
@@ -2339,6 +2422,7 @@ function WhatsAppMarketing() {
     };
   }, []);
 
+  // Refreshes whats app connection.
   async function refreshWhatsAppConnection(selection = whatsappSelection) {
     setWhatsAppLoading(true);
     setWhatsAppError("");
@@ -2373,6 +2457,7 @@ function WhatsAppMarketing() {
     }
   }
 
+  // Handles continue with meta.
   async function handleContinueWithMeta() {
     setWhatsAppLoading(true);
     setWhatsAppError("");
@@ -2418,6 +2503,7 @@ function WhatsAppMarketing() {
     }
   }
 
+  // Handles connect whats app test mode.
   async function handleConnectWhatsAppTestMode() {
     setWhatsAppLoading(true);
     setWhatsAppError("");
@@ -2448,6 +2534,7 @@ function WhatsAppMarketing() {
     }
   }
 
+  // Handles whats app selection change.
   async function handleWhatsAppSelectionChange(patch) {
     const nextSelection = { ...whatsappSelection, ...patch };
     setWhatsAppSelection(nextSelection);
@@ -2499,6 +2586,7 @@ function WhatsAppMarketing() {
       });
   }
 
+  // Handles save whats app selection.
   async function handleSaveWhatsAppSelection() {
     setWhatsAppLoading(true);
     setWhatsAppError("");
@@ -2516,6 +2604,7 @@ function WhatsAppMarketing() {
     }
   }
 
+  // Handles disconnect whats app.
   async function handleDisconnectWhatsApp() {
     setWhatsAppLoading(true);
     setWhatsAppError("");
@@ -2534,6 +2623,7 @@ function WhatsAppMarketing() {
     }
   }
 
+  // Handles send test whats app.
   async function handleSendTestWhatsApp() {
     setSendState({ loading: true, success: false, message: "", messageId: "" });
     setWhatsAppError("");
@@ -2570,12 +2660,14 @@ function WhatsAppMarketing() {
   const configurationError = whatsappStatus.configured === false && !whatsappStatus.embeddedSignupConfigured && !whatsappStatus.oauthConfigured;
   const developerToolsEnabled = canShowWhatsAppDeveloperTools(whatsappStatus);
 
+  // Applies whats app connection state.
   function applyWhatsAppConnectionState(connection) {
     setWhatsAppStatus((current) => mergeWhatsAppStatus(current, { ...connection, loading: false }));
     setWhatsAppAssets(connection.assets || emptyWhatsAppAssets());
     setWhatsAppSelection(connection.selection || emptyWhatsAppSelection());
   }
 
+  // Checks send whats app connection.
   async function checkSendWhatsAppConnection() {
     setSendConnectionCheck({ loading: true, error: "" });
     try {
@@ -2593,17 +2685,20 @@ function WhatsAppMarketing() {
     }
   }
 
+  // Handles open whats app send.
   function handleOpenWhatsAppSend(draft) {
     setSendDraft(draft);
     setSelectedTemplate(null);
     checkSendWhatsAppConnection();
   }
 
+  // Handles send drawer continue meta.
   async function handleSendDrawerContinueMeta() {
     await handleContinueWithMeta();
     await checkSendWhatsAppConnection();
   }
 
+  // Opens whats app connection panel.
   function openWhatsAppConnectionPanel({ closeSendDrawer = false } = {}) {
     setShowConnectionPanel(true);
     if (closeSendDrawer) setSendDraft(null);
@@ -2612,6 +2707,7 @@ function WhatsAppMarketing() {
     }, 0);
   }
 
+  // Renders developer tools.
   const renderDeveloperTools = () => (
     <section ref={connectionPanelRef} className="space-y-3">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">

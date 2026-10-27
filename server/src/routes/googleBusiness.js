@@ -1,3 +1,4 @@
+// Defines backend API routes for google business.
 import { Router } from "express";
 import { google } from "googleapis";
 import googleOAuthClient from "../config/googleOAuth.js";
@@ -21,6 +22,7 @@ router.get("/accounts", async (_req, res) => {
     });
 
     const response = await accountManagement.accounts.list();
+    // Handles result.
     const accounts = (response.data.accounts || []).map((account) => ({
       name: account.name,
       displayName: account.accountName,

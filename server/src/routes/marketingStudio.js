@@ -1,3 +1,4 @@
+// Defines backend API routes for marketing studio.
 /* global process */
 import express from "express";
 import { createImageToLayersDesignPayload } from "../services/imageToLayersService.js";
@@ -5,6 +6,7 @@ import { createImageToLayersDesignPayload } from "../services/imageToLayersServi
 const router = express.Router();
 const CALENDARIFIC_ENDPOINT = "https://calendarific.com/api/v2/holidays";
 
+// Gets calendarific api key.
 function getCalendarificApiKey() {
   return process.env.CALENDARIFIC_API_KEY || process.env.VITE_CALENDARIFIC_API_KEY || "";
 }

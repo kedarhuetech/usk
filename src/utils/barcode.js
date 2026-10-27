@@ -1,3 +1,4 @@
+// Provides helper functions for barcode.
 export const code128Patterns = [
   "212222",
   "222122",
@@ -108,6 +109,7 @@ export const code128Patterns = [
   "2331112",
 ];
 
+// Encodes code128 b.
 export function encodeCode128B(value) {
   const text = String(value || "").trim();
   if (!text) return null;
@@ -116,6 +118,7 @@ export function encodeCode128B(value) {
     const code = char.charCodeAt(0);
     return code >= 32 && code <= 126 ? code - 32 : 31;
   });
+  // Handles result.
   const checksum = (104 + dataCodes.reduce((sum, code, index) => sum + code * (index + 1), 0)) % 103;
   const symbols = [104, ...dataCodes, checksum, 106];
   const modules = symbols.flatMap((symbol) => code128Patterns[symbol].split("").map(Number));
@@ -124,6 +127,7 @@ export function encodeCode128B(value) {
   return { text, modules, totalWidth };
 }
 
+// Gets code128 bars.
 export function getCode128Bars(value) {
   const encoded = encodeCode128B(value);
   if (!encoded) return null;
@@ -156,11 +160,13 @@ const eanParity = [
   "011001", "011100", "010101", "010110", "011010",
 ];
 
+// This helper handles value logic.
 function numericValue(value, length) {
   const text = String(value || "").trim();
   return /^\d+$/.test(text) && text.length === length ? text : null;
 }
 
+// Checks digit.
 function checkDigit(value, oddIndexWeight, evenIndexWeight) {
   const sum = Array.from(value).reduce(
     (total, digit, index) => total + Number(digit) * (index % 2 ? oddIndexWeight : evenIndexWeight),
@@ -169,6 +175,7 @@ function checkDigit(value, oddIndexWeight, evenIndexWeight) {
   return String((10 - (sum % 10)) % 10);
 }
 
+// This helper handles to bars logic.
 function modulesToBars(modules) {
   const bars = [];
   let x = 10;
@@ -179,6 +186,7 @@ function modulesToBars(modules) {
   return { bars, totalWidth: x + 10 };
 }
 
+// Gets ean13 bars.
 export function getEan13Bars(value) {
   const base = numericValue(value, 12) || numericValue(value, 13)?.slice(0, 12);
   if (!base) return null;
@@ -196,6 +204,7 @@ export function getEan13Bars(value) {
   return { ...modulesToBars(modules), text, format: "EAN-13" };
 }
 
+// Gets upc a bars.
 export function getUpcABars(value) {
   const base = numericValue(value, 11) || numericValue(value, 12)?.slice(0, 11);
   if (!base) return null;
@@ -210,6 +219,7 @@ export function getUpcABars(value) {
   return { ...modulesToBars(modules), text, format: "UPC-A" };
 }
 
+// Gets barcode bars.
 export function getBarcodeBars(value, format = "CODE128") {
   if (format === "EAN13") return getEan13Bars(value);
   if (format === "UPCA") return getUpcABars(value);

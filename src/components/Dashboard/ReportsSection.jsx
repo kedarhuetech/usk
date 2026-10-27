@@ -2,6 +2,7 @@ import { FiChevronRight } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import Card from "../Common/Card";
 
+// Renders the reports section interface.
 function ReportsSection({ reports }) {
   const navigate = useNavigate();
 

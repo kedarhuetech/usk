@@ -1,3 +1,4 @@
+// Defines backend API routes for whatsapp business.
 import { Router } from "express";
 import { getWhatsAppOAuthConfig } from "../config/whatsappOAuth.js";
 import {
@@ -28,6 +29,7 @@ import {
 
 const router = Router();
 
+// Validates selection.
 function validateSelection(selection = {}, assets = {}) {
   const businesses = new Set((assets.businesses || []).map((item) => item.id));
   const wabas = new Set((assets.wabas || []).map((item) => item.id));
@@ -41,6 +43,7 @@ function validateSelection(selection = {}, assets = {}) {
   return "";
 }
 
+// This helper handles selection logic.
 function pruneSelection(selection = {}, assets = {}, requestedBusinessId = "", requestedWabaId = "") {
   const businesses = new Set((assets.businesses || []).map((item) => item.id));
   const wabas = new Set((assets.wabas || []).map((item) => item.id));
@@ -58,10 +61,12 @@ function pruneSelection(selection = {}, assets = {}, requestedBusinessId = "", r
   };
 }
 
+// This helper handles template logic.
 function selectedTemplate(connection) {
   return (connection.assets.templates || []).find((template) => template.id === connection.selection.templateId) || null;
 }
 
+// This helper handles whats app business state logic.
 function publicWhatsAppBusinessState(config = getWhatsAppOAuthConfig()) {
   return {
     ...getWhatsAppPublicConnection(),
@@ -245,6 +250,7 @@ router.get("/templates/:templateId/variables", async (req, res) => {
   const config = getWhatsAppOAuthConfig();
   let connection = getWhatsAppConnection();
 
+  // Handles result.
   const template = (connection.assets.templates || []).find((item) => item.id === req.params.templateId);
 
   if (!template) {

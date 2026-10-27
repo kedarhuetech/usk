@@ -1,3 +1,4 @@
+// Defines shared dashboard data application data.
 export const dashboardData = {
   stats: [
     {

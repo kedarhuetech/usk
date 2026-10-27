@@ -1,3 +1,4 @@
+// Defines shared parties data application data.
 export const gstTypes = [
   "Unregistered / Consumer",
   "Registered Business - Regular",

@@ -1,3 +1,4 @@
+// Implements the update items in bulk page.
 import { useEffect, useMemo, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiSearch, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
@@ -28,6 +29,7 @@ const fields = [
 
 const numericFields = new Set(["salePrice", "purchasePrice", "discount", "openingQuantity", "atPrice", "minimumStock"]);
 
+// This helper handles value logic.
 function itemValue(item, key) {
   if (key === "itemName") return item.itemName || item.name || "";
   if (key === "itemCode") return item.itemCode || item.code || "";
@@ -35,6 +37,7 @@ function itemValue(item, key) {
   return item[key] ?? "";
 }
 
+// This helper handles item logic.
 function changedItem(item, key, value) {
   return {
     ...item,
@@ -47,6 +50,7 @@ function changedItem(item, key, value) {
   };
 }
 
+// Renders the update items in bulk interface.
 function UpdateItemsInBulk() {
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -83,16 +87,20 @@ function UpdateItemsInBulk() {
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
   const selectedFieldDefinition = fields.find((field) => field.key === selectedField);
 
+  // Toggles item.
   const toggleItem = (id) => setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  // Toggles visible.
   const toggleVisible = () => {
     const visibleIds = visibleItems.map((item) => item.id);
     const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
     setSelectedIds((current) => allSelected ? current.filter((id) => !visibleIds.includes(id)) : [...new Set([...current, ...visibleIds])]);
   };
+  // Handles field.
   const chooseField = (key) => {
     setSelectedField(key);
     if (!(key in fieldValues)) setFieldValues((current) => ({ ...current, [key]: "" }));
   };
+  // Validates result.
   const validate = () => {
     if (!selectedItems.length) return "Select at least one existing item.";
     if (!selectedFieldDefinition) return "Choose one existing item field to update.";
@@ -101,12 +109,14 @@ function UpdateItemsInBulk() {
     if (numericFields.has(selectedField) && value && (!Number.isFinite(Number(value)) || Number(value) < 0)) return `${selectedFieldDefinition.label} must be a non-negative number.`;
     return "";
   };
+  // Handles to preview.
   const continueToPreview = () => {
     const validationError = validate();
     if (validationError) { setError(validationError); return; }
     setError("");
     setStep("preview");
   };
+  // Applies update.
   const applyUpdate = async () => {
     const validationError = validate();
     if (validationError) { setError(validationError); return; }

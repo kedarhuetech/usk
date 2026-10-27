@@ -1,3 +1,4 @@
+// Defines backend API routes for google auth.
 import { Router } from "express";
 import { google } from "googleapis";
 import googleOAuthClient from "../config/googleOAuth.js";
@@ -169,6 +170,7 @@ router.get("/google/live-details", async (req, res) => {
     const businessHours = days.map((day) => {
       const match = periods.find((p) => p.openDay === dayToGoogle[day]);
       if (!match) return { day, open: "", close: "", isClosed: true };
+      // Handles result.
       const pad = (n) => String(n).padStart(2, "0");
       return {
         day,

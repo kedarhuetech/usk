@@ -1,7 +1,9 @@
 import { pool } from "../src/db/mysql.js";
 
+// Escapes path part.
 function escapePathPart(value) { return String(value).replace(/~/g, "~0").replace(/\//g, "~1"); }
 
+// This helper handles result logic.
 function flatten(value, parentPath = "", fieldName = "", ordinal = 0, output = []) {
   const path = parentPath ? `${parentPath}/${escapePathPart(fieldName)}` : `/${escapePathPart(fieldName)}`;
   if (path.length > 512) throw new Error(`Field path is too long: ${path.slice(0, 80)}`);
@@ -18,6 +20,7 @@ function flatten(value, parentPath = "", fieldName = "", ordinal = 0, output = [
   return output;
 }
 
+// Ensures fields table.
 async function ensureFieldsTable(connection) {
   await connection.execute(`CREATE TABLE IF NOT EXISTS business_growth_record_fields (
     business_id VARCHAR(64) NOT NULL,
@@ -38,6 +41,7 @@ async function ensureFieldsTable(connection) {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
+// Ensures attribute fields table.
 async function ensureAttributeFieldsTable(connection) {
   await connection.execute(`CREATE TABLE IF NOT EXISTS business_growth_attribute_fields (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -56,6 +60,7 @@ async function ensureAttributeFieldsTable(connection) {
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 }
 
+// Creates owner key.
 function makeOwnerKey(row, keyColumns) {
   if (keyColumns.length === 1) return String(row[keyColumns[0]]);
   return keyColumns.map((key) => {
@@ -64,6 +69,7 @@ function makeOwnerKey(row, keyColumns) {
   }).join("|");
 }
 
+// Stores attributes.
 async function storeAttributes(connection, ownerTable, ownerKey, value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`Invalid structured data in ${ownerTable}/${ownerKey}`);
   const fields = [];
@@ -98,6 +104,7 @@ const JSON_COLUMNS = [
   ["marketing_studio_brand_data", "brand_data", ["business_id"]],
 ];
 
+// Migrates json column.
 async function migrateJsonColumn(connection, table, column, keyColumns) {
   const [exists] = await connection.execute("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", [table]);
   if (!Number(exists[0].total)) return 0;
@@ -133,6 +140,7 @@ async function migrateJsonColumn(connection, table, column, keyColumns) {
   return count;
 }
 
+// Migrates result.
 async function migrate() {
   const connection = await pool.getConnection();
   try {

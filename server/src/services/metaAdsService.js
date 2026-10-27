@@ -1,3 +1,4 @@
+// Implements the backend meta ads service.
 import { Buffer } from "node:buffer";
 import { getMetaOAuthConfig } from "../config/metaOAuth.js";
 import { buildMetaReadiness } from "./metaConnectionStore.js";
@@ -12,6 +13,7 @@ const VIDEO_PROCESSING_ATTEMPTS = 6;
 const VIDEO_PROCESSING_DELAY_MS = 3000;
 const ZERO_DECIMAL_CURRENCIES = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
 
+// Creates publish error.
 function createPublishError(message, code = "META_PUBLISH_ERROR", publishResult = null) {
   const error = new Error(message);
   error.code = code;
@@ -19,6 +21,7 @@ function createPublishError(message, code = "META_PUBLISH_ERROR", publishResult 
   return error;
 }
 
+// This helper handles meta error logic.
 function safeMetaError(error, fallback, step = "") {
   const normalized = normalizeMetaError(error, fallback);
   const classified = classifyMetaPublishError(normalized);
@@ -37,6 +40,7 @@ function safeMetaError(error, fallback, step = "") {
   };
 }
 
+// This helper handles meta publish error logic.
 function classifyMetaPublishError(error = {}) {
   const code = String(error.code || "");
   const subcode = String(error.subcode || "");
@@ -75,23 +79,27 @@ function classifyMetaPublishError(error = {}) {
   return null;
 }
 
+// This helper handles account path logic.
 function adAccountPath(adAccountId = "") {
   const id = String(adAccountId || "").trim();
   if (!id) throw createPublishError("Select a real Meta Ad Account before publishing.", "META_AD_ACCOUNT_REQUIRED");
   return id.startsWith("act_") ? id : `act_${id}`;
 }
 
+// This helper handles positive number logic.
 function asPositiveNumber(value, label) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) throw createPublishError(`${label} must be greater than zero.`, "META_VALIDATION_ERROR");
   return parsed;
 }
 
+// This helper handles budget to minor units logic.
 function dailyBudgetToMinorUnits(value, currency = "INR") {
   const amount = asPositiveNumber(value, "Daily budget");
   return Math.max(1, Math.round(amount * (ZERO_DECIMAL_CURRENCIES.has(String(currency).toUpperCase()) ? 1 : 100)));
 }
 
+// Parses date time utc.
 function parseDateTimeUtc(dateValue = "", timeValue = "00:00") {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue))) return null;
   const safeTime = /^\d{2}:\d{2}$/.test(String(timeValue)) ? timeValue : "00:00";
@@ -99,10 +107,12 @@ function parseDateTimeUtc(dateValue = "", timeValue = "00:00") {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
+// This helper handles timestamp logic.
 function metaTimestamp(date) {
   return date.toISOString().replace(".000Z", "+0000");
 }
 
+// Builds meta schedule.
 function buildMetaSchedule(campaign = {}, now = new Date()) {
   const durationDays = Math.max(Math.ceil(Number(campaign.budget?.durationDays) || 1), 1);
   const scheduleMode = campaign.schedule?.mode || "all-day";
@@ -129,6 +139,7 @@ function buildMetaSchedule(campaign = {}, now = new Date()) {
   };
 }
 
+// Makes the url value consistent.
 function normalizeUrl(value = "") {
   const url = String(value || "").trim();
   try {
@@ -141,16 +152,19 @@ function normalizeUrl(value = "") {
   }
 }
 
+// This helper handles objective logic.
 function metaObjective(goal) {
   if (goal === "reach") return "OUTCOME_AWARENESS";
   return "OUTCOME_TRAFFIC";
 }
 
+// This helper handles optimization goal logic.
 function metaOptimizationGoal(goal) {
   if (goal === "reach") return "REACH";
   return "LINK_CLICKS";
 }
 
+// This helper handles cta type logic.
 function metaCtaType(cta = "") {
   const normalized = String(cta).toLowerCase();
   if (normalized.includes("shop")) return "SHOP_NOW";
@@ -158,22 +172,26 @@ function metaCtaType(cta = "") {
   return "CONTACT_US";
 }
 
+// This helper handles result logic.
 function delay(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
 
+// This helper handles file name logic.
 function safeFileName(value = "") {
   const name = String(value || "smart-ads-video.mp4").replace(/[^a-z0-9._-]/gi, "_");
   return name || "smart-ads-video.mp4";
 }
 
+// This helper handles meta id logic.
 function cleanMetaId(value = "") {
   const id = String(value || "").trim();
   return /^[a-zA-Z0-9_]+$/.test(id) ? id : "";
 }
 
+// This helper handles http url logic.
 function validHttpUrl(value = "") {
   try {
     const parsed = new URL(String(value || ""));
@@ -183,6 +201,7 @@ function validHttpUrl(value = "") {
   }
 }
 
+// This helper handles url host logic.
 function safeUrlHost(value = "") {
   try {
     return new URL(String(value || "")).host;
@@ -191,6 +210,7 @@ function safeUrlHost(value = "") {
   }
 }
 
+// This helper handles video creative diagnostics logic.
 function logVideoCreativeDiagnostics({ videoId, thumbnailSource, thumbnailUrl, thumbnailFound, objectStorySpec }) {
   const videoDataKeys = Object.keys(objectStorySpec.video_data || {});
   console.info("Meta video creative diagnostics", {
@@ -203,6 +223,7 @@ function logVideoCreativeDiagnostics({ videoId, thumbnailSource, thumbnailUrl, t
   });
 }
 
+// This helper handles video mime type logic.
 function inferVideoMimeType(creative = {}, dataMimeType = "") {
   const explicitType = String(creative.videoMimeType || dataMimeType || "").toLowerCase();
   if (explicitType) return explicitType;
@@ -213,6 +234,7 @@ function inferVideoMimeType(creative = {}, dataMimeType = "") {
   return "";
 }
 
+// This helper handles post multipart logic.
 async function graphPostMultipart(path, accessToken, params = {}, files = []) {
   const config = getMetaOAuthConfig();
   const url = new URL(path.startsWith("http") ? path : `${config.graphBaseUrl}${path}`);
@@ -248,12 +270,14 @@ async function graphPostMultipart(path, accessToken, params = {}, files = []) {
   return payload;
 }
 
+// This helper handles targeting logic.
 function genderTargeting(gender = "All") {
   if (gender === "Male") return [1];
   if (gender === "Female") return [2];
   return undefined;
 }
 
+// Resolves geo locations.
 async function resolveGeoLocations(accessToken, campaign = {}) {
   if (campaign.audience?.panIndia) return { countries: ["IN"] };
 
@@ -293,6 +317,7 @@ async function resolveGeoLocations(accessToken, campaign = {}) {
   };
 }
 
+// This helper handles from data url logic.
 function imageFromDataUrl(dataUrl = "") {
   const match = String(dataUrl).match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/i);
   if (!match) {
@@ -305,6 +330,7 @@ function imageFromDataUrl(dataUrl = "") {
   };
 }
 
+// This helper handles from data url logic.
 function videoFromDataUrl(creative = {}) {
   const dataUrl = String(creative.videoDataUrl || "");
   const match = dataUrl.match(/^data:([^;,]*);base64,(.+)$/i);
@@ -328,6 +354,7 @@ function videoFromDataUrl(creative = {}) {
   };
 }
 
+// Uploads ad image buffer.
 async function uploadAdImageBuffer(accessToken, adAccountId, buffer) {
   const accountPath = adAccountPath(adAccountId);
   const payload = await graphPost(`/${accountPath}/adimages`, accessToken, {
@@ -339,11 +366,13 @@ async function uploadAdImageBuffer(accessToken, adAccountId, buffer) {
   return imageRecord.hash;
 }
 
+// Uploads ad image.
 async function uploadAdImage(accessToken, adAccountId, creative = {}) {
   const { buffer } = imageFromDataUrl(creative.imageDataUrl);
   return uploadAdImageBuffer(accessToken, adAccountId, buffer);
 }
 
+// Uploads ad video.
 async function uploadAdVideo(accessToken, adAccountId, videoFile) {
   const accountPath = adAccountPath(adAccountId);
   const payload = await graphPostMultipart(
@@ -366,6 +395,7 @@ async function uploadAdVideo(accessToken, adAccountId, videoFile) {
   return payload.id;
 }
 
+// This helper handles status value logic.
 function videoStatusValue(statusPayload = {}) {
   const status = statusPayload.status || {};
   return [
@@ -378,16 +408,19 @@ function videoStatusValue(statusPayload = {}) {
     .map((value) => String(value).toLowerCase());
 }
 
+// Checks whether video ready.
 function isVideoReady(statusPayload = {}) {
   const values = videoStatusValue(statusPayload);
   return values.includes("ready") || values.includes("complete") || Number(statusPayload.status?.processing_progress) >= 100;
 }
 
+// Checks whether video failed.
 function isVideoFailed(statusPayload = {}) {
   const values = videoStatusValue(statusPayload);
   return values.includes("error") || values.includes("failed") || Boolean(statusPayload.status?.error);
 }
 
+// This helper handles for video ready logic.
 async function waitForVideoReady(accessToken, videoId) {
   for (let attempt = 0; attempt < VIDEO_PROCESSING_ATTEMPTS; attempt += 1) {
     const statusPayload = await graphGet(`/${videoId}`, accessToken, { fields: "status" });
@@ -399,6 +432,7 @@ async function waitForVideoReady(accessToken, videoId) {
   throw createPublishError("Meta video is still processing. The partial publish record includes the video ID; wait a moment before trying again.", "META_VIDEO_PROCESSING");
 }
 
+// Gets video thumbnail reference.
 async function getVideoThumbnailReference(accessToken, videoId) {
   const videoPayload = await graphGet(`/${videoId}`, accessToken, {
     fields: "picture",
@@ -430,6 +464,7 @@ async function getVideoThumbnailReference(accessToken, videoId) {
   return thumbnailUrl ? { source: "thumbnails", url: thumbnailUrl } : null;
 }
 
+// Gets required video thumbnail reference.
 async function getRequiredVideoThumbnailReference(accessToken, videoId) {
   const thumbnail = await getVideoThumbnailReference(accessToken, videoId);
   if (!thumbnail?.url) {
@@ -444,6 +479,7 @@ async function getRequiredVideoThumbnailReference(accessToken, videoId) {
   return thumbnail;
 }
 
+// Downloads video thumbnail.
 async function downloadVideoThumbnail(thumbnailUrl) {
   const response = await fetch(thumbnailUrl);
   if (!response.ok) {
@@ -463,6 +499,7 @@ async function downloadVideoThumbnail(thumbnailUrl) {
   return { buffer, contentType };
 }
 
+// Uploads video thumbnail image.
 async function uploadVideoThumbnailImage({ accessToken, adAccountId, thumbnail }) {
   if (!thumbnail?.url) {
     throw createPublishError("Meta video uploaded successfully but a valid thumbnail could not be obtained.", "META_VIDEO_THUMBNAIL_REQUIRED");
@@ -477,6 +514,7 @@ async function uploadVideoThumbnailImage({ accessToken, adAccountId, thumbnail }
   };
 }
 
+// Builds targeting.
 function buildTargeting({ campaign, geoLocations }) {
   const minAge = Math.max(Number(campaign.audience?.minAge) || 18, 13);
   const maxAge = Math.min(Number(campaign.audience?.maxAge) || 65, 65);
@@ -490,6 +528,7 @@ function buildTargeting({ campaign, geoLocations }) {
   };
 }
 
+// Creates campaign.
 async function createCampaign({ accessToken, adAccountId, campaign }) {
   return graphPost(`/${adAccountPath(adAccountId)}/campaigns`, accessToken, {
     name: campaign.name,
@@ -500,6 +539,7 @@ async function createCampaign({ accessToken, adAccountId, campaign }) {
   });
 }
 
+// Creates ad set.
 async function createAdSet({ adAccountId, accessToken, campaign, metaCampaignId, adAccount, geoLocations, schedule }) {
   const targeting = buildTargeting({ campaign, geoLocations });
 
@@ -518,6 +558,7 @@ async function createAdSet({ adAccountId, accessToken, campaign, metaCampaignId,
   });
 }
 
+// Creates image ad creative.
 async function createImageAdCreative({ accessToken, adAccountId, campaign, pageId, instagramAccountId, imageHash, link }) {
   const objectStorySpec = {
     page_id: pageId,
@@ -540,6 +581,7 @@ async function createImageAdCreative({ accessToken, adAccountId, campaign, pageI
   });
 }
 
+// Creates video ad creative.
 async function createVideoAdCreative({ accessToken, adAccountId, campaign, pageId, instagramAccountId, videoId, thumbnailImageHash, thumbnailSource, thumbnailUrl, link }) {
   if (!thumbnailImageHash) {
     throw createPublishError("Meta video creative requires a thumbnail image hash.", "META_VIDEO_THUMBNAIL_REQUIRED");
@@ -574,6 +616,7 @@ async function createVideoAdCreative({ accessToken, adAccountId, campaign, pageI
   });
 }
 
+// Creates ad.
 async function createAd({ accessToken, adAccountId, campaign, metaAdSetId, metaCreativeId }) {
   return graphPost(`/${adAccountPath(adAccountId)}/ads`, accessToken, {
     name: `${campaign.name} Ad`,
@@ -583,6 +626,7 @@ async function createAd({ accessToken, adAccountId, campaign, metaAdSetId, metaC
   });
 }
 
+// This helper handles publish step logic.
 async function runPublishStep(result, step, action) {
   try {
     const payload = await action();
@@ -597,10 +641,13 @@ async function runPublishStep(result, step, action) {
   }
 }
 
+// This helper handles meta ad campaign logic.
 export async function publishMetaAdCampaign({ accessToken, connection, campaign }) {
   const selection = connection.selection || {};
   const assets = connection.assets || {};
+  // Handles ad account.
   const selectedAdAccount = (assets.adAccounts || []).find((account) => account.id === selection.adAccountId);
+  // Handles page.
   const selectedPage = (assets.pages || []).find((page) => page.id === selection.pageId);
   const destinationUrl = normalizeUrl(campaign.ad?.website);
   const mediaType = campaign.creative?.mediaType === "video" ? "video" : "image";

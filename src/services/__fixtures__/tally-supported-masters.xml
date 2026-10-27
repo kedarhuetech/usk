@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ENVELOPE>
+  <BODY>
+    <DATA>
+      <TALLYMESSAGE xmlns:UDF="TallyUDF">
+        <LEDGER NAME="Ocean Retail">
+          <NAME>Ocean Retail</NAME>
+          <PARENT>Sundry Debtors</PARENT>
+          <MASTERID>101</MASTERID>
+          <GUID>ledger-guid-101</GUID>
+          <PARTYGSTIN>27ABCDE1234F1Z5</PARTYGSTIN>
+          <LEDGERPHONE>9876543210</LEDGERPHONE>
+          <EMAIL>accounts@example.test</EMAIL>
+          <STATENAME>Maharashtra</STATENAME>
+          <ADDRESS.LIST><ADDRESS>Pune</ADDRESS></ADDRESS.LIST>
+          <OPENINGBALANCE>1250.50 Dr</OPENINGBALANCE>
+        </LEDGER>
+        <STOCKITEM NAME="Copper Wire">
+          <NAME>Copper Wire</NAME>
+          <PARENT>Electrical</PARENT>
+          <MASTERID>202</MASTERID>
+          <GUID>item-guid-202</GUID>
+          <BASEUNITS>mtr</BASEUNITS>
+          <PARTNUMBER>CW-01</PARTNUMBER>
+          <OPENINGBALANCE>10 mtr</OPENINGBALANCE>
+          <GSTDETAILS.LIST><HSNCODE>7408</HSNCODE><GSTRATE>18</GSTRATE></GSTDETAILS.LIST>
+        </STOCKITEM>
+      </TALLYMESSAGE>
+      <TALLYMESSAGE><VOUCHER VCHTYPE="Sales"><VOUCHERNUMBER>INV-9</VOUCHERNUMBER></VOUCHER></TALLYMESSAGE>
+    </DATA>
+  </BODY>
+</ENVELOPE>

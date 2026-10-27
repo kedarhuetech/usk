@@ -1,3 +1,4 @@
+// Implements the whats app connect page.
 import { useEffect, useState } from "react";
 import { FiCheckCircle, FiMessageCircle, FiShield, FiSmartphone } from "react-icons/fi";
 import Card from "../../components/Common/Card";
@@ -26,6 +27,7 @@ const steps = [
   "Complete pairing and start sending invoices.",
 ];
 
+// Renders the demo illustration interface.
 function DemoIllustration({ slide }) {
   const Icon = slide.icon;
 
@@ -76,6 +78,7 @@ function DemoIllustration({ slide }) {
   );
 }
 
+// Renders the qr placeholder interface.
 function QrPlaceholder({ enabled }) {
   return (
     <div
@@ -99,6 +102,7 @@ function QrPlaceholder({ enabled }) {
   );
 }
 
+// Renders the whats app connect interface.
 function WhatsAppConnect() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [qrEnabled, setQrEnabled] = useState(false);

@@ -1,3 +1,4 @@
+// Implements the backend whatsapp business service.
 import { graphGet, normalizeMetaError } from "./metaOAuthService.js";
 import { graphJsonPost } from "./whatsappOAuthService.js";
 
@@ -7,6 +8,7 @@ const PHONE_NUMBER_FIELDS = "id,display_phone_number,verified_name,quality_ratin
 const TEMPLATE_FIELDS = "id,name,language,category,status,components";
 const TEMPLATE_COMPONENT_TYPES = new Set(["HEADER", "BODY"]);
 
+// Creates whats app error.
 function createWhatsAppError(message, code = "WHATSAPP_API_ERROR", meta = null, stage = "") {
   const error = new Error(message);
   error.code = code;
@@ -15,6 +17,7 @@ function createWhatsAppError(message, code = "WHATSAPP_API_ERROR", meta = null, 
   return error;
 }
 
+// Makes the whats app error value consistent.
 export function normalizeWhatsAppError(error, fallback = "WhatsApp request failed") {
   const normalized = normalizeMetaError(error, fallback);
   const rawErrorCode = error?.code;
@@ -73,11 +76,13 @@ export function normalizeWhatsAppError(error, fallback = "WhatsApp request faile
   };
 }
 
+// This helper handles unique by id logic.
 function addUniqueById(map, item) {
   if (!item?.id) return;
   map.set(item.id, { ...(map.get(item.id) || {}), ...item });
 }
 
+// Fetches all edge.
 async function fetchAllEdge(path, accessToken, params = {}) {
   const records = [];
   let payload = await graphGet(path, accessToken, params);
@@ -91,6 +96,7 @@ async function fetchAllEdge(path, accessToken, params = {}) {
   return records;
 }
 
+// This helper handles staged whats app error logic.
 function throwStagedWhatsAppError(error, stage, fallback) {
   const normalized = normalizeWhatsAppError(error, fallback);
   const staged = new Error(normalized.message || fallback);
@@ -106,6 +112,7 @@ function throwStagedWhatsAppError(error, stage, fallback) {
   throw staged;
 }
 
+// Fetches required object.
 async function fetchRequiredObject(path, accessToken, params, stage, label) {
   try {
     return await graphGet(path, accessToken, params);
@@ -114,6 +121,7 @@ async function fetchRequiredObject(path, accessToken, params, stage, label) {
   }
 }
 
+// Fetches required edge.
 async function fetchRequiredEdge(path, accessToken, params, stage, label) {
   try {
     return await fetchAllEdge(path, accessToken, params);
@@ -122,6 +130,7 @@ async function fetchRequiredEdge(path, accessToken, params, stage, label) {
   }
 }
 
+// This helper handles fetch edge logic.
 async function safeFetchEdge(path, accessToken, params, warnings, label) {
   try {
     return await fetchAllEdge(path, accessToken, params);
@@ -138,6 +147,7 @@ async function safeFetchEdge(path, accessToken, params, warnings, label) {
   }
 }
 
+// Makes the business value consistent.
 function normalizeBusiness(business = {}) {
   return {
     id: business.id,
@@ -146,6 +156,7 @@ function normalizeBusiness(business = {}) {
   };
 }
 
+// Makes the waba value consistent.
 function normalizeWaba(waba = {}, business = null, source = "") {
   return {
     id: waba.id,
@@ -159,6 +170,7 @@ function normalizeWaba(waba = {}, business = null, source = "") {
   };
 }
 
+// Makes the phone number value consistent.
 function normalizePhoneNumber(phone = {}, wabaId = "") {
   return {
     id: phone.id,
@@ -172,6 +184,7 @@ function normalizePhoneNumber(phone = {}, wabaId = "") {
   };
 }
 
+// Makes the template value consistent.
 function normalizeTemplate(template = {}, wabaId = "") {
   return {
     id: template.id,
@@ -184,6 +197,7 @@ function normalizeTemplate(template = {}, wabaId = "") {
   };
 }
 
+// Fetches business wabas.
 async function fetchBusinessWabas(business, accessToken, warnings, wabasById) {
   const [ownedWabas, clientWabas] = await Promise.all([
     safeFetchEdge(`/${business.id}/owned_whatsapp_business_accounts`, accessToken, { fields: WABA_FIELDS }, warnings, `${business.name || business.id} owned WABAs`),
@@ -194,6 +208,7 @@ async function fetchBusinessWabas(business, accessToken, warnings, wabasById) {
   clientWabas.map((waba) => normalizeWaba(waba, business, "client")).forEach((waba) => addUniqueById(wabasById, waba));
 }
 
+// Fetches required configured phone number.
 async function fetchRequiredConfiguredPhoneNumber(accessToken, phoneNumberId, selectedWabaId) {
   try {
     const phone = await graphGet(`/${phoneNumberId}`, accessToken, { fields: PHONE_NUMBER_FIELDS });
@@ -203,6 +218,7 @@ async function fetchRequiredConfiguredPhoneNumber(accessToken, phoneNumberId, se
   }
 }
 
+// Fetches whats app assets.
 export async function fetchWhatsAppAssets(accessToken, options = {}) {
   const warnings = [];
   const businessesById = new Map();
@@ -262,6 +278,7 @@ export async function fetchWhatsAppAssets(accessToken, options = {}) {
   };
 }
 
+// Fetches whats app test assets.
 export async function fetchWhatsAppTestAssets(accessToken, options = {}) {
   const warnings = [];
   const selectedWabaId = options.wabaId || "";
@@ -306,6 +323,7 @@ export async function fetchWhatsAppTestAssets(accessToken, options = {}) {
   };
 }
 
+// This helper handles template variables logic.
 export function extractTemplateVariables(template = {}) {
   const variables = [];
   (template.components || []).forEach((component) => {
@@ -319,6 +337,7 @@ export function extractTemplateVariables(template = {}) {
   return variables.sort((a, b) => a.componentType.localeCompare(b.componentType) || a.index - b.index);
 }
 
+// Makes the recipient value consistent.
 export function normalizeRecipient(countryCode = "", phoneNumber = "") {
   const code = String(countryCode || "").replace(/[^\d]/g, "");
   const number = String(phoneNumber || "").replace(/[^\d]/g, "");
@@ -329,6 +348,7 @@ export function normalizeRecipient(countryCode = "", phoneNumber = "") {
   return combined;
 }
 
+// Builds template components.
 function buildTemplateComponents(template, variables = {}) {
   const requiredVariables = extractTemplateVariables(template);
   const grouped = new Map();
@@ -346,6 +366,7 @@ function buildTemplateComponents(template, variables = {}) {
   return Array.from(grouped.entries()).map(([type, parameters]) => ({ type, parameters }));
 }
 
+// Sends whats app template message.
 export async function sendWhatsAppTemplateMessage({ accessToken, phoneNumberId, template, recipient, variables = {} }) {
   if (!phoneNumberId) throw createWhatsAppError("Select a WhatsApp business phone number before sending.", "NO_PHONE_NUMBER");
   if (!template?.name || template.status !== "APPROVED") throw createWhatsAppError("Select an approved WhatsApp message template.", "TEMPLATE_NOT_APPROVED");

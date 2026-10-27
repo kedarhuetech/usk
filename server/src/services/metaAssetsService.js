@@ -1,3 +1,4 @@
+// Implements the backend meta assets service.
 import { graphGet, normalizeMetaError } from "./metaOAuthService.js";
 
 const PAGE_BASE_FIELDS = "id,name,category,tasks,access_token";
@@ -7,6 +8,7 @@ const AD_ACCOUNT_FIELDS = "id,account_id,name,currency,timezone_name,account_sta
 const BUSINESS_FIELDS = "id,name,verification_status";
 const INSTAGRAM_FIELDS = "id,username,name,profile_picture_url";
 
+// This helper handles unique by id logic.
 function addUniqueById(map, item) {
   if (!item?.id) return;
   const existing = map.get(item.id) || {};
@@ -24,6 +26,7 @@ function addUniqueById(map, item) {
   });
 }
 
+// Fetches all edge.
 async function fetchAllEdge(path, accessToken, params = {}) {
   const records = [];
   let payload = await graphGet(path, accessToken, params);
@@ -37,6 +40,7 @@ async function fetchAllEdge(path, accessToken, params = {}) {
   return records;
 }
 
+// This helper handles fetch edge logic.
 async function safeFetchEdge(path, accessToken, params, warnings, label, options = {}) {
   try {
     return await fetchAllEdge(path, accessToken, params);
@@ -53,6 +57,7 @@ async function safeFetchEdge(path, accessToken, params, warnings, label, options
   }
 }
 
+// This helper handles fetch node logic.
 async function safeFetchNode(path, accessToken, params, warnings, label, options = {}) {
   try {
     return await graphGet(path, accessToken, params);
@@ -69,6 +74,7 @@ async function safeFetchNode(path, accessToken, params, warnings, label, options
   }
 }
 
+// Makes the business value consistent.
 function normalizeBusiness(business = {}) {
   return {
     id: business.id,
@@ -77,6 +83,7 @@ function normalizeBusiness(business = {}) {
   };
 }
 
+// Makes the instagram account value consistent.
 function normalizeInstagramAccount(account = {}, page = null) {
   return {
     id: account.id,
@@ -89,6 +96,7 @@ function normalizeInstagramAccount(account = {}, page = null) {
   };
 }
 
+// Makes the page value consistent.
 function normalizePage(page = {}, business = null, source = "") {
   const instagram = page.instagram_business_account || page.connected_instagram_account || null;
   return {
@@ -105,6 +113,7 @@ function normalizePage(page = {}, business = null, source = "") {
   };
 }
 
+// Makes the ad account value consistent.
 function normalizeAdAccount(account = {}) {
   return {
     id: account.id || (account.account_id ? `act_${account.account_id}` : ""),
@@ -118,6 +127,7 @@ function normalizeAdAccount(account = {}) {
   };
 }
 
+// This helper handles pages with instagram logic.
 async function enrichPagesWithInstagram(pages, accessToken, warnings, instagramById) {
   await Promise.all(
     pages.map(async (page) => {
@@ -138,6 +148,7 @@ async function enrichPagesWithInstagram(pages, accessToken, warnings, instagramB
   );
 }
 
+// Fetches business assets.
 async function fetchBusinessAssets(business, accessToken, warnings, pagesById, adAccountsById, instagramById) {
   const [ownedPages, clientPages, ownedAdAccounts, clientAdAccounts, instagramAccounts] = await Promise.all([
     safeFetchEdge(`/${business.id}/owned_pages`, accessToken, { fields: BUSINESS_PAGE_FIELDS }, warnings, `${business.name || business.id} owned pages`),
@@ -160,6 +171,7 @@ async function fetchBusinessAssets(business, accessToken, warnings, pagesById, a
     .forEach((account) => addUniqueById(instagramById, account));
 }
 
+// Fetches user assets.
 async function fetchUserAssets(accessToken, warnings, pagesById, adAccountsById) {
   const [pages, userAdAccounts] = await Promise.all([
     safeFetchEdge("/me/accounts", accessToken, { fields: PAGE_BASE_FIELDS }, warnings, "pages"),
@@ -170,6 +182,7 @@ async function fetchUserAssets(accessToken, warnings, pagesById, adAccountsById)
   userAdAccounts.map(normalizeAdAccount).forEach((account) => addUniqueById(adAccountsById, account));
 }
 
+// Fetches meta assets.
 export async function fetchMetaAssets(accessToken, options = {}) {
   const warnings = [];
   const businessesById = new Map();

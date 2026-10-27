@@ -2,16 +2,19 @@ import { graphGet, normalizeMetaError } from "./metaOAuthService.js";
 
 const INSIGHT_FIELDS = "account_id,account_name,account_currency,date_start,date_stop,reach,impressions,clicks,spend,actions";
 
+// This helper handles error logic.
 function insightError(message, code, state, status) {
   return Object.assign(new Error(message), { code, state, status });
 }
 
+// This helper handles or null logic.
 function numberOrNull(value) {
   if (value === undefined || value === null || value === "" || typeof value === "boolean") return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+// Fetches meta ads insights.
 export async function fetchMetaAdsInsights({ connection, datePreset = "last_30d" }) {
   if (!connection.connected || !connection.token?.accessToken) {
     throw insightError("Connect Meta to view advertising activity.", "META_NOT_CONNECTED", "NOT_CONNECTED", 401);
@@ -20,6 +23,7 @@ export async function fetchMetaAdsInsights({ connection, datePreset = "last_30d"
     throw insightError("Choose the last 7 or 30 days.", "META_INSIGHTS_DATE_RANGE", "INVALID_REQUEST", 400);
   }
 
+  // Handles result.
   const account = (connection.assets?.adAccounts || []).find((item) => item.id === connection.selection?.adAccountId);
   if (!account || !/^(act_)?\d+$/.test(account.id)) {
     throw insightError("Select an Ad Account in Meta connection settings.", "META_AD_ACCOUNT_SELECTION_REQUIRED", "NO_AD_ACCOUNT", 400);
@@ -69,6 +73,7 @@ export async function fetchMetaAdsInsights({ connection, datePreset = "last_30d"
   };
 }
 
+// Makes the meta insights error value consistent.
 export function normalizeMetaInsightsError(error, accessToken = "") {
   const normalized = normalizeMetaError(error, "Unable to fetch Meta advertising activity.");
   const code = String(normalized.code);

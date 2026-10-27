@@ -1,3 +1,4 @@
+// Provides the google profile service application service.
 import { apiRequest, businessGrowthApi } from "./apiClient.js";
 import { googleProfileMock } from "../constants/googleProfileData";
 

@@ -1,6 +1,7 @@
 import { FiFileText, FiUser } from "react-icons/fi";
 import Input from "../Common/Input";
 
+// Renders the invoice header interface.
 function InvoiceHeader({ invoice, form, onChange }) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">

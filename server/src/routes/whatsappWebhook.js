@@ -1,8 +1,10 @@
+// Defines backend API routes for whatsapp webhook.
 import { Router } from "express";
 import { getWhatsAppOAuthConfig } from "../config/whatsappOAuth.js";
 
 const router = Router();
 
+// Counts webhook events.
 function countWebhookEvents(payload = {}) {
   let statuses = 0;
   let messages = 0;

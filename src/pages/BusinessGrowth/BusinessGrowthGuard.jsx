@@ -1,9 +1,11 @@
+// Implements the business growth guard page.
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { FiLock, FiArrowRight } from "react-icons/fi";
 import { googleProfileService } from "../../services/googleProfileService";
 import { API_BASE_URL } from "../../services/apiClient";
 
+// Renders the business growth guard interface.
 export default function BusinessGrowthGuard() {
   // --- TEMPORARY BYPASS: Uncomment this line to allow full access to everything ---
   return <Outlet />;
@@ -12,6 +14,7 @@ export default function BusinessGrowthGuard() {
   const [status, setStatus] = useState("loading"); // "loading" | "allowed" | "denied"
   const location = useLocation();
 
+  // Checks auth.
   const checkAuth = async () => {
     setStatus("loading");
     const auth = await googleProfileService.verifyGoogleBusinessAccount();

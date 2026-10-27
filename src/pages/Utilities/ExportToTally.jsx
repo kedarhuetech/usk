@@ -1,3 +1,4 @@
+// Implements the export to tally page.
 import { useEffect, useMemo, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiDownload } from "react-icons/fi";
 import Button from "../../components/Common/Button";
@@ -9,6 +10,7 @@ const transactionTypes = [
   { value: "purchase", label: "Purchase", resource: "purchase-bills" },
 ];
 
+// This helper handles escape logic.
 const xmlEscape = (value) => String(value ?? "")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
@@ -16,24 +18,30 @@ const xmlEscape = (value) => String(value ?? "")
   .replace(/"/g, "&quot;")
   .replace(/'/g, "&apos;");
 
+// This helper handles result logic.
 const text = (value) => String(value ?? "").trim();
 
+// This helper handles date logic.
 function recordDate(record) {
   return text(record.form?.invoiceDate || record.invoiceDate || record.date || record.createdAt).slice(0, 10);
 }
 
+// This helper handles number logic.
 function recordNumber(record) {
   return text(record.form?.invoiceNumber || record.invoiceNumber || record.billNumber || record.number);
 }
 
+// This helper handles name logic.
 function partyName(record) {
   return text(record.form?.customer || record.customer || record.partyName || record.party || record.supplier);
 }
 
+// This helper handles result logic.
 function amount(record) {
   return Number(record.totals?.finalTotal ?? record.totals?.amount ?? record.total ?? record.amount);
 }
 
+// Makes the record value consistent.
 function normalizeRecord(record, type) {
   return {
     ...record,
@@ -46,6 +54,7 @@ function normalizeRecord(record, type) {
   };
 }
 
+// Validates record.
 function validateRecord(record) {
   const errors = [];
   if (!/^\d{8}$/.test(record.exportDate.replace(/-/g, ""))) errors.push("valid date is missing");
@@ -56,6 +65,7 @@ function validateRecord(record) {
   return errors;
 }
 
+// Downloads xml.
 function downloadXml(name, content) {
   const blob = new Blob([content], { type: "application/xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -66,6 +76,7 @@ function downloadXml(name, content) {
   URL.revokeObjectURL(url);
 }
 
+// This helper handles xml logic.
 function masterXml(records) {
   const parties = [...new Set(records.map((record) => record.exportParty).filter(Boolean))];
   const items = [...new Set(records.flatMap((record) => (record.rows || []).map((row) => text(row.item)).filter(Boolean)))];
@@ -74,9 +85,11 @@ function masterXml(records) {
   return `<?xml version="1.0" encoding="UTF-8"?><ENVELOPE><HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER><BODY><IMPORTDATA><REQUESTDESC><REPORTNAME>All Masters</REPORTNAME><STATICVARIABLES><SVCURRENTCOMPANY></SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC><REQUESTDATA>${partyMasters}${itemMasters}</REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>`;
 }
 
+// This helper handles xml logic.
 function voucherXml(records) {
   const vouchers = records.map((record) => {
     const isPurchase = record.exportType === "purchase";
+    // Handles result.
     const rows = (record.rows || []).filter((row) => text(row.item) && Number(row.qty || row.calculated?.qty) > 0);
     const inventory = rows.map((row) => {
       const quantity = Number(row.qty || row.calculated?.qty || 0);
@@ -89,6 +102,7 @@ function voucherXml(records) {
   return `<?xml version="1.0" encoding="UTF-8"?><ENVELOPE><HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER><BODY><IMPORTDATA><REQUESTDESC><REPORTNAME>Vouchers</REPORTNAME><STATICVARIABLES><SVCURRENTCOMPANY></SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC><REQUESTDATA>${vouchers}</REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>`;
 }
 
+// Renders the export to tally interface.
 function ExportToTally() {
   const [records, setRecords] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -124,6 +138,7 @@ function ExportToTally() {
   const invalid = selected.map((record) => ({ record, errors: validateRecord(record) })).filter((entry) => entry.errors.length);
   const valid = selected.filter((record) => !validateRecord(record).length);
 
+  // Toggles result.
   const toggle = (id) => setSelectedIds((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id);
@@ -131,6 +146,7 @@ function ExportToTally() {
     return next;
   });
 
+  // Exports tally.
   const exportTally = () => {
     if (!valid.length) {
       setStatus({ type: "error", message: `No valid records to export. ${invalid.length} record${invalid.length === 1 ? "" : "s"} skipped.` });

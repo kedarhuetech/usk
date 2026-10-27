@@ -1,3 +1,4 @@
+// Defines shared google profile data application data.
 export const emptyBusinessDetails = {
   businessName: "",
   primaryCategory: "",
