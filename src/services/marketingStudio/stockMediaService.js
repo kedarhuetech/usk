@@ -34,7 +34,7 @@ const createDemoAsset = ({ id, title, subtitle, colors, width = 1600, height = 1
     width,
     height,
     alt: `${title} ${subtitle}`,
-    author: "Ledgerly demo media",
+    author: "USK demo media",
     source: "demo",
     sourceUrl: "",
     category,

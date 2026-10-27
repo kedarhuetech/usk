@@ -368,13 +368,11 @@ function ItemsDashboard() {
 
   const saveItem = async (value) => {
     if (itemModal?.mode === "edit") {
-      const saved = saveInventoryItem(value);
-      const overrides = readItemUiOverrides();
-      writeItemUiOverrides({ ...overrides, edits: { ...(overrides.edits || {}), [saved.id]: saved }, deleted: (overrides.deleted || []).filter((id) => id !== saved.id) });
+      const saved = await saveBusinessItem(value);
       setItems((current) => [...current.filter((item) => item.id !== saved.id), saved]);
       setSelectedId(saved.id);
       setItemModal(null);
-      setNotice(`${saved.itemName} updated in this browser.`);
+      setNotice(`${saved.itemName} updated.`);
       return saved;
     }
     const saved = await saveBusinessItem(value);
@@ -531,7 +529,7 @@ function ItemsDashboard() {
               </div>
               <div className="relative" data-item-bulk-menu>
                 <button type="button" aria-label="More item actions" onClick={() => setMenuOpen((open) => !open)} className="grid h-9 w-7 place-items-center text-slate-500 hover:text-slate-900"><FiMoreVertical /></button>
-                {menuOpen && <div className="absolute right-0 top-9 z-40 w-60 rounded-md border border-slate-200 bg-white p-1.5 text-slate-800 shadow-xl">{[{ id: "inactive", label: "Bulk Inactive" }, { id: "active", label: "Bulk Active" }, { id: "code", label: "Bulk Assign Code" }, { id: "units", label: "Assign Units" }, { id: "update", label: "Bulk Update Items" }].map((action) => <button key={action.id} type="button" onClick={() => startBulkAction(action.id)} className="block w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-100">{action.label}</button>)}</div>}
+                {menuOpen && <div className="absolute right-0 top-9 z-40 w-60 rounded-md border border-slate-200 bg-white p-1.5 text-slate-800 shadow-xl">{[{ id: "inactive", label: "Bulk Inactive" }, { id: "active", label: "Bulk Active" }, { id: "code", label: "Bulk Assign Code" }, { id: "units", label: "Assign Units" }, { id: "update", label: "Bulk Update Items" }].map((action) => <button key={action.id} type="button" onClick={() => action.id === "update" ? (setMenuOpen(false), navigate("/utilities/update-items-in-bulk")) : startBulkAction(action.id)} className="block w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-100">{action.label}</button>)}</div>}
               </div>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold uppercase text-slate-500"><span>Item</span><span>{activeTab === "product" ? "Quantity" : "Unit"}</span><button type="button" aria-label="Filter items" onClick={() => setFiltersOpen((open) => !open)} className={`grid h-7 w-7 place-items-center rounded ${filtersOpen ? "bg-blue-100 text-blue-700" : "hover:bg-slate-200"}`}><FiFilter /></button></div>

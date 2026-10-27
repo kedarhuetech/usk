@@ -2,7 +2,7 @@ export const plans = [
   {
     id: "basic",
     name: "Basic",
-    description: "For businesses getting started with Ledgerly.",
+    description: "For businesses getting started with USK.",
     price: "Pricing pending",
     billingPeriod: "Commercial pricing not configured",
     recommended: false,

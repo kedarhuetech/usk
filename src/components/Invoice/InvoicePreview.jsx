@@ -2,7 +2,7 @@ function InvoicePreview({ invoice, form }) {
   return (
     <section className="rounded-lg bg-slate-100 p-6">
       <h2 className="mb-5 text-center text-lg font-semibold text-slate-950">
-        1Cr businesses have created invoices on Ledgerly
+        1Cr businesses have created invoices on this platform
       </h2>
       <div className="mx-auto min-h-[680px] max-w-xl bg-white p-8 shadow-xl shadow-slate-300/50">
         <p className="text-center text-sm font-bold text-slate-950">Tax Invoice</p>

@@ -1,4 +1,5 @@
 const COMPANY_PROFILE_KEY = "ledgerly:companyProfile.v1";
+export const companyProfileUpdatedEvent = "ledgerly:company-profile-updated";
 const defaultCompanyProfile = {
   companyName: "My Company",
 };
@@ -33,6 +34,7 @@ export function saveCompanyProfile(profile) {
   };
   if (canUseStorage()) {
     window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
+    window.dispatchEvent(new CustomEvent(companyProfileUpdatedEvent));
   }
   return nextProfile;
 }

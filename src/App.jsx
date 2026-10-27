@@ -21,6 +21,11 @@ import SalePreview from "./pages/Sales/SalePreview";
 import SaleInvoices from "./pages/Sales/SaleInvoices";
 import EstimateQuotation from "./pages/Sales/EstimateQuotation";
 import BarcodeGenerator from "./pages/Utilities/BarcodeGenerator";
+import ImportItems from "./pages/Utilities/ImportItems";
+import ExportItems from "./pages/Utilities/ExportItems";
+import ExportToTally from "./pages/Utilities/ExportToTally";
+import ImportParties from "./pages/Utilities/ImportParties";
+import UpdateItemsInBulk from "./pages/Utilities/UpdateItemsInBulk";
 import PlansPricing from "./pages/PlansPricing/PlansPricing";
 import {
   DataDeletion,
@@ -89,6 +94,11 @@ function App() {
             path="utilities/barcode-generator"
             element={<BarcodeGenerator />}
           />
+          <Route path="utilities/import-items" element={<ImportItems />} />
+          <Route path="utilities/export-items" element={<ExportItems />} />
+          <Route path="utilities/export-to-tally" element={<ExportToTally />} />
+          <Route path="utilities/import-parties" element={<ImportParties />} />
+          <Route path="utilities/update-items-in-bulk" element={<UpdateItemsInBulk />} />
           <Route path="plans-pricing" element={<PlansPricing />} />
           <Route path="reports" element={<ComingSoon />} />
           <Route path="*" element={<ComingSoon />} />

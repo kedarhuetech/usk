@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FiChevronRight, FiZap, FiX } from "react-icons/fi";
+import { FiChevronRight, FiEdit3, FiZap, FiX } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import {
   companySwitcher,
@@ -9,11 +9,17 @@ import {
   sidebarTrial,
 } from "./SidebarData";
 import SidebarItem from "./SidebarItem";
-import { getCompanyProfile } from "../../services/companyProfileStorage";
+import {
+  companyProfileUpdatedEvent,
+  getCompanyProfile,
+  saveCompanyProfile,
+} from "../../services/companyProfileStorage";
 
 function Sidebar() {
   const navigate = useNavigate();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [companyName, setCompanyName] = useState(companyProfile.companyName);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef(null);
@@ -59,8 +65,17 @@ function Sidebar() {
 
   useEffect(() => {
     const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
+    const refreshProfileFromEvent = () => {
+      const profile = getCompanyProfile();
+      setCompanyProfile(profile);
+      setCompanyName(profile.companyName);
+    };
     window.addEventListener("storage", refreshCompanyProfile);
-    return () => window.removeEventListener("storage", refreshCompanyProfile);
+    window.addEventListener(companyProfileUpdatedEvent, refreshProfileFromEvent);
+    return () => {
+      window.removeEventListener("storage", refreshCompanyProfile);
+      window.removeEventListener(companyProfileUpdatedEvent, refreshProfileFromEvent);
+    };
   }, []);
 
   const openSearch = () => {
@@ -71,6 +86,20 @@ function Sidebar() {
   const openSearchResult = (path) => {
     setSearchOpen(false);
     navigate(path);
+  };
+
+  const openCompanyProfile = () => {
+    setCompanyName(companyProfile.companyName);
+    setProfileOpen(true);
+  };
+
+  const saveCompanyName = (event) => {
+    event.preventDefault();
+    const nextName = companyName.trim();
+    if (!nextName) return;
+    const profile = saveCompanyProfile({ companyName: nextName });
+    setCompanyProfile(profile);
+    setProfileOpen(false);
   };
 
   return (
@@ -125,6 +154,7 @@ function Sidebar() {
 
         <button
           type="button"
+          onClick={openCompanyProfile}
           className="flex h-10 w-full items-center gap-2.5 rounded-lg bg-white/10 px-2.5 text-left text-[13px] font-semibold hover:bg-white/15"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1A1F71]">
@@ -135,6 +165,63 @@ function Sidebar() {
         </button>
       </div>
       </aside>
+
+      {profileOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setProfileOpen(false);
+          }}
+        >
+          <form
+            onSubmit={saveCompanyName}
+            className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="text-lg font-bold text-slate-800">Company Profile</h2>
+              <button
+                type="button"
+                onClick={() => setProfileOpen(false)}
+                aria-label="Close company profile"
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+            <label className="mt-5 block text-sm font-semibold text-slate-700" htmlFor="company-name">
+              Company name
+            </label>
+            <input
+              id="company-name"
+              value={companyName}
+              onChange={(event) => setCompanyName(event.target.value)}
+              autoFocus
+              maxLength={120}
+              className="mt-2 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-800 outline-none focus:border-[#343B9A] focus:ring-2 focus:ring-indigo-100"
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              Saved in this browser for now. This storage boundary can be connected to the database later.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setProfileOpen(false)}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!companyName.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-[#1A1F71] px-4 py-2 text-sm font-semibold text-white hover:bg-[#14185D] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FiEdit3 className="h-4 w-4" />
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {searchOpen && (
         <div
