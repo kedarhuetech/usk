@@ -276,12 +276,12 @@ function escapeHtml(value) {
 }
 
 // Builds statement document.
-function buildStatementDocument(party, invoices) {
+function buildStatementDocument(party, invoices, activity = []) {
   const opening = Math.abs(Number(party?.openingBalance || 0));
   const openingType = party?.openingBalanceType === "to-pay" ? "Payable" : "Receivable";
   const transactionRows = [
     ...(opening > 0 ? [`<tr><td>${escapeHtml(party.asOfDate || "")}</td><td>${openingType} Opening Balance</td><td></td><td>Unpaid</td><td>${money(opening)}</td><td>₹ 0.00</td><td>${money(opening)}</td></tr>`] : []),
-    ...invoices.map((invoice) => `<tr><td>${escapeHtml(invoice.form?.invoiceDate || invoice.createdAt || "")}</td><td>Sale</td><td>${escapeHtml(invoice.form?.invoiceNumber || invoice.invoiceNumber || "")}</td><td>Unpaid</td><td>${money(invoice.totals?.finalTotal)}</td><td>₹ 0.00</td><td>${money(invoice.totals?.finalTotal)}</td></tr>`),
+    ...activity.map((entry) => `<tr><td>${escapeHtml(entry.date || "")}</td><td>${escapeHtml(entry.source)}</td><td>${escapeHtml(entry.number)}</td><td>${escapeHtml(entry.status)}</td><td>${money(entry.total)}</td><td>${money(entry.received)}</td><td>${money(entry.balance)}</td></tr>`),
   ].join("");
   const itemTables = invoices.map((invoice) => `<h3>Sale ${escapeHtml(invoice.form?.invoiceNumber || invoice.invoiceNumber || "")}</h3><table><thead><tr><th>#</th><th>Item name</th><th>HSN/SAC</th><th>Quantity</th><th>Unit</th><th>Price/Unit</th><th>Discount</th><th>Amount</th></tr></thead><tbody>${(invoice.rows || []).map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.item)}</td><td>${escapeHtml(row.hsnSac || row.hsn || "")}</td><td>${escapeHtml(row.calculated?.qty || row.qty || "")}</td><td>${escapeHtml(row.unit || "")}</td><td>${money(row.price)}</td><td>${money(row.calculated?.discount)}</td><td>${money(row.calculated?.amount)}</td></tr>`).join("")}</tbody></table>`).join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title><style>body{font:14px Arial,sans-serif;color:#111;margin:32px}header{text-align:center;margin-bottom:48px}h1{text-align:center;text-decoration:underline;font-size:24px;margin-bottom:36px}h2{font-size:20px}h3{margin-top:28px}table{border-collapse:collapse;width:100%;margin:10px 0 24px}th{background:#d6d6d6;text-align:left}th,td{padding:8px 6px;border-bottom:1px solid #888}button{padding:10px 18px;margin:10px 8px 0 0} @media print{button{display:none}body{margin:12mm}}</style></head><body><header><h2>My Company</h2><div>Party statement</div></header><h1>Party statement</h1><h2>Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</h2><p>Contact No.: ${escapeHtml(party?.phone || "")}</p><table><thead><tr><th>Date</th><th>Txn Type</th><th>Ref No.</th><th>Payment Status</th><th>Total</th><th>Received / Paid</th><th>Txn Balance</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="7">No transactions</td></tr>'}</tbody></table>${itemTables}<button onclick="window.print()">Print / Save PDF</button></body></html>`;
@@ -294,6 +294,7 @@ function PartyDetails() {
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
   const [parties, setParties] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [] });
   const [selectedPartyId, setSelectedPartyId] = useState("cash-sale");
   const [search, setSearch] = useState("");
   const [openTransactionMenu, setOpenTransactionMenu] = useState("");
@@ -308,6 +309,15 @@ function PartyDetails() {
     try {
       setParties(getParties());
       setInvoices(getSaleInvoices());
+      const readLocalList = (key) => {
+        try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
+        catch { return []; }
+      };
+      setPartyActivity({
+        estimates: readLocalList("ledgerly:estimateQuotations.v1"),
+        proformas: readLocalList("ledgerly:proformaInvoices.v1"),
+        payments: readLocalList("ledgerly:paymentIns.v1"),
+      });
     } catch (error) {
       setLoadError(error.message || "Could not load saved parties from this browser.");
     }
@@ -390,7 +400,22 @@ function PartyDetails() {
     String(invoice.partyId || invoice.form?.partyId || "") === String(selectedParty.id)
     || String(invoice.partyName || invoice.customerName || invoice.form?.customer || "").toLowerCase() === String(selectedParty.partyName || "").toLowerCase()
   ) : [];
-  const visiblePartyInvoices = partyInvoices.filter((invoice) => [invoice.form?.invoiceNumber, invoice.invoiceNumber, invoice.form?.invoiceDate, "Sale", invoice.form?.customer, invoice.totals?.finalTotal, invoice.saleType === "credit" ? "Unpaid" : "Paid"].join(" ").toLowerCase().includes(transactionSearch.toLowerCase()));
+  const belongsToSelectedParty = (entry) => selectedParty && (
+    String(entry.partyId || entry.form?.partyId || "") === String(selectedParty.id)
+    || String(entry.partyName || entry.customerName || entry.customer || entry.form?.customer || "").trim().toLowerCase() === String(selectedParty.partyName || "").trim().toLowerCase()
+  );
+  const partyTransactions = [
+    ...partyInvoices.map((invoice) => {
+      const total = Number(invoice.totals?.finalTotal || invoice.total || invoice.grandTotal || 0);
+      const received = Number(invoice.receivedAmount || invoice.form?.receivedAmount || 0);
+      const balance = Math.max(0, Number(invoice.balance ?? (invoice.saleType === "credit" ? total - received : 0)));
+      return { id: `sale:${invoice.id}`, source: "Sale", number: invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—", date: invoice.form?.invoiceDate || invoice.createdAt, total, received: total - balance, balance, status: balance > 0 ? "Unpaid" : "Paid", raw: invoice };
+    }),
+    ...partyActivity.estimates.filter(belongsToSelectedParty).map((entry) => ({ id: `estimate:${entry.id}`, source: "Estimate/Quotation", number: entry.number || entry.refNo || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
+    ...partyActivity.proformas.filter(belongsToSelectedParty).map((entry) => ({ id: `proforma:${entry.id}`, source: "Proforma Invoice", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
+    ...partyActivity.payments.filter(belongsToSelectedParty).map((entry) => ({ id: `payment:${entry.id}`, source: "Payment-In", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.received ?? entry.amount ?? 0), balance: 0, status: entry.status || "Unused", raw: entry })),
+  ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+  const visiblePartyTransactions = partyTransactions.filter((entry) => [entry.source, entry.number, entry.date, entry.total, entry.received, entry.balance, entry.status, entry.raw?.paymentType, entry.raw?.description].join(" ").toLowerCase().includes(transactionSearch.toLowerCase()));
   const openingBalance = Math.abs(Number(selectedParty?.openingBalance || 0));
   const cashSaleName = selectedParty?.partyName || "Cash Sale";
   const selectedOpeningBalance = Math.abs(Number(selectedParty?.openingBalance || 0));
@@ -403,7 +428,7 @@ function PartyDetails() {
       return;
     }
     popup.document.open();
-    popup.document.write(buildStatementDocument(selectedParty, partyInvoices));
+    popup.document.write(buildStatementDocument(selectedParty, partyInvoices, partyTransactions));
     popup.document.close();
     if (printWhenReady) popup.addEventListener("load", () => popup.print(), { once: true });
   };
@@ -412,11 +437,7 @@ function PartyDetails() {
     const tableRows = [
       ["Date", "Type", "Number", "Payment Status", "Total", "Received / Paid", "Balance"],
       ...(selectedParty && openingBalance > 0 ? [[selectedParty.asOfDate || "", `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance`, "", "Unpaid", openingBalance, 0, openingBalance]] : []),
-      ...partyInvoices.map((invoice) => {
-        const total = Number(invoice.totals?.finalTotal || 0);
-        const balance = invoice.saleType === "credit" ? total : 0;
-        return [invoice.form?.invoiceDate || invoice.createdAt || "", "Sale", invoice.form?.invoiceNumber || invoice.invoiceNumber || "", balance ? "Unpaid" : "Paid", total, total - balance, balance];
-      }),
+      ...partyTransactions.map((entry) => [entry.date || "", entry.source, entry.number, entry.status, entry.total, entry.received, entry.balance]),
     ];
     const excelDocument = `<!doctype html><html><head><meta charset="utf-8"></head><body><table>${tableRows.map((row, index) => `<tr>${row.map((value) => index === 0 ? `<th>${escapeHtml(value)}</th>` : `<td>${escapeHtml(value)}</td>`).join("")}</tr>`).join("")}</table></body></html>`;
     const url = URL.createObjectURL(new Blob([excelDocument], { type: "application/vnd.ms-excel;charset=utf-8" }));
@@ -462,10 +483,8 @@ function PartyDetails() {
           </div></div>
           <div className="overflow-auto"><table className="w-full min-w-[690px] text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => <th key={label} className="border-b border-r border-slate-200 px-3 py-3 font-semibold">{label}{label && <FiFilter className="float-right mt-0.5 text-slate-400" />}</th>)}</tr></thead><tbody>
             {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && <tr className="border-b border-slate-100 bg-sky-100 text-slate-800"><td className="px-3 py-4">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td className="px-3 py-4">—</td><td className="px-3 py-4">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-rose-500">Unpaid</td><td className="px-3 py-4">{transactionActions(null, "opening")}</td></tr>}
-            {visiblePartyInvoices.map((invoice) => { const total = Number(invoice.totals?.finalTotal || invoice.total || invoice.grandTotal || 0); const paid = Number(invoice.receivedAmount || invoice.form?.receivedAmount || 0); const balance = Math.max(0, Number(invoice.balance ?? (invoice.saleType === "credit" ? total - paid : 0)));
-              return <tr key={invoice.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">Sale</td><td className="px-3 py-4">{invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—"}</td><td className="px-3 py-4">{invoice.form?.invoiceDate ? new Date(invoice.form.invoiceDate).toLocaleDateString("en-GB") : invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className={`px-3 py-4 ${balance > 0 ? "text-rose-500" : "text-emerald-500"}`}>{balance > 0 ? "Unpaid" : "Paid"}</td><td className="px-3 py-4">{transactionActions(invoice)}</td></tr>;
-            })}
-            {!visiblePartyInvoices.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && <tr><td colSpan="7" className="h-48 text-center text-slate-400">{transactionSearch ? "No matching transactions" : "No transactions to show"}</td></tr>}
+            {visiblePartyTransactions.map((entry) => <tr key={entry.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">{entry.source}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{money(entry.total)}</td><td className="px-3 py-4 text-right">{entry.source === "Payment-In" ? "—" : money(entry.balance)}</td><td className={`px-3 py-4 ${["Paid", "Used"].includes(entry.status) ? "text-emerald-500" : "text-rose-500"}`}>{entry.status}</td><td className="px-3 py-4">{entry.source === "Sale" ? transactionActions(entry.raw) : <button type="button" title="View transaction" onClick={() => { setStatementOpen(true); setPrintStatementOnOpen(false); }} className="rounded p-1 text-slate-500 hover:bg-slate-100"><FiMoreVertical /></button>}</td></tr>)}
+            {!visiblePartyTransactions.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && <tr><td colSpan="7" className="h-48 text-center text-slate-400">{transactionSearch ? "No matching transactions" : "No transactions to show"}</td></tr>}
           </tbody></table></div>
         </section>
       </div>
@@ -480,8 +499,8 @@ function PartyDetails() {
             {selectedParty?.phone && <p className="mt-6">Contact No.: {selectedParty.phone}</p>}
             <div className="mt-1 overflow-x-auto"><table className="w-full min-w-[850px] border-collapse text-left"><thead className="bg-neutral-300"><tr>{["Date", "Txn Type", "Ref No.", "Payment Status", "Total", "Received / Paid", "Txn Balance", "Receivable Balance", "Payable Balance"].map((label) => <th key={label} className="px-2 py-2 font-bold">{label}</th>)}</tr></thead><tbody>
               {selectedOpeningBalance > 0 && <tr className="border-b border-neutral-400 font-semibold"><td className="px-2 py-3">{selectedParty.asOfDate || ""}</td><td>{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td></td><td>Unpaid</td><td></td><td></td><td>{money(selectedOpeningBalance)}</td><td>{selectedBalanceType === "to-receive" ? money(selectedOpeningBalance) : ""}</td><td>{selectedBalanceType === "to-pay" ? money(selectedOpeningBalance) : ""}</td></tr>}
-              {partyInvoices.map((invoice) => { const total = Number(invoice.totals?.finalTotal || 0); const balance = invoice.saleType === "credit" ? total : 0; return <tr key={invoice.id} className="border-b border-neutral-400 font-semibold"><td className="px-2 py-3">{invoice.form?.invoiceDate || invoice.createdAt || ""}</td><td>Sale</td><td>{invoice.form?.invoiceNumber || invoice.invoiceNumber}</td><td>{balance > 0 ? "Unpaid" : "Paid"}</td><td>{money(total)}</td><td>{money(total - balance)}</td><td>{money(balance)}</td><td>{selectedBalanceType === "to-receive" ? money(selectedOpeningBalance + balance) : ""}</td><td>{selectedBalanceType === "to-pay" ? money(selectedOpeningBalance) : ""}</td></tr>; })}
-              {!partyInvoices.length && selectedOpeningBalance <= 0 && <tr><td colSpan="9" className="px-3 py-8 text-center text-slate-500">No transactions to show</td></tr>}
+              {partyTransactions.map((entry) => <tr key={entry.id} className="border-b border-neutral-400 font-semibold"><td className="px-2 py-3">{entry.date || ""}</td><td>{entry.source}</td><td>{entry.number}</td><td>{entry.status}</td><td>{money(entry.total)}</td><td>{money(entry.received)}</td><td>{money(entry.balance)}</td><td>{entry.balance && selectedBalanceType === "to-receive" ? money(entry.balance) : ""}</td><td>{entry.balance && selectedBalanceType === "to-pay" ? money(entry.balance) : ""}</td></tr>)}
+              {!partyTransactions.length && selectedOpeningBalance <= 0 && <tr><td colSpan="9" className="px-3 py-8 text-center text-slate-500">No transactions to show</td></tr>}
             </tbody></table></div>
             {partyInvoices.map((invoice) => <section key={`items-${invoice.id}`} className="mt-6"><h3 className="mb-2 font-bold">Sale {invoice.form?.invoiceNumber || invoice.invoiceNumber}</h3><div className="overflow-x-auto"><table className="w-full min-w-[700px] border-collapse text-left"><thead className="bg-neutral-300"><tr>{["#", "Item name", "HSN/SAC", "Quantity", "Unit", "Price/Unit", "Discount", "Amount"].map((label) => <th key={label} className="px-2 py-2">{label}</th>)}</tr></thead><tbody>{(invoice.rows || []).map((row, index) => <tr key={row.id || index} className="border-b border-neutral-400"><td className="px-2 py-2">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.item}</td><td className="px-2 py-2">{row.hsnSac || row.hsn || ""}</td><td className="px-2 py-2 text-center">{row.calculated?.qty || row.qty}</td><td className="px-2 py-2">{row.unit}</td><td className="px-2 py-2 text-right">{money(row.price)}</td><td className="px-2 py-2 text-right">{money(row.calculated?.discount)}</td><td className="px-2 py-2 text-right">{money(row.calculated?.amount)}</td></tr>)}</tbody></table></div></section>)}
           </main>

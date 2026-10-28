@@ -1127,7 +1127,12 @@ function AddSale({ mode = "sale" }) {
   const location = useLocation();
   const config = transactionConfigs[mode] || transactionConfigs.sale;
   const isPurchase = config.type === "purchase";
-  const quotationConversion = !isPurchase ? location.state?.quotationConversion || null : null;
+  const quotationConversion = !isPurchase ? location.state?.quotationConversion || location.state?.proformaConversion || null : null;
+  const saleOrderConversions = !isPurchase ? location.state?.saleOrdersConversion || [] : [];
+  const saleOrderConversion = saleOrderConversions[0] || null;
+  const deliveryChallanConversions = !isPurchase ? location.state?.deliveryChallansConversion || [] : [];
+  const deliveryChallanConversion = deliveryChallanConversions[0] || null;
+  const conversionStorageKey = location.state?.proformaConversion ? "ledgerly:proformaInvoices.v1" : "ledgerly:estimateQuotations.v1";
   const editInvoice = !isPurchase ? location.state?.editInvoice || null : null;
   const onlineOrderConversion = !isPurchase ? location.state?.onlineOrderConversion : null;
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
@@ -1137,10 +1142,12 @@ function AddSale({ mode = "sale" }) {
   const [rows, setRows] = useState(() => {
     if (editInvoice?.rows?.length) return editInvoice.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
     if (quotationConversion?.rows?.length) return quotationConversion.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
+    if (saleOrderConversions.some((order) => order.rows?.length)) return saleOrderConversions.flatMap((order) => (order.rows || []).map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" })));
+    if (deliveryChallanConversions.some((challan) => challan.rows?.length)) return deliveryChallanConversions.flatMap((challan) => (challan.rows || []).map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" })));
     if (!onlineOrderConversion?.items?.length) return [createRow(), createRow()];
     return onlineOrderConversion.items.map(createRowFromOrderItem);
   });
-  const [items, setItems] = useState(() => quotationConversion ? getInventoryItems().map(saleItemFromInventory) : []);
+  const [items, setItems] = useState(() => (quotationConversion || saleOrderConversions.length || deliveryChallanConversions.length) ? getInventoryItems().map(saleItemFromInventory) : []);
   const [parties, setParties] = useState(() => getParties().map(partyOption).filter((party) => party.name));
   const [addItemRowId, setAddItemRowId] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -1163,32 +1170,36 @@ function AddSale({ mode = "sale" }) {
   const shareRef = useRef(null);
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
   const [form, setForm] = useState(() => ({
-    customer: quotationConversion?.customer || onlineOrderConversion?.customerName || "",
-    phone: quotationConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
-    billingAddress: quotationConversion?.billingAddress || onlineOrderConversion?.address || "",
-    shippingAddress: quotationConversion?.billingAddress || onlineOrderConversion?.address || "",
-    invoiceNumber: quotationConversion?.number || "1",
-    invoiceDate: quotationConversion?.date || currentLocalDate(),
-    stateOfSupply: quotationConversion?.state || "None",
+    customer: quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || "",
+    phone: quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
+    billingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
+    shippingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
+    invoiceNumber: quotationConversion?.number || deliveryChallanConversion?.number || "1",
+    invoiceDate: quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
+    stateOfSupply: quotationConversion?.state || deliveryChallanConversion?.state || "None",
     partyBalance: "",
     showTerms: false,
     termsTitle: "",
     terms: "",
-    showDescription: Boolean(onlineOrderConversion || quotationConversion?.description),
-    description: quotationConversion?.description || (onlineOrderConversion
+    showDescription: Boolean(onlineOrderConversion || quotationConversion?.description || saleOrderConversion || deliveryChallanConversion),
+    description: quotationConversion?.description || (saleOrderConversion
+      ? `Converted from Sale Order${saleOrderConversions.length > 1 ? "s" : ""} ${saleOrderConversions.map((order) => order.number).join(", ")}.`
+      : deliveryChallanConversions.length
+      ? `Converted from Delivery Challan${deliveryChallanConversions.length > 1 ? "s" : ""} ${deliveryChallanConversions.map((challan) => challan.number).join(", ")}.`
+      : onlineOrderConversion
       ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
       : ""),
     terms: quotationConversion?.terms || "",
     paymentType: "Cash",
     ...(editInvoice?.form || {}),
-    invoiceDate: editInvoice?.form?.invoiceDate || currentLocalDate(),
+    invoiceDate: editInvoice?.form?.invoiceDate || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
   }));
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
 
   useEffect(() => {
     let active = true;
-    if (quotationConversion) {
+    if (quotationConversion || saleOrderConversions.length || deliveryChallanConversions.length) {
       setItems(getInventoryItems().map(saleItemFromInventory));
       return () => { active = false; };
     }
@@ -1223,7 +1234,7 @@ function AddSale({ mode = "sale" }) {
           if (active) setToast(error.message || "Could not load invoice numbers from MySQL.");
         });
     return () => { active = false; };
-  }, [isPurchase, editInvoice?.id, quotationConversion]);
+  }, [isPurchase, editInvoice?.id, quotationConversion, deliveryChallanConversions.length]);
 
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
@@ -1327,13 +1338,41 @@ function AddSale({ mode = "sale" }) {
     const invoice = buildInvoice();
     if (quotationConversion) {
       try {
-        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, quotationId: quotationConversion.id });
-        const estimates = JSON.parse(window.localStorage.getItem("ledgerly:estimateQuotations.v1") || "[]");
-        window.localStorage.setItem("ledgerly:estimateQuotations.v1", JSON.stringify(estimates.map((estimate) => estimate.id === quotationConversion.id ? { ...estimate, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id } : estimate)));
+        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, quotationId: quotationConversion.id, proformaId: location.state?.proformaConversion?.id || "" });
+        const sourceDocuments = JSON.parse(window.localStorage.getItem(conversionStorageKey) || "[]");
+        window.localStorage.setItem(conversionStorageKey, JSON.stringify(sourceDocuments.map((document) => document.id === quotationConversion.id ? { ...document, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id } : document)));
         setToast("Sale invoice saved locally from this quotation.");
         navigate(returnPath);
       } catch (error) {
         setToast(error.message || "Could not save the sale invoice locally.");
+      }
+      return;
+    }
+    if (saleOrderConversions.length) {
+      try {
+        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, saleOrderIds: saleOrderConversions.map((order) => order.id) });
+        const key = "ledgerly:saleOrders.v1";
+        const sourceOrders = JSON.parse(window.localStorage.getItem(key) || "[]");
+        window.localStorage.setItem(key, JSON.stringify(sourceOrders.map((order) => saleOrderConversions.some((source) => source.id === order.id) ? { ...order, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id, history: [...(order.history || []), { action: "Converted to Sale", at: new Date().toISOString(), saleInvoiceId: savedInvoice.id }] } : order)));
+        setToast("Sale invoice created from the selected sale order(s).");
+        navigate(returnPath);
+      } catch (error) {
+        setToast(error.message || "Could not convert the sale order locally.");
+      }
+      return;
+    }
+    if (deliveryChallanConversions.length) {
+      try {
+        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, deliveryChallanIds: deliveryChallanConversions.map((challan) => challan.id) });
+        const key = "ledgerly:deliveryChallans.v1";
+        const sourceChallans = JSON.parse(window.localStorage.getItem(key) || "[]");
+        window.localStorage.setItem(key, JSON.stringify(sourceChallans.map((challan) => deliveryChallanConversions.some((source) => source.id === challan.id)
+          ? { ...challan, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id, history: [...(challan.history || []), { action: "Converted to Sale", at: new Date().toISOString(), saleInvoiceId: savedInvoice.id }] }
+          : challan)));
+        setToast("Sale invoice created from the selected delivery challan(s).");
+        navigate(returnPath);
+      } catch (error) {
+        setToast(error.message || "Could not convert the delivery challan locally.");
       }
       return;
     }

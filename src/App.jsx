@@ -27,6 +27,11 @@ import AddSale from "./pages/Sales/AddSale";
 import SalePreview from "./pages/Sales/SalePreview";
 import SaleInvoices from "./pages/Sales/SaleInvoices";
 import EstimateQuotation from "./pages/Sales/EstimateQuotation";
+import ProformaInvoices from "./pages/Sales/ProformaInvoices";
+import PaymentIn from "./pages/Sales/PaymentIn";
+import SaleOrders from "./pages/Sales/SaleOrders";
+import DeliveryChallans from "./pages/Sales/DeliveryChallans";
+import SaleReturns from "./pages/Sales/SaleReturns";
 import BarcodeGenerator from "./pages/Utilities/BarcodeGenerator";
 import ImportItems from "./pages/Utilities/ImportItems";
 import ExportItems from "./pages/Utilities/ExportItems";
@@ -95,6 +100,11 @@ function App() {
 
           <Route path="sales/sale-invoices" element={<SaleInvoices />} />
           <Route path="sales/estimate-quotation" element={<EstimateQuotation />} />
+          <Route path="sales/proforma-invoice" element={<ProformaInvoices />} />
+          <Route path="sales/payment-in" element={<PaymentIn />} />
+          <Route path="sales/sale-order" element={<SaleOrders />} />
+          <Route path="sales/delivery-challan" element={<DeliveryChallans />} />
+          <Route path="sales/sale-return-credit-note" element={<SaleReturns />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
           <Route
