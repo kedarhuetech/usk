@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FiAlertCircle, FiArrowDownLeft, FiArrowUpRight, FiRefreshCw, FiSearch, FiX } from "react-icons/fi";
+import { FiAlertCircle, FiArrowDownLeft, FiArrowUpRight, FiSearch, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { calculateCashBalance, formatCashAmount, loadCashInHandData, saveCashAdjustment, validateCashAdjustment } from "../../services/cashInHand";
@@ -79,7 +79,7 @@ function CashInHand() {
 
   return <main className="min-h-full bg-slate-100 p-4 md:p-7">
     <div className="mx-auto max-w-screen-2xl space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-bold text-slate-950">Cash in Hand</h1><p className="mt-1 text-slate-600">Track saved cash sales, customer receipts, supplier payments, and cash count adjustments.</p></div><div className="flex gap-2"><Button onClick={() => void refresh()} disabled={loading} className="border border-slate-300 bg-white text-slate-700 disabled:cursor-wait disabled:opacity-50"><FiRefreshCw className={loading ? "animate-spin" : ""} /> Refresh</Button><Button onClick={() => setAdjusting(true)} disabled={loading} className="bg-[#1A1F71] text-white disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-70">Adjust Cash</Button></div></header>
+      <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-bold text-slate-950">Cash in Hand</h1><p className="mt-1 text-slate-600">Track saved cash sales, customer receipts, supplier payments, and cash count adjustments.</p></div><div className="flex gap-2"><Button onClick={() => setAdjusting(true)} disabled={loading} className="bg-[#1A1F71] text-white disabled:cursor-not-allowed disabled:bg-slate-400 disabled:opacity-70">Adjust Cash</Button></div></header>
       {notice && <div role="status" className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-emerald-800">{notice}<button className="float-right" onClick={() => setNotice("")} aria-label="Dismiss">×</button></div>}
       {error && <div role="alert" className="flex gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-rose-800"><FiAlertCircle className="mt-0.5" />{error}</div>}
       {!complete && !loading && <div role="alert" className="rounded-md border border-amber-200 bg-amber-50 p-4 text-amber-900"><p className="font-semibold">Balance may be incomplete. Some saved records could not be loaded.</p><ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{unavailable.map((source) => <li key={source.name}><strong>{source.name}:</strong> {source.message}</li>)}</ul></div>}

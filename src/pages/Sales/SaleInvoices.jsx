@@ -20,6 +20,7 @@ import {
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { loadSalesInvoices } from "../../services/businessRecords";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const SALE_INVOICE_UI_KEY = "ledgerly:saleInvoiceUiActions.v1";
 
@@ -281,6 +282,7 @@ function SaleInvoices() {
   const saveInvoiceUi = (update) => setInvoiceUi((current) => {
     const next = update(current);
     window.localStorage.setItem(SALE_INVOICE_UI_KEY, JSON.stringify(next));
+    notifyBusinessDataChanged();
     return next;
   });
 

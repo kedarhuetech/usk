@@ -1,3 +1,5 @@
+import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+
 const PURCHASE_BILLS_KEY = "ledgerly:purchaseBills.v1";
 
 function canUseStorage() {
@@ -35,6 +37,7 @@ export function savePurchaseBill(value) {
   const bill = normalizeBill({ ...value, updatedAt: new Date().toISOString() });
   const next = [bill, ...readBills().filter((entry) => entry.id !== bill.id && entry.invoiceId !== bill.invoiceId)];
   if (canUseStorage()) window.localStorage.setItem(PURCHASE_BILLS_KEY, JSON.stringify(next));
+  notifyBusinessDataChanged();
   return bill;
 }
 
