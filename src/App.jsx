@@ -46,6 +46,7 @@ import UpdateItemsInBulk from "./pages/Utilities/UpdateItemsInBulk";
 import ImportFromTally from "./pages/Utilities/ImportFromTally";
 import VerifyMyData from "./pages/Utilities/VerifyMyData";
 import BackupToComputer from "./pages/SyncShareBackup/BackupToComputer";
+import BackupToDrive from "./pages/SyncShareBackup/BackupToDrive";
 import PlansPricing from "./pages/PlansPricing/PlansPricing";
 import {
   DataDeletion,
@@ -136,6 +137,7 @@ function App() {
           <Route path="plans-pricing" element={<PlansPricing />} />
           <Route path="settings" element={<Settings />} />
           <Route path="sync-share-backup/backup-to-computer" element={<BackupToComputer />} />
+          <Route path="sync-share-backup/backup-to-drive" element={<BackupToDrive />} />
           <Route path="reports" element={<Reports />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
