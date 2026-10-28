@@ -35,6 +35,7 @@ import {
   stateOfSupplyOptions,
 } from "../../constants/salesData";
 import { markOnlineStoreOrderConverted } from "../../services/onlineStoreOrdersStorage";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import {
   loadBusinessItems,
   loadBusinessParties,
@@ -1386,6 +1387,7 @@ function AddSale({ mode = "sale" }) {
           history: [{ id: `${invoice.id}-${Date.now()}`, invoiceId: invoice.id, invoiceNumber: invoice.form.invoiceNumber, action: "View/Edit saved", at: new Date().toISOString() }, ...(current.history || [])],
         };
         window.localStorage.setItem(key, JSON.stringify(next));
+        notifyBusinessDataChanged();
         sessionStorage.setItem(config.storageKey, JSON.stringify(invoice));
         setToast("Sale updated in this browser.");
         navigate(returnPath);
