@@ -1,6 +1,8 @@
 // Checks company records through read-only business data APIs.
 import { businessDataApi } from "./apiClient.js";
 import { calculateInvoiceTotals } from "../utils/saleInvoice.js";
+import { getInventoryItems } from "./itemsStorage.js";
+import { getParties } from "./partiesStorage.js";
 
 const unavailableChecks = [
   "Stock quantities cannot be reconciled because USV does not expose a complete stock movement history.",
@@ -139,12 +141,11 @@ export function verifyBusinessData(data) {
 // Reads every supported record type; a failed request leaves verification incomplete.
 export async function runDataVerification(api = businessDataApi) {
   try {
-    const [items, parties, salesInvoices, purchaseBills] = await Promise.all([
-      api.list("items"),
-      api.list("parties"),
-      api.list("sales-invoices"),
-      api.list("purchase-bills"),
+    const [salesInvoices, purchaseBills] = await Promise.all([
+      api.list("sales-invoices"), api.list("purchase-bills"),
     ]);
+    const items = getInventoryItems();
+    const parties = getParties();
     return verifyBusinessData({ items, parties, salesInvoices, purchaseBills });
   } catch (error) {
     return {

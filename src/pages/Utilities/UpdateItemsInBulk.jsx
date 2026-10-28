@@ -4,7 +4,7 @@ import { FiAlertCircle, FiCheckCircle, FiSearch, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { units, taxModes, taxOptions, discountTypes } from "../../constants/itemsData";
-import { businessDataApi } from "../../services/apiClient";
+import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
 
 const fields = [
   { key: "itemName", label: "Item Name", type: "text" },
@@ -66,12 +66,8 @@ function UpdateItemsInBulk() {
   const [status, setStatus] = useState("");
 
   useEffect(() => {
-    let active = true;
-    businessDataApi.list("items")
-      .then((rows) => { if (active) setItems(Array.isArray(rows) ? rows : []); })
-      .catch((loadError) => { if (active) setError(loadError.message || "Could not load items."); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
+    setItems(getInventoryItems());
+    setLoading(false);
   }, []);
 
   const categories = useMemo(() => ["All categories", ...new Set(items.map((item) => item.category).filter(Boolean))], [items]);
@@ -124,15 +120,9 @@ function UpdateItemsInBulk() {
     setError("");
     setStatus("");
     const value = fieldValues[selectedField] ?? "";
-    const results = await Promise.allSettled(selectedItems.map((item) => businessDataApi.save("items", changedItem(item, selectedField, value))));
-    const succeeded = results.filter((result) => result.status === "fulfilled").length;
-    const failed = results.length - succeeded;
-    if (succeeded) {
-      const updated = selectedItems.map((item) => changedItem(item, selectedField, value));
-      setItems((current) => current.map((item) => updated.find((next) => next.id === item.id) || item));
-    }
-    if (failed && !succeeded) setError(`No items were updated. ${failed} save${failed === 1 ? "" : "s"} failed.`);
-    else setStatus(`Updated ${succeeded} item${succeeded === 1 ? "" : "s"}${failed ? `; ${failed} failed` : ""}.`);
+    const updated = selectedItems.map((item) => saveInventoryItem(changedItem(item, selectedField, value)));
+    setItems((current) => current.map((item) => updated.find((next) => next.id === item.id) || item));
+    setStatus(`Updated ${updated.length} item${updated.length === 1 ? "" : "s"} in local storage.`);
     setSelectedIds([]);
     setStep("select");
     setSaving(false);
@@ -141,7 +131,7 @@ function UpdateItemsInBulk() {
   return (
     <div className="min-h-full bg-slate-100 p-4 sm:p-5">
       <div className="mx-auto max-w-7xl space-y-5">
-        <header><h1 className="text-2xl font-bold text-slate-900">Update Items In Bulk</h1><p className="mt-1 text-sm text-slate-500">Select existing items, choose one supported field, review the change, and save it through the current item API.</p></header>
+        <header><h1 className="text-2xl font-bold text-slate-900">Update Items In Bulk</h1><p className="mt-1 text-sm text-slate-500">Select locally saved items, choose a field, review the change, and save it to this browser.</p></header>
         {error && <p role="alert" className="flex gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><FiAlertCircle />{error}</p>}
         {status && <p role="status" className="flex gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><FiCheckCircle />{status}</p>}
         {step === "select" ? (

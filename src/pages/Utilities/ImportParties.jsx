@@ -4,7 +4,7 @@ import { FiAlertCircle, FiCheckCircle, FiDownload, FiTrash2, FiUpload } from "re
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { businessDataApi } from "../../services/apiClient";
+import { getParties, saveParty } from "../../services/partiesStorage";
 
 const columns = [
   ["partyName", "Party Name", true],
@@ -150,7 +150,7 @@ function ImportParties() {
     setSaving(true);
     setStatus({ type: "", message: "" });
     try {
-      const existing = await businessDataApi.list("parties");
+      const existing = getParties();
       const keys = new Set(existing.map((party) => `${normalized(party.partyName).toLowerCase()}|${String(party.phone || "").replace(/\D/g, "") || normalized(party.email).toLowerCase()}`));
       let imported = 0;
       let duplicates = 0;
@@ -165,7 +165,7 @@ function ImportParties() {
           const party = { ...row };
           delete party.rowNumber;
           delete party.errors;
-          await businessDataApi.save("parties", { ...party, id: undefined });
+          saveParty({ ...party, id: undefined });
           keys.add(key);
           imported += 1;
         } catch {
@@ -184,7 +184,7 @@ function ImportParties() {
   return (
     <div className="min-h-full bg-slate-100 p-4 sm:p-5">
       <div className="mx-auto max-w-6xl space-y-5">
-        <header><h1 className="text-2xl font-bold text-slate-900">Import Parties</h1><p className="mt-1 text-sm text-slate-500">Upload customer, supplier, or other party records using the existing party database service.</p></header>
+        <header><h1 className="text-2xl font-bold text-slate-900">Import Parties</h1><p className="mt-1 text-sm text-slate-500">Upload customer, supplier, or other party records into this browser's local storage.</p></header>
         <div className="grid gap-5 lg:grid-cols-2">
           <Card className="p-5"><h2 className="text-lg font-bold text-slate-800">Download Excel Template</h2><p className="mt-2 text-sm text-slate-500">Use the template columns for supported party fields. <strong>Party Name</strong> is required.</p><Button onClick={downloadTemplate} className="mt-5 bg-[#1A1F71] text-white hover:bg-[#14185D]"><FiDownload /> Download Template</Button></Card>
           <Card className="p-5"><h2 className="text-lg font-bold text-slate-800">Upload your .xls / .xlsx file</h2><p className="mt-2 text-sm text-slate-500">Drag a party spreadsheet here or browse for a file.</p><div onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); chooseFile(event.dataTransfer.files?.[0]); }} className="mt-4 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 p-7 text-center"><FiUpload className="mx-auto h-8 w-8 text-slate-400" /><Button onClick={() => inputRef.current?.click()} className="mt-3 border border-slate-300 text-slate-700 hover:bg-white">Browse</Button><input ref={inputRef} type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => { chooseFile(event.target.files?.[0]); event.target.value = ""; }} /></div>{fileName && <div className="mt-3 flex items-center justify-between rounded bg-slate-100 p-3 text-sm"><span>{fileName}</span><button type="button" aria-label="Remove selected file" onClick={() => { setFileName(""); setRows([]); setFileError(""); }} className="text-rose-600"><FiTrash2 /></button></div>}</Card>
