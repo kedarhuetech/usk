@@ -17,7 +17,7 @@ import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
 import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
-import { saveInventoryItem } from "../../services/itemsStorage";
+import { deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
 
 const tabs = [
@@ -117,8 +117,8 @@ function writeItemUiOverrides(value) {
 // Applies item ui overrides.
 function applyItemUiOverrides(sourceItems) {
   const overrides = readItemUiOverrides();
-  const deleted = new Set(overrides.deleted || []);
-  return sourceItems.filter((item) => !deleted.has(item.id)).map((item) => ({ ...item, ...(overrides.edits?.[item.id] || {}) }));
+  // Older versions only hid rows in this browser; deletion now removes the local record itself.
+  return sourceItems.map((item) => ({ ...item, ...(overrides.edits?.[item.id] || {}) }));
 }
 
 // Reads transaction actions.
@@ -344,19 +344,32 @@ function ItemsDashboard() {
 
   const refresh = useCallback(async () => {
     setLoadError("");
-    try {
-      const [loadedItems, loadedSales, loadedPurchases] = await Promise.all([loadBusinessItems(), loadSalesInvoices(), loadPurchaseBills()]);
+    const showItems = (loadedItems) => {
       const allItems = [...loadedItems, ...readCsvImportedItems()];
       setItems(applyItemUiOverrides(allItems));
-      setSales(loadedSales);
-      setPurchases(loadedPurchases);
       setSelectedId((current) => current || allItems[0]?.id || "");
+    };
+
+    // Render browser-local items immediately; transaction APIs are independent.
+    showItems(getInventoryItems());
+    try {
+      showItems(await loadBusinessItems());
     } catch (error) {
       setLoadError(error.message || "Could not load item data.");
     }
+
+    const [salesResult, purchasesResult] = await Promise.allSettled([loadSalesInvoices(), loadPurchaseBills()]);
+    if (salesResult.status === "fulfilled") setSales(salesResult.value);
+    if (purchasesResult.status === "fulfilled") setPurchases(purchasesResult.value);
+    if (salesResult.status === "rejected" || purchasesResult.status === "rejected") {
+      setNotice("Items loaded from local storage. Some transaction history is unavailable.");
+    }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void refresh(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [refresh]);
   useEffect(() => {
     // Handles pointer down.
     const onPointerDown = (event) => { if (!menuRef.current?.contains(event.target) && !event.target.closest?.("[data-item-bulk-menu]") && !event.target.closest?.("[data-item-transaction-actions]") && !event.target.closest?.("[data-item-row-actions]")) { setMenuOpen(false); setRowMenu(""); } };
@@ -576,7 +589,7 @@ function ItemsDashboard() {
                 <button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 py-2 text-left"><span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span>{item.itemCode && <span className="block truncate text-xs text-slate-400">{item.itemCode}</span>}</button>
                 <span className={`whitespace-nowrap text-sm font-medium ${activeTab === "product" && quantity(item) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{activeTab === "product" ? `${quantity(item)}${item.unit ? ` ${item.unit}` : ""}` : item.unit || "-"}</span>
                 <button type="button" aria-label={`Actions for ${item.itemName}`} onClick={() => setRowMenu((current) => current === item.id ? "" : item.id)} className="grid h-8 w-6 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"><FiMoreVertical /></button>
-                {rowMenu === item.id && <div className="absolute right-2 top-9 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" onClick={() => { setItemModal({ mode: "edit", initialItem: item }); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View / Edit</button><button type="button" onClick={() => { if (!window.confirm(`Remove ${item.itemName} from the Items screen? Its backend record will remain unchanged.`)) return; const overrides = readItemUiOverrides(); writeItemUiOverrides({ ...overrides, deleted: [...new Set([...(overrides.deleted || []), item.id])] }); const remaining = items.filter((entry) => entry.id !== item.id); setItems(remaining); if (selectedId === item.id) setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || ""); setRowMenu(""); setNotice(`${item.itemName} hidden from this browser's Items screen.`); }} className="w-full rounded px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">Delete</button>{activeTab === "product" && <button type="button" onClick={() => { setAdjustItem(item); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Adjust Stock</button>}</div>}
+                {rowMenu === item.id && <div className="absolute right-2 top-9 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" onClick={() => { setItemModal({ mode: "edit", initialItem: item }); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View / Edit</button><button type="button" onClick={() => { if (!window.confirm(`Permanently delete ${item.itemName} and matching local copies?`)) return; deleteInventoryItem(item); const remaining = items.filter((entry) => !sameInventoryItemIdentity(entry, item)); const csvItems = readCsvImportedItems().filter((entry) => !sameInventoryItemIdentity(entry, item)); window.localStorage.setItem(ITEM_CSV_IMPORTS_KEY, JSON.stringify(csvItems)); setItems(remaining); if (remaining.some((entry) => entry.id === selectedId) === false) setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || ""); setRowMenu(""); setNotice(`${item.itemName} and matching copies deleted from local storage.`); }} className="w-full rounded px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">Delete</button>{activeTab === "product" && <button type="button" onClick={() => { setAdjustItem(item); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Adjust Stock</button>}</div>}
               </div>)}
               {!filteredItems.length && <div className="grid min-h-60 place-items-center px-6 text-center"><div><p className="font-semibold text-slate-700">{search ? "No items match your search" : `No ${activeTab}s yet`}</p><p className="mt-1 text-sm text-slate-500">Add a {activeTab} to get started.</p><Button onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="mt-4 bg-amber-500 text-white hover:bg-amber-600"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</Button></div></div>}
             </div>
