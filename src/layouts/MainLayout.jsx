@@ -12,6 +12,7 @@ function MainLayout() {
   const outlet = useOutlet();
   const [refreshKey, setRefreshKey] = useState(0);
   const isTransactionRoute = transactionRoutes.includes(pathname);
+  const isReportsRoute = pathname.startsWith("/reports");
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -20,7 +21,7 @@ function MainLayout() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main className={`min-h-0 min-w-0 flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"}`}>
           {outlet && cloneElement(outlet, { key: refreshKey })}
         </main>
       </div>

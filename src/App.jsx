@@ -5,6 +5,7 @@ import MainLayout from "./layouts/MainLayout";
 import Settings from "./pages/Settings/Settings";
 import { AppPasscodeGuard, AppPasscodeProvider } from "./components/Passcode/AppPasscodeGate";
 import ComingSoon from "./pages/ComingSoon";
+import Reports from "./pages/Reports/Reports";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import GoogleProfileManager from "./pages/BusinessGrowth/GoogleProfileManager";
 import MarketingStudioEditor from "./pages/BusinessGrowth/MarketingStudioEditor";
@@ -135,7 +136,7 @@ function App() {
           <Route path="plans-pricing" element={<PlansPricing />} />
           <Route path="settings" element={<Settings />} />
           <Route path="sync-share-backup/backup-to-computer" element={<BackupToComputer />} />
-          <Route path="reports" element={<ComingSoon />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
         </Routes>
