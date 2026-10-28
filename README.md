@@ -1,4 +1,6 @@
-# Vyapaar
+# Vyapaar — Local Storage Testing
+
+This project is being tested with browser-local Items and Parties. Start the frontend with `npm run dev` from the project root and use the same browser and local app address each time; `localStorage` is scoped to that browser origin.
 
 ## MySQL setup
 
@@ -11,9 +13,28 @@
 7. Set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and an appropriate `DB_CONNECTION_LIMIT` in `server/.env`. Never commit credentials. Total possible connections equal `DB_CONNECTION_LIMIT × number of API instances`, so size it against MySQL's connection capacity.
 8. Demo and local runs use `demo-business` automatically when `VITE_BUSINESS_ID` is not set. All unauthenticated demo data is stored under that shared identifier. Before production, set a tenant-specific `VITE_BUSINESS_ID` and add authentication and authorization; do not use the shared demo identifier for unrelated tenants.
 
-### Current database coverage
+### Current storage and test workflow
 
-MySQL persists Sale Invoices, Purchase Bills, and the active Business Growth records and poster catalog. Inventory Items and Parties currently use browser localStorage through `src/services/itemsStorage.js` and `src/services/partiesStorage.js`. On first load after the local-only switch, any legacy MySQL items are copied into localStorage once to preserve existing records; subsequent item CRUD uses local storage. The Utilities item and party import, bulk update, export, and Tally master import tools use those same shared local records, so imported or edited entries appear in the regular Items and Parties screens. To move them to a database later, replace persistence in their two storage services and keep the existing normalization and CRUD callers. Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most Utilities workflows are coming soon and have no implemented records to save yet.
+| Data | Current storage behavior |
+| --- | --- |
+| Items | Browser `localStorage` via `src/services/itemsStorage.js`. The first Items load can copy legacy MySQL items into local storage once; normal create, read, update, delete, import, and stock changes use the local item service. |
+| Parties | Browser `localStorage` via `src/services/partiesStorage.js`. Party imports use this same store. |
+| Sales | Saved invoices are kept in browser storage and also use the existing database save flow. |
+| Purchases | The database save flow remains active. Successful loads and saves mirror purchase bills to browser storage for local Tally export. |
+| Export to Tally | Reads the browser-local sales and purchase records; it does not query the database. A database-only purchase that has not been mirrored locally will not appear. |
+
+The Utilities item and party import, bulk update, export, and Tally master import features share the same local Items and Parties used by the regular app screens. Their data survives a page refresh in the same browser and origin. Clearing that browser's site data, changing browsers, or changing the app origin uses a different local store.
+
+To try the sample item import:
+
+1. Open **Utilities → Import Items**.
+2. Choose `sample-items-import.xlsx` from the project root.
+3. Review the rows and confirm the import.
+4. Open **Items** and check the Products and Services tabs. Imported entries should remain after refreshing.
+
+The sample contains seven dummy records with item codes, categories, units, sale and purchase prices, quantities, HSN/SAC, tax, discount, and descriptions. To move Items or Parties to a database later, replace persistence inside their storage services while keeping the existing CRUD callers.
+
+Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most other Utilities workflows are coming soon and have no implemented records to save yet.
 
 ### WhatsApp Marketing poster catalog
 
