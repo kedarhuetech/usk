@@ -6,8 +6,8 @@ import { FiAlertCircle, FiCamera, FiCheckCircle, FiImage, FiSearch, FiUpload, Fi
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { businessDataApi } from "../../services/apiClient";
 import { saveBusinessItem } from "../../services/businessRecords";
+import { getInventoryItems } from "../../services/itemsStorage";
 
 const requiredColumns = ["itemname"];
 const maxRows = 500;
@@ -53,6 +53,10 @@ function rowsToItems(rows) {
     salePrice: column("saleprice", "sellingprice", "price", "rate"),
     purchasePrice: column("purchaseprice", "costprice", "purchasecost"),
     quantity: column("quantity", "openingquantity", "openingstock", "stock"),
+    hsn: column("hsn", "hsnsac", "sac"),
+    taxRate: column("taxrate", "tax"),
+    discount: column("discount", "discountvalue"),
+    description: column("description", "details", "itemdescription"),
   };
   if (requiredColumns.some((name) => !headers.includes(name)) || indexes.name < 0) {
     throw new Error("The file must include an Item Name column.");
@@ -71,6 +75,10 @@ function rowsToItems(rows) {
       salePrice: get("salePrice"),
       purchasePrice: get("purchasePrice"),
       openingQuantity: get("quantity"),
+      hsn: get("hsn"),
+      taxRate: get("taxRate"),
+      discount: get("discount"),
+      description: get("description"),
     };
   });
 }
@@ -488,7 +496,7 @@ function ImportItems() {
     setBarcodeSaving(true);
     setLookupState({ status: "loading", message: "Checking duplicates and saving the approved item..." });
     try {
-      const existingItems = await businessDataApi.list("items");
+      const existingItems = getInventoryItems();
       const duplicate = existingItems.some((item) => (
         String(item.itemCode || "").trim().toLowerCase() === reviewItem.itemCode.trim().toLowerCase()
         || (
@@ -549,7 +557,7 @@ function ImportItems() {
     const failures = [];
     let existingItems;
     try {
-      existingItems = await businessDataApi.list("items");
+      existingItems = getInventoryItems();
     } catch (error) {
       setSaving(false);
       setMessage(`Import stopped before saving because existing items could not be checked: ${error.message || "backend/database unavailable"}`);
@@ -589,7 +597,7 @@ function ImportItems() {
       <div className="mx-auto max-w-6xl space-y-5">
         <header>
           <h1 className="text-2xl font-bold text-slate-900">Import Items</h1>
-          <p className="mt-1 text-sm text-slate-500">Review item rows before saving them through the existing inventory API.</p>
+          <p className="mt-1 text-sm text-slate-500">Review item rows before saving them to this browser's shared local inventory.</p>
         </header>
         <Card className="p-5">
           <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-800">

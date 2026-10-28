@@ -5,7 +5,7 @@ import { FiAlertCircle, FiCheckCircle, FiDownload, FiFileText, FiSearch } from "
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { businessDataApi } from "../../services/apiClient";
+import { getInventoryItems } from "../../services/itemsStorage";
 
 const fieldDefinitions = [
   ["itemName", "Item Name"],
@@ -96,18 +96,8 @@ function ExportItems() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let active = true;
-    businessDataApi.list("items")
-      .then((result) => {
-        if (active) setItems(Array.isArray(result) ? result : []);
-      })
-      .catch((error) => {
-        if (active) setStatus({ type: "error", message: `Items could not be loaded: ${error.message}` });
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => { active = false; };
+    setItems(getInventoryItems());
+    setLoading(false);
   }, []);
 
   const categories = useMemo(() => [...new Set(items.map((item) => String(item.category || "").trim()).filter(Boolean))].sort(), [items]);

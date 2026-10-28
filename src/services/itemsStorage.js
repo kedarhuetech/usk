@@ -221,6 +221,13 @@ export function saveInventoryItem(itemForm) {
   return item;
 }
 
+// Deletes an inventory item from the active storage adapter.
+export function deleteInventoryItem(itemId) {
+  const nextItems = readItems().filter((item) => item.id !== itemId);
+  writeItems(nextItems);
+  return nextItems;
+}
+
 // This helper handles name logic.
 function normalizedName(value = "") {
   return String(value || "").trim().toLowerCase();

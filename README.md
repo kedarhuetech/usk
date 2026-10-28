@@ -13,7 +13,7 @@
 
 ### Current database coverage
 
-MySQL persists Parties, Items, Sale Invoices, Purchase Bills, and the active Business Growth records and poster catalog. Their nested form data is stored in typed fields and can be inspected through the section views in Workbench. Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most Utilities workflows are coming soon and have no implemented records to save yet. Items and sale invoices created before backend persistence are copied from local storage into MySQL when those records are first loaded.
+MySQL persists Sale Invoices, Purchase Bills, and the active Business Growth records and poster catalog. Inventory Items and Parties currently use browser localStorage through `src/services/itemsStorage.js` and `src/services/partiesStorage.js`. On first load after the local-only switch, any legacy MySQL items are copied into localStorage once to preserve existing records; subsequent item CRUD uses local storage. The Utilities item and party import, bulk update, export, and Tally master import tools use those same shared local records, so imported or edited entries appear in the regular Items and Parties screens. To move them to a database later, replace persistence in their two storage services and keep the existing normalization and CRUD callers. Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most Utilities workflows are coming soon and have no implemented records to save yet.
 
 ### WhatsApp Marketing poster catalog
 

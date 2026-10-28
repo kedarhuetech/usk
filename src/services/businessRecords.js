@@ -1,8 +1,11 @@
 // Provides the business records application service.
 import { businessDataApi } from "./apiClient.js";
-import { persistInlineImages, normalizePersistedAssetUrls } from "./businessGrowthData.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
+import { getParties, saveParty } from "./partiesStorage.js";
+import { savePurchaseBill } from "./purchaseBillsStorage.js";
+
+const LEGACY_ITEMS_MIGRATED_KEY = "ledgerly:inventoryItems.legacyDatabaseMigration.v1";
 
 // This helper handles id logic.
 function withId(record = {}) {
@@ -11,39 +14,43 @@ function withId(record = {}) {
 
 // Loads business items.
 export async function loadBusinessItems() {
-  const rows = await businessDataApi.list("items");
-  if (rows.length) {
-    const items = rows.map((item) => {
-      const normalized = normalizeInventoryItem(normalizePersistedAssetUrls(item));
-      saveInventoryItem(normalized);
-      return normalized;
-    });
-    const knownIds = new Set(items.map((item) => item.id));
-    for (const localItem of getInventoryItems()) {
-      if (!knownIds.has(localItem.id)) items.push(await saveBusinessItem(localItem));
-    }
-    return items;
-  }
-
-  // Move existing browser-only items into MySQL the first time this account loads.
   const localItems = getInventoryItems();
-  const migrated = [];
-  for (const item of localItems) migrated.push(await saveBusinessItem(item));
-  return migrated;
+  if (typeof window === "undefined" || !window.localStorage) return localItems;
+  if (window.localStorage.getItem(LEGACY_ITEMS_MIGRATED_KEY) === "true") return localItems;
+
+  try {
+    // One-time recovery for items saved to MySQL before the local-only switch.
+    const legacyItems = await businessDataApi.list("items");
+    const keys = new Set(localItems.flatMap((item) => [
+      item.itemCode ? `code:${String(item.itemCode).trim().toLowerCase()}` : "",
+      `name:${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}`,
+    ].filter(Boolean)));
+    const migratedItems = [...localItems];
+    for (const legacyItem of legacyItems) {
+      const item = normalizeInventoryItem(legacyItem);
+      const codeKey = item.itemCode ? `code:${String(item.itemCode).trim().toLowerCase()}` : "";
+      const nameKey = `name:${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}`;
+      if ((codeKey && keys.has(codeKey)) || keys.has(nameKey)) continue;
+      migratedItems.push(saveInventoryItem(item));
+      if (codeKey) keys.add(codeKey);
+      keys.add(nameKey);
+    }
+    window.localStorage.setItem(LEGACY_ITEMS_MIGRATED_KEY, "true");
+    return migratedItems;
+  } catch {
+    // Keep the local Items screen usable when the legacy API is offline.
+    return localItems;
+  }
 }
 
 // Saves business item.
 export async function saveBusinessItem(value) {
-  const item = normalizeInventoryItem(value);
-  const persisted = await persistInlineImages(item, "inventory-item", item.id);
-  const saved = await businessDataApi.save("items", persisted);
-  saveInventoryItem(saved);
-  return normalizeInventoryItem(saved);
+  return saveInventoryItem(normalizeInventoryItem(value));
 }
 
 // Loads business parties.
 export async function loadBusinessParties() {
-  return businessDataApi.list("parties");
+  return getParties();
 }
 
 // Loads business summary.
@@ -53,7 +60,7 @@ export async function loadBusinessSummary() {
 
 // Saves business party.
 export async function saveBusinessParty(value) {
-  return businessDataApi.save("parties", withId(value));
+  return saveParty(withId(value));
 }
 
 // Loads sales invoices.
@@ -99,7 +106,9 @@ export async function saveBusinessSaleInvoice(value) {
 
 // Loads purchase bills.
 export async function loadPurchaseBills() {
-  return businessDataApi.list("purchase-bills");
+  const bills = await businessDataApi.list("purchase-bills");
+  for (const bill of bills) savePurchaseBill(bill);
+  return bills;
 }
 
 // This helper handles purchase bill number logic.
@@ -114,6 +123,8 @@ export async function saveBusinessPurchaseBill(value) {
   // Handles result.
   const existing = (await loadPurchaseBills()).some((entry) => entry.id === bill.id);
   const saved = await businessDataApi.save("purchase-bills", bill);
+  // Keep a browser-local copy for Utilities that need to work without a database read.
+  savePurchaseBill(saved);
   if (!existing) {
     const items = await loadBusinessItems();
     const quantities = new Map();

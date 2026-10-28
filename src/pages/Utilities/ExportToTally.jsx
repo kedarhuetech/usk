@@ -3,11 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiDownload } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { businessDataApi } from "../../services/apiClient";
+import { getSaleInvoices } from "../../services/salesStorage";
+import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 
 const transactionTypes = [
-  { value: "sale", label: "Sale", resource: "sales-invoices" },
-  { value: "purchase", label: "Purchase", resource: "purchase-bills" },
+  { value: "sale", label: "Sale", load: getSaleInvoices },
+  { value: "purchase", label: "Purchase", load: getPurchaseBills },
 ];
 
 // This helper handles escape logic.
@@ -114,12 +115,12 @@ function ExportToTally() {
 
   useEffect(() => {
     let active = true;
-    Promise.all(transactionTypes.map(async ({ value, resource }) => (
-      (await businessDataApi.list(resource)).map((record) => normalizeRecord(record, value))
+    Promise.all(transactionTypes.map(async ({ value, load }) => (
+      load().map((record) => normalizeRecord(record, value))
     ))).then((groups) => {
       if (active) setRecords(groups.flat());
     }).catch((error) => {
-      if (active) setStatus({ type: "error", message: `Transactions could not be loaded: ${error.message}` });
+      if (active) setStatus({ type: "error", message: `Local transactions could not be read: ${error.message || "local storage error"}` });
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -160,7 +161,7 @@ function ExportToTally() {
   return (
     <div className="min-h-full bg-slate-100 p-4 sm:p-5">
       <div className="mx-auto max-w-7xl space-y-5">
-        <header><h1 className="text-2xl font-bold text-slate-900">Export to Tally</h1><p className="mt-1 text-sm text-slate-500">Review saved USV sales and purchases before downloading Tally-compatible XML files.</p></header>
+        <header><h1 className="text-2xl font-bold text-slate-900">Export to Tally</h1><p className="mt-1 text-sm text-slate-500">Review sales and purchases saved in this browser before downloading Tally-compatible XML files.</p></header>
         <Card className="p-5">
           <div className="grid gap-3 md:grid-cols-4">
             <label className="text-sm font-semibold text-slate-700">From date<input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="mt-1 h-10 w-full rounded border border-slate-300 px-2 font-normal" /></label>
@@ -168,7 +169,7 @@ function ExportToTally() {
             <label className="text-sm font-semibold text-slate-700">Transaction type<select aria-label="Transaction type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="mt-1 h-10 w-full rounded border border-slate-300 px-2 font-normal"><option value="all">All supported types</option><option value="sale">Sale</option><option value="purchase">Purchase</option></select></label>
             <div className="flex items-end"><Button onClick={exportTally} disabled={loading || !selected.length} className="w-full bg-[#1A1F71] text-white hover:bg-[#14185D]"><FiDownload /> Export to Tally</Button></div>
           </div>
-          <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Only saved Sale and Purchase records are supported. Tally import is manual; importing the same vouchers again may create duplicates.</p>
+          <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Only saved local Sale and Purchase records are supported. Tally import is manual; importing the same vouchers again may create duplicates.</p>
           {status.message && <p role={status.type === "error" ? "alert" : "status"} className={`mt-4 flex gap-2 rounded-lg p-3 text-sm ${status.type === "error" ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{status.type === "error" ? <FiAlertCircle /> : <FiCheckCircle />}{status.message}</p>}
         </Card>
         <Card className="overflow-hidden">

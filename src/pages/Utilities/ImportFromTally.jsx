@@ -1,11 +1,11 @@
 // Lets users preview, validate, and confirm supported Tally master imports.
-import { useEffect, useRef, useState } from "react";
-import { FiAlertCircle, FiCheckCircle, FiDatabase, FiUpload } from "react-icons/fi";
+import { useRef, useState } from "react";
+import { FiAlertCircle, FiCheckCircle, FiUpload } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { parseTallyXml } from "../../services/tallyImportParser";
 import { mapAndValidateTallyRecords } from "../../services/tallyImportValidation";
-import { activateDatabaseTallyImportStorage, getImportedLocalDemoRecords, getTallyImportStorageMode, importRecords, migrateLocalDemoRecords, previewImport } from "../../services/tallyImportStorage";
+import { importRecords, previewImport } from "../../services/tallyImportStorage";
 
 // Renders the import from tally interface.
 function ImportFromTally() {
@@ -16,24 +16,9 @@ function ImportFromTally() {
   const [records, setRecords] = useState([]);
   const [unsupportedTypes, setUnsupportedTypes] = useState([]);
   const [fileError, setFileError] = useState("");
-  const [fallbackReason, setFallbackReason] = useState("");
   const [acknowledged, setAcknowledged] = useState(false);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState(null);
-  const [localDemoCount, setLocalDemoCount] = useState(0);
-  const [storageMessage, setStorageMessage] = useState("");
-  const [storageMode, setStorageMode] = useState(getTallyImportStorageMode());
-
-  // Load the local demo count and ignore updates after the page closes.
-  useEffect(() => {
-    let active = true;
-    getImportedLocalDemoRecords().then((local) => {
-      if (active) setLocalDemoCount(local.length);
-    }).catch((error) => {
-      if (active) setFileError(`Local demo records could not be read: ${error.message}`);
-    });
-    return () => { active = false; };
-  }, []);
 
   // Reads the selected XML and prepares a duplicate-checked preview.
   const chooseFile = async (file) => {
@@ -43,7 +28,6 @@ function ImportFromTally() {
     setFileError("");
     setRecords([]);
     setUnsupportedTypes([]);
-    setFallbackReason("");
     setSummary(null);
     setAcknowledged(false);
     if (!file.name.toLowerCase().endsWith(".xml")) {
@@ -57,8 +41,6 @@ function ImportFromTally() {
       const preview = await previewImport(mapped);
       setRecords(preview.records);
       setUnsupportedTypes(parsed.unsupportedTypes);
-      setStorageMode(preview.mode);
-      setFallbackReason(preview.fallbackReason || "");
       if (!mapped.length && parsed.unsupportedTypes.length) {
         setFileError("This XML contains no supported party or stock item masters. Unsupported records are listed below.");
       }
@@ -86,47 +68,8 @@ function ImportFromTally() {
     try {
       const result = await importRecords(records);
       setSummary(result);
-      setStorageMode(result.mode);
-      if (result.fallbackReason) setFallbackReason(result.fallbackReason);
-      if (result.mode === "local-demo") {
-        const local = await getImportedLocalDemoRecords();
-        setLocalDemoCount(local.length);
-      }
     } catch (error) {
       setFileError(`Import could not be completed: ${error.message || "Storage error"}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Copies local demo records to the database after checking duplicates.
-  const migrateLocalRecords = async () => {
-    setSaving(true);
-    setFileError("");
-    try {
-      // Keep local source records even after a successful database migration.
-      const result = await migrateLocalDemoRecords();
-      setSummary({ ...result, mode: result.failed || result.invalid ? "local-demo" : "database", failures: result.failures || [] });
-      setStorageMode(result.failed || result.invalid ? "local-demo" : "database");
-      const local = await getImportedLocalDemoRecords();
-      setLocalDemoCount(local.length);
-    } catch (error) {
-      setFileError(`Local records were left in demo storage. Database migration could not start: ${error.message}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Checks the backend before selecting it for future imports.
-  const switchToDatabase = async () => {
-    setSaving(true);
-    setStorageMessage("");
-    try {
-      await activateDatabaseTallyImportStorage();
-      setStorageMode("database");
-      setStorageMessage("Database is available for future imports. Existing local demo records remain separate until you explicitly migrate them.");
-    } catch (error) {
-      setStorageMessage(`Database is still unavailable. Local demo records were not changed. ${error.message}`);
     } finally {
       setSaving(false);
     }
@@ -137,7 +80,6 @@ function ImportFromTally() {
   const invalidCount = records.filter((record) => record.status === "invalid").length;
   const duplicateCount = records.filter((record) => record.status === "duplicate").length;
   const hasWarnings = records.some((record) => record.warnings.length) || unsupportedTypes.length > 0;
-  const isLocalDemo = storageMode === "local-demo";
 
   return (
     <div className="min-h-full bg-slate-100 p-4 sm:p-5">
@@ -148,15 +90,11 @@ function ImportFromTally() {
         </header>
 
         <Card className="p-5">
-          {/* Tell users whether records go to the API or stay in browser storage. */}
-          <div className={`mb-4 flex items-start gap-3 rounded-lg p-4 text-sm ${isLocalDemo ? "bg-amber-50 text-amber-900" : "bg-blue-50 text-blue-900"}`}>
-            {isLocalDemo ? <FiAlertCircle className="mt-0.5 shrink-0" /> : <FiDatabase className="mt-0.5 shrink-0" />}
+          <div className="mb-4 flex items-start gap-3 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+            <FiAlertCircle className="mt-0.5 shrink-0" />
             <div>
-              <strong>{isLocalDemo ? "Local Demo Storage — Not Synced to Database" : "USV database storage"}</strong>
-              <p className="mt-1">{isLocalDemo
-                ? "Imports stay in this browser in a separate Tally demo store, outside the application's item and party lists. They are not synced automatically; this page provides an explicit duplicate-checked migration when database storage is available."
-                : "Records are saved through the existing USV item and party APIs. This is a file import, not a live connection to Tally."}</p>
-              {fallbackReason && <p className="mt-1">The existing database could not be reached during preview ({fallbackReason}); this feature is pinned to local demo storage for this browser.</p>}
+              <strong>Local storage — shared with Items and Parties</strong>
+              <p className="mt-1">Imported masters are saved in this browser and appear in the app's regular item and party lists. This is a file import, not a live connection to Tally.</p>
             </div>
           </div>
           <p className="text-sm text-slate-600">Supported masters: <strong>customer/supplier ledgers</strong> under Sundry Debtors/Creditors (or Accounts Receivable/Payable), and <strong>stock items</strong>. Tally vouchers, payments, tax ledgers, units, groups, godowns, batches, and other record types are not imported.</p>
@@ -168,14 +106,6 @@ function ImportFromTally() {
           {fileError && <p role="alert" className="mt-4 flex gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><FiAlertCircle className="mt-0.5 shrink-0" />{fileError}</p>}
         </Card>
 
-        {/* Keep local records separate and make migration a deliberate action. */}
-        {(isLocalDemo || localDemoCount > 0) && <Card className="border border-amber-200 p-5">
-          <h2 className="font-bold text-slate-800">Local demo imports on this browser</h2>
-          <p className="mt-1 text-sm text-slate-600">{localDemoCount} record{localDemoCount === 1 ? " is" : "s are"} stored separately from {isLocalDemo ? "the database" : "active database records"}. They are never merged automatically.</p>
-          {localDemoCount > 0 && <><p className="mt-1 text-sm text-slate-600">When database storage is available, explicitly migrate these records. Existing records are checked; duplicates are skipped and local copies are retained.</p><Button onClick={migrateLocalRecords} disabled={saving} className="mt-4 bg-[#1A1F71] text-white hover:bg-[#14185D]">{saving ? "Checking and migrating..." : "Check duplicates and migrate to database"}</Button></>}
-          {isLocalDemo && <Button onClick={switchToDatabase} disabled={saving} className="mt-4 border border-slate-300 text-slate-700 hover:bg-white">{saving ? "Checking database..." : "Use database for future imports"}</Button>}
-          {storageMessage && <p role="status" className="mt-3 text-sm text-slate-700">{storageMessage}</p>}
-        </Card>}
 
         {/* List unsupported Tally records so the user sees what will be skipped. */}
         {unsupportedTypes.length > 0 && <Card className="border border-amber-200 p-5">
@@ -217,7 +147,7 @@ function ImportFromTally() {
         {summary && <Card className={`p-5 ${summary.failed ? "border border-amber-300" : ""}`}>
           <h2 className="flex items-center gap-2 font-bold text-slate-800">{summary.failed ? <FiAlertCircle className="text-amber-600" /> : <FiCheckCircle className="text-emerald-600" />}Import summary</h2>
           <p className="mt-2 text-sm text-slate-700">Imported: {summary.imported} · Duplicate skipped: {summary.duplicate} · Invalid skipped: {summary.invalid} · Failed: {summary.failed}</p>
-          <p className="mt-1 text-xs text-slate-500">Storage: {summary.mode === "local-demo" ? "Local Demo Storage — Not Synced to Database" : "USV database API"}</p>
+          <p className="mt-1 text-xs text-slate-500">Storage: this browser's local item and party lists</p>
           {summary.failures.length > 0 && <ul className="mt-3 list-inside list-disc text-sm text-rose-700">{summary.failures.map((failure) => <li key={failure}>{failure}</li>)}</ul>}
         </Card>}
       </div>
