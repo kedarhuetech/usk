@@ -2,10 +2,12 @@ import { calculateLoanOutstanding, validateLoan, validateRepayment } from "./loa
 
 export const LOAN_ACCOUNTS_STORAGE_KEY = "usv.loanAccounts.v1";
 
-function storageKey() {
+export function getLoanAccountsStorageKey() {
   const companyId = String(import.meta.env?.VITE_BUSINESS_ID || "").trim();
   return companyId ? `${LOAN_ACCOUNTS_STORAGE_KEY}:${encodeURIComponent(companyId)}` : LOAN_ACCOUNTS_STORAGE_KEY;
 }
+
+const storageKey = getLoanAccountsStorageKey;
 
 function localStorageRef() {
   if (typeof window === "undefined" || !window.localStorage) throw new Error("Browser local storage is unavailable.");

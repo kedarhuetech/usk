@@ -4,6 +4,7 @@ import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./
 import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
 import { getParties, saveParty } from "./partiesStorage.js";
 import { savePurchaseBill } from "./purchaseBillsStorage.js";
+import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 
 const LEGACY_ITEMS_MIGRATED_KEY = "ledgerly:inventoryItems.legacyDatabaseMigration.v1";
 
@@ -55,7 +56,7 @@ export async function loadBusinessParties() {
 
 // Loads business summary.
 export async function loadBusinessSummary() {
-  return businessDataApi.summary();
+  return loadLocalDashboardSummary();
 }
 
 // Saves business party.

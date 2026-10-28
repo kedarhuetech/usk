@@ -2,10 +2,12 @@ import { initialChequeStatus, validateCheque, validateChequeStatusChange } from 
 
 export const CHEQUE_STORAGE_KEY = "usv.cheques.v1";
 
-function storageKey() {
+export function getChequeStorageKey() {
   const companyId = String(import.meta.env?.VITE_BUSINESS_ID || "").trim();
   return companyId ? `${CHEQUE_STORAGE_KEY}:${encodeURIComponent(companyId)}` : CHEQUE_STORAGE_KEY;
 }
+
+const storageKey = getChequeStorageKey;
 
 function localStorageRef() {
   if (typeof window === "undefined" || !window.localStorage) throw new Error("Browser local storage is unavailable.");

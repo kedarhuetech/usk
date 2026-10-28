@@ -1,4 +1,5 @@
 import { applySaleInvoiceStockUpdate } from "./itemsStorage.js";
+import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
 const SALE_INVOICES_KEY = "ledgerly:saleInvoices.v1";
 
@@ -76,6 +77,7 @@ export function saveSaleInvoice(invoice) {
 
   const nextInvoices = [normalized, ...existing.filter((current) => current.id !== normalized.id)];
   writeInvoices(nextInvoices);
+  notifyBusinessDataChanged();
   return normalized;
 }
 
@@ -83,6 +85,7 @@ export function saveSaleInvoice(invoice) {
 export function deleteSaleInvoice(invoiceId) {
   if (!canUseStorage()) return;
   writeInvoices(readInvoices().filter((invoice) => invoice.id !== invoiceId && invoice.invoiceId !== invoiceId));
+  notifyBusinessDataChanged();
 }
 
 export const saleInvoicesStorageKey = SALE_INVOICES_KEY;
