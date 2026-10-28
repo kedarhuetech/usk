@@ -1,4 +1,4 @@
-// Tests read-only data verification rules and backend failures.
+// Tests read-only data verification rules and local storage failures.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runDataVerification, verifyBusinessData } from "./dataVerification.js";
@@ -58,18 +58,30 @@ test("reports a transaction line with a missing quantity and incomplete saved to
   assert.ok(result.incompleteChecks.some((entry) => entry.includes("no saved rows or final total")));
 });
 
-test("reports API failure as incomplete and does not claim records were checked", async () => {
-  const result = await runDataVerification({ list: async () => { throw new Error("HTTP 502"); } });
+test("reports local storage failure as incomplete and does not claim records were checked", async () => {
+  const repository = {
+    getItems: async () => [],
+    getParties: async () => [],
+    getSales: async () => { throw new Error("Storage unavailable"); },
+    getPurchases: async () => [],
+  };
+  const result = await runDataVerification(repository);
   assert.equal(result.failed, true);
   assert.equal(result.recordsChecked, 0);
   assert.equal(result.issues.length, 0);
-  assert.match(result.incompleteChecks[0], /HTTP 502/);
+  assert.match(result.incompleteChecks[0], /Storage unavailable/);
 });
 
-test("reads all supported records using only list operations", async () => {
+test("reads all four datasets through the repository without writing records", async () => {
   const requested = [];
-  const api = { list: async (resource) => { requested.push(resource); return []; }, save: () => assert.fail("Verification must not save records") };
-  const result = await runDataVerification(api);
-  assert.deepEqual(requested.sort(), ["items", "parties", "purchase-bills", "sales-invoices"]);
+  const repository = Object.fromEntries(["getItems", "getParties", "getSales", "getPurchases"].map((method) => [method, async () => { requested.push(method); return []; }]));
+  const result = await runDataVerification(repository);
+  assert.deepEqual(requested.sort(), ["getItems", "getParties", "getPurchases", "getSales"]);
   assert.equal(result.recordsChecked, 0);
+});
+
+test("default verification reads browser-local services and no longer requires an API", async () => {
+  const result = await runDataVerification();
+  assert.equal(result.failed, undefined);
+  assert.ok(result.completedChecks[0].includes("this browser's local storage"));
 });

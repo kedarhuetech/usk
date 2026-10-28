@@ -1,4 +1,4 @@
-# Vyapaar — Local Storage Testing
+# USV — Local Storage Testing
 
 This project is being tested with browser-local Items and Parties. Start the frontend with `npm run dev` from the project root and use the same browser and local app address each time; `localStorage` is scoped to that browser origin.
 
@@ -34,7 +34,11 @@ To try the sample item import:
 
 The sample contains seven dummy records with item codes, categories, units, sale and purchase prices, quantities, HSN/SAC, tax, discount, and descriptions. To move Items or Parties to a database later, replace persistence inside their storage services while keeping the existing CRUD callers.
 
-Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most other Utilities workflows are coming soon and have no implemented records to save yet.
+Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Other reports and some Utilities workflows are still placeholders.
+
+### Verify My Data
+
+**Utilities → Verify My Data** reads Items, Parties, Sales, and Purchases from the existing browser-local storage services through `src/services/dataVerificationRepository.js`. It does not call the database. Database-only sales or purchases that have not been copied into this browser are not included. To switch later, replace the repository methods with the existing company-scoped API reads; verification rules and the page can remain unchanged.
 
 ### Bank Accounts
 
@@ -47,10 +51,6 @@ Dashboard receivable and payable cards use saved transaction balances; its chart
 ### Cheques
 
 **Cash & Bank → Cheques** is a tracking register stored in LocalStorage by `src/services/chequesRepository.js`, using the versioned `usv.cheques.v1` key (company-scoped when `VITE_BUSINESS_ID` is configured). Cheque metadata edits preserve the status history; status changes are manually recorded and cancellation retains the record. This browser-only register does not post to cash, bank accounts, sales, or purchases and does not verify bank clearance. To migrate it later, replace the repository methods with calls to the existing company-scoped API while keeping the current page and validation rules.
-
-### Loan Accounts
-
-**Cash & Bank → Loan Accounts** stores loan records and their repayment history in browser LocalStorage through `src/services/loanAccountsRepository.js`, using `usv.loanAccounts.v1` (company-scoped when `VITE_BUSINESS_ID` is configured). EMI is calculated using the reducing-balance formula, with optional agreed EMI override. Outstanding principal is estimated from recorded principal portions only; interest accrual is not modeled or lender-verified. The displayed next EMI date advances one monthly installment per repayment entry. Loan repayments remain in the loan register and do not post to cash or bank accounts. For a database migration, replace the repository implementation with existing company-scoped API calls; the page and calculations stay separate from storage. Local records are browser- and origin-specific.
 
 ### Loan Accounts
 

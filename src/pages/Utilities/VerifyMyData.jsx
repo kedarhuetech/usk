@@ -24,8 +24,8 @@ function VerifyMyData() {
         <p className="text-sm font-semibold text-blue-700">Utilities</p>
         <h1 className="mt-1 text-2xl font-bold text-slate-900">Verify My Data</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600">
-          Check supported USV records for saved transaction total mismatches and broken item or party ID references.
-          Verification reads your company data and never changes it.
+          Check locally saved USV records for transaction total mismatches and broken item or party ID references.
+          Verification reads browser storage and never changes it.
         </p>
       </div>
 
@@ -34,8 +34,8 @@ function VerifyMyData() {
           <div className="flex gap-3">
             <FiShield className="mt-1 h-5 w-5 shrink-0 text-blue-600" />
             <div>
-              <h2 className="font-semibold text-slate-900">Read-only verification</h2>
-              <p className="mt-1 text-sm text-slate-600">USV will read items, parties, sales, and purchases through its existing company-scoped API.</p>
+              <h2 className="font-semibold text-slate-900">Read-only local verification</h2>
+              <p className="mt-1 text-sm text-slate-600">USV checks items, parties, sales, and purchases saved in this browser. The check does not contact the database.</p>
             </div>
           </div>
           <Button onClick={startVerification} disabled={checking} className="bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60">
@@ -47,7 +47,7 @@ function VerifyMyData() {
 
       {!result && (
         <Card className="p-5 text-sm text-slate-600">
-          Stock movement reconciliation and party balance reconciliation are not available because USV does not currently store the complete movement, payment, and transaction-to-party history required for those checks.
+          Stock movement reconciliation and party balance reconciliation are not available because USV does not currently store the complete movement, payment, and transaction-to-party history required for those checks. Sales and purchases saved only in the database and not copied to this browser are not included.
         </Card>
       )}
 
@@ -59,7 +59,7 @@ function VerifyMyData() {
             <SummaryCard label="Checks incomplete" value={result.incompleteChecks.length} />
           </div>
 
-          {result.failed && <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No records were reported as checked because the backend request failed.</Card>}
+          {result.failed && <Card className="border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">No records were reported as checked because browser-local storage could not be read.</Card>}
 
           <Card className="p-5">
             <h2 className="font-semibold text-slate-900">Issues</h2>

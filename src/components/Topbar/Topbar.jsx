@@ -1,20 +1,23 @@
 // Renders the topbar interface component.
 import { FiBell, FiHelpCircle, FiRefreshCw, FiSearch, FiUser } from "react-icons/fi";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   companyProfileUpdatedEvent,
   getCompanyProfile,
 } from "../../services/companyProfileStorage";
 
-const navItems = ["Company", "Help", "Versions", "Shortcuts"];
+const navItems = ["Company", "Help"];
 const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purchase-bills/new"];
 
 // Renders the topbar interface.
-export default function Topbar() {
+export default function Topbar({ onRefresh }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
+  const [comingSoon, setComingSoon] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshTimer = useRef(null);
   // Opens transaction.
   const openTransaction = (path) => {
     const state = transactionRoutes.includes(pathname) ? undefined : { from: pathname };
@@ -32,16 +35,28 @@ export default function Topbar() {
     };
   }, []);
 
+  useEffect(() => () => window.clearTimeout(refreshTimer.current), []);
+
+  const refreshCurrentPage = () => {
+    onRefresh?.();
+    setRefreshing(true);
+    window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(() => setRefreshing(false), 700);
+  };
+
   return (
     <header className="shrink-0 border-b border-slate-200 bg-white">
       <div className="flex h-9 items-center justify-between border-b border-slate-100 px-4 text-[13px]">
-        <div className="flex items-center gap-4 text-slate-700">
+        <div className="relative flex items-center gap-4 text-slate-700">
           {navItems.map((item) => (
-            <button key={item} type="button" className="hover:text-[#1A1F71]">
+            <button key={item} type="button" onClick={() => setComingSoon(item)} className="hover:text-[#1A1F71]">
               {item}
             </button>
           ))}
-          <FiRefreshCw className="h-4 w-4 text-slate-500" />
+          <button type="button" onClick={refreshCurrentPage} aria-label="Refresh current page data" title="Refresh current page data" className="flex items-center justify-center border-0 bg-transparent p-0">
+            <FiRefreshCw className={`h-4 w-4 text-slate-500 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+          {comingSoon && <div role="status" aria-live="polite" className="absolute left-0 top-full z-20 mt-1 flex items-center gap-3 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg">{comingSoon} is coming soon.<button type="button" onClick={() => setComingSoon("")} aria-label="Dismiss notice" className="font-bold text-slate-500 hover:text-slate-900">×</button></div>}
         </div>
         <div className="hidden items-center gap-2.5 text-xs text-slate-600 xl:flex">
           <span>Customer Support</span>

@@ -1,8 +1,6 @@
-// Checks company records through read-only business data APIs.
-import { businessDataApi } from "./apiClient.js";
+// Checks saved local records without writing or contacting the backend.
 import { calculateInvoiceTotals } from "../utils/saleInvoice.js";
-import { getInventoryItems } from "./itemsStorage.js";
-import { getParties } from "./partiesStorage.js";
+import { dataVerificationRepository } from "./dataVerificationRepository.js";
 
 const unavailableChecks = [
   "Stock quantities cannot be reconciled because USV does not expose a complete stock movement history.",
@@ -130,7 +128,7 @@ export function verifyBusinessData(data) {
     recordsChecked: items.length + parties.length + sales.length + purchases.length,
     issues,
     completedChecks: [
-      `Loaded ${items.length} items, ${parties.length} parties, ${sales.length} sales, and ${purchases.length} purchases from the current company.`,
+      `Loaded ${items.length} items, ${parties.length} parties, ${sales.length} sales, and ${purchases.length} purchases from this browser's local storage.`,
       "Recalculated saved transaction totals and checked explicit item and party ID references.",
     ],
     incompleteChecks: [...new Set(incompleteChecks)],
@@ -138,21 +136,19 @@ export function verifyBusinessData(data) {
   };
 }
 
-// Reads every supported record type; a failed request leaves verification incomplete.
-export async function runDataVerification(api = businessDataApi) {
+// Reads each dataset through the storage adapter; failures leave verification incomplete.
+export async function runDataVerification(repository = dataVerificationRepository) {
   try {
-    const [salesInvoices, purchaseBills] = await Promise.all([
-      api.list("sales-invoices"), api.list("purchase-bills"),
+    const [items, parties, salesInvoices, purchaseBills] = await Promise.all([
+      repository.getItems(), repository.getParties(), repository.getSales(), repository.getPurchases(),
     ]);
-    const items = getInventoryItems();
-    const parties = getParties();
     return verifyBusinessData({ items, parties, salesInvoices, purchaseBills });
   } catch (error) {
     return {
       recordsChecked: 0,
       issues: [],
       completedChecks: [],
-      incompleteChecks: [`Could not read all records from the existing USV backend: ${error.message || "request failed"}`],
+      incompleteChecks: [`Could not read all records from this browser's local storage: ${error.message || "storage request failed"}`],
       checkedAt: new Date().toISOString(),
       failed: true,
     };
