@@ -47,6 +47,7 @@ import {
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
 import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
+import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 
 const termsAppliesTo = [
@@ -1122,18 +1123,20 @@ function UploadAttentionModal({ onClose }) {
 }
 
 // Renders the add sale interface.
-function AddSale({ mode = "sale" }) {
+function AddSale({ mode = "sale", localOnly = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const config = transactionConfigs[mode] || transactionConfigs.sale;
   const isPurchase = config.type === "purchase";
+  const purchaseOrderConversion = isPurchase ? location.state?.purchaseOrderConversion || null : null;
   const quotationConversion = !isPurchase ? location.state?.quotationConversion || location.state?.proformaConversion || null : null;
   const saleOrderConversions = !isPurchase ? location.state?.saleOrdersConversion || [] : [];
   const saleOrderConversion = saleOrderConversions[0] || null;
   const deliveryChallanConversions = !isPurchase ? location.state?.deliveryChallansConversion || [] : [];
   const deliveryChallanConversion = deliveryChallanConversions[0] || null;
   const conversionStorageKey = location.state?.proformaConversion ? "ledgerly:proformaInvoices.v1" : "ledgerly:estimateQuotations.v1";
-  const editInvoice = !isPurchase ? location.state?.editInvoice || null : null;
+  const editInvoice = isPurchase ? location.state?.editPurchase || null : location.state?.editInvoice || null;
+  const localOnlyPurchase = isPurchase && (localOnly || location.state?.localOnlyPurchase);
   const onlineOrderConversion = !isPurchase ? location.state?.onlineOrderConversion : null;
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
   const [tabs, setTabs] = useState([{ id: `${config.type}-1`, label: `${config.tabPrefix} #1` }]);
@@ -1141,6 +1144,20 @@ function AddSale({ mode = "sale" }) {
   const [saleType, setSaleType] = useState(editInvoice?.saleType || "credit");
   const [rows, setRows] = useState(() => {
     if (editInvoice?.rows?.length) return editInvoice.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
+    if (purchaseOrderConversion?.rows?.length) return purchaseOrderConversion.rows.map((row) => ({
+      ...createRow(),
+      item: row.item || "",
+      description: row.description || "",
+      qty: String(row.qty ?? ""),
+      unit: row.unit || "",
+      price: String(row.price ?? ""),
+      priceMode: "Without Tax",
+      discountMode: row.discountType === "amount" ? "amount" : "percent",
+      discountPercent: row.discountType === "amount" ? "" : String(row.discount ?? ""),
+      discountAmount: row.discountType === "amount" ? String(row.discount ?? "") : "",
+      taxRate: row.tax && row.tax !== "NONE" ? String(row.tax) : "NONE",
+      sourceItemId: row.itemId || "",
+    }));
     if (quotationConversion?.rows?.length) return quotationConversion.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
     if (saleOrderConversions.some((order) => order.rows?.length)) return saleOrderConversions.flatMap((order) => (order.rows || []).map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" })));
     if (deliveryChallanConversions.some((challan) => challan.rows?.length)) return deliveryChallanConversions.flatMap((challan) => (challan.rows || []).map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" })));
@@ -1170,19 +1187,19 @@ function AddSale({ mode = "sale" }) {
   const shareRef = useRef(null);
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
   const [form, setForm] = useState(() => ({
-    customer: quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || "",
-    phone: quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
+    customer: purchaseOrderConversion?.supplier || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || "",
+    phone: purchaseOrderConversion?.phone || quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
     billingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
     shippingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
     invoiceNumber: quotationConversion?.number || deliveryChallanConversion?.number || "1",
-    invoiceDate: quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
-    stateOfSupply: quotationConversion?.state || deliveryChallanConversion?.state || "None",
+    invoiceDate: purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
+    stateOfSupply: purchaseOrderConversion?.state || quotationConversion?.state || deliveryChallanConversion?.state || "None",
     partyBalance: "",
     showTerms: false,
     termsTitle: "",
     terms: "",
-    showDescription: Boolean(onlineOrderConversion || quotationConversion?.description || saleOrderConversion || deliveryChallanConversion),
-    description: quotationConversion?.description || (saleOrderConversion
+    showDescription: Boolean(purchaseOrderConversion || onlineOrderConversion || quotationConversion?.description || saleOrderConversion || deliveryChallanConversion),
+    description: purchaseOrderConversion ? `Converted from Purchase Order ${purchaseOrderConversion.number}.` : quotationConversion?.description || (saleOrderConversion
       ? `Converted from Sale Order${saleOrderConversions.length > 1 ? "s" : ""} ${saleOrderConversions.map((order) => order.number).join(", ")}.`
       : deliveryChallanConversions.length
       ? `Converted from Delivery Challan${deliveryChallanConversions.length > 1 ? "s" : ""} ${deliveryChallanConversions.map((challan) => challan.number).join(", ")}.`
@@ -1192,13 +1209,19 @@ function AddSale({ mode = "sale" }) {
     terms: quotationConversion?.terms || "",
     paymentType: "Cash",
     ...(editInvoice?.form || {}),
-    invoiceDate: editInvoice?.form?.invoiceDate || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
+    invoiceDate: editInvoice?.form?.invoiceDate || purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
   }));
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
 
   useEffect(() => {
     let active = true;
+    if (localOnlyPurchase) {
+      setItems(getInventoryItems().map(saleItemFromInventory));
+      setParties(getParties().map(partyOption).filter((party) => party.name));
+      if (!editInvoice) setForm((current) => ({ ...current, invoiceNumber: String(getPurchaseBills().length + 1) }));
+      return () => { active = false; };
+    }
     if (quotationConversion || saleOrderConversions.length || deliveryChallanConversions.length) {
       setItems(getInventoryItems().map(saleItemFromInventory));
       return () => { active = false; };
@@ -1234,7 +1257,7 @@ function AddSale({ mode = "sale" }) {
           if (active) setToast(error.message || "Could not load invoice numbers from MySQL.");
         });
     return () => { active = false; };
-  }, [isPurchase, editInvoice?.id, quotationConversion, deliveryChallanConversions.length]);
+  }, [isPurchase, localOnlyPurchase, editInvoice?.id, quotationConversion, deliveryChallanConversions.length]);
 
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
@@ -1336,6 +1359,27 @@ function AddSale({ mode = "sale" }) {
       return;
     }
     const invoice = buildInvoice();
+    if (isPurchase && editInvoice && localOnlyPurchase) {
+      const saved = savePurchaseBillLocally({ ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt });
+      sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
+      setToast("Purchase bill updated in this browser.");
+      navigate(returnPath);
+      return;
+    }
+    if (isPurchase && localOnlyPurchase) {
+      const saved = savePurchaseBillLocally(invoice);
+      if (purchaseOrderConversion?.id) {
+        const orderKey = "ledgerly:purchaseOrders.v1";
+        const sourceOrders = JSON.parse(window.localStorage.getItem(orderKey) || "[]");
+        window.localStorage.setItem(orderKey, JSON.stringify(sourceOrders.map((order) => order.id === purchaseOrderConversion.id
+          ? { ...order, status: "Converted to Purchase", convertedAt: new Date().toISOString(), convertedPurchaseId: saved.id, history: [...(order.history || []), { action: "Converted to Purchase", at: new Date().toISOString(), purchaseBillId: saved.id }] }
+          : order)));
+      }
+      sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
+      setToast(purchaseOrderConversion ? "Purchase bill created from the purchase order." : "Purchase bill saved in this browser.");
+      navigate(returnPath);
+      return;
+    }
     if (quotationConversion) {
       try {
         const savedInvoice = saveSaleInvoiceLocally({ ...invoice, quotationId: quotationConversion.id, proformaId: location.state?.proformaConversion?.id || "" });
@@ -1426,7 +1470,7 @@ function AddSale({ mode = "sale" }) {
       if (!validate()) return;
       let invoice;
       try {
-        invoice = await saveBusinessPurchaseBill(buildInvoice());
+        invoice = localOnlyPurchase ? savePurchaseBillLocally(buildInvoice()) : await saveBusinessPurchaseBill(buildInvoice());
       } catch (error) {
         setToast(error.message || "Could not save purchase bill to MySQL.");
         return;
@@ -1458,7 +1502,10 @@ function AddSale({ mode = "sale" }) {
       if (!validate()) return;
       try {
         const invoice = buildInvoice();
-        if (isPurchase) await saveBusinessPurchaseBill(invoice);
+        if (isPurchase) {
+          if (localOnlyPurchase) savePurchaseBillLocally(invoice);
+          else await saveBusinessPurchaseBill(invoice);
+        }
         else await saveBusinessSaleInvoice(invoice);
         resetSale();
       } catch (error) {
@@ -1481,7 +1528,7 @@ function AddSale({ mode = "sale" }) {
 
   // Saves item from modal.
   const saveItemFromModal = async (itemForm) => {
-    if (quotationConversion) {
+    if (quotationConversion || localOnlyPurchase) {
       const savedInventoryItem = saveInventoryItem(itemForm);
       const newItem = saleItemFromInventory(savedInventoryItem);
       setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
