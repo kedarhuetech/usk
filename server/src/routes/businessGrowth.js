@@ -1,3 +1,4 @@
+/* global Buffer */
 // Defines backend API routes for business growth.
 import { Router } from "express";
 import multer from "multer";
@@ -16,10 +17,18 @@ const resources = new Set([
   "parties",
   "sales-invoices",
   "purchase-bills",
+  "bank-accounts",
+  "bank-transactions",
 ]);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 }, fileFilter: (_req, file, done) => done(null, ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype)) });
 // This helper handles result logic.
 const fail = (res, error) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Business Growth request failed." });
+const validIsoDate = (value) => {
+  const date = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+};
 
 // Escapes path part.
 function escapePathPart(value) { return String(value).replace(/~/g, "~0").replace(/\//g, "~1"); }
@@ -325,15 +334,98 @@ router.get("/:resource", async (req, res) => {
 // Saves record.
 async function saveRecord(req, res) {
   const connection = await pool.getConnection();
+  let transactionStarted = false;
   try {
     if (!resources.has(req.params.resource)) return res.status(404).json({ success: false, message: "Resource not found." });
     const id = String(req.params.id || req.body?.id || crypto.randomUUID()).slice(0, 64);
     const now = new Date().toISOString();
     const payload = { ...req.body, id, createdAt: req.body?.createdAt || now, updatedAt: now };
+    if (req.params.resource === "bank-accounts") {
+      payload.accountName = String(payload.accountName || "").trim();
+      payload.bankName = String(payload.bankName || "").trim();
+      payload.accountHolderName = String(payload.accountHolderName || "").trim();
+      payload.accountNumber = String(payload.accountNumber || "").replace(/\s/g, "");
+      payload.ifsc = String(payload.ifsc || "").trim().toUpperCase();
+      payload.branch = String(payload.branch || "").trim();
+      payload.notes = String(payload.notes || "").trim();
+      const openingBalance = Number(payload.openingBalance);
+      if (!payload.accountName || !payload.bankName) throw Object.assign(new Error("Account name and bank name are required."), { status: 400 });
+      if (payload.accountName.length > 120 || payload.bankName.length > 120 || payload.accountHolderName.length > 120 || payload.branch.length > 120 || payload.notes.length > 1000) throw Object.assign(new Error("One or more bank account fields exceed the allowed length."), { status: 400 });
+      if (!/^\d{6,20}$/.test(payload.accountNumber)) throw Object.assign(new Error("Account number must contain 6 to 20 digits."), { status: 400 });
+      if (payload.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(payload.ifsc)) throw Object.assign(new Error("IFSC code must use the valid 11-character format."), { status: 400 });
+      if (!Number.isFinite(openingBalance) || openingBalance < 0) throw Object.assign(new Error("Opening balance must be zero or greater."), { status: 400 });
+      if (!validIsoDate(payload.openingBalanceDate)) throw Object.assign(new Error("A valid opening balance date is required."), { status: 400 });
+      if (!["active", "inactive"].includes(payload.status)) throw Object.assign(new Error("Account status must be active or inactive."), { status: 400 });
+
+      await connection.beginTransaction();
+      transactionStarted = true;
+      await connection.execute("SELECT id FROM businesses WHERE id=? FOR UPDATE", [req.businessId]);
+      const [duplicates] = await connection.execute(
+        `SELECT record_id FROM business_growth_record_fields
+         WHERE business_id=? AND resource='bank-accounts' AND field_path='/accountNumber' AND value_text=? AND record_id<>? LIMIT 1`,
+        [req.businessId, payload.accountNumber, id],
+      );
+      if (duplicates.length) throw Object.assign(new Error("A bank account with this account number already exists."), { status: 409 });
+
+      const [existingOpening] = await connection.execute(
+        `SELECT field_path, value_text, value_number FROM business_growth_record_fields
+         WHERE business_id=? AND resource='bank-accounts' AND record_id=? AND field_path IN ('/openingBalance','/openingBalanceDate')`,
+        [req.businessId, id],
+      );
+      if (existingOpening.length) {
+        for (const field of existingOpening) {
+          if (field.field_path === "/openingBalance") payload.openingBalance = Number(field.value_number ?? field.value_text ?? 0);
+          if (field.field_path === "/openingBalanceDate") payload.openingBalanceDate = field.value_text || payload.openingBalanceDate;
+        }
+      }
+    }
+    if (req.params.resource === "bank-transactions") {
+      if (req.method === "PUT") throw Object.assign(new Error("Bank transactions are immutable. Record a separate correcting transaction instead."), { status: 409 });
+      const amount = Number(payload.amount);
+      if (!String(payload.accountId || "").trim()) throw Object.assign(new Error("Bank account is required."), { status: 400 });
+      if (!["money-in", "money-out"].includes(payload.type)) throw Object.assign(new Error("Transaction type must be money-in or money-out."), { status: 400 });
+      if (!Number.isFinite(amount) || amount <= 0) throw Object.assign(new Error("Transaction amount must be greater than zero."), { status: 400 });
+      if (!validIsoDate(payload.date)) throw Object.assign(new Error("A valid transaction date is required."), { status: 400 });
+      payload.description = String(payload.description || "").trim();
+      if (!payload.description) throw Object.assign(new Error("Transaction description is required."), { status: 400 });
+      payload.reference = String(payload.reference || "").trim();
+      payload.relatedParty = String(payload.relatedParty || "").trim();
+      if (payload.description.length > 240 || payload.reference.length > 120 || payload.relatedParty.length > 120) throw Object.assign(new Error("One or more bank transaction fields exceed the allowed length."), { status: 400 });
+      await connection.beginTransaction();
+      transactionStarted = true;
+      await connection.execute("SELECT id FROM businesses WHERE id=? FOR UPDATE", [req.businessId]);
+      const [accountRows] = await connection.execute(
+        `SELECT r.record_id, MAX(IF(f.field_path='/status', f.value_text, NULL)) AS account_status
+         FROM business_growth_records r
+         LEFT JOIN business_growth_record_fields f ON f.business_id=r.business_id AND f.resource=r.resource AND f.record_id=r.record_id
+         WHERE r.business_id=? AND r.resource='bank-accounts' AND r.record_id=? GROUP BY r.record_id`,
+        [req.businessId, payload.accountId],
+      );
+      if (!accountRows.length) throw Object.assign(new Error("The selected bank account was not found for this company."), { status: 404 });
+      if (accountRows[0].account_status === "inactive") throw Object.assign(new Error("Reactivate this bank account before recording a transaction."), { status: 409 });
+
+      const [duplicateTransaction] = await connection.execute(
+        "SELECT record_id FROM business_growth_records WHERE business_id=? AND resource='bank-transactions' AND record_id=? LIMIT 1",
+        [req.businessId, id],
+      );
+      if (duplicateTransaction.length) {
+        const [fields] = await connection.execute(
+          "SELECT record_id, created_at, updated_at FROM business_growth_records WHERE business_id=? AND resource='bank-transactions' AND record_id=?",
+          [req.businessId, id],
+        );
+        const [existingRecord] = await attachRecordFields(req.businessId, "bank-transactions", fields);
+        await connection.commit();
+        transactionStarted = false;
+        return res.json({ success: true, data: existingRecord });
+      }
+    }
     if (req.params.resource === "orders" && !String(payload.storeId || "").trim()) {
       throw Object.assign(new Error("Order storeId is required."), { status: 400 });
     }
-    await connection.beginTransaction();
+    if (!transactionStarted) {
+      await connection.beginTransaction();
+      transactionStarted = true;
+    }
     await connection.execute("INSERT INTO business_growth_records (business_id, resource, record_id) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP", [req.businessId, req.params.resource, id]);
     await connection.execute("DELETE FROM business_growth_record_fields WHERE business_id=? AND resource=? AND record_id=?", [req.businessId, req.params.resource, id]);
     await insertRecordFields(connection, req.businessId, req.params.resource, id, payload);
@@ -347,8 +439,12 @@ async function saveRecord(req, res) {
       }
     }
     await connection.commit();
+    transactionStarted = false;
     res.status(201).json({ success: true, data: payload });
-  } catch (error) { await connection.rollback(); fail(res, error); }
+  } catch (error) {
+    if (transactionStarted) await connection.rollback();
+    fail(res, error);
+  }
   finally { connection.release(); }
 }
 router.post("/:resource", saveRecord);
@@ -357,6 +453,9 @@ router.delete("/:resource/:id", async (req, res) => {
   const connection = await pool.getConnection();
   try {
     if (!resources.has(req.params.resource)) return res.status(404).json({ success: false, message: "Resource not found." });
+    if (["bank-accounts", "bank-transactions"].includes(req.params.resource)) {
+      return res.status(409).json({ success: false, message: "Bank history and cash adjustments are retained and cannot be deleted." });
+    }
     await connection.beginTransaction();
     const [result] = await connection.execute("DELETE FROM business_growth_records WHERE business_id = ? AND resource = ? AND record_id = ?", [req.businessId, req.params.resource, req.params.id]);
     if (!result.affectedRows) {

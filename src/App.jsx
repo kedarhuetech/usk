@@ -19,6 +19,10 @@ import VyaparNetwork from "./pages/Parties/VyaparNetwork";
 import PartyDetails from "./pages/Parties/PartyDetails";
 import WhatsAppConnect from "./pages/Parties/WhatsAppConnect";
 import AddPurchase from "./pages/Purchase/AddPurchase";
+import BankAccounts from "./pages/CashBank/BankAccounts";
+import CashInHand from "./pages/CashBank/CashInHand";
+import Cheques from "./pages/CashBank/Cheques";
+import LoanAccounts from "./pages/CashBank/LoanAccounts";
 import AddSale from "./pages/Sales/AddSale";
 import SalePreview from "./pages/Sales/SalePreview";
 import SaleInvoices from "./pages/Sales/SaleInvoices";
@@ -52,6 +56,10 @@ function App() {
         <Route path="/" element={<AppPasscodeGuard><MainLayout /></AppPasscodeGuard>}>
           <Route index element={<Home />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="cash-bank/bank-accounts" element={<BankAccounts />} />
+          <Route path="cash-bank/cash-in-hand" element={<CashInHand />} />
+          <Route path="cash-bank/cheques" element={<Cheques />} />
+          <Route path="cash-bank/loan-accounts" element={<LoanAccounts />} />
           <Route path="items" element={<ItemsDashboard />} />
           <Route path="parties/party-details" element={<PartyDetails />} />
           <Route

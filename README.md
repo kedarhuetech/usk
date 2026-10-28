@@ -1,4 +1,6 @@
-# Vyapaar
+# Vyapaar — Local Storage Testing
+
+This project is being tested with browser-local Items and Parties. Start the frontend with `npm run dev` from the project root and use the same browser and local app address each time; `localStorage` is scoped to that browser origin.
 
 ## MySQL setup
 
@@ -11,9 +13,48 @@
 7. Set `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and an appropriate `DB_CONNECTION_LIMIT` in `server/.env`. Never commit credentials. Total possible connections equal `DB_CONNECTION_LIMIT × number of API instances`, so size it against MySQL's connection capacity.
 8. Demo and local runs use `demo-business` automatically when `VITE_BUSINESS_ID` is not set. All unauthenticated demo data is stored under that shared identifier. Before production, set a tenant-specific `VITE_BUSINESS_ID` and add authentication and authorization; do not use the shared demo identifier for unrelated tenants.
 
-### Current database coverage
+### Current storage and test workflow
 
-MySQL persists Sale Invoices, Purchase Bills, and the active Business Growth records and poster catalog. Inventory Items and Parties currently use browser localStorage through `src/services/itemsStorage.js` and `src/services/partiesStorage.js`. On first load after the local-only switch, any legacy MySQL items are copied into localStorage once to preserve existing records; subsequent item CRUD uses local storage. The Utilities item and party import, bulk update, export, and Tally master import tools use those same shared local records, so imported or edited entries appear in the regular Items and Parties screens. To move them to a database later, replace persistence in their two storage services and keep the existing normalization and CRUD callers. Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most Utilities workflows are coming soon and have no implemented records to save yet.
+| Data | Current storage behavior |
+| --- | --- |
+| Items | Browser `localStorage` via `src/services/itemsStorage.js`. The first Items load can copy legacy MySQL items into local storage once; normal create, read, update, delete, import, and stock changes use the local item service. |
+| Parties | Browser `localStorage` via `src/services/partiesStorage.js`. Party imports use this same store. |
+| Sales | Saved invoices are kept in browser storage and also use the existing database save flow. |
+| Purchases | The database save flow remains active. Successful loads and saves mirror purchase bills to browser storage for local Tally export. |
+| Export to Tally | Reads the browser-local sales and purchase records; it does not query the database. A database-only purchase that has not been mirrored locally will not appear. |
+
+The Utilities item and party import, bulk update, export, and Tally master import features share the same local Items and Parties used by the regular app screens. Their data survives a page refresh in the same browser and origin. Clearing that browser's site data, changing browsers, or changing the app origin uses a different local store.
+
+To try the sample item import:
+
+1. Open **Utilities → Import Items**.
+2. Choose `sample-items-import.xlsx` from the project root.
+3. Review the rows and confirm the import.
+4. Open **Items** and check the Products and Services tabs. Imported entries should remain after refreshing.
+
+The sample contains seven dummy records with item codes, categories, units, sale and purchase prices, quantities, HSN/SAC, tax, discount, and descriptions. To move Items or Parties to a database later, replace persistence inside their storage services while keeping the existing CRUD callers.
+
+Dashboard receivable and payable cards use saved transaction balances; its charts and report links remain placeholders. Cash & Bank, Reports, and most other Utilities workflows are coming soon and have no implemented records to save yet.
+
+### Bank Accounts
+
+**Cash & Bank → Bank Accounts** uses the existing company-scoped Business Growth API and typed-record tables. It stores bank account details under `bank-accounts` and append-only money-in/money-out entries under `bank-transactions`; no new database table or connection is required. The displayed book balance is calculated as opening balance plus saved money-in transactions minus saved money-out transactions. Account numbers are masked in the interface, and accounts are deactivated rather than deleted so their transaction history remains intact. Set up the backend and MySQL as described above to use this feature; persistence cannot be verified while the API or database is unavailable.
+
+### Cash in Hand
+
+**Cash & Bank → Cash in Hand** currently reads saved sales and purchase bills from the browser-local storage services and stores count adjustments under `ledgerly:cashAdjustments.v1`. Its service module contains the persistence boundary, so moving adjustments to the company-scoped API later can be done without changing the page or cash calculations. Cash sales and cash received on credit sales increase the balance; cash-paid purchases and count decreases lower it. Bank/non-cash transactions are excluded. Cash receipt, payment, and expense workflows are not yet available in this app.
+
+### Cheques
+
+**Cash & Bank → Cheques** is a tracking register stored in LocalStorage by `src/services/chequesRepository.js`, using the versioned `usv.cheques.v1` key (company-scoped when `VITE_BUSINESS_ID` is configured). Cheque metadata edits preserve the status history; status changes are manually recorded and cancellation retains the record. This browser-only register does not post to cash, bank accounts, sales, or purchases and does not verify bank clearance. To migrate it later, replace the repository methods with calls to the existing company-scoped API while keeping the current page and validation rules.
+
+### Loan Accounts
+
+**Cash & Bank → Loan Accounts** stores loan records and their repayment history in browser LocalStorage through `src/services/loanAccountsRepository.js`, using `usv.loanAccounts.v1` (company-scoped when `VITE_BUSINESS_ID` is configured). EMI is calculated using the reducing-balance formula, with optional agreed EMI override. Outstanding principal is estimated from recorded principal portions only; interest accrual is not modeled or lender-verified. The displayed next EMI date advances one monthly installment per repayment entry. Loan repayments remain in the loan register and do not post to cash or bank accounts. For a database migration, replace the repository implementation with existing company-scoped API calls; the page and calculations stay separate from storage. Local records are browser- and origin-specific.
+
+### Loan Accounts
+
+**Cash & Bank → Loan Accounts** stores loans and nested repayment history in browser LocalStorage through `src/services/loanAccountsRepository.js`, using the versioned `usv.loanAccounts.v1` key (company-scoped when `VITE_BUSINESS_ID` is configured). Replace that repository implementation with the existing company-scoped API later; the page and EMI/repayment rules are independent of storage. EMI uses the standard reducing-balance formula (or an optional agreed EMI override). Outstanding principal is an estimate: original principal minus recorded principal portions. The next EMI date advances one month per repayment record. Interest accrual and lender balances are not verified, and repayments do not post to Cash in Hand or Bank Accounts. Local records are limited to this browser and origin.
 
 ### WhatsApp Marketing poster catalog
 
