@@ -222,8 +222,21 @@ export function saveInventoryItem(itemForm) {
 }
 
 // Deletes an inventory item from the active storage adapter.
-export function deleteInventoryItem(itemId) {
-  const nextItems = readItems().filter((item) => item.id !== itemId);
+export function sameInventoryItemIdentity(left = {}, right = {}) {
+  const leftCode = String(left.itemCode || left.code || left.serviceCode || "").trim().toLowerCase();
+  const rightCode = String(right.itemCode || right.code || right.serviceCode || "").trim().toLowerCase();
+  if (leftCode || rightCode) return Boolean(leftCode && rightCode && leftCode === rightCode);
+  const leftName = normalizedName(left.itemName || left.name || left.serviceName);
+  const rightName = normalizedName(right.itemName || right.name || right.serviceName);
+  return Boolean(leftName && leftName === rightName
+    && normalizedName(left.unit || left.baseUnit) === normalizedName(right.unit || right.baseUnit)
+    && normalizedName(left.category) === normalizedName(right.category));
+}
+
+export function deleteInventoryItem(itemOrId) {
+  const target = typeof itemOrId === "object" ? itemOrId : null;
+  const itemId = target?.id || itemOrId;
+  const nextItems = readItems().filter((item) => item.id !== itemId && !(target && sameInventoryItemIdentity(item, target)));
   writeItems(nextItems);
   return nextItems;
 }
