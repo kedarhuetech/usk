@@ -19,6 +19,10 @@ import VyaparNetwork from "./pages/Parties/VyaparNetwork";
 import PartyDetails from "./pages/Parties/PartyDetails";
 import WhatsAppConnect from "./pages/Parties/WhatsAppConnect";
 import AddPurchase from "./pages/Purchase/AddPurchase";
+import PurchaseBills from "./pages/Purchase/PurchaseBills";
+import PaymentOut from "./pages/Purchase/PaymentOut";
+import Expenses from "./pages/Purchase/Expenses";
+import PurchaseOrders from "./pages/Purchase/PurchaseOrders";
 import BankAccounts from "./pages/CashBank/BankAccounts";
 import CashInHand from "./pages/CashBank/CashInHand";
 import Cheques from "./pages/CashBank/Cheques";
@@ -108,14 +112,14 @@ function App() {
           <Route path="sales/sale-return-credit-note" element={<SaleReturns />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
-          <Route
-            path="purchase-expense/purchase-bills"
-            element={<AddPurchase />}
-          />
+          <Route path="purchase-expense/purchase-bills" element={<PurchaseBills />} />
           <Route
             path="purchase-expense/purchase-bills/new"
-            element={<AddPurchase />}
+            element={<AddPurchase localOnly />}
           />
+          <Route path="purchase-expense/payment-out" element={<PaymentOut />} />
+          <Route path="purchase-expense/expenses" element={<Expenses />} />
+          <Route path="purchase-expense/purchase-order" element={<PurchaseOrders />} />
           <Route
             path="utilities/barcode-generator"
             element={<BarcodeGenerator />}
