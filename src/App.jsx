@@ -37,6 +37,7 @@ import PaymentIn from "./pages/Sales/PaymentIn";
 import SaleOrders from "./pages/Sales/SaleOrders";
 import DeliveryChallans from "./pages/Sales/DeliveryChallans";
 import SaleReturns from "./pages/Sales/SaleReturns";
+import POS from "./pages/Sales/POS";
 import BarcodeGenerator from "./pages/Utilities/BarcodeGenerator";
 import ImportItems from "./pages/Utilities/ImportItems";
 import ExportItems from "./pages/Utilities/ExportItems";
@@ -114,6 +115,7 @@ function App() {
           <Route path="sales/sale-return-credit-note" element={<SaleReturns />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
+          <Route path="sales/pos" element={<POS />} />
           <Route path="purchase-expense/purchase-bills" element={<PurchaseBills />} />
           <Route
             path="purchase-expense/purchase-bills/new"
