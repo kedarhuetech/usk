@@ -464,3 +464,4 @@ export default function SalePurchaseByPartyReport() {
     </div>
   );
 }
+

@@ -161,6 +161,8 @@ function App() {
           <Route path="reports/sale-purchase-by-party" element={<Reports defaultReport="Sale Purchase By Party" />} />
           <Route path="reports/sale-purchase-by-party-group" element={<Reports defaultReport="Sale Purchase By Party Group" />} />
           <Route path="reports/stock-summary" element={<Reports defaultReport="Stock summary" />} />
+          <Route path="reports/item-report-by-party" element={<Reports defaultReport="Item Report By Party" />} />
+          <Route path="reports/item-wise-profit-and-loss" element={<Reports defaultReport="Item Wise Profit And Loss" />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
         </Routes>
