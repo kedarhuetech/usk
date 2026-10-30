@@ -1,4 +1,7 @@
 const INVENTORY_ITEMS_KEY = "ledgerly:inventoryItems.v1";
+export const csvImportedItemsStorageKey = "ledgerly:itemsCsvImports.v1";
+export const itemUiOverridesStorageKey = "ledgerly:itemsUiOverrides.v1";
+export const itemTransactionActionsStorageKey = "ledgerly:itemsTransactionActions.v1";
 
 // This helper handles parse logic.
 function safeParse(value, fallback) {

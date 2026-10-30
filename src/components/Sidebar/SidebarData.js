@@ -217,11 +217,7 @@ export const sidebarNavigation = [
         label: "Sync & Share",
         path: "/sync-share-backup/sync-share",
       },
-      {
-        id: "auto-backup",
-        label: "Auto Backup",
-        path: "/sync-share-backup/auto-backup",
-      },
+    
       {
         id: "backup-to-computer",
         label: "Backup To Computer",

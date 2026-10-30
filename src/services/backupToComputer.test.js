@@ -6,8 +6,11 @@ import {
   collectBackupData,
   createBackupPayload,
   downloadBackupFile,
+  previewBackupPayload,
+  restoreBackupPayload,
   validateBackupPayload,
 } from "./backupToComputer.js";
+import { createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
 import { CASH_ADJUSTMENTS_STORAGE_KEY } from "./cashInHand.js";
 import { getChequeStorageKey } from "./chequesRepository.js";
 import { inventoryItemsStorageKey } from "./itemsStorage.js";
@@ -94,4 +97,54 @@ test("validates backup version and downloads a named USV file with the expected 
   assert.match(savedName, /^USV-backup-20261028T123045Z\.usvbackup$/);
   assert.equal(result.filename, savedName);
   assert.equal(JSON.parse(downloadedText).data[inventoryItemsStorageKey].length, 0);
+});
+
+test("previews and restores supported records through an injected repository", () => {
+  const payload = createBackupPayload(collectBackupData(storageWith({
+    [inventoryItemsStorageKey]: JSON.stringify([{ id: "item-1", itemName: "Book" }]),
+  }).storage), { now });
+  assert.deepEqual(previewBackupPayload(payload).entries.map(({ category, recordCount }) => ({ category, recordCount })), [{ category: "Items", recordCount: 1 }]);
+  let restored;
+  const summary = restoreBackupPayload(payload, { restore: (entries, data) => { restored = { entries, data }; } });
+  assert.equal(summary.restoredCount, 1);
+  assert.equal(restored.data[inventoryItemsStorageKey][0].itemName, "Book");
+});
+
+test("local repository replaces included stores and rolls back failed writes", () => {
+  const profileKey = "ledgerly:companyProfile.v1";
+  const values = new Map([
+    [profileKey, JSON.stringify({ companyName: "Original" })],
+    [inventoryItemsStorageKey, JSON.stringify([{ id: "old" }])],
+  ]);
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  };
+  const repository = createLocalStorageBackupRestoreRepository(storage);
+  const payload = createBackupPayload(collectBackupData(storageWith({
+    [profileKey]: JSON.stringify({ companyName: "Restored" }),
+    [inventoryItemsStorageKey]: JSON.stringify([{ id: "new" }]),
+  }).storage), { now });
+  restoreBackupPayload(payload, repository);
+  assert.deepEqual(JSON.parse(values.get(inventoryItemsStorageKey)), [{ id: "new" }]);
+  assert.deepEqual(JSON.parse(values.get(profileKey)), { companyName: "Restored" });
+
+  values.set(profileKey, JSON.stringify({ companyName: "Before failed restore" }));
+  values.set(inventoryItemsStorageKey, JSON.stringify([{ id: "before-failure" }]));
+  const originalSet = storage.setItem;
+  let writes = 0;
+  storage.setItem = (key, value) => {
+    writes += 1;
+    if (writes === 2) throw new Error("quota exceeded");
+    originalSet(key, value);
+  };
+  assert.throws(() => restoreBackupPayload(payload, repository), /rolled back/);
+  assert.deepEqual(JSON.parse(values.get(inventoryItemsStorageKey)), [{ id: "before-failure" }]);
+  assert.deepEqual(JSON.parse(values.get(profileKey)), { companyName: "Before failed restore" });
+});
+
+test("rejects unsupported data stores instead of importing them", () => {
+  const payload = createBackupPayload(collectBackupData(storageWith({}).storage), { now });
+  assert.throws(() => previewBackupPayload({ ...payload, data: { ...payload.data, "unexpected:key": [] } }), /unsupported data store/);
 });
