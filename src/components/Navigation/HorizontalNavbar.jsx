@@ -4,7 +4,6 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   sidebarBrand,
   sidebarNavigation,
-  sidebarSearch,
 } from "../Sidebar/SidebarData";
 
 export default function HorizontalNavbar() {
@@ -74,15 +73,15 @@ export default function HorizontalNavbar() {
       <nav
         ref={navContainerRef}
         aria-label="Main Navigation"
-        className="relative z-40 shrink-0 border-b border-[#0f1345] bg-[#1A1F71] text-white shadow-md select-none"
+        className="relative z-50 shrink-0 border-b border-[#0f1345] bg-[#1A1F71] text-white shadow-md select-none overflow-visible"
       >
-        <div className="flex h-11 items-center justify-between px-4 overflow-x-auto scrollbar-none">
+        <div className="flex h-11 items-center justify-between px-4 overflow-visible">
           {/* Left Brand Badge + Navigation Items */}
-          <div className="flex items-center gap-1 min-w-max">
+          <div className="flex items-center gap-1 overflow-visible">
             {/* Brand Logo Pill */}
             <div
               onClick={() => navigate("/dashboard")}
-              className="mr-3 flex cursor-pointer items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold tracking-wide transition hover:bg-white/20"
+              className="mr-3 flex cursor-pointer items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold tracking-wide transition hover:bg-white/20 shrink-0"
             >
               <div className="flex h-5 w-5 items-center justify-center rounded bg-white text-[11px] font-black text-[#1A1F71]">
                 {sidebarBrand.name[0]}
@@ -106,7 +105,7 @@ export default function HorizontalNavbar() {
                   <NavLink
                     key={item.id}
                     to={item.path}
-                    className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-all ${
+                    className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
                       isActive
                         ? "bg-white/20 text-white shadow-xs font-semibold"
                         : "text-white/80 hover:bg-white/10 hover:text-white"
@@ -119,13 +118,19 @@ export default function HorizontalNavbar() {
               }
 
               return (
-                <div key={item.id} className="relative">
+                <div
+                  key={item.id}
+                  className="relative overflow-visible shrink-0"
+                  onMouseEnter={() => setActiveDropdown(item.id)}
+                  onMouseLeave={() => setActiveDropdown(null)}
+                >
                   <button
                     type="button"
-                    onClick={() =>
-                      setActiveDropdown((prev) => (prev === item.id ? null : item.id))
-                    }
-                    className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-all cursor-pointer ${
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveDropdown((prev) => (prev === item.id ? null : item.id));
+                    }}
+                    className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
                       isActive || isOpen
                         ? "bg-white/20 text-white shadow-xs font-semibold"
                         : "text-white/80 hover:bg-white/10 hover:text-white"
@@ -142,7 +147,10 @@ export default function HorizontalNavbar() {
 
                   {/* Dropdown Menu */}
                   {isOpen && (
-                    <div className="absolute left-0 top-full mt-1.5 min-w-[200px] rounded-lg border border-[#2c3396] bg-[#14185D] p-1.5 shadow-2xl backdrop-blur-md z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div
+                      className="absolute left-0 top-full mt-1 min-w-[210px] rounded-lg border border-[#2c3396] bg-[#14185D] p-1.5 shadow-2xl z-[9999] overflow-hidden"
+                      style={{ filter: "drop-shadow(0 15px 25px rgba(0,0,0,0.5))" }}
+                    >
                       {item.children.map((child) => {
                         const isChildLinkActive = location.pathname === child.path;
                         return (
@@ -150,10 +158,10 @@ export default function HorizontalNavbar() {
                             key={child.id}
                             to={child.path}
                             onClick={() => setActiveDropdown(null)}
-                            className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors ${
+                            className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors whitespace-nowrap ${
                               isChildLinkActive
                                 ? "bg-rose-600 font-semibold text-white"
-                                : "text-white/85 hover:bg-white/12 hover:text-white"
+                                : "text-white/85 hover:bg-white/15 hover:text-white"
                             }`}
                           >
                             <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
@@ -169,14 +177,14 @@ export default function HorizontalNavbar() {
           </div>
 
           {/* Right Actions: Quick Open (Ctrl+F) */}
-          <div className="flex items-center gap-2 pl-4">
+          <div className="flex items-center gap-2 pl-3 shrink-0">
             <button
               type="button"
               onClick={() => {
                 setQuery("");
                 setSearchOpen(true);
               }}
-              className="flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 text-[11px] font-medium text-white/80 transition hover:bg-white/20 hover:text-white"
+              className="flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 text-[11px] font-medium text-white/80 transition hover:bg-white/20 hover:text-white cursor-pointer"
               title="Open Anything (Ctrl+F)"
             >
               <FiSearch className="h-3 w-3" />
@@ -194,7 +202,7 @@ export default function HorizontalNavbar() {
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-20 backdrop-blur-xs"
+          className="fixed inset-0 z-[10000] flex items-start justify-center bg-black/60 p-4 pt-20 backdrop-blur-xs"
         >
           <div className="w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-2xl border border-slate-200">
             <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
@@ -209,7 +217,7 @@ export default function HorizontalNavbar() {
               <button
                 type="button"
                 onClick={() => setSearchOpen(false)}
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
               >
                 <FiX className="h-5 w-5" />
               </button>
@@ -229,7 +237,7 @@ export default function HorizontalNavbar() {
                       setSearchOpen(false);
                       navigate(item.path);
                     }}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition"
+                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition cursor-pointer"
                   >
                     <span className="font-medium">{item.label}</span>
                     {item.parentLabel && (
