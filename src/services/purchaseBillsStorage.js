@@ -41,4 +41,12 @@ export function savePurchaseBill(value) {
   return bill;
 }
 
+export function replacePurchaseBills(bills) {
+  if (!Array.isArray(bills)) throw new Error("Purchase bills must be an array.");
+  if (!canUseStorage()) throw new Error("Browser local storage is unavailable.");
+  window.localStorage.setItem(PURCHASE_BILLS_KEY, JSON.stringify(bills));
+  notifyBusinessDataChanged();
+  return bills;
+}
+
 export const purchaseBillsStorageKey = PURCHASE_BILLS_KEY;

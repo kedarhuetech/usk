@@ -1,5 +1,5 @@
 // Implements the home page.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FiArrowRight,
   FiBarChart2,
@@ -14,7 +14,12 @@ import {
 import { useNavigate } from "react-router-dom";
 import Card from "../../components/Common/Card";
 import Button from "../../components/Common/Button";
-import { loadBusinessSummary, loadSalesInvoices } from "../../services/businessRecords";
+import { loadBusinessSummary } from "../../services/businessRecords";
+import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
+import { purchaseBillsStorageKey } from "../../services/purchaseBillsStorage.js";
+import { saleInvoicesStorageKey } from "../../services/salesStorage.js";
+import { partiesStorageKey } from "../../services/partiesStorage.js";
+import { saleInvoiceUiStorageKey } from "../../services/dashboardSummary.js";
 
 const currencyFormatter = new Intl.NumberFormat("en-IN", {
   style: "currency",
@@ -71,67 +76,67 @@ const actionTones = {
 function Home() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState(null);
-  const [invoices, setInvoices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     let active = true;
+    let request = 0;
 
-    // Loads home data.
-    async function loadHomeData() {
-      const results = await Promise.allSettled([loadBusinessSummary(), loadSalesInvoices()]);
-      if (!active) return;
+    const refresh = () => {
+      const currentRequest = ++request;
+      setIsLoading(true);
+      setLoadError("");
+      setSummary(null);
+      loadBusinessSummary()
+        .then((data) => {
+          if (!active || currentRequest !== request) return;
+          setSummary(data);
+        })
+        .catch((error) => {
+          if (!active || currentRequest !== request) return;
+          setSummary(null);
+          setLoadError(error.message || "Could not load saved business data.");
+        })
+        .finally(() => {
+          if (active && currentRequest === request) setIsLoading(false);
+        });
+    };
+    const onStorage = (event) => {
+      if ([saleInvoicesStorageKey, purchaseBillsStorageKey, partiesStorageKey, saleInvoiceUiStorageKey].includes(event.key)) refresh();
+    };
 
-      const [summaryResult, invoicesResult] = results;
-      const errors = [];
-      if (summaryResult.status === "fulfilled") {
-        setSummary(summaryResult.value);
-      } else {
-        errors.push(summaryResult.reason);
-      }
-      if (invoicesResult.status === "fulfilled") {
-        setInvoices(invoicesResult.value);
-      } else {
-        errors.push(invoicesResult.reason);
-      }
-      if (errors.length) {
-        const firstError = errors[0];
-        setLoadError(firstError instanceof Error ? firstError.message : "Could not load business data.");
-      }
-      setIsLoading(false);
-    }
-
-    loadHomeData();
+    refresh();
+    window.addEventListener(businessDataChangedEvent, refresh);
+    window.addEventListener("storage", onStorage);
     return () => {
       active = false;
+      window.removeEventListener(businessDataChangedEvent, refresh);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
-  const totalSales = useMemo(
-    () => invoices.reduce((total, invoice) => total + Number(invoice.totals?.finalTotal || 0), 0),
-    [invoices],
-  );
+  const totalSales = summary?.totalSales;
 
   const summaryCards = [
     {
       label: "Total Sales",
-      value: currencyFormatter.format(totalSales),
-      note: invoices.length ? `${invoices.length} saved invoice${invoices.length === 1 ? "" : "s"}` : "No sales recorded yet",
+      value: isLoading && !summary ? "Loading…" : summary ? currencyFormatter.format(totalSales) : "—",
+      note: summary ? `${summary.activeSales.length} active saved invoice${summary.activeSales.length === 1 ? "" : "s"}` : loadError ? "Saved sales are unavailable" : "No sales recorded yet",
       icon: FiTrendingUp,
       tone: "blue",
     },
     {
       label: "Total Receivable",
-      value: summary ? currencyFormatter.format(Number(summary.receivable || 0)) : "—",
-      note: summary ? "Outstanding from saved sales" : "Summary unavailable",
+      value: isLoading && !summary ? "Loading…" : summary ? currencyFormatter.format(Number(summary.receivable || 0)) : "—",
+      note: summary ? "Outstanding from saved sales and opening balances" : loadError ? "Summary unavailable" : "No outstanding balance",
       icon: FiArrowRight,
       tone: "emerald",
     },
     {
       label: "Total Payable",
-      value: summary ? currencyFormatter.format(Number(summary.payable || 0)) : "—",
-      note: summary ? "Outstanding from saved purchases" : "Summary unavailable",
+      value: isLoading && !summary ? "Loading…" : summary ? currencyFormatter.format(Number(summary.payable || 0)) : "—",
+      note: summary ? "Outstanding from saved purchases and opening balances" : loadError ? "Summary unavailable" : "No outstanding balance",
       icon: FiShoppingCart,
       tone: "rose",
     },
@@ -159,7 +164,7 @@ function Home() {
 
         {loadError && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            We could not load the latest business data. Please try again after checking the connection.
+              Dashboard totals could not be loaded from saved browser data: {loadError}
           </div>
         )}
 
