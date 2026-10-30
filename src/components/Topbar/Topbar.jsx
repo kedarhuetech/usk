@@ -274,66 +274,21 @@ export default function Topbar({ onRefresh }) {
   };
 
   return (
-    <header className="shrink-0 border-b border-slate-200 bg-white select-none">
-      <div className="flex h-9 items-center justify-between border-b border-slate-100 px-4 text-[13px]">
-        <div className="relative flex items-center gap-4 text-slate-700">
-          {navItems.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => handleNavClick(item)}
-              className="hover:text-[#1A1F71] cursor-pointer"
-            >
-              {item}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={refreshCurrentPage}
-            aria-label="Refresh current page data"
-            title="Refresh current page data"
-            className="flex items-center justify-center border-0 bg-transparent p-0 cursor-pointer"
-          >
-            <FiRefreshCw
-              className={`h-4 w-4 text-slate-500 ${
-                refreshing ? "animate-spin" : ""
-              }`}
-            />
-          </button>
-          {comingSoon && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="absolute left-0 top-full z-20 mt-1 flex items-center gap-3 whitespace-nowrap rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-lg"
-            >
-              {comingSoon} is coming soon.
-              <button
-                type="button"
-                onClick={() => setComingSoon("")}
-                aria-label="Dismiss notice"
-                className="font-bold text-slate-500 hover:text-slate-900 cursor-pointer"
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="hidden items-center gap-2 text-xs text-slate-600 xl:flex">
-          <span>Customer Support :</span>
-          <span className="font-medium text-blue-600">
-            📞 +91 9333911911 +917795687633
-          </span>
-          <span className="text-slate-300">|</span>
-          <button type="button" className="font-medium text-blue-600 cursor-pointer">
-            Get Instant Online Support
-          </button>
-        </div>
-      </div>
+    <header
+      className={`relative shrink-0 border-b border-slate-200 bg-white select-none ${
+        isSearchFocused && searchQuery.trim() ? "z-[60]" : "z-30"
+      }`}
+    >
+      
 
       <div className="flex h-[52px] items-center justify-between px-4 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span className="h-2 w-2 rounded-full bg-rose-500" />
-          <span className="hidden text-sm font-medium text-slate-500 sm:block">
+          <span
+            onClick={() => navigate("/company-profile")}
+            title="Click to view Company Profile"
+            className="hidden text-sm font-semibold text-slate-700 sm:block cursor-pointer hover:text-blue-600 transition"
+          >
             {companyProfile.businessName ||
               companyProfile.companyName ||
               "Sai Kirana Stores"}
@@ -377,7 +332,7 @@ export default function Topbar({ onRefresh }) {
 
             {/* Autocomplete Results Dropdown */}
             {isSearchFocused && searchQuery.trim() && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl z-50 p-1.5">
+              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl z-[100] p-1.5">
                 {searchResults.length > 0 ? (
                   <div className="space-y-0.5">
                     {searchResults.map((result, idx) => {
@@ -476,7 +431,9 @@ export default function Topbar({ onRefresh }) {
           </button>
           <button
             type="button"
-            className="rounded-full bg-[#1A1F71] p-2 text-white hover:bg-[#14185D] transition cursor-pointer"
+            onClick={() => navigate("/company-profile")}
+            title="Company Profile"
+            className="rounded-full bg-[#1A1F71] p-2 text-white hover:bg-[#14185D] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
           >
             <FiUser className="h-4 w-4" />
           </button>
