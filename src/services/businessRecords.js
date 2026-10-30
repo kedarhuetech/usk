@@ -6,8 +6,6 @@ import { getParties, saveParty } from "./partiesStorage.js";
 import { savePurchaseBill } from "./purchaseBillsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 
-const LEGACY_ITEMS_MIGRATED_KEY = "ledgerly:inventoryItems.legacyDatabaseMigration.v1";
-
 // This helper handles id logic.
 function withId(record = {}) {
   return { ...record, id: record.id || crypto.randomUUID() };
@@ -15,33 +13,8 @@ function withId(record = {}) {
 
 // Loads business items.
 export async function loadBusinessItems() {
-  const localItems = getInventoryItems();
-  if (typeof window === "undefined" || !window.localStorage) return localItems;
-  if (window.localStorage.getItem(LEGACY_ITEMS_MIGRATED_KEY) === "true") return localItems;
-
-  try {
-    // One-time recovery for items saved to MySQL before the local-only switch.
-    const legacyItems = await businessDataApi.list("items");
-    const keys = new Set(localItems.flatMap((item) => [
-      item.itemCode ? `code:${String(item.itemCode).trim().toLowerCase()}` : "",
-      `name:${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}`,
-    ].filter(Boolean)));
-    const migratedItems = [...localItems];
-    for (const legacyItem of legacyItems) {
-      const item = normalizeInventoryItem(legacyItem);
-      const codeKey = item.itemCode ? `code:${String(item.itemCode).trim().toLowerCase()}` : "";
-      const nameKey = `name:${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}`;
-      if ((codeKey && keys.has(codeKey)) || keys.has(nameKey)) continue;
-      migratedItems.push(saveInventoryItem(item));
-      if (codeKey) keys.add(codeKey);
-      keys.add(nameKey);
-    }
-    window.localStorage.setItem(LEGACY_ITEMS_MIGRATED_KEY, "true");
-    return migratedItems;
-  } catch {
-    // Keep the local Items screen usable when the legacy API is offline.
-    return localItems;
-  }
+  // Item master data remains browser-local during the current development phase.
+  return getInventoryItems();
 }
 
 // Saves business item.

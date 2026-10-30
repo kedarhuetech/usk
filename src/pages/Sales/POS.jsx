@@ -677,20 +677,6 @@ export default function PointOfSale() {
           </button>
           <button
             type="button"
-            onClick={() => setModal({ type: "settings" })}
-            className="hover:text-blue-600 transition"
-          >
-            Versions
-          </button>
-          <button
-            type="button"
-            onClick={() => setModal({ type: "shortcuts" })}
-            className="hover:text-blue-600 transition"
-          >
-            Shortcuts
-          </button>
-          <button
-            type="button"
             onClick={handleNewBillClick}
             title="Start a new bill"
             className="hover:text-blue-600 transition"

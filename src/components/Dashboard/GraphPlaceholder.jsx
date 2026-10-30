@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiArrowUpRight, FiCalendar, FiChevronDown, FiTrendingUp } from "react-icons/fi";
 import Card from "../Common/Card";
-import { getSaleInvoices } from "../../services/salesStorage.js";
 import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
+import { saleInvoicesStorageKey } from "../../services/salesStorage.js";
 
 const PERIODS = ["This Month", "Last 30 Days", "This Week", "This Year"];
 
@@ -15,7 +15,9 @@ function parseInvoiceDate(invoice) {
 }
 
 function parseInvoiceAmount(invoice) {
-  return Math.max(0, Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? invoice.total ?? invoice.amount ?? 0));
+  const amount = Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? invoice.total ?? invoice.amount ?? 0);
+  if (!Number.isFinite(amount)) throw new Error("A saved sales invoice has an invalid total.");
+  return Math.max(0, amount);
 }
 
 function toIsoDate(date) {
@@ -23,12 +25,14 @@ function toIsoDate(date) {
 }
 
 // Renders the interactive, dynamic sales graph.
-function GraphPlaceholder({ summary }) {
+function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
   const navigate = useNavigate();
   const [selectedPeriod, setSelectedPeriod] = useState("This Month");
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [localSales, setLocalSales] = useState([]);
+  const [salesError, setSalesError] = useState("");
+  const [salesLoading, setSalesLoading] = useState(true);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicked outside
@@ -46,15 +50,29 @@ function GraphPlaceholder({ summary }) {
   useEffect(() => {
     const updateSales = () => {
       try {
-        const invoices = getSaleInvoices();
+        const raw = window.localStorage.getItem(saleInvoicesStorageKey);
+        const invoices = raw == null ? [] : JSON.parse(raw);
+        if (!Array.isArray(invoices) || invoices.some((invoice) => !invoice || typeof invoice !== "object" || Array.isArray(invoice))) {
+          throw new Error("Saved sales invoice data is not a valid list.");
+        }
+        invoices.forEach(parseInvoiceAmount);
         setLocalSales(invoices || []);
-      } catch {
+        setSalesError("");
+      } catch (error) {
         setLocalSales([]);
+        setSalesError(error.message || "Could not read saved sales invoices.");
+      } finally {
+        setSalesLoading(false);
       }
     };
     updateSales();
     window.addEventListener(businessDataChangedEvent, updateSales);
-    return () => window.removeEventListener(businessDataChangedEvent, updateSales);
+    const onStorage = (event) => { if (event.key === saleInvoicesStorageKey) updateSales(); };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(businessDataChangedEvent, updateSales);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // Active sales list: prefer summary.activeSales if available, otherwise localSales
@@ -62,7 +80,8 @@ function GraphPlaceholder({ summary }) {
     if (summary?.activeSales && Array.isArray(summary.activeSales)) {
       return summary.activeSales;
     }
-    return localSales.filter((inv) => !inv.isReturn && String(inv.status || "").toLowerCase() !== "cancelled");
+    return localSales.filter((inv) => !inv.isReturn && !inv.cancelled && !inv.deleted && !inv.isDeleted
+      && !["cancelled", "canceled", "void", "deleted"].includes(String(inv.status || "").trim().toLowerCase()));
   }, [summary, localSales]);
 
   // Build timeline buckets based on selected period
@@ -191,7 +210,7 @@ function GraphPlaceholder({ summary }) {
             </span>
           </div>
           <p className="mt-1.5 text-2xl font-bold text-slate-950">
-            ₹ {periodTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+            {summaryLoading && !summary && salesLoading ? "Loading…" : salesError ? "—" : `₹ ${periodTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
           </p>
         </div>
 
@@ -367,7 +386,7 @@ function GraphPlaceholder({ summary }) {
               <span>Total Sales</span>
               <br />
               <span className="font-bold text-sm">
-                ₹ {periodTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                {salesError ? "Sales data unavailable" : `₹ ${periodTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
               </span>
             </>
           )}

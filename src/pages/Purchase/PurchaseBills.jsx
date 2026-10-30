@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { getPurchaseBills, savePurchaseBill } from "../../services/purchaseBillsStorage";
+import { getPurchaseBills, replacePurchaseBills, savePurchaseBill } from "../../services/purchaseBillsStorage";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
@@ -29,7 +29,7 @@ export default function PurchaseBills() {
   const total = visible.reduce((sum, bill) => sum + billTotal(bill), 0);
   const paid = visible.reduce((sum, bill) => sum + billPaid(bill), 0);
   const unpaid = Math.max(0, total - paid);
-  const refresh = (next) => { setRecords(next); localStorage.setItem("ledgerly:purchaseBills.v1", JSON.stringify(next)); };
+  const refresh = (next) => { setRecords(next); replacePurchaseBills(next); };
   const addPurchase = () => navigate("/purchase-expense/purchase-bills/new", { state: { from: "/purchase-expense/purchase-bills", localOnlyPurchase: true } });
   const remove = (bill) => {
     if (!window.confirm(`Delete purchase bill ${bill.form?.invoiceNumber || bill.invoiceNumber || ""}?`)) return;

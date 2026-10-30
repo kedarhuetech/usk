@@ -51,6 +51,7 @@ import ImportFromTally from "./pages/Utilities/ImportFromTally";
 import VerifyMyData from "./pages/Utilities/VerifyMyData";
 import BackupToComputer from "./pages/SyncShareBackup/BackupToComputer";
 import BackupToDrive from "./pages/SyncShareBackup/BackupToDrive";
+import RestoreBackup from "./pages/SyncShareBackup/RestoreBackup";
 import PlansPricing from "./pages/PlansPricing/PlansPricing";
 import EditProfile from "./pages/CompanyProfile/EditProfile";
 import {
@@ -150,6 +151,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="sync-share-backup/backup-to-computer" element={<BackupToComputer />} />
           <Route path="sync-share-backup/backup-to-drive" element={<BackupToDrive />} />
+          <Route path="sync-share-backup/restore-backup" element={<RestoreBackup />} />
           <Route path="reports" element={<Reports />} />
           <Route path="reports/all-transactions" element={<Reports defaultReport="All Transactions" />} />
           <Route path="reports/profit-and-loss" element={<Reports defaultReport="Profit And Loss" />} />

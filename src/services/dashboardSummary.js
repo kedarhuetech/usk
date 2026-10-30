@@ -37,8 +37,12 @@ function totalFor(record) {
 
 function outstandingFor(record) {
   const total = totalFor(record);
-  const paymentType = String(record.form?.paymentType || record.paymentType || record.saleType || record.purchaseType || "").toLowerCase();
-  if (paymentType === "cash") return 0;
+  // saleType/purchaseType describe settlement terms. form.paymentType is the
+  // tender method (Cash, UPI, etc.) and must not make an unpaid credit bill
+  // appear settled.
+  const settlementType = String(record.saleType || record.purchaseType || "").trim().toLowerCase();
+  if (settlementType === "cash" || record.isCashTransaction === true) return 0;
+  if (["paid", "cancelled", "canceled", "void", "deleted"].includes(String(record.status || "").trim().toLowerCase())) return 0;
 
   const paidOrReceived = Math.min(
     Math.max(
@@ -84,7 +88,8 @@ export function calculateDashboardSummary({ sales = [], purchases = [], parties 
   // Active sales
   const activeSales = uniqueRecords(salesWithUi)
     .filter((record) => !record.isReturn && !deleted.has(String(record.id)) && !cancelled[record.id]
-      && !record.cancelled && String(record.status || "").toLowerCase() !== "cancelled");
+      && !record.cancelled && !record.deleted && !record.isDeleted
+      && !["cancelled", "canceled", "void", "deleted"].includes(String(record.status || "").trim().toLowerCase()));
 
   const salesReceivable = activeSales
     .reduce((sum, record) => sum + outstandingFor(record), 0);
@@ -94,8 +99,8 @@ export function calculateDashboardSummary({ sales = [], purchases = [], parties 
 
   // Active purchases
   const activePurchases = uniqueRecords(purchases)
-    .filter((record) => !record.isReturn && !record.cancelled
-      && !["cancelled", "canceled", "void"].includes(String(record.status || "").toLowerCase()));
+    .filter((record) => !record.isReturn && !record.cancelled && !record.deleted && !record.isDeleted
+      && !["cancelled", "canceled", "void", "deleted"].includes(String(record.status || "").toLowerCase()));
 
   const purchasesPayable = activePurchases
     .reduce((sum, record) => sum + outstandingFor(record), 0);
@@ -104,7 +109,7 @@ export function calculateDashboardSummary({ sales = [], purchases = [], parties 
   let partyReceivable = 0;
   let partyPayable = 0;
   for (const party of parties) {
-    const ob = Math.abs(Number(party.openingBalance || 0));
+    const ob = Math.abs(amount(party.openingBalance || 0, "party opening balance"));
     if (ob > 0) {
       if (party.openingBalanceType === "to-pay") {
         partyPayable += ob;
