@@ -10,6 +10,7 @@ import { loadBusinessSummary } from "../../services/businessRecords";
 import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { purchaseBillsStorageKey } from "../../services/purchaseBillsStorage.js";
 import { saleInvoicesStorageKey } from "../../services/salesStorage.js";
+import { partiesStorageKey } from "../../services/partiesStorage.js";
 import { saleInvoiceUiStorageKey } from "../../services/dashboardSummary.js";
 
 // Renders the dashboard interface.
@@ -17,6 +18,7 @@ function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
   useEffect(() => {
     let active = true;
     let request = 0;
@@ -38,9 +40,13 @@ function Dashboard() {
           if (active && currentRequest === request) setLoading(false);
         });
     };
+
     const onStorage = (event) => {
-      if ([saleInvoicesStorageKey, purchaseBillsStorageKey, saleInvoiceUiStorageKey].includes(event.key)) refresh();
+      if ([saleInvoicesStorageKey, purchaseBillsStorageKey, partiesStorageKey, saleInvoiceUiStorageKey].includes(event.key)) {
+        refresh();
+      }
     };
+
     refresh();
     window.addEventListener(businessDataChangedEvent, refresh);
     window.addEventListener("storage", onStorage);
@@ -50,14 +56,21 @@ function Dashboard() {
       window.removeEventListener("storage", onStorage);
     };
   }, []);
+
   const stats = dashboardData.stats.map((stat) => {
     const amount = summary ? (stat.id === "receivable" ? summary.receivable : summary.payable) : null;
-    const formatted = amount == null ? (loading ? "Loading…" : "—")
+    const formatted = amount == null
+      ? (loading ? "Loading…" : "—")
       : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+
     return {
       ...stat,
       value: formatted,
-      note: error ? "Could not read saved local data" : amount ? "Calculated from saved invoices" : "No outstanding balance",
+      note: error
+        ? "Could not read saved local data"
+        : amount > 0
+          ? "Calculated from saved transactions"
+          : "No outstanding balance",
     };
   });
 
@@ -71,7 +84,7 @@ function Dashboard() {
               <StatCard key={stat.id} stat={stat} />
             ))}
           </div>
-          <GraphPlaceholder />
+          <GraphPlaceholder summary={summary} loading={loading} />
           <ReportsSection reports={dashboardData.reports} />
         </div>
 

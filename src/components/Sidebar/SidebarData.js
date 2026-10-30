@@ -18,7 +18,7 @@ import {
 
 export const sidebarBrand = {
   name: "USK",
-  companyName: "My Company",
+  companyName: "Sai Kirana Stores",
 };
 
 export const sidebarSearch = {
@@ -307,8 +307,8 @@ export const sidebarTrial = {
 };
 
 export const companySwitcher = {
-  label: "My Company",
-  path: "/companies",
+  label: "Sai Kirana Stores",
+  path: "/company-profile",
   icon: FiBriefcase,
 };
 

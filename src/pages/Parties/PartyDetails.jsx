@@ -1,13 +1,14 @@
 // Implements the party details page.
 import { useEffect, useState } from "react";
 import { FiDownload, FiFileText, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiSettings, FiUsers, FiX } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
 import { deleteSaleInvoice, getSaleInvoices, saveSaleInvoice } from "../../services/salesStorage";
+import { getCompanyProfile } from "../../services/companyProfileStorage";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -284,12 +285,19 @@ function buildStatementDocument(party, invoices, activity = []) {
     ...activity.map((entry) => `<tr><td>${escapeHtml(entry.date || "")}</td><td>${escapeHtml(entry.source)}</td><td>${escapeHtml(entry.number)}</td><td>${escapeHtml(entry.status)}</td><td>${money(entry.total)}</td><td>${money(entry.received)}</td><td>${money(entry.balance)}</td></tr>`),
   ].join("");
   const itemTables = invoices.map((invoice) => `<h3>Sale ${escapeHtml(invoice.form?.invoiceNumber || invoice.invoiceNumber || "")}</h3><table><thead><tr><th>#</th><th>Item name</th><th>HSN/SAC</th><th>Quantity</th><th>Unit</th><th>Price/Unit</th><th>Discount</th><th>Amount</th></tr></thead><tbody>${(invoice.rows || []).map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.item)}</td><td>${escapeHtml(row.hsnSac || row.hsn || "")}</td><td>${escapeHtml(row.calculated?.qty || row.qty || "")}</td><td>${escapeHtml(row.unit || "")}</td><td>${money(row.price)}</td><td>${money(row.calculated?.discount)}</td><td>${money(row.calculated?.amount)}</td></tr>`).join("")}</tbody></table>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title><style>body{font:14px Arial,sans-serif;color:#111;margin:32px}header{text-align:center;margin-bottom:48px}h1{text-align:center;text-decoration:underline;font-size:24px;margin-bottom:36px}h2{font-size:20px}h3{margin-top:28px}table{border-collapse:collapse;width:100%;margin:10px 0 24px}th{background:#d6d6d6;text-align:left}th,td{padding:8px 6px;border-bottom:1px solid #888}button{padding:10px 18px;margin:10px 8px 0 0} @media print{button{display:none}body{margin:12mm}}</style></head><body><header><h2>My Company</h2><div>Party statement</div></header><h1>Party statement</h1><h2>Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</h2><p>Contact No.: ${escapeHtml(party?.phone || "")}</p><table><thead><tr><th>Date</th><th>Txn Type</th><th>Ref No.</th><th>Payment Status</th><th>Total</th><th>Received / Paid</th><th>Txn Balance</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="7">No transactions</td></tr>'}</tbody></table>${itemTables}<button onclick="window.print()">Print / Save PDF</button></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title><style>body{font:14px Arial,sans-serif;color:#111;margin:32px}header{text-align:center;margin-bottom:48px}h1{text-align:center;text-decoration:underline;font-size:24px;margin-bottom:36px}h2{font-size:20px}h3{margin-top:28px}table{border-collapse:collapse;width:100%;margin:10px 0 24px}th{background:#d6d6d6;text-align:left}th,td{padding:8px 6px;border-bottom:1px solid #888}button{padding:10px 18px;margin:10px 8px 0 0} @media print{button{display:none}body{margin:12mm}}</style></head><body><header><h2>${escapeHtml(getCompanyProfile().businessName || getCompanyProfile().companyName || "Sai Kirana Stores")}</h2><div>Party statement</div></header><h1>Party statement</h1><h2>Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</h2><p>Contact No.: ${escapeHtml(party?.phone || "")}</p><table><thead><tr><th>Date</th><th>Txn Type</th><th>Ref No.</th><th>Payment Status</th><th>Total</th><th>Received / Paid</th><th>Txn Balance</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="7">No transactions</td></tr>'}</tbody></table>${itemTables}<button onclick="window.print()">Print / Save PDF</button></body></html>`;
 }
 
 // Renders the party details interface.
 function PartyDetails() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.openAddParty) {
+      setIsModalOpen(true);
+    }
+  }, [location.state]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
   const [parties, setParties] = useState([]);

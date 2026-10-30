@@ -24,6 +24,7 @@ import PurchaseBills from "./pages/Purchase/PurchaseBills";
 import PaymentOut from "./pages/Purchase/PaymentOut";
 import Expenses from "./pages/Purchase/Expenses";
 import PurchaseOrders from "./pages/Purchase/PurchaseOrders";
+import PurchaseReturns from "./pages/Purchase/PurchaseReturns";
 import BankAccounts from "./pages/CashBank/BankAccounts";
 import CashInHand from "./pages/CashBank/CashInHand";
 import Cheques from "./pages/CashBank/Cheques";
@@ -49,6 +50,7 @@ import VerifyMyData from "./pages/Utilities/VerifyMyData";
 import BackupToComputer from "./pages/SyncShareBackup/BackupToComputer";
 import BackupToDrive from "./pages/SyncShareBackup/BackupToDrive";
 import PlansPricing from "./pages/PlansPricing/PlansPricing";
+import EditProfile from "./pages/CompanyProfile/EditProfile";
 import {
   DataDeletion,
   PrivacyPolicy,
@@ -68,6 +70,8 @@ function App() {
 
         <Route path="/" element={<AppPasscodeGuard><MainLayout /></AppPasscodeGuard>}>
           <Route index element={<Home />} />
+          <Route path="company-profile" element={<EditProfile />} />
+          <Route path="edit-profile" element={<EditProfile />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="cash-bank/bank-accounts" element={<BankAccounts />} />
           <Route path="cash-bank/cash-in-hand" element={<CashInHand />} />
@@ -124,6 +128,10 @@ function App() {
           <Route path="purchase-expense/payment-out" element={<PaymentOut />} />
           <Route path="purchase-expense/expenses" element={<Expenses />} />
           <Route path="purchase-expense/purchase-order" element={<PurchaseOrders />} />
+          <Route
+            path="purchase-expense/purchase-return-debit-note"
+            element={<PurchaseReturns />}
+          />
           <Route
             path="utilities/barcode-generator"
             element={<BarcodeGenerator />}

@@ -1,7 +1,7 @@
 // Renders the sidebar interface component.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronRight, FiEdit3, FiZap, FiX } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   companySwitcher,
   sidebarBrand,
@@ -19,14 +19,14 @@ import {
 // Renders the sidebar interface.
 function Sidebar() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [companyName, setCompanyName] = useState(companyProfile.companyName);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const searchInputRef = useRef(null);
   const SearchIcon = sidebarSearch.icon;
   const CompanyIcon = companySwitcher.icon;
+  const isProfileActive = pathname === "/company-profile" || pathname === "/edit-profile";
 
   const searchableItems = useMemo(
     () =>
@@ -69,17 +69,11 @@ function Sidebar() {
   useEffect(() => {
     // Refreshes company profile.
     const refreshCompanyProfile = () => setCompanyProfile(getCompanyProfile());
-    // Refreshes profile from event.
-    const refreshProfileFromEvent = () => {
-      const profile = getCompanyProfile();
-      setCompanyProfile(profile);
-      setCompanyName(profile.companyName);
-    };
     window.addEventListener("storage", refreshCompanyProfile);
-    window.addEventListener(companyProfileUpdatedEvent, refreshProfileFromEvent);
+    window.addEventListener(companyProfileUpdatedEvent, refreshCompanyProfile);
     return () => {
       window.removeEventListener("storage", refreshCompanyProfile);
-      window.removeEventListener(companyProfileUpdatedEvent, refreshProfileFromEvent);
+      window.removeEventListener(companyProfileUpdatedEvent, refreshCompanyProfile);
     };
   }, []);
 
@@ -97,18 +91,7 @@ function Sidebar() {
 
   // Opens company profile.
   const openCompanyProfile = () => {
-    setCompanyName(companyProfile.companyName);
-    setProfileOpen(true);
-  };
-
-  // Saves company name.
-  const saveCompanyName = (event) => {
-    event.preventDefault();
-    const nextName = companyName.trim();
-    if (!nextName) return;
-    const profile = saveCompanyProfile({ companyName: nextName });
-    setCompanyProfile(profile);
-    setProfileOpen(false);
+    navigate("/company-profile");
   };
 
   return (
@@ -121,7 +104,9 @@ function Sidebar() {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold">{sidebarBrand.name}</p>
-            <p className="truncate text-xs text-white/60">{companyProfile.companyName}</p>
+            <p className="truncate text-xs text-white/60">
+              {companyProfile.businessName || companyProfile.companyName}
+            </p>
           </div>
         </div>
 
@@ -143,94 +128,71 @@ function Sidebar() {
       </nav>
 
       <div className="shrink-0 space-y-2.5 p-2.5">
-        <div className="rounded-lg bg-amber-50 p-2.5 text-[#14185D]">
-          <p className="text-[13px] font-semibold">{sidebarTrial.title}</p>
-          <div className="mt-2 h-1.5 rounded-full bg-white">
-            <div className="h-full w-5/12 rounded-full bg-amber-500" />
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate("/plans-pricing")}
-            className="mt-2 flex w-full items-center justify-between rounded-md bg-[#1A1F71] px-2.5 py-2 text-[13px] font-semibold text-white"
-          >
-            <span className="flex items-center gap-2">
-              <FiZap className="h-4 w-4 text-amber-300" />
-              {sidebarTrial.ctaLabel}
+        {/* Grab Sale Banner matching screenshot */}
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#e00826] via-[#be051c] to-[#7f0010] p-3 text-white shadow-md">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1 text-[11px] font-bold text-white">
+              <span className="text-xs text-amber-300">⚡</span> Vyapar
             </span>
-            <FiChevronRight className="h-4 w-4" />
-          </button>
+            <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-black text-rose-950 leading-none">
+              Upto 60% OFF
+            </span>
+          </div>
+
+          <p className="mt-1 text-sm font-black italic tracking-wide text-white drop-shadow-sm">
+            GRAB SALE
+          </p>
+
+          <div className="mt-2 flex items-end justify-between gap-1">
+            <div className="space-y-0.5 text-[10px] text-white/90">
+              <div className="flex items-center gap-1 font-medium">
+                <span>📅</span>
+                <span>29 Oct 2026</span>
+              </div>
+              <div className="flex items-center gap-1 font-medium">
+                <span>⏰</span>
+                <span>12:00 AM - 11:59 PM</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate("/plans-pricing")}
+              className="rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-slate-900 shadow-sm transition hover:bg-amber-300 active:scale-95"
+            >
+              Buy Now
+            </button>
+          </div>
         </div>
 
+        {/* Company Switcher / Profile Button */}
         <button
           type="button"
           onClick={openCompanyProfile}
-          className="flex h-10 w-full items-center gap-2.5 rounded-lg bg-white/10 px-2.5 text-left text-[13px] font-semibold hover:bg-white/15"
+          className={`flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] font-semibold transition ${
+            isProfileActive
+              ? "bg-[#1d4ed8] text-white shadow-sm ring-1 ring-white/20"
+              : "bg-white/10 text-white hover:bg-white/15"
+          }`}
         >
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-[#1A1F71]">
-            <CompanyIcon className="h-4 w-4" />
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-[#1A1F71]">
+            {companyProfile.logo ? (
+              <img
+                src={companyProfile.logo}
+                alt="Logo"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <CompanyIcon className="h-3.5 w-3.5" />
+            )}
           </span>
-          <span className="min-w-0 flex-1 truncate">{companyProfile.companyName}</span>
-          <FiChevronRight className="h-4 w-4 text-white/60" />
+          <span className="min-w-0 flex-1 truncate">
+            {companyProfile.businessName || companyProfile.companyName || "Sai Kirana Stores"}
+          </span>
+          <FiChevronRight className="h-4 w-4 text-white/70" />
         </button>
       </div>
       </aside>
-
-      {profileOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setProfileOpen(false);
-          }}
-        >
-          <form
-            onSubmit={saveCompanyName}
-            className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-bold text-slate-800">Company Profile</h2>
-              <button
-                type="button"
-                onClick={() => setProfileOpen(false)}
-                aria-label="Close company profile"
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-              >
-                <FiX className="h-5 w-5" />
-              </button>
-            </div>
-            <label className="mt-5 block text-sm font-semibold text-slate-700" htmlFor="company-name">
-              Company name
-            </label>
-            <input
-              id="company-name"
-              value={companyName}
-              onChange={(event) => setCompanyName(event.target.value)}
-              autoFocus
-              maxLength={120}
-              className="mt-2 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm text-slate-800 outline-none focus:border-[#343B9A] focus:ring-2 focus:ring-indigo-100"
-            />
-            <p className="mt-2 text-xs text-slate-500">
-              Saved in this browser for now. This storage boundary can be connected to the database later.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setProfileOpen(false)}
-                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!companyName.trim()}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#1A1F71] px-4 py-2 text-sm font-semibold text-white hover:bg-[#14185D] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FiEdit3 className="h-4 w-4" />
-                Save Changes
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {searchOpen && (
         <div

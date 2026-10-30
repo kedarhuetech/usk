@@ -1,5 +1,6 @@
 import { getPurchaseBills, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { getSaleInvoices, saleInvoicesStorageKey } from "./salesStorage.js";
+import { getParties, partiesStorageKey } from "./partiesStorage.js";
 
 export const saleInvoiceUiStorageKey = "ledgerly:saleInvoiceUiActions.v1";
 
@@ -31,14 +32,25 @@ function amount(value, label) {
 }
 
 function totalFor(record) {
-  return Math.max(0, amount(record.totals?.finalTotal ?? record.totals?.amount ?? record.total ?? record.amount, "total"));
+  return Math.max(0, amount(record.totals?.finalTotal ?? record.totals?.grandTotal ?? record.totals?.amount ?? record.totalAmount ?? record.total ?? record.amount, "total"));
 }
 
 function outstandingFor(record) {
   const total = totalFor(record);
-  if (String(record.saleType || "").toLowerCase() === "cash") return 0;
-  const received = Math.min(Math.max(amount(record.totals?.received, "received amount"), 0), total);
-  return Math.max(total - received, 0);
+  const paymentType = String(record.form?.paymentType || record.paymentType || record.saleType || record.purchaseType || "").toLowerCase();
+  if (paymentType === "cash") return 0;
+
+  const paidOrReceived = Math.min(
+    Math.max(
+      amount(
+        record.totals?.received ?? record.paidAmount ?? record.receivedAmount ?? record.form?.receivedAmount ?? record.form?.paidAmount,
+        "paid or received amount"
+      ),
+      0
+    ),
+    total
+  );
+  return Math.max(total - paidOrReceived, 0);
 }
 
 function uniqueRecords(records) {
@@ -60,7 +72,7 @@ function readSaleUiState() {
   return state;
 }
 
-export function calculateDashboardSummary({ sales = [], purchases = [], saleUi = {} } = {}) {
+export function calculateDashboardSummary({ sales = [], purchases = [], parties = [], saleUi = {} } = {}) {
   const deleted = new Set(Array.isArray(saleUi.deleted) ? saleUi.deleted.map(String) : []);
   const cancelled = saleUi.cancelled && typeof saleUi.cancelled === "object" ? saleUi.cancelled : {};
   const edits = saleUi.edits && typeof saleUi.edits === "object" ? saleUi.edits : {};
@@ -68,16 +80,44 @@ export function calculateDashboardSummary({ sales = [], purchases = [], saleUi =
     ...sales.map((record) => edits[record.id] ? { ...record, ...edits[record.id] } : record),
     ...(Array.isArray(saleUi.duplicates) ? saleUi.duplicates : []),
   ];
-  const receivable = uniqueRecords(salesWithUi)
+
+  // Active sales
+  const activeSales = uniqueRecords(salesWithUi)
     .filter((record) => !record.isReturn && !deleted.has(String(record.id)) && !cancelled[record.id]
-      && !record.cancelled && String(record.status || "").toLowerCase() !== "cancelled")
-    .reduce((sum, record) => sum + outstandingFor(record), 0);
-  const payable = uniqueRecords(purchases)
-    .filter((record) => !record.isReturn && !record.cancelled
-      && !["cancelled", "canceled", "void"].includes(String(record.status || "").toLowerCase()))
+      && !record.cancelled && String(record.status || "").toLowerCase() !== "cancelled");
+
+  const salesReceivable = activeSales
     .reduce((sum, record) => sum + outstandingFor(record), 0);
 
-  return { receivable, payable };
+  const totalSales = activeSales
+    .reduce((sum, record) => sum + totalFor(record), 0);
+
+  // Active purchases
+  const activePurchases = uniqueRecords(purchases)
+    .filter((record) => !record.isReturn && !record.cancelled
+      && !["cancelled", "canceled", "void"].includes(String(record.status || "").toLowerCase()));
+
+  const purchasesPayable = activePurchases
+    .reduce((sum, record) => sum + outstandingFor(record), 0);
+
+  // Parties opening balance breakdown
+  let partyReceivable = 0;
+  let partyPayable = 0;
+  for (const party of parties) {
+    const ob = Math.abs(Number(party.openingBalance || 0));
+    if (ob > 0) {
+      if (party.openingBalanceType === "to-pay") {
+        partyPayable += ob;
+      } else {
+        partyReceivable += ob;
+      }
+    }
+  }
+
+  const receivable = salesReceivable + partyReceivable;
+  const payable = purchasesPayable + partyPayable;
+
+  return { receivable, payable, totalSales, activeSales, salesReceivable, purchasesPayable, partyReceivable, partyPayable };
 }
 
 // Uses the existing repositories after validating their persisted JSON, so a
@@ -85,10 +125,12 @@ export function calculateDashboardSummary({ sales = [], purchases = [], saleUi =
 export async function loadLocalDashboardSummary() {
   readCollection(saleInvoicesStorageKey);
   readCollection(purchaseBillsStorageKey);
+  readCollection(partiesStorageKey);
   const saleUi = readSaleUiState();
   return calculateDashboardSummary({
     sales: getSaleInvoices(),
     purchases: getPurchaseBills(),
+    parties: getParties(),
     saleUi,
   });
 }
