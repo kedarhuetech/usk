@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from "react";
-import { FiChevronDown, FiPrinter } from "react-icons/fi";
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { FiChevronDown, FiPrinter, FiX, FiSearch } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
@@ -28,7 +28,7 @@ function parseYMD(val) {
 }
 
 function fmtDisplayDate(ymd) {
-  if (!ymd) return "—";
+  if (!ymd) return "-";
   const parts = ymd.split("-");
   if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
   return ymd;
@@ -48,9 +48,11 @@ export default function ItemDetailReport() {
   const [from, setFrom] = useState(defaultFrom());
   const [to, setTo] = useState(defaultTo());
   const [selectedItemName, setSelectedItemName] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [hideInactiveDates, setHideInactiveDates] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     const handler = () => setRefreshTrigger((k) => k + 1);
@@ -60,6 +62,17 @@ export default function ItemDetailReport() {
       window.removeEventListener("ledgerly:business-data-changed", handler);
       window.removeEventListener("storage", handler);
     };
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const inventoryItems = useMemo(() => {
@@ -74,16 +87,17 @@ export default function ItemDetailReport() {
   const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
   const adjustments = useMemo(() => readLocal("ledgerly:inventoryAdjustments.v1"), [refreshTrigger]);
 
-  // Set default selected item
-  useEffect(() => {
-    if (!selectedItemName && inventoryItems.length > 0) {
-      const first = inventoryItems.find((i) => i.type !== "service");
-      if (first) setSelectedItemName(first.itemName || first.name);
-    }
+  // Filter items in dropdown list by search query
+  const filteredItemList = useMemo(() => {
+    const q = (selectedItemName || "").trim().toLowerCase();
+    if (!q) return inventoryItems;
+    return inventoryItems.filter((i) =>
+      (i.itemName || i.name || "").toLowerCase().includes(q)
+    );
   }, [inventoryItems, selectedItemName]);
 
   const rows = useMemo(() => {
-    if (!selectedItemName) return [];
+    if (!selectedItemName.trim()) return [];
     const target = selectedItemName.trim().toLowerCase();
     const invItem = inventoryItems.find(
       (i) => (i.itemName || i.name || "").trim().toLowerCase() === target
@@ -204,7 +218,7 @@ export default function ItemDetailReport() {
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-slate-800 text-xs">
-      {/* ── Top Bar ── */}
+      {/* Top Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
         {/* Date Range */}
         <div className="flex items-center gap-3">
@@ -249,30 +263,88 @@ export default function ItemDetailReport() {
         </div>
       </div>
 
-      {/* ── Title & Item Selector ── */}
+      {/* Title & Item Selector */}
       <div className="border-b border-slate-100 bg-white px-5 py-3">
         <h2 className="mb-3 text-sm font-bold tracking-wider text-slate-700 uppercase">
           DETAILS
         </h2>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-2" ref={dropdownRef}>
             <span className="font-semibold text-slate-600 text-xs">
               Item name
             </span>
             <div className="relative">
-              <input
-                type="text"
-                value={selectedItemName}
-                onChange={(e) => setSelectedItemName(e.target.value)}
-                placeholder="Type or select item..."
-                list="inventory-items-datalist"
-                className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-800 outline-none focus:border-sky-500 min-w-[200px]"
-              />
-              <datalist id="inventory-items-datalist">
-                {inventoryItems.map((item) => (
-                  <option key={item.id} value={item.itemName || item.name} />
-                ))}
-              </datalist>
+              <div className="relative flex items-center">
+                <input
+                  type="text"
+                  value={selectedItemName}
+                  onFocus={() => setIsDropdownOpen(true)}
+                  onChange={(e) => {
+                    setSelectedItemName(e.target.value);
+                    setIsDropdownOpen(true);
+                  }}
+                  placeholder="Select or search item..."
+                  className="rounded border border-slate-300 bg-white px-3 py-1.5 pr-14 text-xs text-slate-800 outline-none focus:border-sky-500 min-w-[220px]"
+                />
+                <div className="absolute right-2 flex items-center gap-1 text-slate-400">
+                  {selectedItemName && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedItemName("");
+                        setIsDropdownOpen(false);
+                      }}
+                      className="hover:text-slate-600 p-0.5"
+                      title="Clear"
+                    >
+                      <FiX className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen((prev) => !prev)}
+                    className="hover:text-slate-600 p-0.5"
+                  >
+                    <FiChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Floating Dropdown */}
+              {isDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 max-h-60 w-full min-w-[260px] overflow-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg">
+                  {filteredItemList.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-slate-400 text-center">
+                      No items found
+                    </div>
+                  ) : (
+                    filteredItemList.map((item) => {
+                      const name = item.itemName || item.name;
+                      const isCurr = name.toLowerCase() === selectedItemName.trim().toLowerCase();
+                      return (
+                        <button
+                          key={item.id || name}
+                          type="button"
+                          onClick={() => {
+                            setSelectedItemName(name);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-xs transition-colors flex items-center justify-between ${
+                            isCurr ? "bg-sky-50 text-sky-700 font-semibold" : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <span>{name}</span>
+                          {item.stock !== undefined && (
+                            <span className="text-[10px] text-slate-400">
+                              Stock: {item.stock}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -288,7 +360,7 @@ export default function ItemDetailReport() {
         </div>
       </div>
 
-      {/* ── Table ── */}
+      {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse text-left">
           <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
@@ -306,7 +378,7 @@ export default function ItemDetailReport() {
                 <td colSpan={5} className="py-16 text-center text-slate-400">
                   {selectedItemName
                     ? "No activity recorded for this item in the selected period."
-                    : "Please enter or select an item name above."}
+                    : "Please select or search an item name above."}
                 </td>
               </tr>
             ) : (
@@ -347,4 +419,3 @@ export default function ItemDetailReport() {
     </div>
   );
 }
-
