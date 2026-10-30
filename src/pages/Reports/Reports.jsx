@@ -1,5 +1,10 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useMemo, useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import AllTransactionsReport from "./AllTransactionsReport";
+import ProfitAndLossReport from "./ProfitAndLossReport";
+import CashFlowReport from "./CashFlowReport";
+import AllPartiesReport from "./AllPartiesReport";
+import PartyReportByItem from "./PartyReportByItem";
 import {
   FiBarChart2,
   FiPrinter,
@@ -183,10 +188,37 @@ const readLocal = (...keys) => {
   return [];
 };
 
-function Reports() {
+function Reports({ defaultReport }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [activeReport, setActiveReport] = useState("Sale");
+  const getInitialReport = () => {
+    if (defaultReport) return defaultReport;
+    if (location.pathname.includes("profit-and-loss")) return "Profit And Loss";
+    if (location.pathname.includes("all-transactions")) return "All Transactions";
+    if (location.pathname.includes("cash-flow")) return "Cash flow";
+    if (location.pathname.includes("all-parties")) return "All parties";
+    if (location.pathname.includes("party-report-by-item")) return "Party Report By Item";
+    return "Sale";
+  };
+
+  const [activeReport, setActiveReport] = useState(getInitialReport);
+
+  useEffect(() => {
+    if (defaultReport) {
+      setActiveReport(defaultReport);
+    } else if (location.pathname.includes("profit-and-loss")) {
+      setActiveReport("Profit And Loss");
+    } else if (location.pathname.includes("all-transactions")) {
+      setActiveReport("All Transactions");
+    } else if (location.pathname.includes("cash-flow")) {
+      setActiveReport("Cash flow");
+    } else if (location.pathname.includes("all-parties")) {
+      setActiveReport("All parties");
+    } else if (location.pathname.includes("party-report-by-item")) {
+      setActiveReport("Party Report By Item");
+    }
+  }, [defaultReport, location.pathname]);
   const [search, setSearch] = useState("");
   const [period, setPeriod] = useState("This Month");
 
@@ -593,6 +625,19 @@ function Reports() {
                   setSearch("");
                   setStore("All Stores");
                   setUser("All Users");
+                  if (report === "All Transactions") {
+                    navigate("/reports/all-transactions", { replace: true });
+                  } else if (report === "Profit And Loss") {
+                    navigate("/reports/profit-and-loss", { replace: true });
+                  } else if (report === "Cash flow") {
+                    navigate("/reports/cash-flow", { replace: true });
+                  } else if (report === "All parties") {
+                    navigate("/reports/all-parties", { replace: true });
+                  } else if (report === "Party Report By Item") {
+                    navigate("/reports/party-report-by-item", { replace: true });
+                  } else {
+                    navigate("/reports", { replace: true });
+                  }
                 }}
                 className={`w-full border-l-4 px-4 py-3 text-left text-sm transition-colors ${
                   activeReport === report
@@ -608,7 +653,28 @@ function Reports() {
       </aside>
 
       {/* Main content */}
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">
+      {activeReport === "All Transactions" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <AllTransactionsReport />
+        </div>
+      ) : activeReport === "Profit And Loss" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <ProfitAndLossReport />
+        </div>
+      ) : activeReport === "Cash flow" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <CashFlowReport />
+        </div>
+      ) : activeReport === "All parties" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <AllPartiesReport />
+        </div>
+      ) : activeReport === "Party Report By Item" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <PartyReportByItem />
+        </div>
+      ) : (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">
         <header className="flex min-h-[64px] items-center justify-between gap-3 rounded-md bg-white px-4">
           <h1 className="text-xl font-semibold">
             {reportTitle(activeReport)}
@@ -1279,6 +1345,7 @@ function Reports() {
           )}
         </section>
       </div>
+      )}
     </div>
   );
 }

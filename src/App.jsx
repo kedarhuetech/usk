@@ -6,6 +6,8 @@ import Settings from "./pages/Settings/Settings";
 import { AppPasscodeGuard, AppPasscodeProvider } from "./components/Passcode/AppPasscodeGate";
 import ComingSoon from "./pages/ComingSoon";
 import Reports from "./pages/Reports/Reports";
+import AllTransactionsReport from "./pages/Reports/AllTransactionsReport";
+import ProfitAndLossReport from "./pages/Reports/ProfitAndLossReport";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import GoogleProfileManager from "./pages/BusinessGrowth/GoogleProfileManager";
 import MarketingStudioEditor from "./pages/BusinessGrowth/MarketingStudioEditor";
@@ -151,6 +153,11 @@ function App() {
           <Route path="sync-share-backup/backup-to-drive" element={<BackupToDrive />} />
           <Route path="sync-share-backup/restore-backup" element={<RestoreBackup />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="reports/all-transactions" element={<Reports defaultReport="All Transactions" />} />
+          <Route path="reports/profit-and-loss" element={<Reports defaultReport="Profit And Loss" />} />
+          <Route path="reports/cash-flow" element={<Reports defaultReport="Cash flow" />} />
+          <Route path="reports/all-parties" element={<Reports defaultReport="All parties" />} />
+          <Route path="reports/party-report-by-item" element={<Reports defaultReport="Party Report By Item" />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
         </Routes>

@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiTrash2, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
@@ -29,8 +30,15 @@ function openPayment(entry, printNow = false) {
 }
 
 export default function PaymentOut() {
+  const location = useLocation();
   const [records, setRecords] = useState(readPayments);
   const [editor, setEditor] = useState(null);
+
+  useEffect(() => {
+    if (location.state?.editPayment) {
+      setEditor({ mode: "edit", entry: location.state.editPayment });
+    }
+  }, [location.state]);
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [preset, setPreset] = useState("This Month");

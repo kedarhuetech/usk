@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
@@ -23,6 +24,7 @@ function ExpenseDocument({ entry, onClose }) {
 }
 
 export default function Expenses() {
+  const location = useLocation();
   const [records, setRecords] = useState(() => read(RECORDS_KEY, []));
   const [categories, setCategories] = useState(() => read(CATEGORIES_KEY, DEFAULT_CATEGORIES));
   const [tab, setTab] = useState("Category");
@@ -54,6 +56,13 @@ export default function Expenses() {
   const visible = selectedRecords.filter(record => (!dateFrom || record.date >= dateFrom) && (!dateTo || record.date <= dateTo) && `${record.number} ${record.category} ${record.party} ${record.rows.map(row => row.item).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
   const summary = useMemo(() => { const selectedRecords = records.filter(record => tab === "Category" ? record.category === activeName : record.rows.some(row => row.item === activeName)); return selectedRecords.reduce((acc, record) => { const total = record.rows.reduce((sum, row) => sum + rowAmount(row, record.gst), 0); const paid = record.payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0); acc.total += total; acc.balance += Math.max(0, total - paid); return acc; }, { total: 0, balance: 0 }); }, [records, tab, activeName]);
   const editEntry = (entry) => { setEditor({ mode: "edit", entry: { ...entry, rows: entry.rows.map(row => ({ ...row })), payments: entry.payments.map(payment => ({ ...payment })) } }); setMenuId(""); };
+
+  useEffect(() => {
+    if (location.state?.editExpense) {
+      editEntry(location.state.editExpense);
+    }
+  }, [location.state]);
+
   const updateEntry = (key, value) => setEditor(current => ({ ...current, entry: { ...current.entry, [key]: value } }));
   const updateRow = (id, key, value) => updateEntry("rows", editor.entry.rows.map(row => row.id === id ? { ...row, [key]: value } : row));
   const updatePayment = (id, key, value) => updateEntry("payments", editor.entry.payments.map(payment => payment.id === id ? { ...payment, [key]: value } : payment));
@@ -83,10 +92,3 @@ export default function Expenses() {
     {previewEntry && <ExpenseDocument entry={previewEntry} onClose={() => setPreviewEntry(null)}/>}
   </main>;
 }
-
-
-
-
-
-
-
