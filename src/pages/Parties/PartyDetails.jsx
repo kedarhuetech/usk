@@ -303,7 +303,7 @@ function PartyDetails() {
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
   const [parties, setParties] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [] });
+  const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [], paymentsOut: [], creditNotes: [] });
   const [selectedPartyId, setSelectedPartyId] = useState("cash-sale");
   const [search, setSearch] = useState("");
   const [openTransactionMenu, setOpenTransactionMenu] = useState("");
@@ -326,6 +326,8 @@ function PartyDetails() {
         estimates: readLocalList("ledgerly:estimateQuotations.v1"),
         proformas: readLocalList("ledgerly:proformaInvoices.v1"),
         payments: readLocalList("ledgerly:paymentIns.v1"),
+        paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
+        creditNotes: readLocalList("ledgerly:saleReturns.v1"),
       });
     } catch (error) {
       setLoadError(error.message || "Could not load saved parties from this browser.");
@@ -417,12 +419,14 @@ function PartyDetails() {
     ...partyInvoices.map((invoice) => {
       const total = Number(invoice.totals?.finalTotal || invoice.total || invoice.grandTotal || 0);
       const received = Number(invoice.receivedAmount || invoice.form?.receivedAmount || 0);
-      const balance = Math.max(0, Number(invoice.balance ?? (invoice.saleType === "credit" ? total - received : 0)));
+      const balance = Math.max(0, Number(invoice.balance ?? (invoice.saleType === "credit" ? total - received : 0)) - Number(invoice.creditNoteAppliedAmount || 0));
       return { id: `sale:${invoice.id}`, source: "Sale", number: invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—", date: invoice.form?.invoiceDate || invoice.createdAt, total, received: total - balance, balance, status: balance > 0 ? "Unpaid" : "Paid", raw: invoice };
     }),
     ...partyActivity.estimates.filter(belongsToSelectedParty).map((entry) => ({ id: `estimate:${entry.id}`, source: "Estimate/Quotation", number: entry.number || entry.refNo || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
     ...partyActivity.proformas.filter(belongsToSelectedParty).map((entry) => ({ id: `proforma:${entry.id}`, source: "Proforma Invoice", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
     ...partyActivity.payments.filter(belongsToSelectedParty).map((entry) => ({ id: `payment:${entry.id}`, source: "Payment-In", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.received ?? entry.amount ?? 0), balance: 0, status: entry.status || "Unused", raw: entry })),
+    ...partyActivity.paymentsOut.filter(belongsToSelectedParty).map((entry) => ({ id: `payment-out:${entry.id}`, source: entry.linkedCreditNoteId ? "Credit Note Refund" : "Payment-Out", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.amount || 0), balance: 0, status: entry.status || "Paid", raw: entry })),
+    ...partyActivity.creditNotes.filter((entry) => entry.type === "Credit Note" && !entry.cancelled && (String(entry.party || entry.customer || "").trim().toLowerCase() === String(selectedParty?.partyName || "").trim().toLowerCase())).map((entry) => ({ id: `credit-note:${entry.id}`, source: "Credit Note", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.total || 0), received: Number(entry.received || 0), balance: Number(entry.balance || 0), status: entry.status || "Credit Available", raw: entry })),
   ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const visiblePartyTransactions = partyTransactions.filter((entry) => [entry.source, entry.number, entry.date, entry.total, entry.received, entry.balance, entry.status, entry.raw?.paymentType, entry.raw?.description].join(" ").toLowerCase().includes(transactionSearch.toLowerCase()));
   const openingBalance = Math.abs(Number(selectedParty?.openingBalance || 0));

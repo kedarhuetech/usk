@@ -82,6 +82,7 @@ export default function AllPartiesReport() {
   // Raw data from storage
   const storedParties = useMemo(() => getParties(), [refreshTrigger]);
   const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
+  const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
   const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
   const paymentIns = useMemo(() => readLocal("ledgerly:paymentIns.v1"), [refreshTrigger]);
   const paymentOuts = useMemo(() => readLocal("ledgerly:paymentOuts.v1"), [refreshTrigger]);
@@ -204,6 +205,14 @@ export default function AllPartiesReport() {
         }
       });
 
+      // Credit notes reduce the customer's receivable without being counted as new sales.
+      saleReturns.forEach((creditNote) => {
+        if (creditNote.cancelled) return;
+        if (!isInDateRange(creditNote.date || creditNote.createdAt)) return;
+        const customer = String(creditNote.party || creditNote.customer || creditNote.partyName || "").trim().toLowerCase();
+        if (customer === pKey) netBalance -= Number(creditNote.total || 0);
+      });
+
       // Subtract unlinked payment-ins
       paymentIns.forEach((pi) => {
         if (!isInDateRange(pi.date || pi.createdAt)) return;
@@ -215,6 +224,9 @@ export default function AllPartiesReport() {
 
       // Add payment-outs
       paymentOuts.forEach((po) => {
+        // A Credit Note already reduces this customer's balance above; its linked
+        // refund is shown as an activity, but must not reduce the balance twice.
+        if (po.linkedCreditNoteId) return;
         if (!isInDateRange(po.date || po.createdAt)) return;
         const supp = (po.customer || po.party || po.partyName || "").trim().toLowerCase();
         if (supp === pKey) {
@@ -248,7 +260,7 @@ export default function AllPartiesReport() {
       if (b.partyName.toLowerCase() === "cash sale") return 1;
       return a.partyName.localeCompare(b.partyName);
     });
-  }, [storedParties, sales, purchases, paymentIns, paymentOuts, dateFilterActive, from, to]);
+  }, [storedParties, sales, purchases, saleReturns, paymentIns, paymentOuts, dateFilterActive, from, to]);
 
   // Filtered rows based on party type and search query
   const filteredRows = useMemo(() => {

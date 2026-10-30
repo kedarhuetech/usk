@@ -100,7 +100,7 @@ function invoiceReceived(invoice) {
 
 // This helper handles balance logic.
 function invoiceBalance(invoice) {
-  return Math.max(invoiceAmount(invoice) - invoiceReceived(invoice), 0);
+  return Math.max(invoiceAmount(invoice) - invoiceReceived(invoice) - Number(invoice.creditNoteAppliedAmount || 0), 0);
 }
 
 // Downloads csv.
