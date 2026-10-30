@@ -1,17 +1,9 @@
-import { applySaleInvoiceStockUpdate } from "./itemsStorage.js";
+import { applySaleInvoiceStockUpdate, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
 const SALE_INVOICES_KEY = "ledgerly:saleInvoices.v1";
 
 // This helper handles parse logic.
-function safeParse(value, fallback) {
-  try {
-    return JSON.parse(value) || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 // Checks whether use storage.
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -20,12 +12,21 @@ function canUseStorage() {
 // Reads invoices.
 function readInvoices() {
   if (!canUseStorage()) return [];
-  return safeParse(window.localStorage.getItem(SALE_INVOICES_KEY), []);
+  const raw = window.localStorage.getItem(SALE_INVOICES_KEY);
+  if (raw === null) return [];
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch (error) {
+    throw new Error("Saved sale invoices are corrupted; no invoice was changed.", { cause: error });
+  }
+  if (!Array.isArray(value)) throw new Error("Saved sale invoices must be a list; no invoice was changed.");
+  return value;
 }
 
 // Writes invoices.
 function writeInvoices(invoices) {
-  if (!canUseStorage()) return;
+  if (!canUseStorage()) throw new Error("Browser storage is unavailable; the invoice was not saved.");
   window.localStorage.setItem(SALE_INVOICES_KEY, JSON.stringify(invoices));
 }
 
@@ -59,6 +60,10 @@ export function getNextSaleInvoiceNumber() {
 
 // Saves sale invoice.
 export function saveSaleInvoice(invoice) {
+  if (!canUseStorage()) throw new Error("Browser storage is unavailable; the invoice was not saved.");
+  const previousInvoices = window.localStorage.getItem(SALE_INVOICES_KEY);
+  const previousItems = window.localStorage.getItem(inventoryItemsStorageKey);
+  try {
   let normalized = normalizeInvoice({ ...invoice, updatedAt: new Date().toISOString() });
   const existing = readInvoices();
   const existingInvoice = existing.find((current) => current.id === normalized.id || current.invoiceId === normalized.invoiceId);
@@ -77,8 +82,22 @@ export function saveSaleInvoice(invoice) {
 
   const nextInvoices = [normalized, ...existing.filter((current) => current.id !== normalized.id)];
   writeInvoices(nextInvoices);
+  if (!readInvoices().some((current) => current.id === normalized.id)) {
+    throw new Error("The invoice could not be verified after saving.");
+  }
   notifyBusinessDataChanged();
   return normalized;
+  } catch (error) {
+    try {
+      if (previousInvoices === null) window.localStorage.removeItem(SALE_INVOICES_KEY);
+      else window.localStorage.setItem(SALE_INVOICES_KEY, previousInvoices);
+      if (previousItems === null) window.localStorage.removeItem(inventoryItemsStorageKey);
+      else window.localStorage.setItem(inventoryItemsStorageKey, previousItems);
+    } catch (rollbackError) {
+      throw new Error(`${error.message} Rollback could not fully restore local data: ${rollbackError.message}`, { cause: rollbackError });
+    }
+    throw error;
+  }
 }
 
 // Deletes sale invoice.

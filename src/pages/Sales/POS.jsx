@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiAlertCircle,
@@ -10,9 +10,7 @@ import {
   FiEdit2,
   FiFileText,
   FiInfo,
-  FiPercent,
   FiPlus,
-  FiPrinter,
   FiSearch,
   FiSettings,
   FiTag,
@@ -23,36 +21,43 @@ import {
 import {
   getInventoryItems,
   saveInventoryItem,
-  applySaleInvoiceStockUpdate,
+  inventoryItemsStorageKey,
 } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
-import { saveSaleInvoice } from "../../services/salesStorage";
+import { getParties, saveParty, partiesStorageKey } from "../../services/partiesStorage";
+import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey } from "../../services/salesStorage";
+import {
+  addPosBill,
+  closePosBill,
+  createPosBillSession,
+  createPosDraft,
+  switchPosBill,
+  updatePosBill,
+} from "../../services/posBillState.js";
+import { calculatePosBill } from "../../services/posBillCalculations.js";
 
 const STORAGE = {
-  products: "pos_products_v1",
-  customers: "pos_customers_v1",
   draft: "pos_draft_v1",
   bills: "pos_saved_bills_v1",
+  openBills: "pos_open_bills_v1",
+  activeBillId: "pos_active_bill_id_v1",
 };
 
-const DEFAULT_PRODUCTS = [
-  { id: "p1", code: "A101", name: "Wheat Flour 5kg", price: 240, taxRate: 0, unit: "Kg", stock: 50 },
-  { id: "p2", code: "A102", name: "Basmati Rice 1kg", price: 110, taxRate: 5, unit: "Kg", stock: 100 },
-  { id: "p3", code: "A103", name: "Sunflower Oil 1L", price: 155, taxRate: 5, unit: "Litre", stock: 45 },
-  { id: "p4", code: "A104", name: "Tata Salt 1kg", price: 28, taxRate: 0, unit: "Pcs", stock: 120 },
-  { id: "p5", code: "A105", name: "Sugar 1kg", price: 48, taxRate: 5, unit: "Kg", stock: 80 },
-  { id: "p6", code: "A106", name: "Toor Dal 1kg", price: 165, taxRate: 5, unit: "Kg", stock: 60 },
-  { id: "p7", code: "A107", name: "Notebook 200 Pgs", price: 60, taxRate: 12, unit: "Pcs", stock: 150 },
-  { id: "p8", code: "A108", name: "Ball Pen Blue", price: 10, taxRate: 12, unit: "Pcs", stock: 300 },
-  { id: "p9", code: "A109", name: "Biscuits Pack", price: 35, taxRate: 18, unit: "Pcs", stock: 95 },
-  { id: "p10", code: "A110", name: "Mineral Water 1L", price: 20, taxRate: 18, unit: "Pcs", stock: 110 },
-];
-
-const DEFAULT_CUSTOMERS = [
-  { id: "c1", name: "Ramesh Sharma", phone: "9876543210" },
-  { id: "c2", name: "Pooja Patel", phone: "9823456789" },
-  { id: "c3", name: "Anil Kumar", phone: "9123456780" },
-];
+function validatePosStorage() {
+  try {
+    for (const key of [inventoryItemsStorageKey, partiesStorageKey, saleInvoicesStorageKey, STORAGE.bills, STORAGE.openBills]) {
+      const raw = localStorage.getItem(key);
+      if (raw === null) continue;
+      if (!Array.isArray(JSON.parse(raw))) return `Saved data in ${key} is not a valid list.`;
+    }
+    for (const key of [STORAGE.activeBillId, STORAGE.draft]) {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) JSON.parse(raw);
+    }
+  } catch (error) {
+    return `Could not read saved POS data: ${error.message}`;
+  }
+  return "";
+}
 
 function readStorage(key, fallback) {
   try {
@@ -66,8 +71,12 @@ function readStorage(key, fallback) {
 function persist(key, value) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    window.dispatchEvent(new CustomEvent("pos-storage-saved"));
+    return true;
   } catch (error) {
     console.error("Could not save POS data:", error);
+    window.dispatchEvent(new CustomEvent("pos-storage-error", { detail: `Could not save ${key} in browser storage.` }));
+    return false;
   }
 }
 
@@ -77,19 +86,41 @@ const money = (value) =>
     maximumFractionDigits: 2,
   });
 
-const makeDraft = () => ({
-  invoiceNo: `INV-${Date.now().toString().slice(-6)}`,
-  date: new Date().toISOString().slice(0, 10),
-  customer: "",
-  customerPhone: "",
-  items: [],
-  paymentMode: "Cash",
-  amountReceived: "",
-  billDiscount: 0,
-  additionalCharges: 0,
-  remarks: "",
-  loyaltyPointsRedeemed: 0,
-});
+function readPosBillSession() {
+  const savedBills = readStorage(STORAGE.openBills, null);
+  const savedActive = readStorage(STORAGE.activeBillId, null);
+  if (Array.isArray(savedBills)) return createPosBillSession({ bills: savedBills, activeBillId: savedActive });
+  const legacyDraft = readStorage(STORAGE.draft, null);
+  const migrated = legacyDraft && typeof legacyDraft === "object"
+    ? [{ ...legacyDraft, id: legacyDraft.id || createPosDraft().id }]
+    : [];
+  return createPosBillSession({ bills: migrated, activeBillId: migrated[0]?.id || null });
+}
+
+function billDraftSignature(bill) {
+  return JSON.stringify({
+    invoiceNo: bill.invoiceNo,
+    date: bill.date,
+    customer: bill.customer,
+    customerPhone: bill.customerPhone,
+    paymentMode: bill.paymentMode,
+    amountReceived: bill.amountReceived,
+    billDiscount: bill.billDiscount,
+    additionalCharges: bill.additionalCharges,
+    remarks: bill.remarks,
+    loyaltyPointsRedeemed: bill.loyaltyPointsRedeemed,
+    items: (bill.items || []).map((item) => ({
+      productId: item.productId,
+      code: item.code,
+      name: item.name,
+      qty: item.qty,
+      unit: item.unit,
+      price: item.price,
+      taxRate: item.taxRate,
+      discount: item.discount,
+    })),
+  });
+}
 
 function ActionButton({ children, primary = false, onClick, disabled = false }) {
   return (
@@ -110,6 +141,7 @@ function ActionButton({ children, primary = false, onClick, disabled = false }) 
 
 export default function PointOfSale() {
   const navigate = useNavigate();
+  const [initialStorageError] = useState(validatePosStorage);
 
   const handleClosePOS = useCallback(() => {
     if (window.history.state && window.history.state.idx > 0) {
@@ -122,62 +154,42 @@ export default function PointOfSale() {
   // Load products from localStorage (getInventoryItems)
   const loadProducts = useCallback(() => {
     const inventory = getInventoryItems();
-    if (inventory && inventory.length > 0) {
-      return inventory.map((item) => ({
+    return inventory.map((item) => ({
         id: item.id,
-        code: item.itemCode || item.code || `ITM-${item.id.slice(-4)}`,
+        code: item.itemCode || item.code || `ITM-${String(item.id || "").slice(-4)}`,
         name: item.itemName || item.name || "Item",
-        price: Number(item.salePrice || item.price || 0),
-        taxRate: Number(String(item.taxRate || "0").replace("%", "").replace("None", "0")) || 0,
+        price: Number(item.salePrice ?? item.price ?? 0),
+        taxRate: Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
         unit: item.unit || item.baseUnit || "Pcs",
-        stock: Number(item.stock || item.openingQuantity || 0),
+        stock: Number(item.stock ?? item.openingQuantity ?? 0),
         category: item.category || "",
+        barcode: item.barcode || item.barCode || item.itemBarcode || "",
+        type: item.type || item.itemType || "product",
       }));
-    }
-
-    const legacy = readStorage(STORAGE.products, null);
-    if (legacy && legacy.length > 0) return legacy;
-
-    // Seed defaults into localStorage so they are stored in localStorage
-    DEFAULT_PRODUCTS.forEach((p) => {
-      saveInventoryItem({
-        id: p.id,
-        itemName: p.name,
-        itemCode: p.code,
-        salePrice: p.price,
-        taxRate: `${p.taxRate}%`,
-        unit: p.unit,
-        stock: p.stock,
-      });
-    });
-    return DEFAULT_PRODUCTS;
   }, []);
 
   // Load customers from localStorage (getParties)
   const loadCustomers = useCallback(() => {
     const parties = getParties();
-    if (parties && parties.length > 0) {
-      return parties.map((p) => ({
+    return parties.map((p) => ({
         id: p.id,
         name: p.partyName || p.name || "Customer",
         phone: p.phoneNumber || p.phone || "",
         address: p.billingAddress || p.address || "",
+        loyaltyPoints: Number(p.loyaltyPoints || p.points || 0),
       }));
-    }
-
-    const legacy = readStorage(STORAGE.customers, null);
-    if (legacy && legacy.length > 0) return legacy;
-
-    DEFAULT_CUSTOMERS.forEach((c) => {
-      saveParty({ partyName: c.name, phoneNumber: c.phone });
-    });
-    return DEFAULT_CUSTOMERS;
   }, []);
 
   const [products, setProducts] = useState(loadProducts);
   const [customers, setCustomers] = useState(loadCustomers);
-  const [bills, setBills] = useState(() => readStorage(STORAGE.bills, []));
-  const [draft, setDraft] = useState(() => readStorage(STORAGE.draft, null) || makeDraft());
+  const [bills, setBills] = useState(() => {
+    const value = readStorage(STORAGE.bills, []);
+    return Array.isArray(value) ? value : [];
+  });
+  const [billSession, setBillSession] = useState(readPosBillSession);
+  const [emptyDraft] = useState(createPosDraft);
+  const activeBill = billSession.bills.find((bill) => bill.id === billSession.activeBillId);
+  const draft = activeBill || emptyDraft;
 
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -188,9 +200,12 @@ export default function PointOfSale() {
   // Modal State Management
   const [modal, setModal] = useState(null); // { type: string, data?: any }
   const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'warning' | 'info' }
+  const [storageError, setStorageError] = useState(initialStorageError);
 
   const searchRef = useRef(null);
   const toastTimeoutRef = useRef(null);
+  const newBillLockRef = useRef(false);
+  const saveBillLockRef = useRef(false);
 
   const showToast = useCallback((message, type = "success") => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -203,72 +218,38 @@ export default function PointOfSale() {
     const handleStorageChange = () => {
       setProducts(loadProducts());
       setCustomers(loadCustomers());
+      setStorageError(validatePosStorage());
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [loadProducts, loadCustomers]);
 
-  // Persist POS state to localStorage
-  useEffect(() => persist(STORAGE.products, products), [products]);
-  useEffect(() => persist(STORAGE.customers, customers), [customers]);
-  useEffect(() => persist(STORAGE.bills, bills), [bills]);
-  useEffect(() => persist(STORAGE.draft, draft), [draft]);
+  useEffect(() => {
+    const onError = (event) => setStorageError(event.detail || "POS data could not be saved in browser storage.");
+    const onSaved = () => setStorageError(validatePosStorage());
+    window.addEventListener("pos-storage-error", onError);
+    window.addEventListener("pos-storage-saved", onSaved);
+    return () => {
+      window.removeEventListener("pos-storage-error", onError);
+      window.removeEventListener("pos-storage-saved", onSaved);
+    };
+  }, []);
+
+  // Persist POS state to localStorage.
+  useEffect(() => {
+    persist(STORAGE.bills, bills);
+  }, [bills]);
+  useEffect(() => {
+    persist(STORAGE.openBills, billSession.bills);
+    persist(STORAGE.activeBillId, billSession.activeBillId);
+  }, [billSession]);
 
   const updateDraft = useCallback((changes) => {
-    setDraft((current) => ({ ...current, ...changes }));
+    setBillSession((current) => updatePosBill(current, current.activeBillId, changes));
   }, []);
 
   // Financial calculations
-  const calculations = useMemo(() => {
-    let subtotal = 0;
-    let itemDiscount = 0;
-    let tax = 0;
-
-    const lines = draft.items.map((item) => {
-      const qty = Math.max(0.01, Number(item.qty) || 1);
-      const price = Math.max(0, Number(item.price) || 0);
-      const discount = Math.max(0, Math.min(Number(item.discount) || 0, price * qty));
-      const taxable = Math.max(0, price * qty - discount);
-      const itemTax = (taxable * (Number(item.taxRate) || 0)) / 100;
-      const total = taxable + itemTax;
-
-      subtotal += price * qty;
-      itemDiscount += discount;
-      tax += itemTax;
-
-      return {
-        ...item,
-        qty,
-        price,
-        discount,
-        taxable,
-        itemTax,
-        total,
-      };
-    });
-
-    const billDiscount = Math.max(0, Number(draft.billDiscount) || 0);
-    const charges = Math.max(0, Number(draft.additionalCharges) || 0);
-    const loyaltyDiscount = Math.max(0, Number(draft.loyaltyPointsRedeemed) || 0);
-    const total = Math.max(0, subtotal - itemDiscount + tax - billDiscount - loyaltyDiscount + charges);
-
-    const receivedInput = draft.amountReceived === "" ? total : Number(draft.amountReceived);
-    const received = Number.isFinite(receivedInput) ? Math.max(0, receivedInput) : total;
-
-    return {
-      lines,
-      subtotal,
-      itemDiscount,
-      tax,
-      billDiscount,
-      loyaltyDiscount,
-      charges,
-      total,
-      received,
-      change: Math.max(0, received - total),
-      due: Math.max(0, total - received),
-    };
-  }, [draft]);
+  const calculations = useMemo(() => calculatePosBill(draft), [draft]);
 
   // Filter products for search
   const filteredProducts = useMemo(() => {
@@ -277,7 +258,7 @@ export default function PointOfSale() {
 
     return products
       .filter((product) =>
-        [product.name, product.code, product.id, product.category]
+        [product.name, product.code, product.barcode, product.id, product.category]
           .some((val) => String(val || "").toLowerCase().includes(query))
       )
       .slice(0, 12);
@@ -305,22 +286,27 @@ export default function PointOfSale() {
 
   // Add product to bill
   function addProduct(product) {
-    setDraft((current) => {
-      const existing = current.items.find((item) => item.productId === product.id);
+    if (!activeBill) {
+      showToast("Start a new bill before adding products.", "warning");
+      return;
+    }
+    const existing = draft.items.find((item) => item.productId === product.id);
+    const requestedQuantity = Number(existing?.qty || 0) + 1;
+    if (product.type !== "service" && requestedQuantity > Number(product.stock || 0)) {
+      showToast(`Only ${Number(product.stock || 0)} ${product.unit || "unit(s)"} available.`, "warning");
+      return;
+    }
 
-      if (existing) {
-        return {
-          ...current,
-          items: current.items.map((item) =>
-            item.productId === product.id
-              ? { ...item, qty: Number(item.qty) + 1 }
-              : item
-          ),
-        };
-      }
-
+    if (existing) {
+      updateDraft((current) => ({
+        ...current,
+        items: current.items.map((item) => item.productId === product.id
+          ? { ...item, qty: Number(item.qty) + 1 }
+          : item),
+      }));
+    } else {
       const item = {
-        lineId: `${product.id}-${Date.now()}`,
+        lineId: crypto.randomUUID(),
         productId: product.id,
         code: product.code,
         name: product.name,
@@ -330,10 +316,9 @@ export default function PointOfSale() {
         taxRate: Number(product.taxRate) || 0,
         discount: 0,
       };
-
+      updateDraft((current) => ({ ...current, items: [...current.items, item] }));
       setSelectedId(item.lineId);
-      return { ...current, items: [...current.items, item] };
-    });
+    }
 
     setSearch("");
     setProductOpen(false);
@@ -342,7 +327,7 @@ export default function PointOfSale() {
   }
 
   function updateItem(lineId, changes) {
-    setDraft((current) => ({
+    updateDraft((current) => ({
       ...current,
       items: current.items.map((item) =>
         item.lineId === lineId ? { ...item, ...changes } : item
@@ -419,10 +404,11 @@ export default function PointOfSale() {
   }
 
   function handleLoyaltyClick() {
+    const customer = customers.find((entry) => entry.name === draft.customer);
     setModal({
       type: "loyalty",
       customer: draft.customer || "Walk-in Customer",
-      availablePoints: 350,
+      availablePoints: Number(customer?.loyaltyPoints || customer?.points || 0),
       pointsToRedeem: String(draft.loyaltyPointsRedeemed || 0),
     });
   }
@@ -444,34 +430,121 @@ export default function PointOfSale() {
     setModal({
       type: "otherPayment",
       paymentMode: draft.paymentMode || "Cash",
-      amountReceived: String(draft.amountReceived || calculations.total),
+      amountReceived: String(draft.amountReceived === "" ? calculations.received : draft.amountReceived),
       reference: "",
       notes: "",
     });
   }
 
   function handleNewBillClick() {
-    if (draft.items.length > 0) {
-      setModal({ type: "confirmNewBill" });
-    } else {
-      executeNewBill();
-    }
+    if (newBillLockRef.current) return;
+    newBillLockRef.current = true;
+    window.setTimeout(() => { newBillLockRef.current = false; }, 350);
+    executeNewBill();
   }
 
   function executeNewBill() {
-    setDraft(makeDraft());
+    const next = createPosDraft();
+    setBillSession((current) => addPosBill(current, next));
     setSelectedId("");
     setSearch("");
+    setCustomerSearch("");
+    setCustomerOpen(false);
     showToast("New bill started");
     searchRef.current?.focus();
     setModal(null);
   }
 
+  function hasUnsavedBillData(bill) {
+    if (bill.savedAt) return Boolean(bill.savedSnapshot && billDraftSignature(bill) !== bill.savedSnapshot);
+    return bill.items?.length > 0 || bill.customer || bill.customerPhone
+      || bill.amountReceived !== "" || Number(bill.billDiscount) > 0
+      || Number(bill.additionalCharges) > 0 || Number(bill.loyaltyPointsRedeemed) > 0
+      || Boolean(bill.remarks) || bill.paymentMode !== "Cash"
+      || bill.date !== new Date().toISOString().slice(0, 10);
+  }
+
+  function closeActiveBill() {
+    if (!activeBill) return;
+    requestCloseBill(activeBill.id);
+  }
+
+  function requestCloseBill(billId) {
+    const bill = billSession.bills.find((entry) => entry.id === billId);
+    if (!bill) return;
+    if (hasUnsavedBillData(bill)) {
+      setModal({ type: "confirmCloseBill", billId });
+      return;
+    }
+    removeOpenBill(billId);
+  }
+
+  function removeOpenBill(billId) {
+    setBillSession((current) => closePosBill(current, billId));
+    setSelectedId("");
+    setSearch("");
+    setModal(null);
+  }
+
+  function activateBill(billId) {
+    if (billId === billSession.activeBillId) return;
+    setBillSession((current) => switchPosBill(current, billId, draft));
+    setSelectedId("");
+    setSearch("");
+    setCustomerSearch("");
+    setModal(null);
+  }
+
+  function openSavedBill(bill) {
+    const existing = billSession.bills.find((entry) => entry.id === bill.id);
+    if (existing) {
+      setBillSession((current) => ({ ...current, activeBillId: existing.id }));
+    } else {
+      const reopened = {
+        ...bill,
+        id: bill.id || crypto.randomUUID(),
+        items: (bill.items || []).map((item) => ({ ...item, lineId: item.lineId || crypto.randomUUID() })),
+        savedSnapshot: billDraftSignature(bill),
+      };
+      setBillSession((current) => addPosBill(current, reopened));
+    }
+    setSelectedId("");
+    setSearch("");
+    showToast(`Loaded ${bill.invoiceNo}`);
+  }
+
   function saveBill(print = false) {
+    if (!activeBill) {
+      showToast("Start a new bill before saving.", "warning");
+      return;
+    }
+    if (draft.savedAt) {
+      showToast(`Bill ${draft.invoiceNo} is already saved.`, "info");
+      if (print) window.setTimeout(() => window.print(), 150);
+      return;
+    }
     if (draft.items.length === 0) {
       showToast("Add at least one item before saving the bill.", "warning");
       return;
     }
+    const inventory = getInventoryItems();
+    for (const line of calculations.lines) {
+      const product = inventory.find((item) => item.id === line.productId);
+      if (!product) {
+        showToast(`Product "${line.name}" is no longer available in inventory.`, "warning");
+        return;
+      }
+      const stock = Number(product.stock ?? product.openingQuantity ?? 0);
+      const quantityInBill = calculations.lines
+        .filter((entry) => entry.productId === line.productId)
+        .reduce((sum, entry) => sum + entry.qty, 0);
+      if ((product.type || product.itemType) !== "service" && quantityInBill > stock) {
+        showToast(`Insufficient stock for ${line.name}. Available: ${stock}.`, "warning");
+        return;
+      }
+    }
+    if (saveBillLockRef.current) return;
+    saveBillLockRef.current = true;
 
     const bill = {
       ...draft,
@@ -486,46 +559,63 @@ export default function PointOfSale() {
       savedAt: new Date().toISOString(),
     };
 
-    // Save in POS bills
-    setBills((current) => {
-      const existingIndex = current.findIndex((b) => b.invoiceNo === bill.invoiceNo);
-      if (existingIndex >= 0) {
-        return current.map((b, idx) => (idx === existingIndex ? bill : b));
-      }
-      return [bill, ...current];
-    });
+    const transactionId = `pos-sale-${draft.id}`;
+    const invoiceTotal = bill.total;
+    const received = Math.min(bill.total, bill.amountReceived);
+    const saleType = bill.due > 0 || bill.paymentMode === "Credit" ? "credit" : "cash";
 
-    // Also persist into global sales records and update stock in localStorage
     try {
-      saveSaleInvoice({
+      const savedInvoice = saveSaleInvoice({
+        id: transactionId,
+        transactionType: "sale",
+        saleType,
         invoiceNumber: bill.invoiceNo,
-        party: bill.customer || "Walk-in Customer",
-        phone: bill.customerPhone || "",
-        total: bill.total,
-        paymentType: bill.paymentMode,
-        receivedAmount: bill.amountReceived,
+        form: {
+          invoiceNumber: bill.invoiceNo,
+          invoiceDate: bill.date,
+          customer: bill.customer || "",
+          phone: bill.customerPhone || "",
+          paymentType: bill.paymentMode,
+        },
+        totals: {
+          subTotal: bill.subtotal,
+          discount: bill.itemDiscount + bill.billDiscount + bill.loyaltyDiscount,
+          tax: bill.tax,
+          additionalCharges: bill.charges,
+          finalTotal: invoiceTotal,
+          grandTotal: invoiceTotal,
+          received,
+          balance: bill.due,
+        },
+        status: bill.due === 0 ? "Paid" : received > 0 ? "Partially Paid" : "Unpaid",
         rows: bill.items.map((it) => ({
+          id: it.lineId,
+          sourceItemId: it.productId,
           itemId: it.productId,
           item: it.name,
           qty: it.qty,
           price: it.price,
           unit: it.unit,
           discount: it.discount,
+          taxRate: it.taxRate,
+          amount: it.total,
         })),
       });
-      applySaleInvoiceStockUpdate({
-        transactionType: "sale",
-        rows: bill.items.map((it) => ({
-          itemId: it.productId,
-          item: it.name,
-          qty: it.qty,
-        })),
-      });
-    } catch (e) {
-      console.warn("Could not sync with sales records:", e);
-    }
+      if (!savedInvoice?.id || !getSaleInvoices().some((invoice) => invoice.id === savedInvoice.id)) {
+        throw new Error("The sale invoice could not be verified in local storage.");
+      }
 
-    showToast(`Bill ${bill.invoiceNo} saved to local storage!`);
+      const savedBill = { ...bill, id: draft.id, invoiceId: savedInvoice.id, savedAt: new Date().toISOString(), savedSnapshot: billDraftSignature(draft) };
+      setBills((current) => [savedBill, ...current.filter((entry) => entry.id !== savedBill.id && entry.invoiceNo !== savedBill.invoiceNo)]);
+      updateDraft({ savedAt: savedBill.savedAt, invoiceId: savedInvoice.id });
+      setProducts(loadProducts());
+      showToast(`Bill ${bill.invoiceNo} saved to local storage!`);
+    } catch (e) {
+      showToast(`Could not save bill: ${e.message || "Local storage write failed."}`, "warning");
+      saveBillLockRef.current = false;
+      return;
+    }
+    saveBillLockRef.current = false;
 
     if (print) {
       window.setTimeout(() => window.print(), 150);
@@ -588,7 +678,7 @@ export default function PointOfSale() {
 
       if (event.ctrlKey && key === "w") {
         event.preventDefault();
-        handleNewBillClick();
+        closeActiveBill();
         return;
       }
 
@@ -724,17 +814,17 @@ export default function PointOfSale() {
 
       {/* Bill Tabs & Actions Bar */}
       <nav className="flex h-[48px] shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3">
-        <div className="flex h-full items-center gap-4 rounded-t-md bg-[#f8f9fc] px-4 border-t-2 border-blue-600">
-          <span className="font-semibold text-slate-800">#{draft.invoiceNo}</span>
-          <span className="text-xs text-slate-400">Ctrl+W</span>
-          <button
-            type="button"
-            onClick={handleNewBillClick}
-            aria-label="Close current bill"
-            className="rounded p-0.5 hover:bg-slate-200 transition"
-          >
-            <FiX className="text-slate-500" />
-          </button>
+        <div className="flex h-full min-w-0 items-center gap-1 overflow-x-auto">
+          {billSession.bills.map((bill) => (
+            <div key={bill.id} className={`flex h-full shrink-0 items-center gap-3 rounded-t-md border-t-2 px-3 ${bill.id === billSession.activeBillId ? "border-blue-600 bg-[#f8f9fc]" : "border-transparent bg-white"}`}>
+              <button type="button" onClick={() => activateBill(bill.id)} className="max-w-40 truncate text-sm font-semibold text-slate-800" aria-current={bill.id === billSession.activeBillId ? "page" : undefined}>
+                #{bill.invoiceNo}
+              </button>
+              <button type="button" onClick={() => requestCloseBill(bill.id)} aria-label={`Close bill ${bill.invoiceNo}`} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 transition">
+                <FiX />
+              </button>
+            </div>
+          ))}
         </div>
         <button
           type="button"
@@ -748,8 +838,11 @@ export default function PointOfSale() {
         </div>
       </nav>
 
+      {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{storageError}</p>}
+
       {/* Main Split Grid */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-auto p-1.5 lg:grid-cols-[minmax(0,1.82fr)_minmax(340px,1fr)]">
+        {activeBill ? <>
         {/* Left Section: Search, Table, Shortcuts Bar */}
         <section className="flex min-h-[500px] flex-col gap-1.5">
           {/* Item Search Bar */}
@@ -767,17 +860,20 @@ export default function PointOfSale() {
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
-                    if (filteredProducts[0]) {
-                      addProduct(filteredProducts[0]);
+                    const query = search.trim().toLowerCase();
+                    const exactMatch = products.find((product) => [product.code, product.barcode]
+                      .some((value) => String(value || "").trim().toLowerCase() === query));
+                    if (exactMatch || filteredProducts[0]) {
+                      addProduct(exactMatch || filteredProducts[0]);
                     } else if (search.trim()) {
                       setModal({
                         type: "addProduct",
                         name: search.trim(),
-                        price: "100",
+                        price: "",
                         unit: "Pcs",
                         taxRate: "0",
-                        code: `ITEM-${Date.now().toString().slice(-4)}`,
-                        stock: "100",
+                        code: "",
+                        stock: "",
                       });
                       setProductOpen(false);
                     }
@@ -821,7 +917,7 @@ export default function PointOfSale() {
                       <span className="block font-semibold text-slate-800">{product.name}</span>
                       <span className="text-xs text-slate-500">
                         {product.code} · {product.unit} · GST {product.taxRate}%
-                        {product.stock ? ` · Stock: ${product.stock}` : ""}
+                        {product.type !== "service" ? ` · Stock: ${product.stock}` : ""}
                       </span>
                     </div>
                     <span className="font-bold text-slate-900">₹{money(product.price)}</span>
@@ -837,11 +933,11 @@ export default function PointOfSale() {
                         setModal({
                           type: "addProduct",
                           name: search.trim(),
-                          price: "100",
+                          price: "",
                           unit: "Pcs",
                           taxRate: "0",
-                          code: `ITEM-${Date.now().toString().slice(-4)}`,
-                          stock: "100",
+                          code: "",
+                          stock: "",
                         });
                         setProductOpen(false);
                       }}
@@ -1009,8 +1105,8 @@ export default function PointOfSale() {
                     price: "",
                     unit: "Pcs",
                     taxRate: "0",
-                    code: `ITEM-${Date.now().toString().slice(-4)}`,
-                    stock: "100",
+                    code: "",
+                    stock: "",
                   });
                 }}
                 className="font-semibold text-blue-600 hover:underline"
@@ -1269,18 +1365,7 @@ export default function PointOfSale() {
                 >
                   <button
                     type="button"
-                    onClick={() => {
-                      setDraft({
-                        ...makeDraft(),
-                        ...bill,
-                        items: (bill.items || []).map((item) => ({
-                          ...item,
-                          lineId: item.lineId || `${item.productId}-${Date.now()}-${Math.random()}`,
-                        })),
-                      });
-                      setSelectedId("");
-                      showToast(`Loaded ${bill.invoiceNo}`);
-                    }}
+                    onClick={() => openSavedBill(bill)}
                     className="min-w-0 text-left hover:text-blue-600"
                   >
                     <span className="block font-semibold">{bill.invoiceNo}</span>
@@ -1304,6 +1389,12 @@ export default function PointOfSale() {
             )}
           </details>
         </aside>
+        </> : <section className="col-span-full flex min-h-[420px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-sm">
+          <h2 className="text-lg font-bold text-slate-800">No open bills</h2>
+          <p className="mt-2 text-sm text-slate-500">Start a new bill to add products and take payment.</p>
+          <button type="button" onClick={handleNewBillClick} className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"><FiPlus /> New Bill [Ctrl+T]</button>
+          {bills.length > 0 && <div className="mt-6 max-h-56 w-full max-w-lg overflow-auto rounded border border-slate-200 p-3 text-left"><h3 className="mb-2 text-sm font-semibold text-slate-700">Saved bills</h3>{bills.map((bill) => <button key={bill.id || bill.invoiceNo} type="button" onClick={() => openSavedBill(bill)} className="flex w-full items-center justify-between border-t border-slate-100 py-2 text-left text-sm hover:text-blue-600"><span>{bill.invoiceNo} · {bill.customer || "Walk-in"}</span><span>₹{money(bill.total)}</span></button>)}</div>}
+        </section>}
       </div>
 
       {/* Floating Animated Toast Notifications */}
@@ -1356,6 +1447,15 @@ export default function PointOfSale() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const qty = Number(modal.qty);
+                  const product = products.find((entry) => entry.id === modal.item.productId);
+                  if (!Number.isFinite(qty) || qty <= 0) {
+                    showToast("Quantity must be greater than zero.", "warning");
+                    return;
+                  }
+                  if (product && product.type !== "service" && qty > Number(product.stock || 0)) {
+                    showToast(`Only ${Number(product.stock || 0)} ${product.unit || "unit(s)"} available.`, "warning");
+                    return;
+                  }
                   if (qty > 0) {
                     updateItem(modal.item.lineId, { qty });
                     showToast(`Updated quantity to ${qty} ${modal.item.unit}`);
@@ -1650,7 +1750,7 @@ export default function PointOfSale() {
                   <button
                     type="button"
                     onClick={() => {
-                      setDraft((current) => ({
+                      updateDraft((current) => ({
                         ...current,
                         items: current.items.filter((r) => r.lineId !== modal.item.lineId),
                       }));
@@ -1971,14 +2071,19 @@ export default function PointOfSale() {
                   e.preventDefault();
                   if (!modal.name?.trim()) return;
                   const newCust = {
-                    id: `c-${Date.now()}`,
+                    id: `c-${crypto.randomUUID()}`,
                     name: modal.name.trim(),
                     partyName: modal.name.trim(),
                     phone: modal.phone?.trim() || "",
                     phoneNumber: modal.phone?.trim() || "",
                     address: modal.address?.trim() || "",
                   };
-                  saveParty(newCust);
+                  try {
+                    saveParty(newCust);
+                  } catch (error) {
+                    showToast(`Could not save customer: ${error.message || "Storage write failed."}`, "warning");
+                    return;
+                  }
                   setCustomers((current) => [...current, newCust]);
                   updateDraft({ customer: newCust.name, customerPhone: newCust.phone });
                   showToast(`Saved customer "${newCust.name}" to local storage!`);
@@ -2066,12 +2171,18 @@ export default function PointOfSale() {
                   e.preventDefault();
                   if (!modal.name?.trim()) return;
 
+                  if (!Number.isFinite(Number(modal.price)) || Number(modal.price) < 0
+                    || !Number.isFinite(Number(modal.stock || 0)) || Number(modal.stock || 0) < 0) {
+                    showToast("Enter a valid price and stock quantity.", "warning");
+                    return;
+                  }
+                  const generatedCode = `ITM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
                   const newProduct = {
-                    id: `p-${Date.now()}`,
+                    id: `p-${crypto.randomUUID()}`,
                     itemName: modal.name.trim(),
                     name: modal.name.trim(),
-                    itemCode: modal.code?.trim() || `ITM-${Date.now().toString().slice(-4)}`,
-                    code: modal.code?.trim() || `ITM-${Date.now().toString().slice(-4)}`,
+                    itemCode: modal.code?.trim() || generatedCode,
+                    code: modal.code?.trim() || generatedCode,
                     salePrice: Number(modal.price) || 0,
                     price: Number(modal.price) || 0,
                     unit: modal.unit || "Pcs",
@@ -2079,8 +2190,13 @@ export default function PointOfSale() {
                     stock: Number(modal.stock) || 0,
                   };
 
-                  saveInventoryItem(newProduct);
-                  setProducts((curr) => [...curr, newProduct]);
+                  try {
+                    saveInventoryItem(newProduct);
+                    setProducts((curr) => [...curr.filter((item) => item.id !== newProduct.id), newProduct]);
+                  } catch (error) {
+                    showToast(`Could not save product: ${error.message || "Storage write failed."}`, "warning");
+                    return;
+                  }
                   addProduct(newProduct);
                   showToast(`Saved "${newProduct.name}" to inventory & added to bill!`);
                   setModal(null);
@@ -2344,7 +2460,11 @@ export default function PointOfSale() {
                       <button
                         key={mode}
                         type="button"
-                        onClick={() => setModal((m) => ({ ...m, paymentMode: mode }))}
+                        onClick={() => setModal((m) => ({
+                          ...m,
+                          paymentMode: mode,
+                          amountReceived: mode === "Credit" && m.amountReceived === String(calculations.total) ? "0" : m.amountReceived,
+                        }))}
                         className={`rounded-lg border py-2 text-xs font-bold transition ${
                           modal.paymentMode === mode
                             ? "border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-300"
@@ -2391,17 +2511,16 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* 13. Confirm Start New Bill Modal */}
-          {modal.type === "confirmNewBill" && (
+          {/* Confirm closing an unsaved bill */}
+          {modal.type === "confirmCloseBill" && (
             <div className="w-full max-w-sm rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="p-5 text-center">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 mb-3">
                   <FiAlertCircle size={24} />
                 </div>
-                <h3 className="text-base font-bold text-slate-800">Start a New Bill?</h3>
+                <h3 className="text-base font-bold text-slate-800">Close this unsaved bill?</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  The current bill has{" "}
-                  <strong>{draft.items.length} item(s)</strong>. Starting a new bill will clear the current draft.
+                  This removes the open draft. Other bills will remain saved and available in their tabs.
                 </p>
                 <div className="mt-5 flex justify-center gap-3">
                   <button
@@ -2413,10 +2532,10 @@ export default function PointOfSale() {
                   </button>
                   <button
                     type="button"
-                    onClick={executeNewBill}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 shadow-sm"
+                    onClick={() => removeOpenBill(modal.billId)}
+                    className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 shadow-sm"
                   >
-                    Discard &amp; Start New
+                    Discard &amp; Close Bill
                   </button>
                 </div>
               </div>

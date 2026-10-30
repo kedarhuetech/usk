@@ -39,13 +39,33 @@ export async function saveBusinessParty(value) {
 
 // Loads sales invoices.
 export async function loadSalesInvoices() {
-  const rows = await businessDataApi.list("sales-invoices");
   const localInvoices = getSaleInvoices();
+  let rows;
+  try {
+    rows = await businessDataApi.list("sales-invoices");
+  } catch (error) {
+    // POS invoices are committed to the local sales repository. Keep them
+    // visible in the Sales module during backend downtime instead of turning
+    // a reachable local invoice into an empty/error list.
+    if (localInvoices.length) {
+      console.warn("Backend invoice list unavailable; using saved local sale invoices.", error);
+      return localInvoices;
+    }
+    throw error;
+  }
+
   if (rows.length) {
     const invoices = [...rows];
     const knownIds = new Set(invoices.map((invoice) => invoice.id));
     for (const invoice of localInvoices) {
-      if (!knownIds.has(invoice.id)) invoices.push(await businessDataApi.save("sales-invoices", invoice));
+      if (!knownIds.has(invoice.id)) {
+        try {
+          invoices.push(await businessDataApi.save("sales-invoices", invoice));
+        } catch (error) {
+          console.warn("Could not migrate a local invoice to the backend; showing its local copy.", error);
+          invoices.push(invoice);
+        }
+      }
     }
     return invoices;
   }
@@ -53,7 +73,12 @@ export async function loadSalesInvoices() {
   // Preserve existing invoices created before MySQL persistence was enabled.
   const migrated = [];
   for (const invoice of localInvoices) {
-    migrated.push(await businessDataApi.save("sales-invoices", invoice));
+    try {
+      migrated.push(await businessDataApi.save("sales-invoices", invoice));
+    } catch (error) {
+      console.warn("Could not migrate a local invoice to the backend; showing its local copy.", error);
+      migrated.push(invoice);
+    }
   }
   return migrated;
 }
