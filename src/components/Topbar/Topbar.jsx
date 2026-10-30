@@ -274,7 +274,11 @@ export default function Topbar({ onRefresh }) {
   };
 
   return (
-    <header className="shrink-0 border-b border-slate-200 bg-white select-none">
+    <header
+      className={`relative shrink-0 border-b border-slate-200 bg-white select-none ${
+        isSearchFocused && searchQuery.trim() ? "z-[60]" : "z-30"
+      }`}
+    >
       
 
       <div className="flex h-[52px] items-center justify-between px-4 py-2">
@@ -324,7 +328,7 @@ export default function Topbar({ onRefresh }) {
 
             {/* Autocomplete Results Dropdown */}
             {isSearchFocused && searchQuery.trim() && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl z-50 p-1.5">
+              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl z-[100] p-1.5">
                 {searchResults.length > 0 ? (
                   <div className="space-y-0.5">
                     {searchResults.map((result, idx) => {

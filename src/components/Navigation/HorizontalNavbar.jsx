@@ -77,7 +77,7 @@ export default function HorizontalNavbar() {
       <nav
         ref={navContainerRef}
         aria-label="Main Navigation"
-        className="relative z-50 shrink-0 border-b border-[#0f1345] bg-[#1A1F71] text-white shadow-md select-none overflow-visible"
+        className="relative z-40 shrink-0 border-b border-[#0f1345] bg-[#1A1F71] text-white shadow-md select-none overflow-visible"
       >
         <div className="flex h-11 items-center justify-between px-4 overflow-visible">
           {/* Left Brand Badge + Navigation Items */}
