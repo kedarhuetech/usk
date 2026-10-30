@@ -10,8 +10,7 @@ export async function apiRequest(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const businessId = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
-  headers.set("X-Business-Id", businessId);
+  headers.set("X-Business-Id", import.meta.env?.VITE_BUSINESS_ID || "demo-business");
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   // Automatically prefixes /api if not present

@@ -17,17 +17,18 @@ import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
 import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
-import { deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
+import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOverridesStorageKey, deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
+import { deleteAllInventoryItems, previewDeleteAllInventoryItems } from "../../services/inventoryItemBulkDelete";
 
 const tabs = [
   { id: "product", label: "PRODUCTS" },
   { id: "service", label: "SERVICES" },
   { id: "units", label: "UNITS" },
 ];
-const ITEM_TRANSACTION_ACTIONS_KEY = "ledgerly:itemsTransactionActions.v1";
-const ITEM_UI_OVERRIDES_KEY = "ledgerly:itemsUiOverrides.v1";
-const ITEM_CSV_IMPORTS_KEY = "ledgerly:itemsCsvImports.v1";
+const ITEM_TRANSACTION_ACTIONS_KEY = itemTransactionActionsStorageKey;
+const ITEM_UI_OVERRIDES_KEY = itemUiOverridesStorageKey;
+const ITEM_CSV_IMPORTS_KEY = csvImportedItemsStorageKey;
 
 // Parses csv.
 function parseCsv(text) {
@@ -325,6 +326,11 @@ function ItemsDashboard() {
   const [bulkFields, setBulkFields] = useState({ salePrice: "", purchasePrice: "", category: "" });
   const [rowMenu, setRowMenu] = useState("");
   const [itemModal, setItemModal] = useState(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllCount, setDeleteAllCount] = useState(null);
+  const [deleteAllPhrase, setDeleteAllPhrase] = useState("");
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+  const [deleteAllError, setDeleteAllError] = useState("");
 
   useEffect(() => {
     if (location.state?.openAddItem) {
@@ -564,6 +570,38 @@ function ItemsDashboard() {
     }
   };
 
+  const openDeleteAll = async () => {
+    setDeleteAllError("");
+    setLoadError("");
+    setDeleteAllLoading(true);
+    try {
+      const preview = await previewDeleteAllInventoryItems();
+      setDeleteAllCount(preview);
+      setDeleteAllPhrase("");
+      setDeleteAllOpen(true);
+    } catch (error) {
+      setDeleteAllError(error.message || "Could not verify the items to delete.");
+      setLoadError(error.message || "Could not verify local item storage.");
+    } finally { setDeleteAllLoading(false); }
+  };
+
+  const confirmDeleteAll = async () => {
+    if (deleteAllPhrase !== "DELETE ALL ITEMS" || deleteAllLoading) return;
+    setDeleteAllLoading(true);
+    setDeleteAllError("");
+    try {
+      const result = deleteAllInventoryItems(deleteAllCount?.local);
+      setDeleteAllOpen(false);
+      const currentItems = applyItemUiOverrides([...getInventoryItems(), ...readCsvImportedItems()]);
+      setItems(currentItems);
+      setSelectedId(currentItems[0]?.id || "");
+      setSelectedBulkIds([]);
+      setNotice(`Deleted ${result.deletedLocal} browser-local item records. Historical invoices and other business records were preserved.`);
+    } catch (error) {
+      setDeleteAllError(error.message || "Items could not be deleted from browser storage.");
+    } finally { setDeleteAllLoading(false); }
+  };
+
   return (
     <div className="flex min-h-full flex-col bg-slate-200 p-1.5">
       <div className="mb-1 grid grid-cols-3 bg-white">
@@ -576,7 +614,7 @@ function ItemsDashboard() {
         <div className="grid min-h-[calc(100vh-12.5rem)] flex-1 gap-1 xl:grid-cols-[minmax(280px,24%)_minmax(0,1fr)]">
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" aria-label="Choose item CSV file" onChange={(event) => importItemsCsv(event.target.files?.[0])} />
           <Card className="flex min-h-[420px] flex-col overflow-visible shadow-sm">
-            <div className="relative flex items-center gap-2 border-b border-slate-200 p-3">
+            <div className="relative flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
               <button type="button" aria-label={searchOpen ? "Close item search" : "Search items"} onClick={() => { setSearchOpen((open) => !open); if (searchOpen) setSearch(""); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200"><FiSearch className="h-5 w-5" /></button>
               {searchOpen && <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${activeTab}s`} aria-label={`Search ${activeTab}s`} className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-blue-500" />}
               <div ref={menuRef} className="relative ml-auto flex h-11 overflow-visible rounded-md bg-amber-500 text-white shadow-sm">
@@ -588,6 +626,7 @@ function ItemsDashboard() {
                 <button type="button" aria-label="More item actions" onClick={() => setMenuOpen((open) => !open)} className="grid h-9 w-7 place-items-center text-slate-500 hover:text-slate-900"><FiMoreVertical /></button>
                 {menuOpen && <div className="absolute right-0 top-9 z-40 w-60 rounded-md border border-slate-200 bg-white p-1.5 text-slate-800 shadow-xl">{[{ id: "inactive", label: "Bulk Inactive" }, { id: "active", label: "Bulk Active" }, { id: "code", label: "Bulk Assign Code" }, { id: "units", label: "Assign Units" }, { id: "update", label: "Bulk Update Items" }].map((action) => <button key={action.id} type="button" onClick={() => action.id === "update" ? (setMenuOpen(false), navigate("/utilities/update-items-in-bulk")) : startBulkAction(action.id)} className="block w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-100">{action.label}</button>)}</div>}
               </div>
+              <button type="button" onClick={openDeleteAll} disabled={deleteAllLoading} className="h-10 w-full basis-full rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{deleteAllLoading ? "Checking…" : "Delete All Items"}</button>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold uppercase text-slate-500"><span>Item</span><span>{activeTab === "product" ? "Quantity" : "Unit"}</span><button type="button" aria-label="Filter items" onClick={() => setFiltersOpen((open) => !open)} className={`grid h-7 w-7 place-items-center rounded ${filtersOpen ? "bg-blue-100 text-blue-700" : "hover:bg-slate-200"}`}><FiFilter /></button></div>
             {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3"><label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" />Low stock only</label>}</div>}
@@ -660,6 +699,7 @@ function ItemsDashboard() {
       {adjustItem && <AdjustmentModal item={adjustItem} onClose={() => setAdjustItem(null)} onSave={saveAdjustment} />}
       {transactionDetails && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransactionDetails(null); }}><section className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{transactionDetails.type} Details</h2><p className="mt-1 text-sm text-slate-500">{transactionDetails.invoice !== "-" ? `Invoice ${transactionDetails.invoice}` : transactionDetails.name}</p></div><button type="button" aria-label="Close transaction details" onClick={() => setTransactionDetails(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header><div className="max-h-[70vh] space-y-5 overflow-auto p-5"><div className="grid gap-4 sm:grid-cols-3">{[["Name", transactionDetails.name], ["Date", dateLabel(transactionDetails.date)], ["Status", transactionDetails.status], ["Quantity", `${transactionDetails.quantity} ${transactionDetails.unit}`], ["Price / Unit", transactionDetails.price === "-" ? "-" : money(transactionDetails.price)], ["Amount", transactionDetails.amount === "-" ? "-" : money(transactionDetails.amount)]].map(([label, value]) => <div key={label} className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 font-medium text-slate-800">{value || "-"}</p></div>)}</div>{transactionDetails.source?.rows?.length > 0 && <div className="overflow-x-auto"><h3 className="mb-2 font-semibold text-slate-800">Invoice items</h3><table className="w-full min-w-[560px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{["Item", "Quantity", "Unit", "Price", "Discount", "Tax", "Amount"].map((label) => <th key={label} className="px-3 py-2">{label}</th>)}</tr></thead><tbody>{transactionDetails.source.rows.filter((entry) => entry.item || entry.qty).map((entry, index) => <tr key={entry.id || index} className="border-b border-slate-100"><td className="px-3 py-2">{entry.item || "-"}</td><td className="px-3 py-2">{entry.calculated?.qty || entry.qty || "-"}</td><td className="px-3 py-2">{entry.unit || "-"}</td><td className="px-3 py-2">{money(entry.price)}</td><td className="px-3 py-2">{money(entry.calculated?.discount)}</td><td className="px-3 py-2">{money(entry.calculated?.tax)}</td><td className="px-3 py-2">{money(entry.calculated?.amount)}</td></tr>)}</tbody></table></div>}{transactionDetails.source?.note && <p className="text-sm text-slate-600">Note: {transactionDetails.source.note}</p>}</div><footer className="flex justify-end border-t border-slate-200 px-5 py-3"><Button onClick={() => setTransactionDetails(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}
       {transactionHistory && <Modal title="Transaction History" onClose={() => setTransactionHistory(null)}><div className="space-y-3 p-5 text-sm text-slate-700"><p><b>Type:</b> {transactionHistory.type}</p><p><b>Invoice:</b> {transactionHistory.invoice}</p><p><b>Recorded:</b> {dateLabel(transactionHistory.date)}</p><p><b>Status:</b> {transactionHistory.status}</p><p className="text-slate-500">Local changes made from this menu are stored in this browser. Source invoice records are unchanged.</p><div className="flex justify-end"><Button onClick={() => setTransactionHistory(null)} className="bg-slate-100 text-slate-700">Close</Button></div></div></Modal>}
+      {deleteAllOpen && <Modal title="Delete All Items" onClose={() => { if (!deleteAllLoading) { setDeleteAllOpen(false); setDeleteAllError(""); } }}><div className="space-y-4 p-5"><p className="text-sm text-slate-700">This will permanently remove <b>{deleteAllCount?.local ?? 0} browser-local item records</b>.</p><div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This operation cannot be undone unless a backup exists. Historical invoices, purchase bills, payments, parties, reports and shared attachments will be preserved.</div><label className="block text-sm font-medium text-slate-700">Type <b>DELETE ALL ITEMS</b> to continue<input autoFocus value={deleteAllPhrase} onChange={(event) => setDeleteAllPhrase(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" /></label>{deleteAllError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{deleteAllError}</p>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button disabled={deleteAllLoading} onClick={() => setDeleteAllOpen(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button disabled={deleteAllPhrase !== "DELETE ALL ITEMS" || deleteAllLoading} onClick={confirmDeleteAll} className="bg-rose-600 text-white disabled:cursor-not-allowed disabled:opacity-50">{deleteAllLoading ? "Deleting…" : "Delete All Items"}</Button></div></div></Modal>}
       {bulkSelectionOpen && <Modal title={bulkAction === "inactive" ? "Select Items to Inactivate" : bulkAction === "active" ? "Select Items to Activate" : bulkAction === "code" ? "Select Items for Code Assignment" : bulkAction === "units" ? "Select Items for Unit Assignment" : "Select Items to Bulk Update"} onClose={() => { setBulkSelectionOpen(false); setBulkAction(""); setSelectedBulkIds([]); }}><div className="space-y-4 p-5"><p className="text-sm text-slate-500">Choose the items this action should affect.</p><label className="flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-700"><input type="checkbox" checked={filteredItems.length > 0 && filteredItems.every((item) => selectedBulkIds.includes(item.id))} onChange={(event) => setSelectedBulkIds(event.target.checked ? filteredItems.map((item) => item.id) : [])} className="h-4 w-4 accent-blue-600" />Select all shown items</label><div className="max-h-72 space-y-1 overflow-y-auto">{filteredItems.map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded px-2 py-2.5 text-sm hover:bg-slate-50"><input type="checkbox" checked={selectedBulkIds.includes(item.id)} onChange={(event) => setSelectedBulkIds((current) => event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id))} className="h-4 w-4 accent-blue-600" /><span className="min-w-0 flex-1 truncate font-medium text-slate-700">{item.itemName}</span><span className="text-xs text-slate-400">{item.itemCode || "No code"}</span></label>)}</div><div className="flex items-center justify-between border-t border-slate-100 pt-4"><span className="text-sm text-slate-500">{selectedBulkItems.length} selected</span><div className="flex gap-2"><Button onClick={() => { setBulkSelectionOpen(false); setBulkAction(""); setSelectedBulkIds([]); }} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={continueBulkSelection} disabled={!selectedBulkItems.length} className="bg-blue-600 text-white">Continue</Button></div></div></div></Modal>}
       {bulkAction && !bulkSelectionOpen && <Modal title={bulkAction === "code" ? "Bulk Assign Code" : bulkAction === "units" ? "Assign Units" : "Bulk Update Items"} onClose={() => { setBulkAction(""); setSelectedBulkIds([]); }}><div className="space-y-4 p-5"><p className="text-sm text-slate-500">This action applies to {selectedBulkItems.length} selected {activeTab}{selectedBulkItems.length === 1 ? "" : "s"} and is saved only in this browser.</p>{bulkAction === "code" && <div className="max-h-72 space-y-3 overflow-y-auto">{selectedBulkItems.map((item) => <label key={item.id} className="block text-sm font-medium text-slate-600">{item.itemName}<input value={bulkCodes[item.id] || ""} onChange={(event) => setBulkCodes((current) => ({ ...current, [item.id]: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder={`Unique code for ${item.itemName}`} /></label>)}</div>}{bulkAction === "units" && <label className="block text-sm font-medium text-slate-600">Set the same unit for all selected items<select value={bulkUnit} onChange={(event) => setBulkUnit(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 bg-white px-3"><option value="">Choose a unit</option>{units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>}{bulkAction === "update" && <div className="space-y-3"><label className="block text-sm font-medium text-slate-600">Sale price<input value={bulkFields.salePrice} onChange={(event) => setBulkFields((current) => ({ ...current, salePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Purchase price<input value={bulkFields.purchasePrice} onChange={(event) => setBulkFields((current) => ({ ...current, purchasePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Category<input value={bulkFields.category} onChange={(event) => setBulkFields((current) => ({ ...current, category: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label></div>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button onClick={() => { setBulkAction(""); setSelectedBulkIds([]); }} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={saveBulkAction} disabled={(bulkAction === "units" && !bulkUnit) || (bulkAction === "code" && selectedBulkItems.some((item) => !String(bulkCodes[item.id] || "").trim()))} className="bg-blue-600 text-white">Apply</Button></div></div></Modal>}
       {unitModal && <Modal title="Add Unit" onClose={() => setUnitModal(false)}><div className="space-y-4 p-5"><label className="block text-sm font-semibold text-slate-600">Unit name<input autoFocus value={unitName} onChange={(event) => setUnitName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") createUnit(); }} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="e.g. Carton" /></label><div className="flex justify-end gap-2"><Button onClick={() => setUnitModal(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={createUnit} className="bg-blue-600 text-white">Save Unit</Button></div></div></Modal>}

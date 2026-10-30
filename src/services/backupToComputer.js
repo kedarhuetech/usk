@@ -5,12 +5,14 @@ import { getLoanAccountsStorageKey } from "./loanAccountsRepository.js";
 import { partiesStorageKey } from "./partiesStorage.js";
 import { purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { saleInvoicesStorageKey } from "./salesStorage.js";
+import { createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
+import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
 export const BACKUP_LAST_CREATED_KEY = "usv:backupToComputer.lastCreated.v1";
 export const BACKUP_FORMAT = "usv-backup";
 export const BACKUP_FORMAT_VERSION = 1;
 
-const BACKUP_SOURCES = [
+export const BACKUP_SOURCES = [
   { category: "Company profile", key: "ledgerly:companyProfile.v1", shape: "object" },
   { category: "Items", key: inventoryItemsStorageKey, shape: "array" },
   { category: "Items", key: "ledgerly:itemsCsvImports.v1", shape: "array" },
@@ -121,6 +123,31 @@ export function validateBackupPayload(payload) {
     return { valid: false, error: "The backup manifest or data section is missing." };
   }
   return { valid: true, error: "" };
+}
+
+export function previewBackupPayload(payload) {
+  const validation = validateBackupPayload(payload);
+  if (!validation.valid) throw new Error(validation.error);
+
+  const sourcesByKey = new Map(BACKUP_SOURCES.map((source) => [source.key, source]));
+  const entries = [];
+  for (const [key, value] of Object.entries(payload.data)) {
+    const source = sourcesByKey.get(key);
+    if (!source) throw new Error(`This backup contains an unsupported data store (${key}).`);
+    const validShape = source.shape === "array" ? Array.isArray(value)
+      : value && typeof value === "object" && !Array.isArray(value);
+    if (!validShape) throw new Error(`Backup data for ${source.category} is invalid (${key}).`);
+    entries.push({ ...source, recordCount: Array.isArray(value) ? value.length : 1 });
+  }
+  return { createdAt: payload.createdAt, companyName: payload.data["ledgerly:companyProfile.v1"]?.companyName || "Not specified", entries };
+}
+
+export function restoreBackupPayload(payload, repository = createLocalStorageBackupRestoreRepository()) {
+  const preview = previewBackupPayload(payload);
+  if (!repository || typeof repository.restore !== "function") throw new Error("A compatible restore repository is required.");
+  repository.restore(preview.entries, payload.data);
+  notifyBusinessDataChanged();
+  return { restoredCount: preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0), entries: preview.entries };
 }
 
 export function downloadBackupFile(payload, { windowRef = window, documentRef = document } = {}) {
