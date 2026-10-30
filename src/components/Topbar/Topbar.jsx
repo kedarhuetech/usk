@@ -25,7 +25,7 @@ import { getInventoryItems } from "../../services/itemsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 
-const navItems = ["Company", "Help", "Versions", "Shortcuts"];
+const navItems = ["Company", "Help"];
 const transactionRoutes = [
   "/sales/sale-invoices/new",
   "/purchase-expense/purchase-bills/new",
