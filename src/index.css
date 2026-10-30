@@ -33,26 +33,166 @@ html.dark .bg-gray-100 {
 
 html.dark .bg-slate-200,
 html.dark .bg-gray-200 {
-  background-color: #24314c !important;
+  background-color: #0f172a !important;
 }
 
-/* ── Selected Rows & Highlight States (Fixes unreadable white-on-white) ── */
+/* ── Opacity & Tinted Surfaces (Modals, filters, detail panels) ── */
+html.dark .bg-slate-50\/50,
+html.dark .bg-slate-50\/70,
+html.dark .bg-slate-50\/80,
+html.dark .bg-gray-50\/50,
+html.dark .bg-gray-50\/70 {
+  background-color: #162035 !important;
+  color: #f1f5f9 !important;
+}
+
+html.dark .bg-white\/70,
+html.dark .bg-white\/80,
+html.dark .bg-white\/85,
+html.dark .bg-white\/90,
+html.dark .bg-white\/95 {
+  background-color: #131b2e !important;
+  color: #f8fafc !important;
+}
+
+html.dark .bg-slate-100\/70,
+html.dark .bg-slate-100\/80 {
+  background-color: #1a2438 !important;
+  color: #f8fafc !important;
+}
+
+/* ── Selected Rows, Cards & Highlights ── */
 html.dark .bg-sky-100,
 html.dark .bg-sky-100\/70,
+html.dark .bg-sky-50,
+html.dark .bg-sky-50\/70,
+html.dark .bg-sky-50\/80,
 html.dark .bg-blue-50,
-html.dark .bg-blue-100 {
+html.dark .bg-blue-100,
+html.dark .bg-blue-50\/40,
+html.dark .bg-blue-50\/50,
+html.dark .bg-blue-50\/60,
+html.dark .bg-blue-50\/70 {
   background-color: #1d3354 !important;
   color: #f8fafc !important;
 }
 
+/* ── Table Alternating Rows & Stripes (Sale Invoices, Transactions, Reports) ── */
+html.dark tr.odd\:bg-white:nth-child(odd),
+html.dark tr.odd\:bg-white:nth-child(2n+1),
+html.dark tr.odd\:bg-slate-50:nth-child(odd),
+html.dark tr.odd\:bg-slate-50:nth-child(2n+1),
+html.dark tr.odd\:bg-slate-100:nth-child(odd),
+html.dark tr.odd\:bg-slate-100:nth-child(2n+1),
+html.dark tr.odd\:bg-sky-50:nth-child(odd),
+html.dark tr.odd\:bg-sky-50:nth-child(2n+1),
+html.dark tr.odd\:bg-sky-100:nth-child(odd),
+html.dark tr.odd\:bg-sky-100:nth-child(2n+1),
+html.dark .odd\:bg-white:nth-child(odd),
+html.dark .odd\:bg-white:nth-child(2n+1),
+html.dark .odd\:bg-slate-50:nth-child(odd),
+html.dark .odd\:bg-slate-50:nth-child(2n+1),
+html.dark .odd\:bg-slate-100:nth-child(odd),
+html.dark .odd\:bg-slate-100:nth-child(2n+1),
+html.dark .odd\:bg-sky-50:nth-child(odd),
+html.dark .odd\:bg-sky-50:nth-child(2n+1),
+html.dark .odd\:bg-sky-100:nth-child(odd),
+html.dark .odd\:bg-sky-100:nth-child(2n+1) {
+  background-color: #162035 !important;
+  color: #f8fafc !important;
+}
+
+html.dark tr.even\:bg-slate-50\/70:nth-child(even),
+html.dark tr.even\:bg-slate-50\/70:nth-child(2n),
+html.dark tr.even\:bg-slate-50\/50:nth-child(even),
+html.dark tr.even\:bg-slate-50\/50:nth-child(2n),
+html.dark tr.even\:bg-slate-50\/80:nth-child(even),
+html.dark tr.even\:bg-slate-50\/80:nth-child(2n),
+html.dark tr.even\:bg-slate-50:nth-child(even),
+html.dark tr.even\:bg-slate-50:nth-child(2n),
+html.dark tr.even\:bg-slate-100:nth-child(even),
+html.dark tr.even\:bg-slate-100:nth-child(2n),
+html.dark tr.even\:bg-white:nth-child(even),
+html.dark tr.even\:bg-white:nth-child(2n),
+html.dark tr.even\:bg-sky-50:nth-child(even),
+html.dark tr.even\:bg-sky-50:nth-child(2n),
+html.dark tr.even\:bg-sky-100:nth-child(even),
+html.dark tr.even\:bg-sky-100:nth-child(2n),
+html.dark .even\:bg-slate-50\/70:nth-child(even),
+html.dark .even\:bg-slate-50\/70:nth-child(2n),
+html.dark .even\:bg-slate-50\/50:nth-child(even),
+html.dark .even\:bg-slate-50\/50:nth-child(2n),
+html.dark .even\:bg-slate-50\/80:nth-child(even),
+html.dark .even\:bg-slate-50\/80:nth-child(2n),
+html.dark .even\:bg-slate-50:nth-child(even),
+html.dark .even\:bg-slate-50:nth-child(2n),
+html.dark .even\:bg-slate-100:nth-child(even),
+html.dark .even\:bg-slate-100:nth-child(2n),
+html.dark .even\:bg-white:nth-child(even),
+html.dark .even\:bg-white:nth-child(2n),
+html.dark .even\:bg-sky-50:nth-child(even),
+html.dark .even\:bg-sky-50:nth-child(2n),
+html.dark .even\:bg-sky-100:nth-child(even),
+html.dark .even\:bg-sky-100:nth-child(2n) {
+  background-color: #121a2d !important;
+  color: #f8fafc !important;
+}
+
+/* ── Interactive Hover States ── */
+html.dark table tbody tr:hover,
+html.dark table tbody tr.hover\:bg-sky-50:hover,
+html.dark table tbody tr.hover\:bg-sky-100:hover,
+html.dark table tbody tr.hover\:bg-blue-50:hover,
+html.dark table tbody tr.hover\:bg-blue-100:hover,
+html.dark table tbody tr.hover\:bg-slate-50:hover,
+html.dark table tbody tr.hover\:bg-slate-100:hover {
+  background-color: #1d3354 !important;
+  color: #f8fafc !important;
+}
 html.dark .hover\:bg-slate-50:hover,
-html.dark .hover\:bg-gray-50:hover {
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-slate-50\/50:hover,
+html.dark .hover\:bg-slate-50\/70:hover {
   background-color: #1a253a !important;
+  color: #f8fafc !important;
 }
 
 html.dark .hover\:bg-slate-100:hover,
-html.dark .hover\:bg-gray-100:hover {
+html.dark .hover\:bg-gray-100:hover,
+html.dark .hover\:bg-slate-200:hover,
+html.dark .hover\:bg-gray-200:hover {
   background-color: #22304a !important;
+  color: #f8fafc !important;
+}
+
+html.dark .hover\:bg-blue-50:hover,
+html.dark .hover\:bg-blue-100:hover,
+html.dark .hover\:bg-sky-50:hover,
+html.dark .hover\:bg-sky-100:hover,
+html.dark .hover\:bg-blue-50\/60:hover {
+  background-color: #1d3354 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .hover\:bg-white:hover {
+  background-color: #1a2438 !important;
+  color: #f8fafc !important;
+}
+
+html.dark .hover\:bg-rose-50:hover {
+  background-color: rgba(244, 63, 94, 0.22) !important;
+  color: #fb7185 !important;
+}
+
+html.dark .hover\:bg-emerald-50:hover {
+  background-color: rgba(16, 185, 129, 0.22) !important;
+  color: #34d399 !important;
+}
+
+html.dark .hover\:bg-amber-50:hover,
+html.dark .hover\:bg-amber-100:hover {
+  background-color: rgba(245, 158, 11, 0.22) !important;
+  color: #fbbf24 !important;
 }
 
 /* ── Borders & Dividers ── */
@@ -69,57 +209,123 @@ html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
   border-color: #25334d !important;
 }
 
-/* ── Text Hierarchy (High Contrast & Readable) ── */
+html.dark .border-rose-100,
+html.dark .border-rose-200,
+html.dark .border-rose-300 {
+  border-color: rgba(244, 63, 94, 0.35) !important;
+}
+
+html.dark .border-emerald-100,
+html.dark .border-emerald-200,
+html.dark .border-emerald-300 {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+html.dark .border-amber-100,
+html.dark .border-amber-200,
+html.dark .border-amber-300,
+html.dark .border-amber-400 {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+html.dark .border-blue-100,
+html.dark .border-blue-200,
+html.dark .border-blue-300,
+html.dark .border-sky-100,
+html.dark .border-sky-200 {
+  border-color: rgba(56, 189, 248, 0.35) !important;
+}
+
+/* ── Text Hierarchy (High Contrast & Fully Readable) ── */
+html.dark .text-slate-950,
 html.dark .text-slate-900,
 html.dark .text-slate-800,
+html.dark .text-gray-950,
 html.dark .text-gray-900,
 html.dark .text-gray-800,
+html.dark .text-zinc-950,
+html.dark .text-zinc-900,
+html.dark .text-zinc-800,
+html.dark .text-neutral-900,
+html.dark .text-neutral-800,
 html.dark .text-black,
 html.dark .text-\[\#263b57\],
-html.dark .text-\[\#313b50\] {
+html.dark .text-\[\#313b50\],
+html.dark .text-\[\#1e293b\],
+html.dark .text-\[\#41485d\] {
   color: #f8fafc !important;
 }
 
 html.dark .text-slate-700,
-html.dark .text-gray-700 {
+html.dark .text-gray-700,
+html.dark .text-zinc-700 {
   color: #e2e8f0 !important;
 }
 
 html.dark .text-slate-600,
+html.dark .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
 html.dark .text-slate-500,
-html.dark .text-gray-600,
 html.dark .text-gray-500 {
-  color: #94a3b8 !important;
+  color: #cbd5e1 !important;
 }
 
 html.dark .text-slate-400,
 html.dark .text-gray-400 {
-  color: #64748b !important;
+  color: #94a3b8 !important;
 }
 
-/* ── Vibrant Status Colors in Dark Mode ── */
+/* ── Hardcoded Dark Navy & Brand Blues to Readable Light Accents ── */
+html.dark .text-\[\#1A1F71\],
+html.dark .text-\[\#1a1f71\],
+html.dark .text-\[\#27308F\],
+html.dark .text-\[\#343B9A\] {
+  color: #93c5fd !important;
+}
+
+/* ── Vibrant Status & Accent Colors in Dark Mode ── */
+html.dark .text-blue-600,
+html.dark .text-blue-700,
+html.dark .text-blue-800,
+html.dark .text-blue-900,
+html.dark .text-sky-600,
+html.dark .text-sky-700,
+html.dark .text-indigo-600,
+html.dark .text-indigo-700,
+html.dark .text-indigo-800,
+html.dark .text-indigo-900 {
+  color: #38bdf8 !important;
+}
+
 html.dark .text-emerald-600,
 html.dark .text-emerald-700,
-html.dark .text-green-600 {
+html.dark .text-emerald-800,
+html.dark .text-green-600,
+html.dark .text-green-700,
+html.dark .text-green-800 {
   color: #34d399 !important;
 }
 
+html.dark .text-rose-500,
 html.dark .text-rose-600,
 html.dark .text-rose-700,
-html.dark .text-rose-500,
-html.dark .text-red-600 {
+html.dark .text-rose-800,
+html.dark .text-rose-950,
+html.dark .text-red-500,
+html.dark .text-red-600,
+html.dark .text-red-700,
+html.dark .text-red-800 {
   color: #fb7185 !important;
-}
-
-html.dark .text-blue-600,
-html.dark .text-blue-700,
-html.dark .text-sky-600 {
-  color: #38bdf8 !important;
 }
 
 html.dark .text-amber-600,
 html.dark .text-amber-700,
-html.dark .text-yellow-600 {
+html.dark .text-amber-800,
+html.dark .text-amber-900,
+html.dark .text-yellow-600,
+html.dark .text-orange-600 {
   color: #fbbf24 !important;
 }
 
@@ -160,6 +366,15 @@ html.dark textarea {
   border-color: #2b3b57 !important;
 }
 
+html.dark input:disabled,
+html.dark select:disabled,
+html.dark textarea:disabled {
+  background-color: #121927 !important;
+  color: #64748b !important;
+  border-color: #1e293b !important;
+  cursor: not-allowed;
+}
+
 html.dark select option {
   background-color: #131b2e !important;
   color: #f8fafc !important;
@@ -167,7 +382,12 @@ html.dark select option {
 
 html.dark input::placeholder,
 html.dark textarea::placeholder {
-  color: #64748b !important;
+  color: #94a3b8 !important;
+}
+
+html.dark input::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+  cursor: pointer;
 }
 
 /* ── Tables & Headers ── */
@@ -175,7 +395,7 @@ html.dark table thead,
 html.dark table thead tr,
 html.dark table thead th {
   background-color: #162035 !important;
-  color: #94a3b8 !important;
+  color: #cbd5e1 !important;
   border-color: #25334d !important;
 }
 
@@ -210,4 +430,218 @@ html.dark ::-webkit-scrollbar-thumb {
 }
 html.dark ::-webkit-scrollbar-thumb:hover {
   background: #3b4e72;
+}
+
+/* ── AddSale / AddPurchase form: tab strip, totals panel, focused cells ── */
+html.dark .bg-slate-100.px-3.pt-1,
+html.dark .bg-slate-100.min-h-8 {
+  background-color: #0f172a !important;
+}
+html.dark .focus\:bg-white:focus {
+  background-color: #1d2f4a !important;
+  color: #f8fafc !important;
+}
+/* Active tab (bg-white) vs inactive tab (bg-slate-200) in AddSale */
+html.dark .bg-slate-200.text-slate-600 {
+  background-color: #1a2438 !important;
+  color: #94a3b8 !important;
+}
+/* Min-h full page container */
+html.dark .min-h-full.bg-slate-100 {
+  background-color: #0b0f19 !important;
+}
+
+/* ── POS (Point of Sale) specific surfaces ── */
+html.dark .bg-\[\#e8edf5\],
+html.dark .bg-\[\#f8f9fc\],
+html.dark .bg-\[\#f4f5f8\],
+html.dark .bg-\[\#f8fafc\],
+html.dark .bg-\[\#fafafa\] {
+  background-color: #131b2e !important;
+  color: #e2e8f0 !important;
+}
+html.dark .bg-\[\#f3f4f6\] {
+  background-color: #162035 !important;
+  color: #cbd5e1 !important;
+}
+/* POS selected item row */
+html.dark .bg-\[\#e3f1ff\] {
+  background-color: #1d3354 !important;
+  color: #f8fafc !important;
+}
+/* POS tab active state */
+html.dark .border-blue-600.bg-\[\#f8f9fc\] {
+  background-color: #1a2a45 !important;
+}
+
+/* ── Reports.jsx sidebar and section backgrounds ── */
+html.dark .bg-\[\#eaf0f6\] {
+  background-color: #0f172a !important;
+  color: #e2e8f0 !important;
+}
+html.dark .bg-\[\#eff8f7\] {
+  background-color: #0d1f1e !important;
+  color: #94a3b8 !important;
+}
+/* Reports sidebar nav links */
+html.dark .border-sky-600.bg-slate-100 {
+  background-color: #1d3354 !important;
+  color: #f8fafc !important;
+}
+/* Upgrade card (violet tinted) */
+html.dark .bg-\[\#fcf9ff\] {
+  background-color: #1a1535 !important;
+  color: #e2e8f0 !important;
+}
+html.dark .border-violet-200 {
+  border-color: rgba(139, 92, 246, 0.35) !important;
+}
+
+/* ── EditProfile.jsx ── */
+html.dark .bg-\[\#f8fafc\] {
+  background-color: #131b2e !important;
+  color: #e2e8f0 !important;
+}
+html.dark .bg-\[\#eef5fc\] {
+  background-color: #1a2a45 !important;
+}
+/* text-[#1e293b] already covered but repeated here for safety */
+html.dark .text-\[\#1e293b\] {
+  color: #f8fafc !important;
+}
+/* Delete / danger button bg-[#e11d48] — keep vivid in dark */
+html.dark .bg-\[\#e11d48\]:hover {
+  background-color: #9f0a2a !important;
+}
+
+/* ── PurchaseReturns: Excel-green icons & Microsoft-blue buttons ── */
+html.dark .text-\[\#107c41\] {
+  color: #34d399 !important;
+}
+html.dark .bg-\[\#0078d4\],
+html.dark .hover\:bg-\[\#006abc\]:hover {
+  background-color: #1d4ed8 !important;
+}
+html.dark .bg-\[\#9da8b6\] {
+  background-color: #334155 !important;
+  color: #e2e8f0 !important;
+}
+
+/* ── text-[#41485d] (POS main text) ── */
+html.dark .text-\[\#41485d\] {
+  color: #e2e8f0 !important;
+}
+
+/* ── Violet / Purple badges & borders ── */
+html.dark .bg-violet-100,
+html.dark .bg-purple-50 {
+  background-color: rgba(139, 92, 246, 0.18) !important;
+  color: #c4b5fd !important;
+}
+html.dark .text-violet-600,
+html.dark .text-violet-700,
+html.dark .text-purple-600,
+html.dark .text-purple-700 {
+  color: #c4b5fd !important;
+}
+html.dark .hover\:bg-violet-50:hover,
+html.dark .hover\:bg-purple-50:hover {
+  background-color: rgba(139, 92, 246, 0.22) !important;
+  color: #c4b5fd !important;
+}
+
+/* ── Cyan / Teal accent colors ── */
+html.dark .text-cyan-600,
+html.dark .text-teal-600,
+html.dark .text-teal-700 {
+  color: #2dd4bf !important;
+}
+html.dark .bg-teal-50,
+html.dark .bg-cyan-50,
+html.dark .bg-cyan-100 {
+  background-color: rgba(20, 184, 166, 0.18) !important;
+  color: #2dd4bf !important;
+}
+
+/* ── Orange / Lime accents ── */
+html.dark .text-orange-500,
+html.dark .text-orange-700 {
+  color: #fb923c !important;
+}
+html.dark .bg-orange-100,
+html.dark .bg-orange-50 {
+  background-color: rgba(249, 115, 22, 0.18) !important;
+  color: #fb923c !important;
+}
+
+/* ── Dropdown / Combobox panel that uses absolute positioned bg-white ── */
+html.dark .absolute.bg-white,
+html.dark .absolute.rounded-lg.bg-white,
+html.dark .absolute.rounded-md.bg-white {
+  background-color: #131b2e !important;
+  color: #f8fafc !important;
+  border-color: #25334d !important;
+}
+
+/* ── Slide-in panels / drawers (aside with bg-white shadow-2xl) ── */
+html.dark aside.bg-white {
+  background-color: #131b2e !important;
+  color: #f8fafc !important;
+}
+
+/* ── Focus ring color adjustments for dark mode ── */
+html.dark .focus\:ring-blue-100:focus {
+  --tw-ring-color: rgba(30, 80, 160, 0.45) !important;
+}
+
+/* ── Additional hex backgrounds found in page scan ── */
+/* CashFlowReport, ProfitAndLoss tinted surfaces */
+html.dark .bg-\[\#dbeafe\] {
+  background-color: #1d3354 !important;
+  color: #bfdbfe !important;
+}
+html.dark .bg-\[\#fbfcfd\] {
+  background-color: #131b2e !important;
+  color: #e2e8f0 !important;
+}
+/* SaleOrders, Expenses light gray containers */
+html.dark .bg-\[\#f3f3f3\],
+html.dark .bg-\[\#f4f4f4\] {
+  background-color: #1a2438 !important;
+  color: #e2e8f0 !important;
+}
+/* PurchaseReturns hover MS-blue */
+html.dark .bg-\[\#006abc\],
+html.dark .hover\:bg-\[\#006abc\]:hover {
+  background-color: #1d4ed8 !important;
+}
+/* EditProfile delete button hover */
+html.dark .bg-\[\#be123c\],
+html.dark .hover\:bg-\[\#be123c\]:hover {
+  background-color: #9f1239 !important;
+}
+/* MarketingStudioEditor canvas tool panel backgrounds — keep dark-ish but slightly visible */
+html.dark .bg-\[\#e8eef5\],
+html.dark .bg-\[\#eef2f7\],
+html.dark .bg-\[\#f1f5f9\] {
+  background-color: #1a2438 !important;
+  color: #e2e8f0 !important;
+}
+html.dark .bg-\[\#ecfeff\] {
+  background-color: #0d2029 !important;
+  color: #67e8f9 !important;
+}
+
+/* ── Print Media Protection (Ensure clean paper printouts) ── */
+@media print {
+  html.dark {
+    color-scheme: light !important;
+  }
+  html.dark body,
+  html.dark * {
+    background-color: transparent !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
 }
