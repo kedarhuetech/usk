@@ -53,6 +53,7 @@ export default function Topbar({ onRefresh }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
+  const [logoError, setLogoError] = useState(false);
   const [comingSoon, setComingSoon] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const refreshTimer = useRef(null);
@@ -91,6 +92,10 @@ export default function Topbar({ onRefresh }) {
       );
     };
   }, []);
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [companyProfile?.logo]);
 
   useEffect(() => () => window.clearTimeout(refreshTimer.current), []);
 
@@ -432,10 +437,20 @@ export default function Topbar({ onRefresh }) {
           <button
             type="button"
             onClick={() => navigate("/company-profile")}
-            title="Company Profile"
-            className="rounded-full bg-[#1A1F71] p-2 text-white hover:bg-[#14185D] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
+            title={companyProfile?.businessName || companyProfile?.companyName || "Company Profile"}
+            aria-label="Company Profile"
+            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1A1F71] text-white hover:bg-[#14185D] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
           >
-            <FiUser className="h-4 w-4" />
+            {companyProfile?.logo && !logoError ? (
+              <img
+                src={companyProfile.logo}
+                alt={companyProfile?.businessName || companyProfile?.companyName || "Company Logo"}
+                onError={() => setLogoError(true)}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <FiUser className="h-4 w-4" />
+            )}
           </button>
         </div>
       </div>
