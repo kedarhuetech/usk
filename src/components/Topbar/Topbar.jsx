@@ -284,7 +284,11 @@ export default function Topbar({ onRefresh }) {
       <div className="flex h-[52px] items-center justify-between px-4 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <span className="h-2 w-2 rounded-full bg-rose-500" />
-          <span className="hidden text-sm font-medium text-slate-500 sm:block">
+          <span
+            onClick={() => navigate("/company-profile")}
+            title="Click to view Company Profile"
+            className="hidden text-sm font-semibold text-slate-700 sm:block cursor-pointer hover:text-blue-600 transition"
+          >
             {companyProfile.businessName ||
               companyProfile.companyName ||
               "Sai Kirana Stores"}
@@ -427,7 +431,9 @@ export default function Topbar({ onRefresh }) {
           </button>
           <button
             type="button"
-            className="rounded-full bg-[#1A1F71] p-2 text-white hover:bg-[#14185D] transition cursor-pointer"
+            onClick={() => navigate("/company-profile")}
+            title="Company Profile"
+            className="rounded-full bg-[#1A1F71] p-2 text-white hover:bg-[#14185D] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
           >
             <FiUser className="h-4 w-4" />
           </button>
