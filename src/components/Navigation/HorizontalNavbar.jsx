@@ -15,11 +15,12 @@ export default function HorizontalNavbar() {
   const searchInputRef = useRef(null);
   const navContainerRef = useRef(null);
 
-  // Close dropdown when location changes or clicking outside
+  // Close dropdown when route/location changes
   useEffect(() => {
     setActiveDropdown(null);
   }, [location.pathname]);
 
+  // Click outside listener: closes dropdown when clicking anywhere outside the navbar
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (navContainerRef.current && !navContainerRef.current.contains(e.target)) {
@@ -30,13 +31,16 @@ export default function HorizontalNavbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Ctrl+F shortcut
+  // Keyboard shortcut listener: Ctrl+F and Escape
   useEffect(() => {
     const handleShortcut = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
         event.preventDefault();
         setQuery("");
         setSearchOpen(true);
+      } else if (event.key === "Escape") {
+        setActiveDropdown(null);
+        setSearchOpen(false);
       }
     };
     window.addEventListener("keydown", handleShortcut);
@@ -80,7 +84,10 @@ export default function HorizontalNavbar() {
           <div className="flex items-center gap-1 overflow-visible">
             {/* Brand Logo Pill */}
             <div
-              onClick={() => navigate("/dashboard")}
+              onClick={() => {
+                setActiveDropdown(null);
+                navigate("/dashboard");
+              }}
               className="mr-3 flex cursor-pointer items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold tracking-wide transition hover:bg-white/20 shrink-0"
             >
               <div className="flex h-5 w-5 items-center justify-center rounded bg-white text-[11px] font-black text-[#1A1F71]">
@@ -105,6 +112,7 @@ export default function HorizontalNavbar() {
                   <NavLink
                     key={item.id}
                     to={item.path}
+                    onClick={() => setActiveDropdown(null)}
                     className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
                       isActive
                         ? "bg-white/20 text-white shadow-xs font-semibold"
@@ -121,8 +129,6 @@ export default function HorizontalNavbar() {
                 <div
                   key={item.id}
                   className="relative overflow-visible shrink-0"
-                  onMouseEnter={() => setActiveDropdown(item.id)}
-                  onMouseLeave={() => setActiveDropdown(null)}
                 >
                   <button
                     type="button"
@@ -145,7 +151,7 @@ export default function HorizontalNavbar() {
                     />
                   </button>
 
-                  {/* Dropdown Menu */}
+                  {/* Dropdown Menu — stays open until clicked or clicked outside */}
                   {isOpen && (
                     <div
                       className="absolute left-0 top-full mt-1 min-w-[210px] rounded-lg border border-[#2c3396] bg-[#14185D] p-1.5 shadow-2xl z-[9999] overflow-hidden"
@@ -181,6 +187,7 @@ export default function HorizontalNavbar() {
             <button
               type="button"
               onClick={() => {
+                setActiveDropdown(null);
                 setQuery("");
                 setSearchOpen(true);
               }}
