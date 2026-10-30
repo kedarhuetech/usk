@@ -10,6 +10,9 @@ import SalePurchaseByPartyGroupReport from "./SalePurchaseByPartyGroupReport";
 import StockSummaryReport from "./StockSummaryReport";
 import ItemReportByParty from "./ItemReportByParty";
 import ItemWiseProfitAndLoss from "./ItemWiseProfitAndLoss";
+import LowStockSummaryReport from "./LowStockSummaryReport";
+import StockDetailReport from "./StockDetailReport";
+import ItemDetailReport from "./ItemDetailReport";
 import {
   FiBarChart2,
   FiPrinter,
@@ -209,6 +212,9 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("stock-summary")) return "Stock summary";
     if (location.pathname.includes("item-report-by-party")) return "Item Report By Party";
     if (location.pathname.includes("item-wise-profit-and-loss")) return "Item Wise Profit And Loss";
+    if (location.pathname.includes("low-stock-summary")) return "Low Stock Summary";
+    if (location.pathname.includes("stock-detail")) return "Stock Detail";
+    if (location.pathname.includes("item-detail")) return "Item Detail";
     return "Sale";
   };
 
@@ -237,6 +243,12 @@ function Reports({ defaultReport }) {
       setActiveReport("Item Report By Party");
     } else if (location.pathname.includes("item-wise-profit-and-loss")) {
       setActiveReport("Item Wise Profit And Loss");
+    } else if (location.pathname.includes("low-stock-summary")) {
+      setActiveReport("Low Stock Summary");
+    } else if (location.pathname.includes("stock-detail")) {
+      setActiveReport("Stock Detail");
+    } else if (location.pathname.includes("item-detail")) {
+      setActiveReport("Item Detail");
     }
   }, [defaultReport, location.pathname]);
   const [search, setSearch] = useState("");
@@ -665,6 +677,12 @@ function Reports({ defaultReport }) {
                     navigate("/reports/item-report-by-party", { replace: true });
                   } else if (report === "Item Wise Profit And Loss") {
                     navigate("/reports/item-wise-profit-and-loss", { replace: true });
+                  } else if (report === "Low Stock Summary") {
+                    navigate("/reports/low-stock-summary", { replace: true });
+                  } else if (report === "Stock Detail") {
+                    navigate("/reports/stock-detail", { replace: true });
+                  } else if (report === "Item Detail") {
+                    navigate("/reports/item-detail", { replace: true });
                   } else {
                     navigate("/reports", { replace: true });
                   }
@@ -722,6 +740,18 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Item Wise Profit And Loss" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <ItemWiseProfitAndLoss />
+        </div>
+      ) : activeReport === "Low Stock Summary" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <LowStockSummaryReport />
+        </div>
+      ) : activeReport === "Stock Detail" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <StockDetailReport />
+        </div>
+      ) : activeReport === "Item Detail" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <ItemDetailReport />
         </div>
       ) : (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">
