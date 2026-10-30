@@ -11,7 +11,19 @@ function MainLayout() {
   const { pathname } = useLocation();
   const outlet = useOutlet();
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Fullscreen routes (like POS) take over the entire screen without Sidebar or Topbar
+  const isFullscreenRoute = pathname === "/sales/pos";
   const isTransactionRoute = transactionRoutes.includes(pathname);
+  const isReportsRoute = pathname.startsWith("/reports");
+
+  if (isFullscreenRoute) {
+    return (
+      <div className="h-screen w-screen overflow-hidden bg-white">
+        {outlet && cloneElement(outlet, { key: refreshKey })}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -20,7 +32,7 @@ function MainLayout() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main className={`min-h-0 min-w-0 flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"}`}>
           {outlet && cloneElement(outlet, { key: refreshKey })}
         </main>
       </div>

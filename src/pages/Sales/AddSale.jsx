@@ -50,6 +50,7 @@ import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorag
 import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
+import { getCompanyProfile } from "../../services/companyProfileStorage";
 
 const termsAppliesTo = [
   "Sale Invoice",
@@ -74,9 +75,9 @@ function currentLocalDate() {
 const purchaseShareActions = ["Share", "Print", "Save & New", "Save & Generate Barcode"];
 
 const initialBusiness = {
-  name: "My Company",
+  name: getCompanyProfile().businessName || getCompanyProfile().companyName || "Sai Kirana Stores",
   gstin: "",
-  phone: "8378089937",
+  phone: getCompanyProfile().phoneNumber || "8369501991",
   email: "",
   address: "",
   pincode: "",

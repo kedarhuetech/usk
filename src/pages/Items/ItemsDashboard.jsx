@@ -1,6 +1,6 @@
 // Implements the items dashboard page.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiArrowUpRight,
   FiChevronDown,
@@ -304,6 +304,7 @@ function AdjustmentModal({ item, onClose, onSave }) {
 // Renders the items dashboard interface.
 function ItemsDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState("product");
   const [items, setItems] = useState([]);
   const [sales, setSales] = useState([]);
@@ -324,6 +325,12 @@ function ItemsDashboard() {
   const [bulkFields, setBulkFields] = useState({ salePrice: "", purchasePrice: "", category: "" });
   const [rowMenu, setRowMenu] = useState("");
   const [itemModal, setItemModal] = useState(null);
+
+  useEffect(() => {
+    if (location.state?.openAddItem) {
+      setItemModal({ mode: "create", initialItem: { type: "product" } });
+    }
+  }, [location.state]);
   const [adjustItem, setAdjustItem] = useState(null);
   const [transactionDetails, setTransactionDetails] = useState(null);
   const [transactionHistory, setTransactionHistory] = useState(null);

@@ -5,6 +5,7 @@ import MainLayout from "./layouts/MainLayout";
 import Settings from "./pages/Settings/Settings";
 import { AppPasscodeGuard, AppPasscodeProvider } from "./components/Passcode/AppPasscodeGate";
 import ComingSoon from "./pages/ComingSoon";
+import Reports from "./pages/Reports/Reports";
 import Dashboard from "./pages/Dashboard/Dashboard";
 import GoogleProfileManager from "./pages/BusinessGrowth/GoogleProfileManager";
 import MarketingStudioEditor from "./pages/BusinessGrowth/MarketingStudioEditor";
@@ -23,6 +24,7 @@ import PurchaseBills from "./pages/Purchase/PurchaseBills";
 import PaymentOut from "./pages/Purchase/PaymentOut";
 import Expenses from "./pages/Purchase/Expenses";
 import PurchaseOrders from "./pages/Purchase/PurchaseOrders";
+import PurchaseReturns from "./pages/Purchase/PurchaseReturns";
 import BankAccounts from "./pages/CashBank/BankAccounts";
 import CashInHand from "./pages/CashBank/CashInHand";
 import Cheques from "./pages/CashBank/Cheques";
@@ -36,6 +38,7 @@ import PaymentIn from "./pages/Sales/PaymentIn";
 import SaleOrders from "./pages/Sales/SaleOrders";
 import DeliveryChallans from "./pages/Sales/DeliveryChallans";
 import SaleReturns from "./pages/Sales/SaleReturns";
+import POS from "./pages/Sales/POS";
 import BarcodeGenerator from "./pages/Utilities/BarcodeGenerator";
 import ImportItems from "./pages/Utilities/ImportItems";
 import ExportItems from "./pages/Utilities/ExportItems";
@@ -47,6 +50,7 @@ import VerifyMyData from "./pages/Utilities/VerifyMyData";
 import BackupToComputer from "./pages/SyncShareBackup/BackupToComputer";
 import BackupToDrive from "./pages/SyncShareBackup/BackupToDrive";
 import PlansPricing from "./pages/PlansPricing/PlansPricing";
+import EditProfile from "./pages/CompanyProfile/EditProfile";
 import {
   DataDeletion,
   PrivacyPolicy,
@@ -66,6 +70,8 @@ function App() {
 
         <Route path="/" element={<AppPasscodeGuard><MainLayout /></AppPasscodeGuard>}>
           <Route index element={<Home />} />
+          <Route path="company-profile" element={<EditProfile />} />
+          <Route path="edit-profile" element={<EditProfile />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="cash-bank/bank-accounts" element={<BankAccounts />} />
           <Route path="cash-bank/cash-in-hand" element={<CashInHand />} />
@@ -113,6 +119,7 @@ function App() {
           <Route path="sales/sale-return-credit-note" element={<SaleReturns />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
+          <Route path="sales/pos" element={<POS />} />
           <Route path="purchase-expense/purchase-bills" element={<PurchaseBills />} />
           <Route
             path="purchase-expense/purchase-bills/new"
@@ -121,6 +128,10 @@ function App() {
           <Route path="purchase-expense/payment-out" element={<PaymentOut />} />
           <Route path="purchase-expense/expenses" element={<Expenses />} />
           <Route path="purchase-expense/purchase-order" element={<PurchaseOrders />} />
+          <Route
+            path="purchase-expense/purchase-return-debit-note"
+            element={<PurchaseReturns />}
+          />
           <Route
             path="utilities/barcode-generator"
             element={<BarcodeGenerator />}
@@ -137,7 +148,7 @@ function App() {
           <Route path="settings" element={<Settings />} />
           <Route path="sync-share-backup/backup-to-computer" element={<BackupToComputer />} />
           <Route path="sync-share-backup/backup-to-drive" element={<BackupToDrive />} />
-          <Route path="reports" element={<ComingSoon />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
         </Routes>
