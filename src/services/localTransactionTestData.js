@@ -2,7 +2,7 @@ import { getParties, saveParty } from "./partiesStorage.js";
 import { getInventoryItems, saveInventoryItem } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
 import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
-import { getSaleReturns, saveSaleReturn } from "./saleReturnsStorage.js";
+import { calculateSaleReturnRow, getSaleReturns, saveSaleReturn } from "./saleReturnsStorage.js";
 import { getPurchaseJobWorks, savePurchaseJobWork } from "./purchaseJobWorkStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
@@ -285,9 +285,38 @@ export function ensureLocalTestData() {
 
   // 8. Credit Note: Link to active sales invoice if none exist
   const creditNotes = getSaleReturns();
-  if (!creditNotes.length && activeSale) {
+  const hasTestCreditNote = creditNotes.some((cn) => cn.number === "TEST-CN-501");
+  if (!creditNotes.length && !hasTestCreditNote && activeSale) {
     const saleRow = activeSale.rows?.[0];
     if (saleRow) {
+      const soldQty = Number(saleRow.qty ?? saleRow.quantity ?? 1);
+      const returnRow = {
+        id: "test-cn-row-1",
+        sourceRowId: saleRow.id || "test-sale-row-1",
+        sourceItemId: saleRow.sourceItemId || saleRow.itemId || finishedShirtItem.id,
+        item: saleRow.item || finishedShirtItem.itemName,
+        soldQty,
+        returnedQty: 0,
+        remainingQty: soldQty,
+        qty: "1",
+        price: String(saleRow.price ?? saleRow.unitPrice ?? "950"),
+        unit: saleRow.unit || "PCS",
+        priceMode: saleRow.priceMode || "Without Tax",
+        discountPercent: String(saleRow.discountPercent ?? saleRow.discount ?? ""),
+        discountMode: saleRow.discountMode || "percent",
+        sourceDiscountAmount: saleRow.calculated?.discount ?? saleRow.discountAmount ?? 0,
+        discountAmount: saleRow.discountMode === "amount" ? String(saleRow.discountAmount || saleRow.calculated?.discount || "") : "",
+        taxRate: saleRow.taxRate ?? saleRow.tax ?? "NONE",
+        tax: String(saleRow.tax ?? saleRow.taxRate ?? "NONE"),
+        restockable: true,
+      };
+
+      const calculatedLine = calculateSaleReturnRow(returnRow);
+      const total = Number((calculatedLine.amount || 0).toFixed(2));
+      const received = 0;
+      const adjustedAmount = 0;
+      const customerCreditAmount = Number((total - received - adjustedAmount).toFixed(2));
+
       saveSaleReturn({
         id: "",
         number: "TEST-CN-501",
@@ -300,27 +329,13 @@ export function ensureLocalTestData() {
         invoiceDate: activeSale.form?.invoiceDate || activeSale.date || today(),
         reason: "TEST Item size replacement request",
         settlementMode: "credit",
-        total: 950,
-        received: 0,
-        adjustedAmount: 0,
-        customerCreditAmount: 950,
-        balance: 950,
+        total,
+        received,
+        adjustedAmount,
+        customerCreditAmount,
+        balance: customerCreditAmount,
         status: "Customer Credit",
-        rows: [
-          {
-            id: "test-cn-row-1",
-            sourceRowId: saleRow.id || "test-sale-row-1",
-            sourceItemId: saleRow.sourceItemId || finishedShirtItem.id,
-            item: saleRow.item || finishedShirtItem.itemName,
-            soldQty: Number(saleRow.qty ?? 2),
-            returnedQty: 0,
-            remainingQty: Number(saleRow.qty ?? 2),
-            qty: "1",
-            price: String(saleRow.price || "950"),
-            unit: "PCS",
-            restockable: true,
-          },
-        ],
+        rows: [returnRow],
         createdAt: new Date().toISOString(),
       });
       changesMade = true;
