@@ -55,6 +55,7 @@ export const partyFormDefaults = {
   partyName: "",
   gstin: "",
   phone: "",
+  group: "General",
   gstType: gstTypes[0],
   state: "",
   email: "",
