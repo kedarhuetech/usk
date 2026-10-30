@@ -633,7 +633,6 @@ export default function PointOfSale() {
   useEffect(() => {
     function onKeyDown(event) {
       const key = event.key.toLowerCase();
-      const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName);
 
       if (event.key === "Escape") {
         if (modal) {
@@ -652,83 +651,42 @@ export default function PointOfSale() {
         return;
       }
 
-      if (event.ctrlKey && key === "t") {
+      if (modal) return;
+
+      const primaryModifier = event.ctrlKey || event.metaKey;
+      if (primaryModifier && !event.altKey && !event.shiftKey && key === "t") {
         event.preventDefault();
+        if (event.repeat) return;
         handleNewBillClick();
         return;
       }
 
-      if (event.ctrlKey && key === "p") {
+      if (primaryModifier && !event.altKey && !event.shiftKey && key === "p") {
         event.preventDefault();
         saveBill(true);
         return;
       }
 
-      if (event.ctrlKey && key === "f") {
+      if (primaryModifier && !event.altKey && !event.shiftKey && key === "f") {
         event.preventDefault();
         handleBreakupClick();
         return;
       }
 
-      if (event.ctrlKey && key === "m") {
+      if (primaryModifier && !event.altKey && !event.shiftKey && key === "m") {
         event.preventDefault();
         handleOtherPaymentsClick();
         return;
       }
 
-      if (event.ctrlKey && key === "w") {
+      if (primaryModifier && !event.altKey && !event.shiftKey && key === "w") {
         event.preventDefault();
+        if (event.repeat) return;
         closeActiveBill();
         return;
       }
 
-      if (typing || modal) return;
-
-      switch (event.key) {
-        case "F1":
-          event.preventDefault();
-          searchRef.current?.focus();
-          setProductOpen(true);
-          break;
-        case "F2":
-          event.preventDefault();
-          handleQuantityClick();
-          break;
-        case "F3":
-          event.preventDefault();
-          handleDiscountClick();
-          break;
-        case "F4":
-          event.preventDefault();
-          handleRemoveItemClick();
-          break;
-        case "F6":
-          event.preventDefault();
-          handleUnitClick();
-          break;
-        case "F8":
-          event.preventDefault();
-          handleAdditionalChargesClick();
-          break;
-        case "F9":
-          event.preventDefault();
-          handleBillDiscountClick();
-          break;
-        case "F10":
-          event.preventDefault();
-          handleLoyaltyClick();
-          break;
-        case "F11":
-          event.preventDefault();
-          setCustomerOpen(true);
-          break;
-        case "F12":
-          event.preventDefault();
-          handleRemarksClick();
-          break;
-        default:
-          break;
-      }
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -736,14 +694,14 @@ export default function PointOfSale() {
   });
 
   const shortcuts = [
-    ["Change Quantity [F2]", handleQuantityClick],
-    ["Item Discount [F3]", handleDiscountClick],
-    ["Remove Item [F4]", handleRemoveItemClick],
-    ["Change Unit [F6]", handleUnitClick],
-    ["Additional Charges [F8]", handleAdditionalChargesClick],
-    ["Bill Discount [F9]", handleBillDiscountClick],
-    ["Loyalty Points [F10]", handleLoyaltyClick],
-    ["Remarks [F12]", handleRemarksClick],
+    ["Change Quantity", handleQuantityClick],
+    ["Item Discount", handleDiscountClick],
+    ["Remove Item", handleRemoveItemClick],
+    ["Change Unit", handleUnitClick],
+    ["Additional Charges", handleAdditionalChargesClick],
+    ["Bill Discount", handleBillDiscountClick],
+    ["Loyalty Points", handleLoyaltyClick],
+    ["Remarks", handleRemarksClick],
   ];
 
   return (
@@ -883,7 +841,7 @@ export default function PointOfSale() {
                     addProduct(filteredProducts[0]);
                   }
                 }}
-                placeholder="Search item name or code, or scan barcode... [F1]"
+                placeholder="Search item name or code, or scan barcode..."
                 className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:font-medium placeholder:text-slate-400 sm:text-lg"
               />
               {search && (
@@ -1179,7 +1137,7 @@ export default function PointOfSale() {
                       }
                     }
                   }}
-                  placeholder="Search customer name or phone [F11]"
+                  placeholder="Search customer name or phone"
                   className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
                 />
                 <button
@@ -1433,7 +1391,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiEdit2 className="text-blue-600" /> Change Quantity [F2]
+                  <FiEdit2 className="text-blue-600" /> Change Quantity
                 </h3>
                 <button
                   type="button"
@@ -1553,7 +1511,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiTag className="text-blue-600" /> Item Discount [F3]
+                  <FiTag className="text-blue-600" /> Item Discount
                 </h3>
                 <button
                   type="button"
@@ -1651,7 +1609,7 @@ export default function PointOfSale() {
           {modal.type === "unit" && (
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800">Change Unit [F6]</h3>
+                <h3 className="font-bold text-slate-800">Change Unit</h3>
                 <button
                   type="button"
                   onClick={() => setModal(null)}
@@ -1771,7 +1729,7 @@ export default function PointOfSale() {
           {modal.type === "additionalCharges" && (
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800">Additional Charges [F8]</h3>
+                <h3 className="font-bold text-slate-800">Additional Charges</h3>
                 <button
                   type="button"
                   onClick={() => setModal(null)}
@@ -1842,7 +1800,7 @@ export default function PointOfSale() {
           {modal.type === "billDiscount" && (
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800">Bill Discount [F9]</h3>
+                <h3 className="font-bold text-slate-800">Bill Discount</h3>
                 <button
                   type="button"
                   onClick={() => setModal(null)}
@@ -1934,7 +1892,7 @@ export default function PointOfSale() {
           {modal.type === "loyalty" && (
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800">Loyalty Points [F10]</h3>
+                <h3 className="font-bold text-slate-800">Loyalty Points</h3>
                 <button
                   type="button"
                   onClick={() => setModal(null)}
@@ -2000,7 +1958,7 @@ export default function PointOfSale() {
           {modal.type === "remarks" && (
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800">Bill Remarks [F12]</h3>
+                <h3 className="font-bold text-slate-800">Bill Remarks</h3>
                 <button
                   type="button"
                   onClick={() => setModal(null)}
@@ -2560,16 +2518,6 @@ export default function PointOfSale() {
               <div className="p-5 space-y-3">
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   {[
-                    ["F1", "Search item or scan barcode"],
-                    ["F2", "Change selected item quantity"],
-                    ["F3", "Item discount"],
-                    ["F4", "Remove selected item"],
-                    ["F6", "Change unit"],
-                    ["F8", "Additional charges"],
-                    ["F9", "Bill discount"],
-                    ["F10", "Loyalty points"],
-                    ["F11", "Search / select customer"],
-                    ["F12", "Bill remarks"],
                     ["Ctrl+T", "Start a new bill"],
                     ["Ctrl+F", "Full bill breakup"],
                     ["Ctrl+P", "Save and print bill"],

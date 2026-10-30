@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { FiCalendar, FiPrinter, FiChevronDown, FiChevronUp } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
+import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const readLocal = (...keys) => {
@@ -213,7 +214,7 @@ export default function ProfitAndLossReport() {
     const saleTotal = activeSales.reduce((acc, r) => acc + recordAmount(r), 0);
 
     // Credit notes (sale returns)
-    const creditNote = saleReturns.reduce((acc, r) => acc + recordAmount(r), 0);
+    const creditNote = saleReturns.filter((r) => !r.cancelled).reduce((acc, r) => acc + recordAmount(r), 0);
 
     // Net Sale Revenue
     const netSaleRevenue = Math.max(0, saleTotal - creditNote);
@@ -276,7 +277,8 @@ export default function ProfitAndLossReport() {
     const totalIncomes = saleAccountsTotal + otherIncomesDirectTotal + otherIncomesIndirectTotal;
 
     // Taxes
-    const gstPayable = activeSales.reduce((acc, r) => acc + recordTax(r), 0);
+    const creditNoteTax = saleReturns.filter((r) => !r.cancelled).reduce((acc, record) => acc + (record.rows || []).reduce((sum, row) => sum + calculateSaleReturnRow(row).tax, 0), 0);
+    const gstPayable = activeSales.reduce((acc, r) => acc + recordTax(r), 0) - creditNoteTax;
     const tcsPayable = 0;
     const tdsPayable = 0;
 
