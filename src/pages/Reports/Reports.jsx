@@ -6,6 +6,7 @@ import CashFlowReport from "./CashFlowReport";
 import AllPartiesReport from "./AllPartiesReport";
 import PartyReportByItem from "./PartyReportByItem";
 import SalePurchaseByPartyReport from "./SalePurchaseByPartyReport";
+import SalePurchaseByPartyGroupReport from "./SalePurchaseByPartyGroupReport";
 import {
   FiBarChart2,
   FiPrinter,
@@ -200,6 +201,7 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("cash-flow")) return "Cash flow";
     if (location.pathname.includes("all-parties")) return "All parties";
     if (location.pathname.includes("party-report-by-item")) return "Party Report By Item";
+    if (location.pathname.includes("sale-purchase-by-party-group")) return "Sale Purchase By Party Group";
     if (location.pathname.includes("sale-purchase-by-party")) return "Sale Purchase By Party";
     return "Sale";
   };
@@ -219,6 +221,8 @@ function Reports({ defaultReport }) {
       setActiveReport("All parties");
     } else if (location.pathname.includes("party-report-by-item")) {
       setActiveReport("Party Report By Item");
+    } else if (location.pathname.includes("sale-purchase-by-party-group")) {
+      setActiveReport("Sale Purchase By Party Group");
     } else if (location.pathname.includes("sale-purchase-by-party")) {
       setActiveReport("Sale Purchase By Party");
     }
@@ -641,6 +645,8 @@ function Reports({ defaultReport }) {
                     navigate("/reports/party-report-by-item", { replace: true });
                   } else if (report === "Sale Purchase By Party") {
                     navigate("/reports/sale-purchase-by-party", { replace: true });
+                  } else if (report === "Sale Purchase By Party Group") {
+                    navigate("/reports/sale-purchase-by-party-group", { replace: true });
                   } else {
                     navigate("/reports", { replace: true });
                   }
@@ -682,6 +688,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Sale Purchase By Party" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <SalePurchaseByPartyReport />
+        </div>
+      ) : activeReport === "Sale Purchase By Party Group" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <SalePurchaseByPartyGroupReport />
         </div>
       ) : (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">
