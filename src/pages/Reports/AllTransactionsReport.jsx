@@ -13,6 +13,7 @@ import {
   FiClock,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
+import { transactionTypes } from "../../services/transactionRecordsStorage";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -209,6 +210,11 @@ export default function AllTransactionsReport() {
   const saleOrders = useMemo(() => readLocal("ledgerly:saleOrders.v1"), [refreshTrigger]);
   const purchaseOrders = useMemo(() => readLocal("ledgerly:purchaseOrders.v1"), [refreshTrigger]);
   const deliveryChallans = useMemo(() => readLocal("ledgerly:deliveryChallans.v1"), [refreshTrigger]);
+  const partyToParty = useMemo(() => readLocal("ledgerly:partyToParty.v1"), [refreshTrigger]);
+  const manufacturing = useMemo(() => readLocal("ledgerly:manufacturing.v1"), [refreshTrigger]);
+  const fixedAssets = useMemo(() => readLocal("ledgerly:fixedAssetTransactions.v1"), [refreshTrigger]);
+  const journalEntries = useMemo(() => readLocal("ledgerly:journalEntries.v1"), [refreshTrigger]);
+  const purchaseJobWorks = useMemo(() => readLocal("ledgerly:purchaseJobWorks.v1"), [refreshTrigger]);
 
   const allRecords = useMemo(() => {
     const list = [
@@ -216,7 +222,7 @@ export default function AllTransactionsReport() {
         const total = Number(r.totals?.finalTotal ?? r.totals?.grandTotal ?? r.total ?? r.amount ?? 0);
         const received = Number(r.totals?.received ?? r.receivedAmount ?? (r.saleType === "cash" ? total : 0));
         const balance = Math.max(0, total - received);
-        const isCancelled = r.status === "Cancelled" || r.cancelled;
+        const isCancelled = r.status === "Cancelled" || r.cancelled || r.isCancelled;
         const status = isCancelled ? "Cancelled" : balance === 0 ? "Paid" : received > 0 ? "Partial" : "Unpaid";
         return {
           id: r.id || `sale-${Math.random()}`,
@@ -224,7 +230,7 @@ export default function AllTransactionsReport() {
           refNo: r.form?.invoiceNumber || r.invoiceNumber || "—",
           partyName: r.form?.customer || r.partyName || r.customer || "Cash Sale",
           category: r.category || r.form?.category || "—",
-          type: "Sale",
+          type: isCancelled ? "Sale (Cancelled)" : "Sale",
           total,
           received,
           balance,
@@ -280,7 +286,7 @@ export default function AllTransactionsReport() {
           id: r.id || `payout-${Math.random()}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || r.refNo || "—",
-          partyName: r.supplier || r.partyName || "—",
+          partyName: r.supplier || r.party || r.customer || r.partyName || "—",
           category: "—",
           type: "Payment-Out",
           total,
@@ -310,19 +316,20 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:expenses.v1",
         };
       }),
-      ...saleReturns.map((r) => {
-        const total = Number(r.totals?.finalTotal ?? r.total ?? 0);
+      ...saleReturns.filter((r) => !r.cancelled).map((r) => {
+        const total = Number(r.total ?? r.totals?.finalTotal ?? 0);
+        const received = Number(r.received || 0);
         return {
           id: r.id || `sret-${Math.random()}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
-          refNo: r.returnNo || r.invoiceNumber || "—",
-          partyName: r.customer || r.partyName || "Cash Sale",
+          refNo: r.number || r.returnNo || r.invoiceNumber || "—",
+          partyName: r.party || r.customer || r.partyName || "Cash Sale",
           category: "—",
           type: "Credit Note",
           total,
-          received: total,
-          balance: 0,
-          status: "Paid",
+          received,
+          balance: Number(r.customerCreditAmount ?? Math.max(total - received - Number(r.adjustedAmount || 0), 0)),
+          status: r.status || (received + Number(r.adjustedAmount || 0) >= total ? "Settled" : "Credit Available"),
           paymentType: r.paymentType || "Cash",
           raw: r,
           storageKey: "ledgerly:saleReturns.v1",
@@ -372,7 +379,7 @@ export default function AllTransactionsReport() {
           refNo: r.number || r.refNo || "—",
           partyName: r.customer || r.partyName || "Cash Sale",
           category: "—",
-          type: "Proforma",
+          type: "Proforma Invoice",
           total,
           received: 0,
           balance: total,
@@ -438,7 +445,11 @@ export default function AllTransactionsReport() {
       }),
     ];
 
-    return list.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    return list.map((row) => ({
+      ...row,
+      firm: row.raw?.firm || row.raw?.companyName || row.raw?.businessName || "",
+      user: row.raw?.user || row.raw?.createdBy || "",
+    })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   }, [
     sales,
     purchases,
@@ -486,6 +497,9 @@ export default function AllTransactionsReport() {
         return false;
       }
 
+      if (firm !== "ALL FIRMS" && row.firm !== firm) return false;
+      if (user !== "ALL USERS" && row.user !== user) return false;
+
       if (paymentType !== "All Payment" && row.paymentType !== paymentType) {
         return false;
       }
@@ -498,7 +512,10 @@ export default function AllTransactionsReport() {
 
       return true;
     });
-  }, [allRecords, from, to, txnType, paymentType, search]);
+  }, [allRecords, from, to, txnType, paymentType, firm, user, search]);
+
+  const availableFirms = [...new Set(allRecords.map((row) => row.firm).filter(Boolean))].sort();
+  const availableUsers = [...new Set(allRecords.map((row) => row.user).filter(Boolean))].sort();
 
   // Status badge styling
   const getStatusBadge = (status) => {
@@ -590,7 +607,7 @@ export default function AllTransactionsReport() {
             className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer hover:bg-slate-50"
           >
             <option>ALL FIRMS</option>
-            <option>Sai Kirana Stores</option>
+            {availableFirms.map((name) => <option key={name}>{name}</option>)}
           </select>
 
           {/* Users select */}
@@ -600,7 +617,7 @@ export default function AllTransactionsReport() {
             className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer hover:bg-slate-50"
           >
             <option>ALL USERS</option>
-            <option>Admin</option>
+            {availableUsers.map((name) => <option key={name}>{name}</option>)}
           </select>
         </div>
 
@@ -640,10 +657,12 @@ export default function AllTransactionsReport() {
           <option>Expense</option>
           <option>Credit Note</option>
           <option>Debit Note</option>
+          <option>Sale (Cancelled)</option>
           <option>Estimate</option>
-          <option>Proforma</option>
+          <option>Proforma Invoice</option>
           <option>Sale Order</option>
           <option>Purchase Order</option>
+          <option>Delivery Challan</option>
         </select>
 
         <select

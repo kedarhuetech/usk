@@ -10,6 +10,7 @@ import {
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -123,6 +124,7 @@ export default function PartyReportByItem() {
   // Raw data from storage
   const inventoryItems = useMemo(() => getInventoryItems(), [refreshTrigger]);
   const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
+  const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
   const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
 
   // Inventory lookup map for category resolution
@@ -148,6 +150,7 @@ export default function PartyReportByItem() {
         if (r.category && r.category.trim()) set.add(r.category.trim());
       });
     });
+
     return ["All Categories", ...Array.from(set).sort()];
   }, [inventoryItems, sales]);
 
@@ -268,6 +271,23 @@ export default function PartyReportByItem() {
       }
     });
 
+    // Returns reduce item sales and remain separate from new sales.
+    saleReturns.forEach((creditNote) => {
+      if (creditNote.cancelled) return;
+      const dateYmd = parseYMD(creditNote.date || creditNote.createdAt);
+      if (from && dateYmd && dateYmd < from) return;
+      if (to && dateYmd && dateYmd > to) return;
+      const partyName = String(creditNote.party || creditNote.customer || creditNote.partyName || "Cash Sale").trim() || "Cash Sale";
+      (creditNote.rows || []).forEach((row) => {
+        const itemName = String(row.item || "").trim();
+        if (selectedItem !== "All Items" && itemName.toLowerCase() !== selectedItem.toLowerCase()) return;
+        const category = row.category || itemCategoryMap.get(itemName.toLowerCase()) || "";
+        if (selectedCategory !== "All Categories" && category.toLowerCase() !== selectedCategory.toLowerCase()) return;
+        const stats = getPartyObj(partyName);
+        stats.saleQty -= Number(row.qty || 0);
+        stats.saleAmount -= calculateSaleReturnRow(row).amount;
+      });
+    });
     // Filter to parties with non-zero activity
     const list = Array.from(partyStats.values()).filter(
       (p) => p.saleQty > 0 || p.saleAmount > 0 || p.purchaseQty > 0 || p.purchaseAmount > 0
@@ -275,7 +295,7 @@ export default function PartyReportByItem() {
 
     // Sort by sale amount descending (matching screenshot)
     return list.sort((a, b) => b.saleAmount - a.saleAmount);
-  }, [sales, purchases, from, to, selectedCategory, selectedItem, itemCategoryMap]);
+  }, [sales, purchases, saleReturns, from, to, selectedCategory, selectedItem, itemCategoryMap]);
 
   // Filter rows by search
   const filteredRows = useMemo(() => {
@@ -558,4 +578,3 @@ export default function PartyReportByItem() {
     </div>
   );
 }
-

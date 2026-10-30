@@ -195,7 +195,7 @@ function transactionRows(item, sales, purchases) {
   const adjustments = getInventoryAdjustments(item.id).map((adjustment) => ({
     id: adjustment.id,
     source: adjustment,
-    type: "Add Adjustment",
+    type: adjustment.direction === "reduce" ? "Reduce Adjustment" : "Add Adjustment",
     invoice: "-",
     name: adjustment.note || "Stock adjustment",
     date: adjustment.createdAt,
