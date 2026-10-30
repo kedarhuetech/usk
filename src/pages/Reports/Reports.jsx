@@ -7,6 +7,7 @@ import AllPartiesReport from "./AllPartiesReport";
 import PartyReportByItem from "./PartyReportByItem";
 import SalePurchaseByPartyReport from "./SalePurchaseByPartyReport";
 import SalePurchaseByPartyGroupReport from "./SalePurchaseByPartyGroupReport";
+import StockSummaryReport from "./StockSummaryReport";
 import {
   FiBarChart2,
   FiPrinter,
@@ -203,6 +204,7 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("party-report-by-item")) return "Party Report By Item";
     if (location.pathname.includes("sale-purchase-by-party-group")) return "Sale Purchase By Party Group";
     if (location.pathname.includes("sale-purchase-by-party")) return "Sale Purchase By Party";
+    if (location.pathname.includes("stock-summary")) return "Stock summary";
     return "Sale";
   };
 
@@ -225,6 +227,8 @@ function Reports({ defaultReport }) {
       setActiveReport("Sale Purchase By Party Group");
     } else if (location.pathname.includes("sale-purchase-by-party")) {
       setActiveReport("Sale Purchase By Party");
+    } else if (location.pathname.includes("stock-summary")) {
+      setActiveReport("Stock summary");
     }
   }, [defaultReport, location.pathname]);
   const [search, setSearch] = useState("");
@@ -647,6 +651,8 @@ function Reports({ defaultReport }) {
                     navigate("/reports/sale-purchase-by-party", { replace: true });
                   } else if (report === "Sale Purchase By Party Group") {
                     navigate("/reports/sale-purchase-by-party-group", { replace: true });
+                  } else if (report === "Stock summary") {
+                    navigate("/reports/stock-summary", { replace: true });
                   } else {
                     navigate("/reports", { replace: true });
                   }
@@ -692,6 +698,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Sale Purchase By Party Group" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <SalePurchaseByPartyGroupReport />
+        </div>
+      ) : activeReport === "Stock summary" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <StockSummaryReport />
         </div>
       ) : (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">
