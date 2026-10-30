@@ -2,7 +2,7 @@
 import { cloneElement, useState } from "react";
 import { FiArrowLeft } from "react-icons/fi";
 import { useLocation, useNavigate, useOutlet } from "react-router-dom";
-import Sidebar from "../components/Sidebar/Sidebar";
+import HorizontalNavbar from "../components/Navigation/HorizontalNavbar";
 import Topbar from "../components/Topbar/Topbar";
 
 const transactionRoutes = ["/sales/sale-invoices/new", "/purchase-expense/purchase-bills/new"];
@@ -39,11 +39,11 @@ function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      {!isTransactionRoute && <Sidebar />}
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
+      <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
+      {!isTransactionRoute && <HorizontalNavbar />}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
 
         {showBackButton && (
           <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white px-4 sm:px-6">
