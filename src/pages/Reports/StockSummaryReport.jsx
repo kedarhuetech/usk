@@ -263,23 +263,27 @@ export default function StockSummaryReport() {
             <span className="text-slate-600 font-medium">Date filter</span>
           </label>
 
-          {/* Date picker — only active when date filter is on */}
-          <div className={`flex items-center gap-2 rounded border px-3 py-1.5 text-xs font-medium transition-colors ${
+          {/* Date picker — clicking automatically activates date filter and opens calendar */}
+          <label className={`flex items-center gap-2 rounded border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
             useDateFilter
-              ? "border-slate-300 bg-white text-slate-800"
-              : "border-slate-200 bg-slate-100 text-slate-400"
+              ? "border-slate-300 bg-white text-slate-800 hover:border-sky-500"
+              : "border-slate-300 bg-white text-slate-600 hover:border-sky-500"
           }`}>
-            <span className="text-slate-500">Date</span>
+            <span className="text-slate-500 select-none">Date</span>
             <input
               type="date"
               value={dateFilter}
-              disabled={!useDateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className={`bg-transparent outline-none cursor-pointer ${
-                useDateFilter ? "text-slate-800 font-semibold" : "text-slate-400 cursor-not-allowed"
-              }`}
+              onClick={(e) => {
+                if (!useDateFilter) setUseDateFilter(true);
+                try { e.currentTarget.showPicker(); } catch {}
+              }}
+              onChange={(e) => {
+                setUseDateFilter(true);
+                setDateFilter(e.target.value);
+              }}
+              className="bg-transparent outline-none cursor-pointer font-semibold text-slate-800"
             />
-          </div>
+          </label>
 
           {/* Show items in stock */}
           <label className="flex items-center gap-2 cursor-pointer select-none">

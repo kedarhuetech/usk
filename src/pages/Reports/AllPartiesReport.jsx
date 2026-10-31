@@ -358,19 +358,21 @@ export default function AllPartiesReport() {
           {/* Date Picker (shown when Date Filter is checked) */}
           {dateFilterActive && (
             <div className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">
-              <span className="text-slate-400">From</span>
+              <span className="text-slate-400 select-none">From</span>
               <input
                 type="date"
                 value={from}
+                onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
                 onChange={(e) => setFrom(e.target.value)}
-                className="bg-transparent outline-none font-medium"
+                className="bg-transparent outline-none font-medium cursor-pointer"
               />
-              <span className="text-slate-400">To</span>
+              <span className="text-slate-400 select-none">To</span>
               <input
                 type="date"
                 value={to}
+                onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
                 onChange={(e) => setTo(e.target.value)}
-                className="bg-transparent outline-none font-medium"
+                className="bg-transparent outline-none font-medium cursor-pointer"
               />
             </div>
           )}

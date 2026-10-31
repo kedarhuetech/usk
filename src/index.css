@@ -385,8 +385,29 @@ html.dark textarea::placeholder {
   color: #94a3b8 !important;
 }
 
-html.dark input::-webkit-calendar-picker-indicator {
-  filter: invert(0.85);
+/* Native Date Input Picker & Indicators */
+input[type="date"] {
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+  padding: 2px;
+  transition: opacity 0.15s ease-in-out;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+html.dark input[type="date"] {
+  color-scheme: dark;
+}
+
+html.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: brightness(1.6) contrast(1.2);
+  opacity: 0.95;
   cursor: pointer;
 }
 

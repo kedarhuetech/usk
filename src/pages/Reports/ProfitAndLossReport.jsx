@@ -503,24 +503,26 @@ export default function ProfitAndLossReport() {
       {/* ── Top Bar ── */}
       <div className="flex flex-wrap items-center justify-between border-b border-gray-100 px-6 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded border border-gray-200 bg-[#fbfcfd] px-3 py-1.5 text-xs text-gray-600">
-            <span className="font-medium text-gray-500">From</span>
+          <label className="flex items-center gap-2 rounded border border-gray-200 bg-[#fbfcfd] px-3 py-1.5 text-xs text-gray-600 cursor-pointer hover:border-sky-500 transition-colors">
+            <span className="font-medium text-gray-500 select-none">From</span>
             <input
               type="date"
               value={from}
+              onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
               onChange={(e) => setFrom(e.target.value)}
               className="bg-transparent font-medium text-gray-700 outline-none cursor-pointer"
             />
-          </div>
-          <div className="flex items-center gap-2 rounded border border-gray-200 bg-[#fbfcfd] px-3 py-1.5 text-xs text-gray-600">
-            <span className="font-medium text-gray-500">To</span>
+          </label>
+          <label className="flex items-center gap-2 rounded border border-gray-200 bg-[#fbfcfd] px-3 py-1.5 text-xs text-gray-600 cursor-pointer hover:border-sky-500 transition-colors">
+            <span className="font-medium text-gray-500 select-none">To</span>
             <input
               type="date"
               value={to}
+              onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
               onChange={(e) => setTo(e.target.value)}
               className="bg-transparent font-medium text-gray-700 outline-none cursor-pointer"
             />
-          </div>
+          </label>
         </div>
 
         <div className="flex items-center gap-2">

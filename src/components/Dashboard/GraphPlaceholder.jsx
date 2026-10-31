@@ -7,16 +7,39 @@ import { saleInvoicesStorageKey } from "../../services/salesStorage.js";
 
 const PERIODS = ["This Month", "Last 30 Days", "This Week", "This Year"];
 
+function parseYMD(val) {
+  if (!val) return "";
+  const s = String(val).trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+  const d = new Date(val);
+  if (!Number.isNaN(d.getTime()))
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return "";
+}
+
 function parseInvoiceDate(invoice) {
-  const value = invoice.form?.invoiceDate || invoice.createdAt || invoice.date;
+  const value = invoice.form?.invoiceDate || invoice.invoiceDate || invoice.date || invoice.createdAt;
   if (!value) return null;
-  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  const ymd = parseYMD(value);
+  if (!ymd) return null;
+  const date = new Date(`${ymd}T00:00:00`);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function parseInvoiceAmount(invoice) {
-  const amount = Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? invoice.total ?? invoice.amount ?? 0);
-  if (!Number.isFinite(amount)) throw new Error("A saved sales invoice has an invalid total.");
+  const amount = Number(
+    invoice.totals?.finalTotal ??
+    invoice.totals?.grandTotal ??
+    invoice.totals?.amount ??
+    invoice.totalAmount ??
+    invoice.total ??
+    invoice.amount ??
+    0
+  );
+  if (!Number.isFinite(amount)) return 0;
   return Math.max(0, amount);
 }
 
