@@ -13,6 +13,7 @@ import {
   FiClock,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { transactionTypes } from "../../services/transactionRecordsStorage";
 
 function readLocal(...keys) {
@@ -71,6 +72,7 @@ export default function AllTransactionsReport() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [menuState, setMenuState] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   const menuRef = useRef(null);
 
@@ -633,7 +635,7 @@ export default function AllTransactionsReport() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => setPrintModalOpen(true)}
             className="flex flex-col items-center text-[11px] font-medium text-slate-600 hover:text-blue-600 transition"
           >
             <FiPrinter className="h-5 w-5" />
@@ -961,6 +963,17 @@ export default function AllTransactionsReport() {
           </div>
         </div>
       )}
+      <ReportPrintPreviewModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="All Transactions Report"
+        dateFrom={from}
+        dateTo={to}
+        user={user}
+        records={filtered.map((r) => ({ ...r.raw, form: { ...r.raw?.form, invoiceNumber: r.refNo, customer: r.partyName, invoiceDate: r.date, paymentType: r.paymentType } }))}
+        totalLabel="Total Amount:"
+        totalAmount={filtered.reduce((sum, r) => sum + Number(r.total || 0), 0)}
+      />
     </div>
   );
 }

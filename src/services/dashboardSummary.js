@@ -37,12 +37,16 @@ function totalFor(record) {
 
 function outstandingFor(record) {
   const total = totalFor(record);
-  // saleType/purchaseType describe settlement terms. form.paymentType is the
-  // tender method (Cash, UPI, etc.) and must not make an unpaid credit bill
-  // appear settled.
   const settlementType = String(record.saleType || record.purchaseType || "").trim().toLowerCase();
   if (settlementType === "cash" || record.isCashTransaction === true) return 0;
   if (["paid", "cancelled", "canceled", "void", "deleted"].includes(String(record.status || "").trim().toLowerCase())) return 0;
+
+  if (record.totals?.balance !== undefined && record.totals?.balance !== null) {
+    return Math.max(0, amount(record.totals.balance, "balance"));
+  }
+  if (record.balance !== undefined && record.balance !== null) {
+    return Math.max(0, amount(record.balance, "balance"));
+  }
 
   const paidOrReceived = Math.min(
     Math.max(
@@ -91,9 +95,6 @@ export function calculateDashboardSummary({ sales = [], purchases = [], parties 
       && !record.cancelled && !record.deleted && !record.isDeleted
       && !["cancelled", "canceled", "void", "deleted"].includes(String(record.status || "").trim().toLowerCase()));
 
-  const salesReceivable = activeSales
-    .reduce((sum, record) => sum + outstandingFor(record), 0);
-
   const totalSales = activeSales
     .reduce((sum, record) => sum + totalFor(record), 0);
 
@@ -102,27 +103,96 @@ export function calculateDashboardSummary({ sales = [], purchases = [], parties 
     .filter((record) => !record.isReturn && !record.cancelled && !record.deleted && !record.isDeleted
       && !["cancelled", "canceled", "void", "deleted"].includes(String(record.status || "").toLowerCase()));
 
-  const purchasesPayable = activePurchases
-    .reduce((sum, record) => sum + outstandingFor(record), 0);
+  // Track matched transaction IDs so unlinked transactions can also be accounted for
+  const matchedSaleIds = new Set();
+  const matchedPurchaseIds = new Set();
 
-  // Parties opening balance breakdown
   let partyReceivable = 0;
   let partyPayable = 0;
+
   for (const party of parties) {
     const ob = Math.abs(amount(party.openingBalance || 0, "party opening balance"));
-    if (ob > 0) {
-      if (party.openingBalanceType === "to-pay") {
-        partyPayable += ob;
-      } else {
-        partyReceivable += ob;
+    const partyTypeStr = String(party.partyType || "").trim().toLowerCase();
+    const isSupplier = partyTypeStr === "supplier" || partyTypeStr === "vendor";
+    const obType = party.openingBalanceType
+      ? String(party.openingBalanceType).trim().toLowerCase()
+      : (isSupplier ? "to-pay" : "to-receive");
+
+    // Unpaid sales for this party
+    const partySales = activeSales.filter((inv) => {
+      const match = (inv.partyId && String(inv.partyId) === String(party.id)) ||
+        (inv.form?.partyId && String(inv.form.partyId) === String(party.id)) ||
+        (inv.partyName && party.partyName && String(inv.partyName).trim().toLowerCase() === String(party.partyName).trim().toLowerCase()) ||
+        (inv.customerName && party.partyName && String(inv.customerName).trim().toLowerCase() === String(party.partyName).trim().toLowerCase()) ||
+        (inv.customer && party.partyName && String(inv.customer).trim().toLowerCase() === String(party.partyName).trim().toLowerCase()) ||
+        (inv.form?.customer && party.partyName && String(inv.form.customer).trim().toLowerCase() === String(party.partyName).trim().toLowerCase());
+      if (match) {
+        matchedSaleIds.add(String(inv.id || inv.invoiceId));
       }
+      return match;
+    });
+
+    const partySalesUnpaid = partySales.reduce((sum, inv) => sum + outstandingFor(inv), 0);
+
+    // Unpaid purchases for this party
+    const partyPurchases = activePurchases.filter((bill) => {
+      const match = (bill.partyId && String(bill.partyId) === String(party.id)) ||
+        (bill.form?.partyId && String(bill.form.partyId) === String(party.id)) ||
+        (bill.supplier && party.partyName && String(bill.supplier).trim().toLowerCase() === String(party.partyName).trim().toLowerCase()) ||
+        (bill.partyName && party.partyName && String(bill.partyName).trim().toLowerCase() === String(party.partyName).trim().toLowerCase()) ||
+        (bill.party && party.partyName && String(bill.party).trim().toLowerCase() === String(party.partyName).trim().toLowerCase()) ||
+        (bill.form?.customer && party.partyName && String(bill.form.customer).trim().toLowerCase() === String(party.partyName).trim().toLowerCase());
+      if (match) {
+        matchedPurchaseIds.add(String(bill.id || bill.invoiceId));
+      }
+      return match;
+    });
+
+    const partyPurchasesUnpaid = partyPurchases.reduce((sum, bill) => sum + outstandingFor(bill), 0);
+
+    let rec = (obType === "to-receive" ? ob : 0) + partySalesUnpaid;
+    let pay = (obType === "to-pay" ? ob : 0) + partyPurchasesUnpaid;
+
+    if (party.balance !== undefined && party.balance !== null && party.balance !== "") {
+      const rawBal = Number(party.balance);
+      if (rawBal > 0 && obType === "to-receive") rec = Math.max(rec, rawBal);
+      if (rawBal < 0 || obType === "to-pay") pay = Math.max(pay, Math.abs(rawBal));
+    }
+
+    const net = rec - pay;
+    if (net > 0) {
+      partyReceivable += net;
+    } else if (net < 0) {
+      partyPayable += Math.abs(net);
+    } else {
+      if (rec > 0) partyReceivable += rec;
+      if (pay > 0) partyPayable += pay;
     }
   }
 
-  const receivable = salesReceivable + partyReceivable;
-  const payable = purchasesPayable + partyPayable;
+  // Any unmatched active sales with outstanding balance
+  const unlinkedSalesReceivable = activeSales
+    .filter((inv) => !matchedSaleIds.has(String(inv.id || inv.invoiceId)))
+    .reduce((sum, inv) => sum + outstandingFor(inv), 0);
 
-  return { receivable, payable, totalSales, activeSales, salesReceivable, purchasesPayable, partyReceivable, partyPayable };
+  // Any unmatched active purchases with outstanding balance
+  const unlinkedPurchasesPayable = activePurchases
+    .filter((bill) => !matchedPurchaseIds.has(String(bill.id || bill.invoiceId)))
+    .reduce((sum, bill) => sum + outstandingFor(bill), 0);
+
+  const receivable = partyReceivable + unlinkedSalesReceivable;
+  const payable = partyPayable + unlinkedPurchasesPayable;
+
+  return {
+    receivable,
+    payable,
+    totalSales,
+    activeSales,
+    salesReceivable: receivable,
+    purchasesPayable: payable,
+    partyReceivable,
+    partyPayable,
+  };
 }
 
 // Uses the existing repositories after validating their persisted JSON, so a

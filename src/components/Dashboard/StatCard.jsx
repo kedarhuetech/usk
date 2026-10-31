@@ -9,9 +9,9 @@ function StatCard({ stat }) {
 
   const handleClick = () => {
     if (stat.id === "receivable") {
-      navigate("/sales/sale-invoices");
+      navigate("/parties/party-details?filter=receivable", { state: { filter: "receivable" } });
     } else if (stat.id === "payable") {
-      navigate("/purchase-expense/purchase-bills");
+      navigate("/parties/party-details?filter=payable", { state: { filter: "payable" } });
     }
   };
 

@@ -388,16 +388,18 @@ export default function PartyReportByItem() {
                 <input
                   type="date"
                   value={from}
+                  onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
                   onChange={(e) => {
                     setPeriod("Custom");
                     setFrom(e.target.value);
                   }}
                   className="bg-transparent font-medium text-slate-800 outline-none cursor-pointer"
                 />
-                <span className="text-slate-400">To</span>
+                <span className="text-slate-400 select-none">To</span>
                 <input
                   type="date"
                   value={to}
+                  onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
                   onChange={(e) => {
                     setPeriod("Custom");
                     setTo(e.target.value);

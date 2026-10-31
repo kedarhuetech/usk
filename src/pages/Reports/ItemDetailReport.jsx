@@ -222,24 +222,26 @@ export default function ItemDetailReport() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
         {/* Date Range */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-1.5 shadow-xs">
-            <span className="text-slate-500 font-medium">From</span>
+          <label className="flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-1.5 shadow-xs cursor-pointer hover:border-sky-500 transition-colors">
+            <span className="text-slate-500 font-medium select-none">From</span>
             <input
               type="date"
               value={from}
+              onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
               onChange={(e) => setFrom(e.target.value)}
               className="bg-transparent font-semibold text-slate-800 outline-none cursor-pointer"
             />
-          </div>
-          <div className="flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-1.5 shadow-xs">
-            <span className="text-slate-500 font-medium">To</span>
+          </label>
+          <label className="flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-1.5 shadow-xs cursor-pointer hover:border-sky-500 transition-colors">
+            <span className="text-slate-500 font-medium select-none">To</span>
             <input
               type="date"
               value={to}
+              onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
               onChange={(e) => setTo(e.target.value)}
               className="bg-transparent font-semibold text-slate-800 outline-none cursor-pointer"
             />
-          </div>
+          </label>
         </div>
 
         {/* Excel & Print */}

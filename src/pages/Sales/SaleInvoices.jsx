@@ -18,6 +18,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import Button from "../../components/Common/Button";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import Card from "../../components/Common/Card";
 import { loadSalesInvoices } from "../../services/businessRecords";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
@@ -49,7 +50,10 @@ function endOfMonth(date) { return new Date(date.getFullYear(), date.getMonth() 
 function invoiceDate(invoice) {
   const value = invoice.form?.invoiceDate || invoice.createdAt;
   if (!value) return null;
-  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  const s = String(value).trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const normalized = dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : (s.length === 10 ? s : value);
+  const date = new Date(normalized.length === 10 ? `${normalized}T00:00:00` : normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -57,7 +61,10 @@ function invoiceDate(invoice) {
 function isInDateRange(value, start, end) {
   if (!start && !end) return true;
   if (!value) return false;
-  const date = new Date(value.length === 10 ? `${value}T00:00:00` : value);
+  const s = String(value).trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const normalized = dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : (s.length === 10 ? s : value);
+  const date = new Date(normalized.length === 10 ? `${normalized}T00:00:00` : normalized);
   if (Number.isNaN(date.getTime())) return false;
   const iso = isoDate(date);
   return (!start || iso >= start) && (!end || iso <= end);
@@ -220,6 +227,7 @@ function SaleInvoices() {
   const [graphPeriod, setGraphPeriod] = useState("Daily");
   const [graphUser, setGraphUser] = useState("All Users");
   const [activeDialog, setActiveDialog] = useState(null);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   // Opens add sale.
   const openAddSale = () => navigate("/sales/sale-invoices/new", { state: { from: pathname } });
   // Opens preview.
@@ -340,7 +348,7 @@ function SaleInvoices() {
 
       <Card className="flex min-h-[calc(100vh-25rem)] flex-col shadow-sm"><div className="flex min-h-[68px] flex-wrap items-center justify-between gap-3 px-4 py-3"><h2 className="text-lg font-semibold text-slate-700">Transactions</h2><div className="flex items-center gap-3 text-slate-500">
         {searchOpen && <label className="relative"><FiSearch className="absolute left-3 top-2.5 h-4 w-4" /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search invoices" className="h-9 w-48 rounded-md border border-slate-300 pl-9 pr-8 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="Close search" className="absolute right-2 top-2"><FiX /></button></label>}
-        <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search" title="Search" className="rounded p-1.5 hover:bg-slate-100"><FiSearch className="h-5 w-5" /></button><button type="button" onClick={() => setGraphOpen(true)} aria-label="Open sales graph" title="Sales Graph" className="rounded p-1.5 hover:bg-slate-100"><FiBarChart2 className="h-5 w-5" /></button><button type="button" onClick={() => downloadCsv(visibleInvoices)} aria-label="Download Excel CSV" title="Download Excel CSV" className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"><FiDownload className="h-5 w-5" /></button><button type="button" onClick={() => window.print()} aria-label="Print sale invoices" title="Print" className="rounded p-1.5 hover:bg-slate-100"><FiPrinter className="h-5 w-5" /></button>
+        <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search" title="Search" className="rounded p-1.5 hover:bg-slate-100"><FiSearch className="h-5 w-5" /></button><button type="button" onClick={() => setGraphOpen(true)} aria-label="Open sales graph" title="Sales Graph" className="rounded p-1.5 hover:bg-slate-100"><FiBarChart2 className="h-5 w-5" /></button><button type="button" onClick={() => downloadCsv(visibleInvoices)} aria-label="Download Excel CSV" title="Download Excel CSV" className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"><FiDownload className="h-5 w-5" /></button><button type="button" onClick={() => setPrintModalOpen(true)} aria-label="Print sale invoices" title="Print" className="rounded p-1.5 hover:bg-slate-100"><FiPrinter className="h-5 w-5" /></button>
       </div></div>
         {visibleInvoices.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[1050px] border-collapse text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["Date", "Invoice no", "Party Name", "Transaction", "Payment Type", "Amount", "Balance", "Status", "Actions"].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-3">{heading}{heading !== "Actions" && <FiFilter className="ml-2 inline h-3.5 w-3.5 text-slate-500" />}</th>)}</tr></thead><tbody>{visibleInvoices.map((invoice, index) => {
           const amount = invoiceAmount(invoice); const balance = invoiceBalance(invoice); const cancelled = Boolean(invoice.cancelled || invoice.status === "Cancelled");
@@ -354,6 +362,17 @@ function SaleInvoices() {
         {activeDialog.type === "Payment History" && <div className="space-y-3 p-5 text-sm text-slate-700"><div className="flex justify-between border-b pb-3"><span>Invoice total</span><b>{formatMoney(invoiceAmount(activeDialog.invoice))}</b></div><div className="flex justify-between border-b pb-3"><span>Received</span><b className="text-emerald-600">{formatMoney(invoiceReceived(activeDialog.invoice))}</b></div><div className="flex justify-between"><span>Balance</span><b className="text-rose-600">{formatMoney(invoiceBalance(activeDialog.invoice))}</b></div><p className="text-xs text-slate-500">Payment entries are shown from this invoice’s saved received amount.</p></div>}
         {activeDialog.type === "View History" && <div className="max-h-80 space-y-3 overflow-y-auto p-5">{(invoiceUi.history || []).filter((entry) => entry.invoiceId === activeDialog.invoice.id).map((entry) => <div key={entry.id} className="flex justify-between gap-3 border-b border-slate-100 pb-3 text-sm"><span className="font-medium text-slate-700">{entry.action}</span><time className="text-slate-500">{new Date(entry.at).toLocaleString()}</time></div>)}{!(invoiceUi.history || []).some((entry) => entry.invoiceId === activeDialog.invoice.id) && <p className="text-sm text-slate-500">No local action history for this invoice yet.</p>}</div>}
         <footer className="flex justify-end border-t border-slate-100 px-5 py-3"><Button onClick={() => setActiveDialog(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}
+      <ReportPrintPreviewModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="Sale Report"
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        user={user}
+        records={visibleInvoices}
+        totalLabel="Total Sale:"
+        totalAmount={totals.amount}
+      />
     </div>
   );
 }

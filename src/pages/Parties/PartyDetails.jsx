@@ -8,6 +8,7 @@ import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
 import { deleteSaleInvoice, getSaleInvoices, saveSaleInvoice } from "../../services/salesStorage";
+import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
@@ -278,15 +279,148 @@ function escapeHtml(value) {
 }
 
 // Builds statement document.
+// Formats date as DD/MM/YYYY
+function formatDateDMY(dateStr) {
+  if (!dateStr) return "-";
+  const s = String(dateStr).trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmy) return `${dmy[1].padStart(2, "0")}/${dmy[2].padStart(2, "0")}/${dmy[3]}`;
+  const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (ymd) return `${ymd[3].padStart(2, "0")}/${ymd[2].padStart(2, "0")}/${ymd[1]}`;
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  }
+  return dateStr;
+}
+
 function buildStatementDocument(party, invoices, activity = []) {
+  const company = getCompanyProfile();
+  const companyName = company.businessName || company.companyName || "Company Name";
+  const companyPhone = company.phoneNumber || company.phone || "";
   const opening = Math.abs(Number(party?.openingBalance || 0));
-  const openingType = party?.openingBalanceType === "to-pay" ? "Payable" : "Receivable";
-  const transactionRows = [
-    ...(opening > 0 ? [`<tr><td>${escapeHtml(party.asOfDate || "")}</td><td>${openingType} Opening Balance</td><td></td><td>Unpaid</td><td>${money(opening)}</td><td>₹ 0.00</td><td>${money(opening)}</td></tr>`] : []),
-    ...activity.map((entry) => `<tr><td>${escapeHtml(entry.date || "")}</td><td>${escapeHtml(entry.source)}</td><td>${escapeHtml(entry.number)}</td><td>${escapeHtml(entry.status)}</td><td>${money(entry.total)}</td><td>${money(entry.received)}</td><td>${money(entry.balance)}</td></tr>`),
-  ].join("");
-  const itemTables = invoices.map((invoice) => `<h3>Sale ${escapeHtml(invoice.form?.invoiceNumber || invoice.invoiceNumber || "")}</h3><table><thead><tr><th>#</th><th>Item name</th><th>HSN/SAC</th><th>Quantity</th><th>Unit</th><th>Price/Unit</th><th>Discount</th><th>Amount</th></tr></thead><tbody>${(invoice.rows || []).map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.item)}</td><td>${escapeHtml(row.hsnSac || row.hsn || "")}</td><td>${escapeHtml(row.calculated?.qty || row.qty || "")}</td><td>${escapeHtml(row.unit || "")}</td><td>${money(row.price)}</td><td>${money(row.calculated?.discount)}</td><td>${money(row.calculated?.amount)}</td></tr>`).join("")}</tbody></table>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title><style>body{font:14px Arial,sans-serif;color:#111;margin:32px}header{text-align:center;margin-bottom:48px}h1{text-align:center;text-decoration:underline;font-size:24px;margin-bottom:36px}h2{font-size:20px}h3{margin-top:28px}table{border-collapse:collapse;width:100%;margin:10px 0 24px}th{background:#d6d6d6;text-align:left}th,td{padding:8px 6px;border-bottom:1px solid #888}button{padding:10px 18px;margin:10px 8px 0 0} @media print{button{display:none}body{margin:12mm}}</style></head><body><header><h2>${escapeHtml(getCompanyProfile().businessName || getCompanyProfile().companyName || "Sai Kirana Stores")}</h2><div>Party statement</div></header><h1>Party statement</h1><h2>Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</h2><p>Contact No.: ${escapeHtml(party?.phone || "")}</p><table><thead><tr><th>Date</th><th>Txn Type</th><th>Ref No.</th><th>Payment Status</th><th>Total</th><th>Received / Paid</th><th>Txn Balance</th></tr></thead><tbody>${transactionRows || '<tr><td colspan="7">No transactions</td></tr>'}</tbody></table>${itemTables}<button onclick="window.print()">Print / Save PDF</button></body></html>`;
+  const openingType = party?.openingBalanceType || "to-receive";
+
+  const rows = [
+    ...(opening > 0 ? [{
+      date: formatDateDMY(party?.asOfDate),
+      source: `${openingType === "to-pay" ? "Payable" : "Receivable"} Opening Balance`,
+      number: "-",
+      status: "Unpaid",
+      total: opening,
+      received: 0,
+      balance: opening,
+      receivableBalance: openingType === "to-receive" ? opening : 0,
+      payableBalance: openingType === "to-pay" ? opening : 0,
+    }] : []),
+    ...activity.map((entry) => ({
+      date: formatDateDMY(entry.date),
+      source: entry.source,
+      number: entry.number || "-",
+      status: entry.status || "Paid",
+      total: Number(entry.total || 0),
+      received: Number(entry.received || 0),
+      balance: Number(entry.balance || 0),
+      receivableBalance: openingType === "to-receive" ? Number(entry.balance || 0) : 0,
+      payableBalance: openingType === "to-pay" ? Number(entry.balance || 0) : 0,
+    })),
+  ];
+
+  const totalAmount = rows.reduce((s, r) => s + r.total, 0);
+  const totalReceived = rows.reduce((s, r) => s + r.received, 0);
+  const totalBalance = rows.reduce((s, r) => s + r.balance, 0);
+  const totalReceivable = rows.reduce((s, r) => s + r.receivableBalance, 0);
+  const totalPayable = rows.reduce((s, r) => s + r.payableBalance, 0);
+
+  const tableRows = rows.map((r) => `
+    <tr>
+      <td>${escapeHtml(r.date)}</td>
+      <td>${escapeHtml(r.source)}</td>
+      <td>${escapeHtml(r.number)}</td>
+      <td style="color:${r.status === 'Paid' ? '#16a34a' : '#e11d48'};font-weight:600;">${escapeHtml(r.status)}</td>
+      <td style="text-align:right;">${money(r.total)}</td>
+      <td style="text-align:right;">${money(r.received)}</td>
+      <td style="text-align:right;">${money(r.balance)}</td>
+      <td style="text-align:right;color:#16a34a;">${r.receivableBalance > 0 ? money(r.receivableBalance) : '-'}</td>
+      <td style="text-align:right;color:#e11d48;">${r.payableBalance > 0 ? money(r.payableBalance) : '-'}</td>
+    </tr>
+  `).join("");
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 36px; }
+    .company-header { text-align: center; margin-bottom: 24px; }
+    .company-name { font-size: 22px; font-weight: 800; margin: 0; }
+    .company-phone { font-size: 13px; color: #475569; margin: 4px 0 0; }
+    .doc-title { text-align: center; text-decoration: underline; font-size: 26px; font-weight: 800; margin: 28px 0 20px; }
+    .party-info { margin-bottom: 16px; }
+    .party-name { font-size: 18px; font-weight: 700; margin: 0; }
+    .party-contact { font-size: 13px; color: #475569; margin: 4px 0 0; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 12px; }
+    th { background: #cbd5e1; font-weight: 700; color: #0f172a; text-align: left; padding: 10px 8px; border-bottom: 2px solid #94a3b8; }
+    td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; }
+    .total-row td { background: #cbd5e1; font-weight: 800; border-top: 2px solid #94a3b8; }
+    .btn-bar { margin-top: 28px; display: flex; justify-content: flex-end; gap: 10px; }
+    .btn { padding: 8px 20px; border-radius: 9999px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e11d48; color: #e11d48; background: white; }
+    .btn-primary { background: #e11d48; color: white; }
+    @media print {
+      body { margin: 10mm; }
+      .btn-bar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="company-header">
+    <h1 class="company-name">${escapeHtml(companyName)}</h1>
+    ${companyPhone ? `<p class="company-phone">Phone no.: ${escapeHtml(companyPhone)}</p>` : ""}
+  </div>
+
+  <h2 class="doc-title">Party statement</h2>
+
+  <div class="party-info">
+    <div class="party-name">Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</div>
+    ${party?.phone ? `<div class="party-contact">Contact No.: ${escapeHtml(party.phone)}</div>` : ""}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Txn Type</th>
+        <th>Ref No.</th>
+        <th>Payment Status</th>
+        <th style="text-align:right;">Total</th>
+        <th style="text-align:right;">Received / Paid</th>
+        <th style="text-align:right;">Txn Balance</th>
+        <th style="text-align:right;">Receivable Balance</th>
+        <th style="text-align:right;">Payable Balance</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${tableRows || '<tr><td colspan="9" style="text-align:center;padding:24px;color:#94a3b8;">No transactions to show</td></tr>'}
+      ${rows.length > 0 ? `
+        <tr class="total-row">
+          <td colspan="4" style="font-weight:800;">Total</td>
+          <td style="text-align:right;font-weight:800;">${money(totalAmount)}</td>
+          <td style="text-align:right;font-weight:800;">${money(totalReceived)}</td>
+          <td style="text-align:right;font-weight:800;">${money(totalBalance)}</td>
+          <td style="text-align:right;font-weight:800;color:#15803d;">${money(totalReceivable)}</td>
+          <td style="text-align:right;font-weight:800;color:#be123c;">${money(totalPayable)}</td>
+        </tr>
+      ` : ""}
+    </tbody>
+  </table>
+
+  <div class="btn-bar">
+    <button class="btn" onclick="window.print()">Print</button>
+    <button class="btn" onclick="window.print()">Save PDF</button>
+  </div>
+</body>
+</html>`;
 }
 
 // Renders the party details interface.
@@ -303,6 +437,24 @@ function PartyDetails() {
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
   const [parties, setParties] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [purchases, setPurchases] = useState([]);
+  const [balanceFilter, setBalanceFilter] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const f = params.get("filter") || location.state?.filter;
+    if (f === "receivable" || f === "to-receive") return "receivable";
+    if (f === "payable" || f === "to-pay") return "payable";
+    return "all";
+  });
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const f = params.get("filter") || location.state?.filter;
+    if (f === "receivable" || f === "to-receive") {
+      setBalanceFilter("receivable");
+    } else if (f === "payable" || f === "to-pay") {
+      setBalanceFilter("payable");
+    }
+  }, [location.search, location.state]);
   const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [], paymentsOut: [], creditNotes: [] });
   const [selectedPartyId, setSelectedPartyId] = useState("cash-sale");
   const [search, setSearch] = useState("");
@@ -318,6 +470,7 @@ function PartyDetails() {
     try {
       setParties(getParties());
       setInvoices(getSaleInvoices());
+      setPurchases(getPurchaseBills());
       const readLocalList = (key) => {
         try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
         catch { return []; }
@@ -405,7 +558,81 @@ function PartyDetails() {
     );
   };
 
-  const filteredParties = parties.filter((party) => String(party.partyName || "").toLowerCase().includes(search.toLowerCase()));
+  const getPartyBalanceInfo = (party) => {
+    const ob = Math.abs(Number(party.openingBalance || 0));
+    const obType = party.openingBalanceType || (String(party.partyType || "").toLowerCase() === "supplier" || String(party.partyType || "").toLowerCase() === "vendor" ? "to-pay" : "to-receive");
+
+    // Unpaid sales for this party
+    const partySalesUnpaid = (invoices || [])
+      .filter((inv) => {
+        const matchesParty = String(inv.partyId || inv.form?.partyId || "") === String(party.id)
+          || String(inv.partyName || inv.customerName || inv.form?.customer || "").trim().toLowerCase() === String(party.partyName || "").trim().toLowerCase();
+        return matchesParty && !inv.cancelled && inv.status !== "Cancelled";
+      })
+      .reduce((sum, inv) => {
+        const total = Number(inv.totals?.finalTotal || inv.total || 0);
+        const received = Number(inv.receivedAmount || inv.form?.receivedAmount || 0);
+        return sum + Math.max(0, total - received);
+      }, 0);
+
+    // Unpaid purchases for this party
+    const partyPurchasesUnpaid = (purchases || [])
+      .filter((bill) => {
+        const matchesParty = String(bill.partyId || bill.form?.partyId || "") === String(party.id)
+          || String(bill.supplier || bill.partyName || bill.party || bill.form?.customer || "").trim().toLowerCase() === String(party.partyName || "").trim().toLowerCase();
+        return matchesParty && !bill.cancelled && bill.status !== "Cancelled";
+      })
+      .reduce((sum, bill) => {
+        const total = Number(bill.totals?.finalTotal || bill.totalAmount || bill.total || 0);
+        const paid = Number(bill.paidAmount || bill.received || bill.form?.paidAmount || 0);
+        return sum + Math.max(0, total - paid);
+      }, 0);
+
+    let receivable = (obType === "to-receive" ? ob : 0) + partySalesUnpaid;
+    let payable = (obType === "to-pay" ? ob : 0) + partyPurchasesUnpaid;
+
+    if (party.balance !== undefined && party.balance !== null && party.balance !== "") {
+      const rawBal = Number(party.balance);
+      if (rawBal > 0 && obType === "to-receive") receivable = Math.max(receivable, rawBal);
+      if (rawBal < 0 || obType === "to-pay") payable = Math.max(payable, Math.abs(rawBal));
+    }
+
+    const net = receivable - payable;
+    const balanceAmount = Math.abs(net) || (ob > 0 ? ob : 0);
+    const balanceType = net > 0 ? "to-receive" : net < 0 ? "to-pay" : (receivable > 0 ? "to-receive" : payable > 0 ? "to-pay" : obType);
+
+    return {
+      receivable,
+      payable,
+      net,
+      balanceAmount,
+      balanceType,
+    };
+  };
+
+  const filteredParties = parties.filter((party) => {
+    const matchesSearch = String(party.partyName || "").toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+
+    const info = getPartyBalanceInfo(party);
+    if (balanceFilter === "receivable") {
+      return info.balanceType === "to-receive" && info.balanceAmount > 0;
+    }
+    if (balanceFilter === "payable") {
+      return info.balanceType === "to-pay" && info.balanceAmount > 0;
+    }
+    return true;
+  });
+
+  // When filtering, ensure selected party is valid
+  useEffect(() => {
+    if (balanceFilter !== "all" && filteredParties.length > 0) {
+      const isCurrentInList = filteredParties.some((p) => String(p.id) === String(selectedPartyId));
+      if (!isCurrentInList) {
+        setSelectedPartyId(filteredParties[0].id);
+      }
+    }
+  }, [balanceFilter, filteredParties]);
   const selectedParty = parties.find((party) => String(party.id) === String(selectedPartyId));
   const partyInvoices = selectedParty ? invoices.filter((invoice) =>
     String(invoice.partyId || invoice.form?.partyId || "") === String(selectedParty.id)
@@ -472,16 +699,46 @@ function PartyDetails() {
       {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
       <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(300px,29%)_1fr]">
         <section className="flex min-h-[430px] flex-col overflow-hidden rounded-md bg-white">
-          <div className="p-4"><label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-slate-400"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Party Name" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" /></label></div>
+          <div className="p-4 pb-2"><label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-slate-400"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Party Name" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" /></label></div>
+          {/* Balance Filter Pills */}
+          <div className="flex items-center gap-1.5 px-4 pb-3">
+            {[
+              { id: "all", label: "All" },
+              { id: "receivable", label: "To Receive" },
+              { id: "payable", label: "To Pay" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setBalanceFilter(f.id)}
+                className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-colors ${
+                  balanceFilter === f.id
+                    ? f.id === "receivable"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : f.id === "payable"
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "bg-[#1A1F71] text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-[1fr_130px] border-y border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500"><span className="flex items-center justify-between">Party Name <FiFilter className="text-rose-500" /></span><span>Amount</span></div>
           <div className="min-h-0 flex-1 overflow-auto">
-            <button onClick={() => setSelectedPartyId("cash-sale")} className={`grid w-full grid-cols-[1fr_130px] px-4 py-5 text-left text-sm ${selectedPartyId === "cash-sale" ? "bg-sky-100" : "hover:bg-slate-50"}`}><span className="font-medium text-slate-800">Cash Sale</span><span className="text-right font-medium text-emerald-500">0.00</span></button>
+            {balanceFilter === "all" && (
+              <button onClick={() => setSelectedPartyId("cash-sale")} className={`grid w-full grid-cols-[1fr_130px] px-4 py-5 text-left text-sm ${selectedPartyId === "cash-sale" ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"}`}><span className="font-medium text-slate-800">Cash Sale</span><span className="text-right font-medium text-emerald-500">0.00</span></button>
+            )}
             {filteredParties.map((party) => {
-              const openingAmount = Math.abs(Number(party.openingBalance || 0));
-              const balanceAmount = Number(party.balance || 0) || openingAmount;
-              const balanceType = party.openingBalanceType || (balanceAmount < 0 ? "to-pay" : "to-receive");
-              return <button key={party.id} onClick={() => setSelectedPartyId(party.id)} className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-5 text-left text-sm ${String(selectedPartyId) === String(party.id) ? "bg-sky-100" : "hover:bg-slate-50"}`}><span className="truncate font-medium text-slate-800">{party.partyName}</span><span className="text-right"><span className="block font-medium text-emerald-500">{balanceAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>{balanceAmount > 0 && <span className="text-xs text-slate-400">{balanceType === "to-pay" ? "To Pay" : "To Receive"}</span>}</span></button>;
+              const info = getPartyBalanceInfo(party);
+              return <button key={party.id} onClick={() => setSelectedPartyId(party.id)} className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-5 text-left text-sm ${String(selectedPartyId) === String(party.id) ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"}`}><span className="truncate font-medium text-slate-800">{party.partyName}</span><span className="text-right"><span className={`block font-medium ${info.balanceType === "to-pay" ? "text-rose-500" : "text-emerald-500"}`}>{info.balanceAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>{info.balanceAmount > 0 && <span className="text-xs text-slate-400">{info.balanceType === "to-pay" ? "To Pay" : "To Receive"}</span>}</span></button>;
             })}
+            {filteredParties.length === 0 && (
+              <div className="py-12 text-center text-xs text-slate-400">
+                {balanceFilter === "receivable" ? "No receivable parties found" : balanceFilter === "payable" ? "No payable parties found" : "No parties found"}
+              </div>
+            )}
           </div>
           <div className="m-2 flex items-center gap-3 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-slate-700"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><FiUsers className="text-xl" /></span><span>Use contacts from your Phone or Gmail to <b>quickly create</b> parties.</span><span className="ml-auto text-emerald-600">›</span></div>
         </section>
@@ -490,9 +747,9 @@ function PartyDetails() {
           <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3"><h2 className="font-semibold text-slate-700">Transactions</h2><div className="flex items-center gap-3 text-slate-500">
             {transactionSearchOpen && <input autoFocus value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search transactions" className="h-10 w-48 rounded-md border border-slate-300 px-3 text-sm text-slate-700 outline-none focus:border-blue-500" />}
             <button type="button" aria-label="Search transactions" title="Search transactions" onClick={() => { setTransactionSearchOpen((open) => !open); setTransactionSearch(""); }} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100"><FiSearch className="text-2xl" /></button>
-            <button type="button" aria-label="Print party statement" title="Print party statement" onClick={() => { setPrintStatementOnOpen(true); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100"><FiPrinter className="text-2xl" /></button>
-            <button type="button" aria-label="Download Excel transactions" title="Download Excel-compatible transactions" onClick={downloadExcel} className="grid h-11 w-11 place-items-center rounded-md text-emerald-600 hover:bg-emerald-50"><span className="rounded bg-emerald-600 px-1 py-0.5 text-[11px] font-bold text-white">XLS</span></button>
-            <button type="button" aria-label="Preview or download PDF" title="Preview or download PDF" onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md text-rose-600 hover:bg-rose-50"><FiFileText className="text-2xl" /></button>
+            <button type="button" aria-label="Print party statement" title="Print party statement" onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 cursor-pointer"><FiPrinter className="text-2xl" /></button>
+            <button type="button" aria-label="Download Excel transactions" title="Download Excel-compatible transactions" onClick={downloadExcel} className="grid h-11 w-11 place-items-center rounded-md text-emerald-600 hover:bg-emerald-50 cursor-pointer"><span className="rounded bg-emerald-600 px-1 py-0.5 text-[11px] font-bold text-white">XLS</span></button>
+            <button type="button" aria-label="Preview or download PDF" title="Preview or download PDF" onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md text-rose-600 hover:bg-rose-50 cursor-pointer"><FiFileText className="text-2xl" /></button>
           </div></div>
           <div className="overflow-auto"><table className="w-full min-w-[690px] text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => <th key={label} className="border-b border-r border-slate-200 px-3 py-3 font-semibold">{label}{label && <FiFilter className="float-right mt-0.5 text-slate-400" />}</th>)}</tr></thead><tbody>
             {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && <tr className="border-b border-slate-100 bg-sky-100 text-slate-800"><td className="px-3 py-4">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td className="px-3 py-4">—</td><td className="px-3 py-4">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-rose-500">Unpaid</td><td className="px-3 py-4">{transactionActions(null, "opening")}</td></tr>}
@@ -501,25 +758,214 @@ function PartyDetails() {
           </tbody></table></div>
         </section>
       </div>
-      {statementOpen && <div className="party-statement-overlay fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-3 sm:p-6">
-        <style>{`@media print { body * { visibility: hidden !important; } .party-statement-print, .party-statement-print * { visibility: visible !important; } .party-statement-print { position: fixed !important; inset: 0 !important; width: 100% !important; max-height: none !important; overflow: visible !important; border: 0 !important; box-shadow: none !important; } .party-statement-actions, .party-statement-close { display: none !important; } }`}</style>
-        <section className="party-statement-print flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl">
-          <header className="party-statement-close flex shrink-0 items-center justify-between border-b border-slate-200 px-5 py-4"><h2 className="text-xl font-semibold text-slate-900">Preview</h2><button type="button" aria-label="Close preview" onClick={() => { setStatementOpen(false); setPrintStatementOnOpen(false); }} className="text-2xl text-slate-500 hover:text-slate-900">×</button></header>
-          <main className="min-h-0 flex-1 overflow-auto px-5 py-4 text-sm text-black sm:px-9">
-            <div className="text-center"><h3 className="text-xl font-bold">My Company</h3>{selectedParty?.phone && <p className="mt-1">Phone no.: {selectedParty.phone}</p>}</div>
-            <h1 className="mb-7 mt-10 text-center text-3xl font-bold underline">Party statement</h1>
-            <h2 className="text-xl font-bold">Party name: {selectedParty?.partyName || "Cash Sale"}</h2>
-            {selectedParty?.phone && <p className="mt-6">Contact No.: {selectedParty.phone}</p>}
-            <div className="mt-1 overflow-x-auto"><table className="w-full min-w-[850px] border-collapse text-left"><thead className="bg-neutral-300"><tr>{["Date", "Txn Type", "Ref No.", "Payment Status", "Total", "Received / Paid", "Txn Balance", "Receivable Balance", "Payable Balance"].map((label) => <th key={label} className="px-2 py-2 font-bold">{label}</th>)}</tr></thead><tbody>
-              {selectedOpeningBalance > 0 && <tr className="border-b border-neutral-400 font-semibold"><td className="px-2 py-3">{selectedParty.asOfDate || ""}</td><td>{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td></td><td>Unpaid</td><td></td><td></td><td>{money(selectedOpeningBalance)}</td><td>{selectedBalanceType === "to-receive" ? money(selectedOpeningBalance) : ""}</td><td>{selectedBalanceType === "to-pay" ? money(selectedOpeningBalance) : ""}</td></tr>}
-              {partyTransactions.map((entry) => <tr key={entry.id} className="border-b border-neutral-400 font-semibold"><td className="px-2 py-3">{entry.date || ""}</td><td>{entry.source}</td><td>{entry.number}</td><td>{entry.status}</td><td>{money(entry.total)}</td><td>{money(entry.received)}</td><td>{money(entry.balance)}</td><td>{entry.balance && selectedBalanceType === "to-receive" ? money(entry.balance) : ""}</td><td>{entry.balance && selectedBalanceType === "to-pay" ? money(entry.balance) : ""}</td></tr>)}
-              {!partyTransactions.length && selectedOpeningBalance <= 0 && <tr><td colSpan="9" className="px-3 py-8 text-center text-slate-500">No transactions to show</td></tr>}
-            </tbody></table></div>
-            {partyInvoices.map((invoice) => <section key={`items-${invoice.id}`} className="mt-6"><h3 className="mb-2 font-bold">Sale {invoice.form?.invoiceNumber || invoice.invoiceNumber}</h3><div className="overflow-x-auto"><table className="w-full min-w-[700px] border-collapse text-left"><thead className="bg-neutral-300"><tr>{["#", "Item name", "HSN/SAC", "Quantity", "Unit", "Price/Unit", "Discount", "Amount"].map((label) => <th key={label} className="px-2 py-2">{label}</th>)}</tr></thead><tbody>{(invoice.rows || []).map((row, index) => <tr key={row.id || index} className="border-b border-neutral-400"><td className="px-2 py-2">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.item}</td><td className="px-2 py-2">{row.hsnSac || row.hsn || ""}</td><td className="px-2 py-2 text-center">{row.calculated?.qty || row.qty}</td><td className="px-2 py-2">{row.unit}</td><td className="px-2 py-2 text-right">{money(row.price)}</td><td className="px-2 py-2 text-right">{money(row.calculated?.discount)}</td><td className="px-2 py-2 text-right">{money(row.calculated?.amount)}</td></tr>)}</tbody></table></div></section>)}
-          </main>
-          <footer className="party-statement-actions flex shrink-0 flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-3"><Button onClick={() => openStatementDocument(false)} className="border border-rose-500 text-rose-600">Open PDF</Button><Button onClick={() => window.print()} className="border border-rose-500 text-rose-600">Print</Button><Button onClick={() => window.print()} className="border border-rose-500 text-rose-600">Save PDF</Button><Button onClick={() => { const email = selectedParty?.email || ""; const subject = encodeURIComponent(`Party statement - ${selectedParty?.partyName || "Cash Sale"}`); const body = encodeURIComponent("Please find the party statement. Save the statement as PDF and attach it to this email."); window.location.href = `mailto:${email}?subject=${subject}&body=${body}`; }} className="border border-rose-500 text-rose-600">Email PDF</Button><Button onClick={() => { setStatementOpen(false); setPrintStatementOnOpen(false); }} className="bg-rose-600 text-white">Close</Button></footer>
-        </section>
-      </div>}
+      {statementOpen && (() => {
+        const company = getCompanyProfile();
+        const companyName = company.businessName || company.companyName || "Company Name";
+        const companyPhone = company.phoneNumber || company.phone || "";
+
+        const statementRows = [
+          ...(selectedParty && selectedOpeningBalance > 0 ? [{
+            id: "opening",
+            date: selectedParty.asOfDate || "",
+            source: `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance`,
+            number: "-",
+            status: "Unpaid",
+            total: selectedOpeningBalance,
+            received: 0,
+            balance: selectedOpeningBalance,
+            receivableBalance: selectedBalanceType === "to-receive" ? selectedOpeningBalance : 0,
+            payableBalance: selectedBalanceType === "to-pay" ? selectedOpeningBalance : 0,
+          }] : []),
+          ...partyTransactions.map((entry) => ({
+            id: entry.id,
+            date: entry.date,
+            source: entry.source,
+            number: entry.number || "-",
+            status: entry.status || "Paid",
+            total: Number(entry.total || 0),
+            received: Number(entry.received || 0),
+            balance: Number(entry.balance || 0),
+            receivableBalance: selectedBalanceType === "to-receive" ? Number(entry.balance || 0) : 0,
+            payableBalance: selectedBalanceType === "to-pay" ? Number(entry.balance || 0) : 0,
+          })),
+        ];
+
+        const totalAmount = statementRows.reduce((sum, r) => sum + Number(r.total || 0), 0);
+        const totalReceived = statementRows.reduce((sum, r) => sum + Number(r.received || 0), 0);
+        const totalBalance = statementRows.reduce((sum, r) => sum + Number(r.balance || 0), 0);
+        const totalReceivable = statementRows.reduce((sum, r) => sum + Number(r.receivableBalance || 0), 0);
+        const totalPayable = statementRows.reduce((sum, r) => sum + Number(r.payableBalance || 0), 0);
+
+        return (
+          <div className="party-statement-overlay fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6 backdrop-blur-xs">
+            <style>{`
+              @media print {
+                body * { visibility: hidden !important; }
+                .party-statement-print, .party-statement-print * { visibility: visible !important; }
+                .party-statement-print {
+                  position: fixed !important;
+                  inset: 0 !important;
+                  width: 100% !important;
+                  max-height: none !important;
+                  overflow: visible !important;
+                  border: 0 !important;
+                  box-shadow: none !important;
+                  background: white !important;
+                }
+                .party-statement-actions, .party-statement-close { display: none !important; }
+              }
+            `}</style>
+            <section className="party-statement-print flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+              {/* Header */}
+              <header className="party-statement-close flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4">
+                <h2 className="text-xl font-bold text-slate-800">Preview</h2>
+                <button
+                  type="button"
+                  aria-label="Close preview"
+                  onClick={() => { setStatementOpen(false); setPrintStatementOnOpen(false); }}
+                  className="rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </header>
+
+              {/* Main Content */}
+              <main className="min-h-0 flex-1 overflow-auto px-6 py-6 text-sm text-black sm:px-12">
+                {/* Company Title */}
+                <div className="text-center">
+                  <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">{companyName}</h3>
+                  {companyPhone && (
+                    <p className="mt-1 text-xs text-slate-600">Phone no.: {companyPhone}</p>
+                  )}
+                </div>
+
+                {/* Document Title */}
+                <h1 className="mb-8 mt-6 text-center text-2xl sm:text-3xl font-extrabold text-slate-950 underline decoration-2 underline-offset-4">
+                  Party statement
+                </h1>
+
+                {/* Party Info */}
+                <div className="mb-4">
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Party name: {selectedParty?.partyName || "Cash Sale"}
+                  </h2>
+                  {selectedParty?.phone && (
+                    <p className="mt-1 text-xs font-medium text-slate-600">
+                      Contact No.: {selectedParty.phone}
+                    </p>
+                  )}
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto rounded border border-neutral-300">
+                  <table className="w-full min-w-[850px] border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="bg-[#cbd5e1] text-slate-900 font-bold border-b border-neutral-300">
+                        <th className="px-3 py-2.5">Date</th>
+                        <th className="px-3 py-2.5">Txn Type</th>
+                        <th className="px-3 py-2.5">Ref No.</th>
+                        <th className="px-3 py-2.5">Payment Status</th>
+                        <th className="px-3 py-2.5 text-right">Total</th>
+                        <th className="px-3 py-2.5 text-right">Received / Paid</th>
+                        <th className="px-3 py-2.5 text-right">Txn Balance</th>
+                        <th className="px-3 py-2.5 text-right">Receivable Balance</th>
+                        <th className="px-3 py-2.5 text-right">Payable Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200">
+                      {statementRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-12 text-center text-slate-500 font-medium">
+                            No transactions to show
+                          </td>
+                        </tr>
+                      ) : (
+                        statementRows.map((row, idx) => (
+                          <tr key={row.id || idx} className="hover:bg-slate-50 text-slate-800">
+                            <td className="px-3 py-2.5 font-medium">{formatDateDMY(row.date)}</td>
+                            <td className="px-3 py-2.5">{row.source}</td>
+                            <td className="px-3 py-2.5">{row.number}</td>
+                            <td className="px-3 py-2.5">
+                              <span className={row.status === "Paid" ? "text-emerald-600 font-medium" : "text-rose-600 font-medium"}>
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-medium">{money(row.total)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-600">{money(row.received)}</td>
+                            <td className="px-3 py-2.5 text-right text-slate-700">{money(row.balance)}</td>
+                            <td className="px-3 py-2.5 text-right font-medium text-emerald-600">
+                              {row.receivableBalance > 0 ? money(row.receivableBalance) : "-"}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-medium text-rose-600">
+                              {row.payableBalance > 0 ? money(row.payableBalance) : "-"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+
+                      {/* Total Row */}
+                      {statementRows.length > 0 && (
+                        <tr className="bg-[#cbd5e1] font-bold text-slate-900 border-t-2 border-neutral-400">
+                          <td className="px-3 py-2.5 font-bold" colSpan={4}>Total</td>
+                          <td className="px-3 py-2.5 text-right font-bold">{money(totalAmount)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold">{money(totalReceived)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold">{money(totalBalance)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-emerald-700">{money(totalReceivable)}</td>
+                          <td className="px-3 py-2.5 text-right font-bold text-rose-700">{money(totalPayable)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </main>
+
+              {/* Actions Footer */}
+              <footer className="party-statement-actions flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => openStatementDocument(false)}
+                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition"
+                >
+                  Open PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition"
+                >
+                  Print
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition"
+                >
+                  Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const email = selectedParty?.email || "";
+                    const subject = encodeURIComponent(`Party statement - ${selectedParty?.partyName || "Cash Sale"}`);
+                    const body = encodeURIComponent("Please find the party statement attached.");
+                    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+                  }}
+                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition"
+                >
+                  Email PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setStatementOpen(false); setPrintStatementOnOpen(false); }}
+                  className="rounded-full bg-rose-600 px-7 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-rose-700 transition"
+                >
+                  Close
+                </button>
+              </footer>
+            </section>
+          </div>
+        );
+      })()}
       {isModalOpen && <AddPartyModal initialParty={partyBeingEdited} onClose={() => { setIsModalOpen(false); setPartyBeingEdited(null); }} onSave={saveParty} />}
     </div>
   );

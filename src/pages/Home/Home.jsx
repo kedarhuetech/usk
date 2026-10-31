@@ -42,7 +42,7 @@ const growthLinks = [
 ];
 
 // Renders the summary card interface.
-function SummaryCard({ label, value, note, icon: Icon, tone }) {
+function SummaryCard({ label, value, note, icon: Icon, tone, onClick }) {
   const tones = {
     blue: "bg-blue-50 text-blue-600",
     emerald: "bg-emerald-50 text-emerald-600",
@@ -50,7 +50,7 @@ function SummaryCard({ label, value, note, icon: Icon, tone }) {
   };
 
   return (
-    <Card className="p-4">
+    <Card onClick={onClick} className={`p-4 ${onClick ? "cursor-pointer hover:shadow-md hover:border-blue-300 transition select-none" : ""}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm text-slate-500">{label}</p>
@@ -125,6 +125,7 @@ function Home() {
       note: summary ? `${summary.activeSales.length} active saved invoice${summary.activeSales.length === 1 ? "" : "s"}` : loadError ? "Saved sales are unavailable" : "No sales recorded yet",
       icon: FiTrendingUp,
       tone: "blue",
+      onClick: () => navigate("/sales/sale-invoices"),
     },
     {
       label: "Total Receivable",
@@ -132,6 +133,7 @@ function Home() {
       note: summary ? "Outstanding from saved sales and opening balances" : loadError ? "Summary unavailable" : "No outstanding balance",
       icon: FiArrowRight,
       tone: "emerald",
+      onClick: () => navigate("/parties/party-details?filter=receivable", { state: { filter: "receivable" } }),
     },
     {
       label: "Total Payable",
@@ -139,6 +141,7 @@ function Home() {
       note: summary ? "Outstanding from saved purchases and opening balances" : loadError ? "Summary unavailable" : "No outstanding balance",
       icon: FiShoppingCart,
       tone: "rose",
+      onClick: () => navigate("/parties/party-details?filter=payable", { state: { filter: "payable" } }),
     },
   ];
 
