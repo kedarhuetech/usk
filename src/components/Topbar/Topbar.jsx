@@ -2,9 +2,7 @@
 import {
   FiArrowRight,
   FiBarChart2,
-  FiBell,
   FiFileText,
-  FiHelpCircle,
   FiPackage,
   FiRefreshCw,
   FiSearch,
@@ -426,18 +424,9 @@ export default function Topbar({ onRefresh }) {
           >
             + Add Purchase
           </button>
-          <button
-            type="button"
-            className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 transition cursor-pointer"
-          >
-            <FiHelpCircle className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 transition cursor-pointer"
-          >
-            <FiBell className="h-4 w-4" />
-          </button>
+          
+          
+      
           {/* Light / Dark Mode Switch */}
           <button
             type="button"
