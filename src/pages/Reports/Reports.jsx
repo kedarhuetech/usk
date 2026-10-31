@@ -13,6 +13,7 @@ import ItemWiseProfitAndLoss from "./ItemWiseProfitAndLoss";
 import LowStockSummaryReport from "./LowStockSummaryReport";
 import StockDetailReport from "./StockDetailReport";
 import ItemDetailReport from "./ItemDetailReport";
+import BillWiseProfitReport from "./BillWiseProfitReport";
 import {
   FiBarChart2,
   FiPrinter,
@@ -203,6 +204,7 @@ function Reports({ defaultReport }) {
   const getInitialReport = () => {
     if (defaultReport) return defaultReport;
     if (location.pathname.includes("profit-and-loss")) return "Profit And Loss";
+    if (location.pathname.includes("bill-wise-profit")) return "Bill Wise Profit";
     if (location.pathname.includes("all-transactions")) return "All Transactions";
     if (location.pathname.includes("cash-flow")) return "Cash flow";
     if (location.pathname.includes("all-parties")) return "All parties";
@@ -222,9 +224,12 @@ function Reports({ defaultReport }) {
 
   useEffect(() => {
     if (defaultReport) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setActiveReport(defaultReport);
     } else if (location.pathname.includes("profit-and-loss")) {
       setActiveReport("Profit And Loss");
+    } else if (location.pathname.includes("bill-wise-profit")) {
+      setActiveReport("Bill Wise Profit");
     } else if (location.pathname.includes("all-transactions")) {
       setActiveReport("All Transactions");
     } else if (location.pathname.includes("cash-flow")) {
@@ -661,6 +666,8 @@ function Reports({ defaultReport }) {
                     navigate("/reports/all-transactions", { replace: true });
                   } else if (report === "Profit And Loss") {
                     navigate("/reports/profit-and-loss", { replace: true });
+                  } else if (report === "Bill Wise Profit") {
+                    navigate("/reports/bill-wise-profit", { replace: true });
                   } else if (report === "Cash flow") {
                     navigate("/reports/cash-flow", { replace: true });
                   } else if (report === "All parties") {
@@ -708,6 +715,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Profit And Loss" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <ProfitAndLossReport />
+        </div>
+      ) : activeReport === "Bill Wise Profit" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <BillWiseProfitReport />
         </div>
       ) : activeReport === "Cash flow" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
@@ -772,12 +783,7 @@ function Reports({ defaultReport }) {
 
           {isPurchase && (
             <div className="flex gap-3">
-              <button
-                type="button"
-                className="rounded-full border border-rose-500 px-5 py-2 font-medium text-rose-600"
-              >
-                Upload Purchase Bills　⌄
-              </button>
+              
 
               <button
                 type="button"
@@ -990,11 +996,11 @@ function Reports({ defaultReport }) {
           <section className="min-h-[145px] rounded-md bg-white p-4">
             {isPurchase ? (
               <div className="flex flex-wrap items-center gap-4">
-                {[
-                  ["Paid", paidTotal, "bg-emerald-100"],
-                  ["Unpaid", unpaidTotal, "bg-blue-100"],
-                  ["Total", totals.amount, "bg-orange-200"],
-                ].map(([label, amount, color], index) => (
+                                            {[
+                                              ["Paid", paidTotal, "bg-emerald-900/50 text-emerald-300"],
+                                              ["Unpaid", unpaidTotal, "bg-blue-900/60 text-blue-200"],
+                                              ["Total", totals.amount, "bg-blue-700 text-white"],
+                                            ].map(([label, amount, color], index) => (
                   <div
                     key={label}
                     className="flex items-center gap-4"

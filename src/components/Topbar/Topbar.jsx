@@ -258,7 +258,7 @@ export default function Topbar({ onRefresh }) {
           icon: FiBarChart2,
           title: rep,
           subtitle: "View financial & GST report",
-          path: "/reports",
+          path: rep === "Bill Wise Profit" ? "/reports/bill-wise-profit" : "/reports",
         });
       }
     });

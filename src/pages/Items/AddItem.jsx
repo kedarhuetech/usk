@@ -1,5 +1,5 @@
 // Implements the add item page.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FiCamera, FiChevronDown, FiPlus, FiSearch, FiSettings, FiTrash2, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
@@ -506,6 +506,16 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   const [batchRows, setBatchRows] = useState(() => createEditableBatchRows(initialItem));
   const [saveStatus, setSaveStatus] = useState("");
 
+  useEffect(() => {
+    if (initialItem) {
+      setForm(createEditableItemForm(initialItem));
+      setImage(initialItem.imageUrl || initialItem.image || "");
+      setWholesaleVisible(hasWholesale(initialItem));
+      setWholesale(createEditableWholesale(initialItem));
+      setBatchRows(createEditableBatchRows(initialItem));
+    }
+  }, [initialItem]);
+
   const isProduct = form.type === "product";
   const isEditMode = mode === "edit";
   // Sets field.
@@ -675,6 +685,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
 
         <footer className="flex justify-end gap-4 border-t border-slate-100 bg-white px-5 py-4">
           {saveStatus && <p className={`mr-auto self-center text-sm font-semibold ${saveStatus.includes("Could not") ? "text-red-600" : "text-emerald-600"}`}>{saveStatus}</p>}
+          <Button type="button" onClick={onClose} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</Button>
           {!isEditMode && <Button onClick={() => saveItem(true)} className="rounded-md border border-slate-200 bg-white text-slate-400">Save & New</Button>}
           <Button onClick={() => saveItem()} className="rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</Button>
         </footer>
