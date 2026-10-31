@@ -12,7 +12,6 @@ import {
   FiPlus,
   FiPrinter,
   FiSearch,
-  FiSettings,
   FiShare2,
   FiTrendingUp,
   FiX,
@@ -334,7 +333,7 @@ function SaleInvoices() {
     <div className="min-h-full bg-slate-200 p-1">
       <div className="mb-1 flex flex-col gap-4 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="inline-flex items-center gap-3 text-xl font-bold text-slate-800">Sale Invoices <FiChevronDown className="h-5 w-5 text-slate-500" /></h1>
-        <div className="flex items-center gap-3"><Button onClick={openAddSale} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus className="h-5 w-5" /> Add Sale</Button><button type="button" aria-label="Sale invoice settings" className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100"><FiSettings className="h-5 w-5" /></button></div>
+        <div className="flex items-center gap-3"><Button onClick={openAddSale} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus className="h-5 w-5" /> Add Sale</Button></div>
       </div>
 
       <Card className="mb-1 p-4 shadow-sm"><div className="flex flex-wrap items-center gap-3"><span className="text-sm font-bold text-slate-800">Filter by:</span>

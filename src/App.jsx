@@ -155,6 +155,7 @@ function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="reports/all-transactions" element={<Reports defaultReport="All Transactions" />} />
           <Route path="reports/profit-and-loss" element={<Reports defaultReport="Profit And Loss" />} />
+          <Route path="reports/bill-wise-profit" element={<Reports defaultReport="Bill Wise Profit" />} />
           <Route path="reports/cash-flow" element={<Reports defaultReport="Cash flow" />} />
           <Route path="reports/all-parties" element={<Reports defaultReport="All parties" />} />
           <Route path="reports/party-report-by-item" element={<Reports defaultReport="Party Report By Item" />} />
