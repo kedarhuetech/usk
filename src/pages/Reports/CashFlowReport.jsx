@@ -484,20 +484,22 @@ export default function CashFlowReport() {
 
           {/* Date range inputs */}
           <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-[#fbfcfd] px-2.5 py-1 text-xs text-gray-600">
-            <span className="rounded bg-slate-400 px-1.5 py-0.5 font-medium text-white">Between</span>
+            <span className="rounded bg-slate-400 px-1.5 py-0.5 font-medium text-white select-none">Between</span>
             <input
               type="date"
               value={from}
+              onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
               onChange={(e) => {
                 setPeriod("Custom");
                 setFrom(e.target.value);
               }}
               className="bg-transparent font-medium text-gray-700 outline-none cursor-pointer"
             />
-            <span className="text-gray-400">To</span>
+            <span className="text-gray-400 select-none">To</span>
             <input
               type="date"
               value={to}
+              onClick={(e) => { try { e.currentTarget.showPicker(); } catch {} }}
               onChange={(e) => {
                 setPeriod("Custom");
                 setTo(e.target.value);

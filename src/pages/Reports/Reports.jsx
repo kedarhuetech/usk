@@ -14,6 +14,7 @@ import LowStockSummaryReport from "./LowStockSummaryReport";
 import StockDetailReport from "./StockDetailReport";
 import ItemDetailReport from "./ItemDetailReport";
 import BillWiseProfitReport from "./BillWiseProfitReport";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import {
   FiBarChart2,
   FiPrinter,
@@ -273,6 +274,7 @@ function Reports({ defaultReport }) {
   const [chartOpen, setChartOpen] = useState(false);
   const [transactionType, setTransactionType] = useState("All Transaction");
   const [paymentFilter, setPaymentFilter] = useState("All Payment");
+  const [printModalOpen, setPrintModalOpen] = useState(false);
 
   const isDayBook = activeReport === "Day book";
   const isAllTransactions = activeReport === "All Transactions";
@@ -984,7 +986,7 @@ function Reports({ defaultReport }) {
                 ▣ Excel Report
               </button>
 
-              <button type="button" onClick={() => window.print()}>
+              <button type="button" onClick={() => setPrintModalOpen(true)}>
                 ▣ Print
               </button>
             </div>
@@ -1103,7 +1105,7 @@ function Reports({ defaultReport }) {
                 type="button"
                 title="Print report"
                 aria-label="Print report"
-                onClick={() => window.print()}
+                onClick={() => setPrintModalOpen(true)}
                 className="text-xl"
               >
                 <FiPrinter />
@@ -1252,7 +1254,7 @@ function Reports({ defaultReport }) {
                           {cell(
                             <button
                               type="button"
-                              onClick={() => window.print()}
+                              onClick={() => setPrintModalOpen(true)}
                               className="text-slate-500 hover:text-sky-600"
                               title="Print day book"
                             >
@@ -1291,7 +1293,7 @@ function Reports({ defaultReport }) {
                             <div className="flex items-center gap-3 text-slate-500">
                               <button
                                 type="button"
-                                onClick={() => window.print()}
+                                onClick={() => setPrintModalOpen(true)}
                                 title="Print transaction"
                                 aria-label="Print transaction"
                                 className="hover:text-sky-600"
@@ -1323,7 +1325,7 @@ function Reports({ defaultReport }) {
                               type="button"
                               title="More actions"
                               aria-label="More actions"
-                              onClick={() => window.print()}
+                              onClick={() => setPrintModalOpen(true)}
                               className="text-slate-500 hover:text-sky-600"
                             >
                               <FiMoreVertical size={18} />
@@ -1351,7 +1353,7 @@ function Reports({ defaultReport }) {
                           {cell(
                             <button
                               type="button"
-                              onClick={() => window.print()}
+                              onClick={() => setPrintModalOpen(true)}
                               className="text-slate-500 hover:text-sky-600"
                               title="Print purchase bill"
                             >
@@ -1430,7 +1432,18 @@ function Reports({ defaultReport }) {
             </footer>
           )}
         </section>
-      </div>
+      <ReportPrintPreviewModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title={`${activeReport} Report`}
+        dateFrom={from}
+        dateTo={to}
+        user={user}
+        records={visible}
+        totalLabel={`Total ${activeReport}:`}
+        totalAmount={totals.amount}
+      />
+    </div>
       )}
     </div>
   );
