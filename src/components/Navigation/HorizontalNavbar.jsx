@@ -149,7 +149,7 @@ export default function HorizontalNavbar() {
               const Icon = item.icon;
               const hasChildren = Boolean(item.children?.length);
               const isChildActive = hasChildren
-                ? item.children.some((child) => location.pathname === child.path)
+                ? item.children.some((child) => location.pathname === child.path || `${location.pathname}${location.search}` === child.path)
                 : false;
               const isDirectActive = item.path === location.pathname;
               const isActive = isDirectActive || isChildActive;
@@ -206,7 +206,7 @@ export default function HorizontalNavbar() {
                       style={{ filter: "drop-shadow(0 15px 25px rgba(0,0,0,0.5))" }}
                     >
                       {item.children.map((child) => {
-                        const isChildLinkActive = location.pathname === child.path;
+                        const isChildLinkActive = location.pathname === child.path || `${location.pathname}${location.search}` === child.path;
                         return (
                           <NavLink
                             key={child.id}

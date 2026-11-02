@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiBell,
   FiBook,
@@ -61,11 +61,15 @@ const TABS = [
 ];
 
 const ZOOM_LEVELS = ["70%", "80%", "90%", "100%", "110%", "115%", "120%", "130%"];
+const settingsTabFromSearch = (search) => {
+  const requestedTab = new URLSearchParams(search).get("tab");
+  return TABS.some((tab) => tab.id === requestedTab) ? requestedTab : "general";
+};
 
 function Settings() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("general");
-  const [searchQuery, setSearchQuery] = useState("");
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState(() => settingsTabFromSearch(location.search));
   const [settings, setSettings] = useState(getAppSettings);
   const [toast, setToast] = useState("");
   const [selectedZoom, setSelectedZoom] = useState(settings.screenZoom || "100%");
@@ -95,6 +99,10 @@ function Settings() {
       applyScreenZoom(settings.screenZoom);
     }
   }, [settings.screenZoom]);
+
+  useEffect(() => {
+    setActiveTab(settingsTabFromSearch(location.search));
+  }, [location.search]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -185,13 +193,8 @@ function Settings() {
     }
   };
 
-  // Filter tabs on search
-  const visibleTabs = TABS.filter((t) =>
-    t.label.toLowerCase().includes(searchQuery.trim().toLowerCase())
-  );
-
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-100 font-sans text-slate-800">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-slate-100 font-sans text-slate-800">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg transition-all animate-in fade-in slide-in-from-bottom-3">
@@ -200,69 +203,8 @@ function Settings() {
         </div>
       )}
 
-      {/* LEFT NAVIGATION SIDEBAR */}
-      <aside className="flex w-64 shrink-0 flex-col border-r border-slate-800/20 bg-[#1e2038] text-white">
-        {/* Settings Title & Search */}
-        <div className="border-b border-white/10 p-4">
-          <div className="flex items-center justify-between pb-3">
-            <h1 className="text-xl font-bold tracking-wide text-white">Settings</h1>
-            <FiSearch className="text-slate-400" />
-          </div>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search setting..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full rounded-md border border-white/10 bg-white/5 pl-8 pr-3 text-xs text-white placeholder-slate-400 outline-none focus:border-blue-400 focus:bg-white/10"
-            />
-            <FiSearch className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-2 text-slate-400 hover:text-white"
-              >
-                <FiX className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Categories List */}
-        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-          {visibleTabs.map((tab) => {
-            const active = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`group flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs font-semibold tracking-wider transition-all ${
-                  active
-                    ? "bg-white text-slate-900 shadow-md"
-                    : "text-slate-300 hover:bg-white/5 hover:text-white"
-                }`}
-              >
-                <span>{tab.label}</span>
-                {active && <span className="h-2 w-2 rounded-full bg-blue-600" />}
-              </button>
-            );
-          })}
-          {!visibleTabs.length && (
-            <p className="p-4 text-center text-xs text-slate-400">No settings found.</p>
-          )}
-        </nav>
-
-        {/* Sidebar Footer info */}
-        <div className="border-t border-white/10 p-3 text-[11px] text-slate-400">
-          <p className="font-semibold text-slate-300">Vyapar Accounting v2.4</p>
-          <p className="text-[10px] text-slate-500">Auto-saved to local browser workspace</p>
-        </div>
-      </aside>
-
       {/* MAIN CONTENT AREA */}
-      <main className="flex flex-1 flex-col overflow-hidden bg-slate-50">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
         {/* Top Header Bar with Close Button */}
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
           <div className="flex items-center gap-3">

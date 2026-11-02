@@ -281,8 +281,19 @@ export const sidebarNavigation = [
   {
     id: "settings",
     label: "Settings",
-    path: "/settings",
     icon: FiSettings,
+    children: [
+      { id: "settings-general", label: "General", path: "/settings?tab=general" },
+      { id: "settings-transaction", label: "Transaction", path: "/settings?tab=transaction" },
+      { id: "settings-print", label: "Print", path: "/settings?tab=print" },
+      { id: "settings-taxes", label: "Taxes & GST", path: "/settings?tab=taxes" },
+      { id: "settings-messages", label: "Transaction Message", path: "/settings?tab=messages" },
+      { id: "settings-party", label: "Party", path: "/settings?tab=party" },
+      { id: "settings-item", label: "Item", path: "/settings?tab=item" },
+      { id: "settings-service-reminders", label: "Service Reminders", path: "/settings?tab=service_reminders" },
+      { id: "settings-accounting", label: "Accounting", path: "/settings?tab=accounting" },
+      { id: "settings-multi-currency", label: "Multi Currency", path: "/settings?tab=multi_currency" },
+    ],
   },
   {
     id: "plans-pricing",
