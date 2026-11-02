@@ -1,5 +1,7 @@
 import { applySaleInvoiceStockUpdate, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { getAppSettings } from "./appSettingsStorage.js";
+import { recordAuditTrail } from "./auditTrailStorage.js";
 
 const SALE_INVOICES_KEY = "ledgerly:saleInvoices.v1";
 
@@ -65,8 +67,27 @@ export function saveSaleInvoice(invoice) {
   const previousItems = window.localStorage.getItem(inventoryItemsStorageKey);
   try {
   let normalized = normalizeInvoice({ ...invoice, updatedAt: new Date().toISOString() });
+  const appSettings = getAppSettings();
   const existing = readInvoices();
   const existingInvoice = existing.find((current) => current.id === normalized.id || current.invoiceId === normalized.invoiceId);
+
+  // Enforce Settings: Stop Sale on Negative Stock
+  if (normalized.transactionType === "sale" && appSettings.stopSaleOnNegativeStock) {
+    const rawItems = window.localStorage.getItem(inventoryItemsStorageKey);
+    let inventory = [];
+    try { inventory = rawItems ? JSON.parse(rawItems) : []; } catch {}
+    for (const row of normalized.rows || []) {
+      const match = inventory.find((i) => i.id === row.sourceItemId || i.id === row.itemId || (i.itemName && i.itemName.toLowerCase() === (row.item || "").toLowerCase()));
+      if (match) {
+        const available = Number(match.openingQuantity ?? match.stock ?? 0);
+        const reqQty = Number(row.qty ?? row.quantity ?? 0);
+        if (reqQty > available) {
+          throw new Error(`Stop Sale on Negative Stock is enabled: "${match.itemName || row.item}" has only ${available} in stock (requested: ${reqQty}).`);
+        }
+      }
+    }
+  }
+
   const shouldAdjustStock =
     normalized.transactionType === "sale" &&
     !normalized.stockAdjustedAt &&
@@ -86,6 +107,12 @@ export function saveSaleInvoice(invoice) {
     throw new Error("The invoice could not be verified after saving.");
   }
   notifyBusinessDataChanged();
+  recordAuditTrail({
+    action: existingInvoice ? "Sale Invoice Updated" : "Sale Invoice Created",
+    entity: "Sales",
+    details: `Invoice #${normalized.invoiceNumber} for ${normalized.form?.customer || 'Cash'} · Amount ${normalized.totals?.finalTotal || normalized.totalAmount || 0}`,
+    user: "User",
+  });
   return normalized;
   } catch (error) {
     try {
@@ -105,6 +132,12 @@ export function deleteSaleInvoice(invoiceId) {
   if (!canUseStorage()) return;
   writeInvoices(readInvoices().filter((invoice) => invoice.id !== invoiceId && invoice.invoiceId !== invoiceId));
   notifyBusinessDataChanged();
+  recordAuditTrail({
+    action: "Sale Invoice Deleted",
+    entity: "Sales",
+    details: `Invoice ID ${invoiceId}`,
+    user: "User",
+  });
 }
 
 export const saleInvoicesStorageKey = SALE_INVOICES_KEY;
