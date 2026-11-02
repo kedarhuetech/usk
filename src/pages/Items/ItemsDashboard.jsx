@@ -16,10 +16,13 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
 import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
+import { getSaleInvoices } from "../../services/salesStorage";
+import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
 import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOverridesStorageKey, deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
 import { deleteAllInventoryItems, previewDeleteAllInventoryItems } from "../../services/inventoryItemBulkDelete";
+import { businessDataChangedEvent } from "../../services/businessDataChanged";
 
 const tabs = [
   { id: "product", label: "PRODUCTS" },
@@ -166,6 +169,8 @@ function transactionRows(item, sales, purchases) {
   const matches = (row) => row.sourceItemId === item.id || String(row.item || "").trim().toLowerCase() === String(item.itemName || "").trim().toLowerCase();
   const saleRows = sales.flatMap((invoice) => (invoice.rows || []).filter(matches).map((row) => ({
     id: `${invoice.id}-${row.id}`,
+    itemId: row.sourceItemId || row.itemId || row.productId || "",
+    itemName: row.item || row.name || row.itemName || row.productName || "",
     sourceId: invoice.id,
     source: invoice,
     type: invoice.transactionType === "purchase" ? "Purchase" : "Sale",
@@ -180,6 +185,8 @@ function transactionRows(item, sales, purchases) {
   })));
   const purchaseRows = purchases.flatMap((invoice) => (invoice.rows || []).filter(matches).map((row) => ({
     id: `${invoice.id}-${row.id}`,
+    itemId: row.sourceItemId || row.itemId || row.productId || "",
+    itemName: row.item || row.name || row.itemName || row.productName || "",
     sourceId: invoice.id,
     source: invoice,
     type: "Purchase",
@@ -392,6 +399,20 @@ function ItemsDashboard() {
     const timer = window.setTimeout(() => { void refresh(); }, 0);
     return () => window.clearTimeout(timer);
   }, [refresh]);
+  useEffect(() => {
+    const reloadLocalData = () => {
+      const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
+      setItems(applyItemUiOverrides(currentItems));
+      setSales(getSaleInvoices());
+      setPurchases(getPurchaseBills());
+    };
+    window.addEventListener(businessDataChangedEvent, reloadLocalData);
+    window.addEventListener("storage", reloadLocalData);
+    return () => {
+      window.removeEventListener(businessDataChangedEvent, reloadLocalData);
+      window.removeEventListener("storage", reloadLocalData);
+    };
+  }, []);
   useEffect(() => {
     // Handles pointer down.
     const onPointerDown = (event) => { if (!menuRef.current?.contains(event.target) && !event.target.closest?.("[data-item-bulk-menu]") && !event.target.closest?.("[data-item-transaction-actions]") && !event.target.closest?.("[data-item-row-actions]")) { setMenuOpen(false); setRowMenu(""); } };
@@ -680,7 +701,19 @@ function ItemsDashboard() {
                     setRowMenu("");
                     if (action === "View Details" || action === "Payment History") { setTransactionDetails(row); return; }
                     if (action === "Preview") { if (row.type === "Sale" && row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source } }); else setTransactionDetails(row); return; }
-                    if (action === "View/Edit") { if (row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source } }); else setTransactionDetails(row); return; }
+                    if (action === "View/Edit") {
+                      const target = items.find((item) =>
+                        (row.itemId && item.id === row.itemId)
+                        || (!row.itemId && String(item.itemName || "").trim().toLowerCase() === String(row.itemName || "").trim().toLowerCase())
+                      );
+                      if (target) {
+                        setSelectedId(target.id);
+                        setItemModal({ mode: "edit", initialItem: target });
+                      } else {
+                        setTransactionDetails(row);
+                      }
+                      return;
+                    }
                     if (action === "Open PDF" || action === "Print") { if (row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source, printAfterOpen: true } }); else setTransactionDetails(row); return; }
                     if (action === "View History") { setTransactionHistory(row); return; }
                     if (action === "Delete" && !window.confirm("Hide this transaction from the Items screen? Its saved invoice will not be deleted.")) return;

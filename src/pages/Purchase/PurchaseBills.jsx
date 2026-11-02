@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { getPurchaseBills, replacePurchaseBills, savePurchaseBill } from "../../services/purchaseBillsStorage";
+import { businessDataChangedEvent } from "../../services/businessDataChanged";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
@@ -20,6 +21,15 @@ export default function PurchaseBills() {
   const [toDate, setToDate] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Purchase Invoices");
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  useEffect(() => {
+    const reloadBills = () => setRecords(getPurchaseBills());
+    window.addEventListener(businessDataChangedEvent, reloadBills);
+    window.addEventListener("storage", reloadBills);
+    return () => {
+      window.removeEventListener(businessDataChangedEvent, reloadBills);
+      window.removeEventListener("storage", reloadBills);
+    };
+  }, []);
   const visible = useMemo(() => records.filter((bill) => {
     const status = billPaid(bill) >= billTotal(bill) ? "Paid" : "Unpaid";
     const text = `${bill.form?.customer || bill.partyName || ""} ${bill.form?.invoiceNumber || bill.invoiceNumber || ""}`.toLowerCase();

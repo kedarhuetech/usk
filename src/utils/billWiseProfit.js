@@ -4,17 +4,32 @@ export function parseYMD(val) {
   if (!val) return "";
   if (typeof val === "string") {
     const s = val.trim();
-    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (dmySlash) {
-      return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
-    }
-    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (dmyDash) {
-      return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
-    }
-    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    // 1. YYYY-MM-DD or YYYY/MM/DD
+    const ymd = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
     if (ymd) {
       return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+    }
+    // 2. DD/MM/YYYY or MM/DD/YYYY
+    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmySlash) {
+      const first = Number(dmySlash[1]);
+      const second = Number(dmySlash[2]);
+      const year = dmySlash[3];
+      if (second > 12 && first <= 12) {
+        return `${year}-${String(first).padStart(2, "0")}-${String(second).padStart(2, "0")}`;
+      }
+      return `${year}-${String(second).padStart(2, "0")}-${String(first).padStart(2, "0")}`;
+    }
+    // 3. DD-MM-YYYY or MM-DD-YYYY
+    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (dmyDash) {
+      const first = Number(dmyDash[1]);
+      const second = Number(dmyDash[2]);
+      const year = dmyDash[3];
+      if (second > 12 && first <= 12) {
+        return `${year}-${String(first).padStart(2, "0")}-${String(second).padStart(2, "0")}`;
+      }
+      return `${year}-${String(second).padStart(2, "0")}-${String(first).padStart(2, "0")}`;
     }
   }
   const d = new Date(val);
@@ -45,7 +60,16 @@ export function formatMoney(val) {
 export function isValidCost(val) {
   if (val === null || val === undefined || val === "") return false;
   const num = Number(val);
-  return !isNaN(num) && isFinite(num) && num >= 0;
+  return !isNaN(num) && isFinite(num) && num > 0;
+}
+
+function normalizedItemName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -70,11 +94,9 @@ export function resolveItemPurchaseCost(row = {}, inventoryItems = [], purchaseB
   }
 
   const rowItemId = String(row.sourceItemId || row.itemId || row.productId || "").trim();
-  const rowItemName = String(
+  const rowItemName = normalizedItemName(
     row.item || row.name || row.itemName || row.productName || row.itemNameSnapshot || ""
-  )
-    .trim()
-    .toLowerCase();
+  );
 
   // 2. Lookup in Inventory Items Master
   let matchedMasterItem = null;
@@ -84,7 +106,7 @@ export function resolveItemPurchaseCost(row = {}, inventoryItems = [], purchaseB
     }
     if (!matchedMasterItem && rowItemName) {
       matchedMasterItem = inventoryItems.find((it) => {
-        const itName = String(it.itemName || it.name || "").trim().toLowerCase();
+        const itName = normalizedItemName(it.itemName || it.name);
         return itName === rowItemName;
       });
     }
@@ -126,11 +148,9 @@ export function resolveItemPurchaseCost(row = {}, inventoryItems = [], purchaseB
         if (matchedMasterItem?.id && brItemId && String(matchedMasterItem.id).trim() === brItemId) {
           return true;
         }
-        const brName = String(
+        const brName = normalizedItemName(
           br.item || br.name || br.itemName || br.productName || br.itemNameSnapshot || ""
-        )
-          .trim()
-          .toLowerCase();
+        );
 
         if (rowItemName && brName && rowItemName === brName) {
           return true;
@@ -187,13 +207,22 @@ export function resolveItemPurchaseCost(row = {}, inventoryItems = [], purchaseB
  * @param {Array} inventoryItems
  * @param {Array} purchaseBills
  */
-export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purchaseBills = []) {
+export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purchaseBills = [], partiesMaster = []) {
   const invoiceNumber = String(
     invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || invoice.id || "—"
   );
-  const partyName = String(
-    invoice.form?.customer || invoice.customer || invoice.partyName || invoice.party || "Cash Sale"
-  );
+  const partyId = invoice.form?.partyId || invoice.partyId || invoice.form?.customerId || invoice.customerId || "";
+  let partyName = String(
+    invoice.form?.customer || invoice.customer || invoice.partyName || invoice.party || ""
+  ).trim();
+
+  if ((!partyName || partyName.toLowerCase() === "cash sale") && partyId && Array.isArray(partiesMaster)) {
+    const matchedParty = partiesMaster.find((p) => String(p.id) === String(partyId));
+    if (matchedParty) {
+      partyName = String(matchedParty.partyName || matchedParty.name || "").trim();
+    }
+  }
+  if (!partyName) partyName = "Cash Sale";
   const rawDate =
     invoice.form?.invoiceDate || invoice.invoiceDate || invoice.date || invoice.createdAt || "";
   const dateYmd = parseYMD(rawDate);
@@ -244,6 +273,9 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
       totalCost,
       source,
       isCostMissing: purchasePrice === null,
+      missingReason: purchasePrice === null
+        ? `Purchase cost not recorded for: ${itemName}. Add a purchase bill or enter the item's purchase price. Profit cannot be calculated until the missing cost is available.`
+        : "",
     };
   });
 
@@ -310,6 +342,7 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
     id: invoice.id || invoice.invoiceId || invoiceNumber,
     rawInvoice: invoice,
     invoiceNumber,
+    partyId,
     partyName,
     rawDate,
     dateYmd,
@@ -324,5 +357,6 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
     hasMissingCost,
     isLoss: profit !== null && profit < 0,
     items: itemDetails,
+    missingCostItems: itemDetails.filter((item) => item.isCostMissing).map((item) => item.itemName),
   };
 }

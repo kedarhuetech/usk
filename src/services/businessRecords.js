@@ -67,6 +67,11 @@ export async function loadSalesInvoices() {
         }
       }
     }
+    for (const invoice of invoices) {
+      try {
+        saveSaleInvoice(invoice);
+      } catch {}
+    }
     return invoices;
   }
 
@@ -92,7 +97,12 @@ export async function nextSalesInvoiceNumber() {
 // Saves business sale invoice.
 export async function saveBusinessSaleInvoice(value) {
   const localInvoice = saveSaleInvoice(value);
-  const saved = await businessDataApi.save("sales-invoices", localInvoice);
+  let saved = localInvoice;
+  try {
+    saved = await businessDataApi.save("sales-invoices", localInvoice);
+  } catch (error) {
+    console.warn("Backend unavailable; saved sale invoice to local storage.", error);
+  }
 
   // Keep MySQL inventory quantities in step with the existing sale stock update.
   const changedItems = getInventoryItems();

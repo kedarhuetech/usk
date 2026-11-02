@@ -357,7 +357,7 @@ export default function ProfitAndLossReport() {
     const directExpensesTotal = directExpensesAmount + paymentInDiscount;
     const totalExpenses = costOfGoodsSold + directExpensesTotal + indirectExpensesTotal;
 
-    // Vyapar Gross Profit
+    // usk Gross Profit
     const grossProfit =
       saleTotal -
       creditNote +
@@ -560,12 +560,12 @@ export default function ProfitAndLossReport() {
               <input
                 type="radio"
                 name="pl-view"
-                value="Vyapar"
-                checked={view === "Vyapar"}
-                onChange={() => setView("Vyapar")}
+                value="USK"
+                checked={view === "USK"}
+                onChange={() => setView("USK")}
                 className="accent-sky-600 h-3.5 w-3.5"
               />
-              Vyapar
+              USK
             </label>
             <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-700">
               <input
@@ -1057,7 +1057,7 @@ export default function ProfitAndLossReport() {
           </table>
         ) : (
           /* ═══════════════════════════════════════════════════════════════════ */
-          /*                         VYAPAR VIEW                                */
+          /*                         USK VIEW                                */
           /* ═══════════════════════════════════════════════════════════════════ */
           <table className="w-full text-left text-xs">
             <thead>

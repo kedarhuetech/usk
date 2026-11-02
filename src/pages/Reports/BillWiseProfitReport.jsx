@@ -14,9 +14,26 @@ import { getParties } from "../../services/partiesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
 import {
+  loadSalesInvoices,
+  loadPurchaseBills,
+  loadBusinessParties,
+  loadBusinessItems,
+} from "../../services/businessRecords";
+import {
   formatMoney,
   calculateInvoiceProfit,
+  parseYMD,
 } from "../../utils/billWiseProfit";
+
+function readSaleInvoiceUi() {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  try {
+    const value = JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}");
+    return value && typeof value === "object" ? value : {};
+  } catch {
+    return {};
+  }
+}
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -51,6 +68,37 @@ export default function BillWiseProfitReport() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [remoteSales, setRemoteSales] = useState([]);
+  const [remotePurchases, setRemotePurchases] = useState([]);
+
+  // Fetch updated backend transactions and master data
+  useEffect(() => {
+    let active = true;
+    async function syncRemoteData() {
+      try {
+        const [salesRes, purchasesRes] = await Promise.allSettled([
+          loadSalesInvoices(),
+          loadPurchaseBills(),
+          loadBusinessParties(),
+          loadBusinessItems(),
+        ]);
+        if (active) {
+          if (salesRes.status === "fulfilled" && Array.isArray(salesRes.value)) {
+            setRemoteSales(salesRes.value);
+          }
+          if (purchasesRes.status === "fulfilled" && Array.isArray(purchasesRes.value)) {
+            setRemotePurchases(purchasesRes.value);
+          }
+        }
+      } catch {
+        // Backend unavailable; local storage handles it seamlessly
+      }
+    }
+    syncRemoteData();
+    return () => {
+      active = false;
+    };
+  }, [refreshTrigger]);
 
   // Synchronize with business data changes across tabs, windows, and navigation focus
   useEffect(() => {
@@ -98,21 +146,40 @@ export default function BillWiseProfitReport() {
     }
     const local = readLocal("ledgerly:saleInvoices.v1", "ledgerly:sales.v1");
     if (Array.isArray(local)) list.push(...local);
+    if (Array.isArray(remoteSales)) list.push(...remoteSales);
+
+    // Apply UI actions (edits, duplicates, returns, deleted, cancelled)
+    const uiActions = readSaleInvoiceUi();
+    const deletedSet = new Set((uiActions.deleted || []).map(String));
+    const duplicates = Array.isArray(uiActions.duplicates) ? uiActions.duplicates : [];
+    const returns = Array.isArray(uiActions.returns) ? uiActions.returns : [];
+
+    const baseList = [...list, ...duplicates, ...returns];
 
     const seen = new Set();
     const merged = [];
-    for (const s of list) {
-      const key = String(s.id || s.invoiceId || "");
+    for (const raw of baseList) {
+      if (!raw || typeof raw !== "object") continue;
+      const key = String(raw.id || raw.invoiceId || "");
+      if (key && deletedSet.has(key)) continue;
+
       if (key && !seen.has(key)) {
         seen.add(key);
-        merged.push(s);
+        const edit = uiActions.edits?.[key];
+        const isCancelled = Boolean(uiActions.cancelled?.[key] || raw.cancelled || raw.status === "Cancelled");
+        merged.push({
+          ...raw,
+          ...(edit || {}),
+          cancelled: isCancelled,
+          status: isCancelled ? "Cancelled" : (edit?.status || raw.status),
+        });
       } else if (!key) {
-        merged.push(s);
+        merged.push(raw);
       }
     }
     return merged;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger]);
+  }, [refreshTrigger, remoteSales]);
 
   const purchaseBills = useMemo(() => {
     const list = [];
@@ -124,10 +191,12 @@ export default function BillWiseProfitReport() {
     }
     const local = readLocal("ledgerly:purchaseBills.v1", "ledgerly:purchases.v1");
     if (Array.isArray(local)) list.push(...local);
+    if (Array.isArray(remotePurchases)) list.push(...remotePurchases);
 
     const seen = new Set();
     const merged = [];
     for (const b of list) {
+      if (!b || typeof b !== "object") continue;
       const key = String(b.id || b.invoiceId || "");
       if (key && !seen.has(key)) {
         seen.add(key);
@@ -138,7 +207,7 @@ export default function BillWiseProfitReport() {
     }
     return merged;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshTrigger]);
+  }, [refreshTrigger, remotePurchases]);
 
   const partiesMaster = useMemo(() => {
     try {
@@ -218,8 +287,16 @@ export default function BillWiseProfitReport() {
   const partyOptions = useMemo(() => {
     const set = new Set();
     rawSales.forEach((s) => {
-      const p = s.form?.customer || s.customer || s.partyName;
+      const p = s.form?.customer || s.customer || s.partyName || s.party;
       if (p) set.add(p.trim());
+      const pId = s.form?.partyId || s.partyId || s.form?.customerId || s.customerId;
+      if (pId && Array.isArray(partiesMaster)) {
+        const found = partiesMaster.find((item) => String(item.id) === String(pId));
+        if (found) {
+          const name = found.partyName || found.name;
+          if (name) set.add(name.trim());
+        }
+      }
     });
     partiesMaster.forEach((p) => {
       const name = p.partyName || p.name;
@@ -233,26 +310,37 @@ export default function BillWiseProfitReport() {
     return rawSales
       .filter((s) => !s.cancelled && s.status !== "Cancelled")
       .map((invoice) =>
-        calculateInvoiceProfit(invoice, inventoryItems, purchaseBills)
+        calculateInvoiceProfit(invoice, inventoryItems, purchaseBills, partiesMaster)
       )
       .sort((a, b) => (b.dateYmd || "").localeCompare(a.dateYmd || ""));
-  }, [rawSales, inventoryItems, purchaseBills]);
+  }, [rawSales, inventoryItems, purchaseBills, partiesMaster]);
+
+  useEffect(() => {
+    if (!selectedInvoice) return;
+    const refreshedInvoice = calculatedInvoices.find((invoice) => invoice.id === selectedInvoice.id);
+    setSelectedInvoice(refreshedInvoice || null);
+  }, [calculatedInvoices, selectedInvoice]);
 
   // Apply filters: Date Range, Party, and Search Query
   const filteredInvoices = useMemo(() => {
-    return calculatedInvoices.filter((row) => {
-      // Date filter
-      if (from && row.dateYmd && row.dateYmd < from) return false;
-      if (to && row.dateYmd && row.dateYmd > to) return false;
+    const fromYmd = parseYMD(from);
+    const toYmd = parseYMD(to);
 
-      // Party filter
+    return calculatedInvoices.filter((row) => {
+      // Date filter normalized
+      if (fromYmd && row.dateYmd && row.dateYmd < fromYmd) return false;
+      if (toYmd && row.dateYmd && row.dateYmd > toYmd) return false;
+
+      // Party filter (supports normalized name and partyId)
       if (selectedParty !== "All Parties") {
-        if (
-          row.partyName.trim().toLowerCase() !==
-          selectedParty.trim().toLowerCase()
-        ) {
-          return false;
-        }
+        const normSelected = selectedParty.trim().toLowerCase();
+        const normRow = row.partyName.trim().toLowerCase();
+        const matchesName = normRow === normSelected;
+        const selectedPartyObj = partiesMaster.find(
+          (p) => (p.partyName || p.name || "").trim().toLowerCase() === normSelected
+        );
+        const matchesId = selectedPartyObj && row.partyId && String(row.partyId) === String(selectedPartyObj.id);
+        if (!matchesName && !matchesId) return false;
       }
 
       // Search filter
@@ -261,12 +349,13 @@ export default function BillWiseProfitReport() {
         const matchesInv = row.invoiceNumber.toLowerCase().includes(q);
         const matchesParty = row.partyName.toLowerCase().includes(q);
         const matchesAmount = String(row.saleAmount).includes(q);
-        if (!matchesInv && !matchesParty && !matchesAmount) return false;
+        const matchesItems = (row.items || []).some((it) => it.itemName.toLowerCase().includes(q));
+        if (!matchesInv && !matchesParty && !matchesAmount && !matchesItems) return false;
       }
 
       return true;
     });
-  }, [calculatedInvoices, from, to, selectedParty, searchQuery]);
+  }, [calculatedInvoices, from, to, selectedParty, searchQuery, partiesMaster]);
 
   // Totals for summary footer
   const totalSaleAmount = useMemo(() => {
@@ -581,20 +670,25 @@ export default function BillWiseProfitReport() {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     {row.hasMissingCost ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200"
-                        title="Purchase cost missing for one or more items in this invoice"
-                      >
-                        <FiAlertCircle className="h-3 w-3" />
-                        Unavailable
-                      </span>
+                      <div className="text-right">
+                        <span
+                          className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200"
+                          title={`Purchase cost not recorded for: ${row.missingCostItems.join(", ")}.\nAdd a purchase bill or enter the item's purchase price.\nProfit cannot be calculated until the missing cost is available.`}
+                        >
+                          <FiAlertCircle className="h-3 w-3" />
+                          Cost details needed
+                        </span>
+                        <p className="text-[10px] text-amber-600 mt-0.5 truncate max-w-[170px] ml-auto">
+                          Cost missing: {row.missingCostItems.join(", ")}
+                        </p>
+                      </div>
                     ) : (
                       <span
                         className={`font-semibold ${
                           row.isLoss ? "text-rose-600" : "text-emerald-600"
                         }`}
                       >
-                        {row.isLoss ? "- " : "+ "}
+                        {row.isLoss ? "Loss: - " : "Profit: "}
                         {formatMoney(Math.abs(row.profit))}
                       </span>
                     )}
@@ -693,12 +787,13 @@ export default function BillWiseProfitReport() {
                   <FiAlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                   <div>
                     <p className="font-semibold text-amber-900">
-                      Incomplete Purchase Cost Information
+                      Purchase cost not recorded for: {selectedInvoice.missingCostItems.join(", ")}
                     </p>
                     <p className="mt-0.5 text-amber-700">
-                      One or more items in this invoice do not have a recorded purchase
-                      price in the item master or purchase history. Profit is reported
-                      as unavailable rather than assuming zero cost.
+                      Add a purchase bill or enter the item's purchase price.
+                    </p>
+                    <p className="mt-0.5 text-amber-700 font-medium">
+                      Profit cannot be calculated until the missing cost is available.
                     </p>
                   </div>
                 </div>
@@ -744,8 +839,8 @@ export default function BillWiseProfitReport() {
                               {item.purchasePrice !== null ? (
                                 formatMoney(item.purchasePrice)
                               ) : (
-                                <span className="text-amber-600 font-medium italic">
-                                  Not Set
+                                <span className="text-amber-600 font-medium italic" title={item.missingReason}>
+                                  Cost details needed
                                 </span>
                               )}
                             </td>
@@ -780,7 +875,7 @@ export default function BillWiseProfitReport() {
                       formatMoney(selectedInvoice.totalCost)
                     ) : (
                       <span className="text-amber-600 font-medium italic">
-                        Unavailable
+                        Cost details needed
                       </span>
                     )}
                   </span>
@@ -828,13 +923,13 @@ export default function BillWiseProfitReport() {
                             : "text-emerald-600"
                         }`}
                       >
-                        {selectedInvoice.isLoss ? "- " : "+ "}
+                        {selectedInvoice.isLoss ? "Loss: - " : "Profit: "}
                         {formatMoney(Math.abs(selectedInvoice.profit))}
                         {selectedInvoice.isLoss ? " (Loss)" : ""}
                       </span>
                     ) : (
                       <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        Unavailable
+                        Cost details needed
                       </span>
                     )}
                   </div>
@@ -864,7 +959,7 @@ export default function BillWiseProfitReport() {
                       </span>
                     ) : (
                       <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                        Unavailable
+                        Cost details needed
                       </span>
                     )}
                   </div>
