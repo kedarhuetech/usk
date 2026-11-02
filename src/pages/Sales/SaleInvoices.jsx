@@ -192,7 +192,7 @@ function InvoiceActionsMenu({ invoice, open, onToggle, onAction }) {
     document.addEventListener("pointerdown", closeWhenOutside);
     return () => document.removeEventListener("pointerdown", closeWhenOutside);
   }, [open, onToggle]);
-  const actions = ["View/Edit", "Generate e-Invoice", "Convert To Return", "Preview Delivery Challan", "Payment History", "Cancel Invoice", "Delete", "Duplicate", "Open PDF", "Preview", "Print", "View History"];
+  const actions = ["View/Edit", "Generate e-Invoice", "Convert To Return", "Preview Delivery Challan", "Payment History", "Cancel Invoice", "Delete", "Open PDF", "Preview", "Print", "View History"];
   // Toggles result.
   const toggle = (event) => {
     if (open) { onToggle(false); return; }
@@ -304,15 +304,22 @@ function SaleInvoices() {
     if (action === "Share") { shareInvoice(invoice); return; }
     if (action === "Cancel Invoice" && !window.confirm("Cancel this invoice in this browser? Its saved invoice will remain unchanged.")) return;
     if (action === "Delete" && !window.confirm("Hide this invoice from the Sale Invoices list in this browser? Its saved invoice will remain unchanged.")) return;
-    if (action === "Convert To Return" && !window.confirm("Create a local sale return for this invoice?")) return;
+    if (action === "Convert To Return") {
+      navigate("/sales/sale-return-credit-note", {
+        state: {
+          convertInvoice: invoice,
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.form?.invoiceNumber || invoice.invoiceNumber,
+          customerName: invoice.form?.customer || invoice.customer || "Cash Sale",
+        },
+      });
+      return;
+    }
     if (action === "Cancel Invoice") saveInvoiceUi((current) => ({ ...current, cancelled: { ...(current.cancelled || {}), [invoice.id]: true }, history: recordInvoiceHistory(current, invoice, action) }));
     else if (action === "Delete") saveInvoiceUi((current) => ({ ...current, deleted: [...new Set([...(current.deleted || []), invoice.id])], history: recordInvoiceHistory(current, invoice, action) }));
     else if (action === "Duplicate") {
       const duplicate = { ...invoice, id: `local-copy-${Date.now()}`, localOnly: true, createdAt: new Date().toISOString(), form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` } };
       saveInvoiceUi((current) => ({ ...current, duplicates: [duplicate, ...(current.duplicates || [])], history: recordInvoiceHistory(current, invoice, action) }));
-    } else if (action === "Convert To Return") {
-      const returned = { ...invoice, id: `local-return-${Date.now()}`, localOnly: true, isReturn: true, createdAt: new Date().toISOString(), form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-RET` }, totals: { ...invoice.totals, finalTotal: -invoiceAmount(invoice), received: 0, balance: 0 } };
-      saveInvoiceUi((current) => ({ ...current, returns: [returned, ...(current.returns || [])], history: recordInvoiceHistory(current, invoice, action) }));
     } else if (["Generate e-Invoice", "Preview Delivery Challan", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
   };
 
