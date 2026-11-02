@@ -1,16 +1,17 @@
 // Implements the party details page.
-import { useEffect, useState } from "react";
-import { FiDownload, FiFileText, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiSettings, FiUsers, FiX } from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import { FiDownload, FiFileText, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiSettings, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
-import { getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
+import { deleteParty, getPartyDeletionBlockReason, getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
 import { deleteSaleInvoice, getSaleInvoices, saveSaleInvoice } from "../../services/salesStorage";
-import { getPurchaseBills } from "../../services/purchaseBillsStorage";
+import { getPurchaseBills, replacePurchaseBills, savePurchaseBill } from "../../services/purchaseBillsStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
+import { calculateInvoiceSettlement, calculatePartyBalances, transactionMatchesParty } from "../../services/partyBalances";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -322,8 +323,8 @@ function buildStatementDocument(party, invoices, activity = []) {
       total: Number(entry.total || 0),
       received: Number(entry.received || 0),
       balance: Number(entry.balance || 0),
-      receivableBalance: openingType === "to-receive" ? Number(entry.balance || 0) : 0,
-      payableBalance: openingType === "to-pay" ? Number(entry.balance || 0) : 0,
+      receivableBalance: Number(entry.receivableBalance || 0),
+      payableBalance: Number(entry.payableBalance || 0),
     })),
   ];
 
@@ -456,7 +457,7 @@ function PartyDetails() {
       setBalanceFilter("payable");
     }
   }, [location.search, location.state]);
-  const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [], paymentsOut: [], creditNotes: [] });
+  const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [], paymentsOut: [], creditNotes: [], debitNotes: [] });
   const [selectedPartyId, setSelectedPartyId] = useState("cash-sale");
   const [search, setSearch] = useState("");
   const [openTransactionMenu, setOpenTransactionMenu] = useState("");
@@ -482,6 +483,8 @@ function PartyDetails() {
         payments: readLocalList("ledgerly:paymentIns.v1"),
         paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
         creditNotes: readLocalList("ledgerly:saleReturns.v1"),
+        debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
+        saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
       });
     } catch (error) {
       setLoadError(error.message || "Could not load saved parties from this browser.");
@@ -493,6 +496,19 @@ function PartyDetails() {
       setParties(getParties());
       setInvoices(getSaleInvoices());
       setPurchases(getPurchaseBills());
+      const readLocalList = (key) => {
+        try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
+        catch { return []; }
+      };
+      setPartyActivity({
+        estimates: readLocalList("ledgerly:estimateQuotations.v1"),
+        proformas: readLocalList("ledgerly:proformaInvoices.v1"),
+        payments: readLocalList("ledgerly:paymentIns.v1"),
+        paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
+        creditNotes: readLocalList("ledgerly:saleReturns.v1"),
+        debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
+        saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
+      });
     };
     window.addEventListener(businessDataChangedEvent, reloadLocalData);
     window.addEventListener("storage", reloadLocalData);
@@ -516,6 +532,20 @@ function PartyDetails() {
     return saved;
   };
 
+  const removeParty = () => {
+    if (!selectedParty) return;
+    const blockReason = getPartyDeletionBlockReason(selectedParty);
+    if (blockReason) {
+      setLoadError(`Cannot delete ${selectedParty.partyName}. ${blockReason}`);
+      return;
+    }
+    if (!window.confirm(`Delete party "${selectedParty.partyName}"? This party has no linked transactions.`)) return;
+    deleteParty(selectedParty.id);
+    setParties((current) => current.filter((party) => String(party.id) !== String(selectedParty.id)));
+    setSelectedPartyId("cash-sale");
+    setLoadError("");
+  };
+
   // Refreshes local invoices.
   const refreshLocalInvoices = () => setInvoices(getSaleInvoices());
   // Handles actions.
@@ -527,27 +557,48 @@ function PartyDetails() {
     const handleAction = (action) => {
       setOpenTransactionMenu("");
       if (action === "View/Edit") {
-        if (invoice) preview();
+        if (invoice && type === "sale") navigate("/sales/sale-invoices/new", { state: { from: location.pathname, editInvoice: invoice } });
+        else if (invoice && type === "purchase") navigate("/purchase-expense/purchase-bills/new", { state: { from: location.pathname, localOnlyPurchase: true, editPurchase: invoice } });
       } else if (action === "Open PDF") {
-        openStatementDocument(false);
+        if (invoice && type === "sale") preview();
+        else openStatementDocument(false);
       } else if (action === "Preview") {
-        setPrintStatementOnOpen(false);
-        setStatementOpen(true);
+        if (invoice && type === "sale") preview();
+        else {
+          setPrintStatementOnOpen(false);
+          setStatementOpen(true);
+        }
       } else if (action === "Print") {
-        setPrintStatementOnOpen(true);
-        setStatementOpen(true);
+        if (invoice && type === "sale") preview(true);
+        else {
+          setPrintStatementOnOpen(true);
+          setStatementOpen(true);
+        }
       } else if (action === "Delete") {
         if (type === "opening") {
           const saved = savePartyLocally({ ...selectedParty, openingBalance: "0", openingBalanceType: "to-receive" });
           setParties((current) => current.map((party) => party.id === saved.id ? saved : party));
+        } else if (type === "purchase" && invoice) {
+          if (window.confirm("Delete this purchase transaction from this browser?")) {
+            const next = purchases.filter((bill) => String(bill.id) !== String(invoice.id));
+            replacePurchaseBills(next);
+            setPurchases(next);
+          }
         } else if (window.confirm("Delete this sale transaction from this browser?")) {
           deleteSaleInvoice(invoice.id);
           refreshLocalInvoices();
         }
       } else if (action === "Duplicate" && invoice) {
-        const duplicate = saveSaleInvoice({ ...invoice, id: crypto.randomUUID(), invoiceId: undefined, invoiceNumber: `${invoice.invoiceNumber || "1"}-COPY`, form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` }, createdAt: new Date().toISOString(), stockAdjustedAt: invoice.stockAdjustedAt || new Date().toISOString() });
-        refreshLocalInvoices();
-        preview(false, duplicate);
+        if (type === "purchase") {
+          const number = `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY`;
+          const duplicate = savePurchaseBill({ ...invoice, id: crypto.randomUUID(), invoiceId: undefined, form: { ...invoice.form, invoiceNumber: number }, createdAt: new Date().toISOString() });
+          setPurchases(getPurchaseBills());
+          navigate("/purchase-expense/purchase-bills/new", { state: { from: location.pathname, localOnlyPurchase: true, editPurchase: duplicate } });
+        } else {
+          const duplicate = saveSaleInvoice({ ...invoice, id: crypto.randomUUID(), invoiceId: undefined, invoiceNumber: `${invoice.invoiceNumber || "1"}-COPY`, form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` }, createdAt: new Date().toISOString(), stockAdjustedAt: invoice.stockAdjustedAt || new Date().toISOString() });
+          refreshLocalInvoices();
+          preview(false, duplicate);
+        }
       } else if (action === "View History") {
         const date = invoice?.updatedAt || invoice?.createdAt || selectedParty?.updatedAt;
         window.alert(date ? `Saved locally on ${new Date(date).toLocaleString()}.` : "No transaction history is available yet.");
@@ -573,69 +624,25 @@ function PartyDetails() {
     );
   };
 
-  const getPartyBalanceInfo = (party) => {
-    const ob = Math.abs(Number(party.openingBalance || 0));
-    const obType = party.openingBalanceType || (String(party.partyType || "").toLowerCase() === "supplier" || String(party.partyType || "").toLowerCase() === "vendor" ? "to-pay" : "to-receive");
-
-    // Unpaid sales for this party
-    const partySalesUnpaid = (invoices || [])
-      .filter((inv) => {
-        const matchesParty = String(inv.partyId || inv.form?.partyId || "") === String(party.id)
-          || String(inv.partyName || inv.customerName || inv.form?.customer || "").trim().toLowerCase() === String(party.partyName || "").trim().toLowerCase();
-        return matchesParty && !inv.cancelled && inv.status !== "Cancelled";
-      })
-      .reduce((sum, inv) => {
-        const total = Number(inv.totals?.finalTotal || inv.total || 0);
-        const received = Number(inv.receivedAmount || inv.form?.receivedAmount || 0);
-        return sum + Math.max(0, total - received);
-      }, 0);
-
-    // Unpaid purchases for this party
-    const partyPurchasesUnpaid = (purchases || [])
-      .filter((bill) => {
-        const matchesParty = String(bill.partyId || bill.form?.partyId || "") === String(party.id)
-          || String(bill.supplier || bill.partyName || bill.party || bill.form?.customer || "").trim().toLowerCase() === String(party.partyName || "").trim().toLowerCase();
-        return matchesParty && !bill.cancelled && bill.status !== "Cancelled";
-      })
-      .reduce((sum, bill) => {
-        const total = Number(bill.totals?.finalTotal || bill.totalAmount || bill.total || 0);
-        const paid = Number(bill.paidAmount || bill.received || bill.form?.paidAmount || 0);
-        return sum + Math.max(0, total - paid);
-      }, 0);
-
-    let receivable = (obType === "to-receive" ? ob : 0) + partySalesUnpaid;
-    let payable = (obType === "to-pay" ? ob : 0) + partyPurchasesUnpaid;
-
-    if (party.balance !== undefined && party.balance !== null && party.balance !== "") {
-      const rawBal = Number(party.balance);
-      if (rawBal > 0 && obType === "to-receive") receivable = Math.max(receivable, rawBal);
-      if (rawBal < 0 || obType === "to-pay") payable = Math.max(payable, Math.abs(rawBal));
-    }
-
-    const net = receivable - payable;
-    const balanceAmount = Math.abs(net) || (ob > 0 ? ob : 0);
-    const balanceType = net > 0 ? "to-receive" : net < 0 ? "to-pay" : (receivable > 0 ? "to-receive" : payable > 0 ? "to-pay" : obType);
-
-    return {
-      receivable,
-      payable,
-      net,
-      balanceAmount,
-      balanceType,
-    };
-  };
+  const partyBalanceResult = useMemo(() => calculatePartyBalances({
+    parties,
+    sales: invoices,
+    purchases,
+    paymentIns: partyActivity.payments,
+    paymentOuts: partyActivity.paymentsOut,
+    creditNotes: partyActivity.creditNotes,
+    debitNotes: partyActivity.debitNotes,
+    saleUi: partyActivity.saleUi,
+  }), [parties, invoices, purchases, partyActivity]);
+  const getPartyBalanceInfo = (party) => partyBalanceResult.parties.find((entry) => String(entry.id) === String(party.id)) || { receivable: 0, payable: 0, customerAdvances: 0, supplierAdvances: 0, net: 0 };
 
   const filteredParties = parties.filter((party) => {
     const matchesSearch = String(party.partyName || "").toLowerCase().includes(search.toLowerCase());
     if (!matchesSearch) return false;
 
     const info = getPartyBalanceInfo(party);
-    if (balanceFilter === "receivable") {
-      return info.balanceType === "to-receive" && info.balanceAmount > 0;
-    }
-    if (balanceFilter === "payable") {
-      return info.balanceType === "to-pay" && info.balanceAmount > 0;
-    }
+    if (balanceFilter === "receivable") return info.receivable > 0;
+    if (balanceFilter === "payable") return info.payable > 0;
     return true;
   });
 
@@ -649,26 +656,25 @@ function PartyDetails() {
     }
   }, [balanceFilter, filteredParties]);
   const selectedParty = parties.find((party) => String(party.id) === String(selectedPartyId));
-  const partyInvoices = selectedParty ? invoices.filter((invoice) =>
-    String(invoice.partyId || invoice.form?.partyId || "") === String(selectedParty.id)
-    || String(invoice.partyName || invoice.customerName || invoice.form?.customer || "").toLowerCase() === String(selectedParty.partyName || "").toLowerCase()
-  ) : [];
-  const belongsToSelectedParty = (entry) => selectedParty && (
-    String(entry.partyId || entry.form?.partyId || "") === String(selectedParty.id)
-    || String(entry.partyName || entry.customerName || entry.customer || entry.form?.customer || "").trim().toLowerCase() === String(selectedParty.partyName || "").trim().toLowerCase()
-  );
+  const selectedPartyBalance = selectedParty ? getPartyBalanceInfo(selectedParty) : null;
+  const partyInvoices = selectedParty ? invoices.filter((invoice) => transactionMatchesParty(invoice, selectedParty)) : [];
+  const partyPurchases = selectedParty ? purchases.filter((bill) => transactionMatchesParty(bill, selectedParty)) : [];
+  const belongsToSelectedParty = (entry) => selectedParty && transactionMatchesParty(entry, selectedParty);
   const partyTransactions = [
     ...partyInvoices.map((invoice) => {
-      const total = Number(invoice.totals?.finalTotal || invoice.total || invoice.grandTotal || 0);
-      const received = Number(invoice.receivedAmount || invoice.form?.receivedAmount || 0);
-      const balance = Math.max(0, Number(invoice.balance ?? (invoice.saleType === "credit" ? total - received : 0)) - Number(invoice.creditNoteAppliedAmount || 0));
-      return { id: `sale:${invoice.id}`, source: "Sale", number: invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—", date: invoice.form?.invoiceDate || invoice.createdAt, total, received: total - balance, balance, status: balance > 0 ? "Unpaid" : "Paid", raw: invoice };
+      const settlement = calculateInvoiceSettlement(invoice, { kind: "sale", payments: partyActivity.payments, adjustments: partyActivity.creditNotes });
+      return { id: `sale:${invoice.id}`, source: "Sale", number: invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—", date: invoice.form?.invoiceDate || invoice.createdAt, total: settlement.total, received: settlement.paid, balance: settlement.outstanding, receivableBalance: settlement.outstanding, payableBalance: 0, status: settlement.status, raw: invoice };
+    }),
+    ...partyPurchases.map((bill) => {
+      const settlement = calculateInvoiceSettlement(bill, { kind: "purchase", payments: partyActivity.paymentsOut, adjustments: partyActivity.debitNotes });
+      return { id: `purchase:${bill.id}`, source: "Purchase", number: bill.form?.invoiceNumber || bill.invoiceNumber || bill.billNumber || bill.number || "—", date: bill.form?.invoiceDate || bill.form?.billDate || bill.date || bill.createdAt, total: settlement.total, received: settlement.paid, balance: settlement.outstanding, receivableBalance: 0, payableBalance: settlement.outstanding, status: settlement.status, raw: bill };
     }),
     ...partyActivity.estimates.filter(belongsToSelectedParty).map((entry) => ({ id: `estimate:${entry.id}`, source: "Estimate/Quotation", number: entry.number || entry.refNo || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
     ...partyActivity.proformas.filter(belongsToSelectedParty).map((entry) => ({ id: `proforma:${entry.id}`, source: "Proforma Invoice", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
-    ...partyActivity.payments.filter(belongsToSelectedParty).map((entry) => ({ id: `payment:${entry.id}`, source: "Payment-In", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.received ?? entry.amount ?? 0), balance: 0, status: entry.status || "Unused", raw: entry })),
-    ...partyActivity.paymentsOut.filter(belongsToSelectedParty).map((entry) => ({ id: `payment-out:${entry.id}`, source: entry.linkedCreditNoteId ? "Credit Note Refund" : "Payment-Out", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.amount || 0), balance: 0, status: entry.status || "Paid", raw: entry })),
-    ...partyActivity.creditNotes.filter((entry) => entry.type === "Credit Note" && !entry.cancelled && (String(entry.party || entry.customer || "").trim().toLowerCase() === String(selectedParty?.partyName || "").trim().toLowerCase())).map((entry) => ({ id: `credit-note:${entry.id}`, source: "Credit Note", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.total || 0), received: Number(entry.received || 0), balance: Number(entry.balance || 0), status: entry.status || "Credit Available", raw: entry })),
+    ...partyActivity.payments.filter(belongsToSelectedParty).map((entry) => { const unallocated = !entry.linkedInvoiceId && !entry.invoiceId && !(entry.allocations || []).length; const advance = unallocated ? Number(entry.amount || 0) : 0; return { id: `payment:${entry.id}`, source: "Payment-In", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.received ?? entry.amount ?? 0), balance: advance, receivableBalance: 0, payableBalance: advance, status: entry.status || "Unused", raw: entry }; }),
+    ...partyActivity.paymentsOut.filter(belongsToSelectedParty).map((entry) => { const unallocated = !entry.linkedInvoiceId && !entry.linkedBillId && !entry.invoiceId && !entry.billId && !entry.purchaseId && !entry.linkedCreditNoteId && !(entry.allocations || []).length; const advance = unallocated ? Number(entry.amount || 0) : 0; return { id: `payment-out:${entry.id}`, source: entry.linkedCreditNoteId ? "Credit Note Refund" : "Payment-Out", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.amount || 0), balance: advance, receivableBalance: advance, payableBalance: 0, status: entry.status || "Paid", raw: entry }; }),
+    ...partyActivity.creditNotes.filter((entry) => entry.type === "Credit Note" && !entry.cancelled && belongsToSelectedParty(entry)).map((entry) => { const credit = Number(entry.customerCreditAmount ?? entry.balance ?? 0); return { id: `credit-note:${entry.id}`, source: "Credit Note", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.total || 0), received: Number(entry.received || 0), balance: credit, receivableBalance: 0, payableBalance: credit, status: entry.status || "Credit Available", raw: entry }; }),
+    ...partyActivity.debitNotes.filter((entry) => !entry.cancelled && belongsToSelectedParty(entry)).map((entry) => { const linked = entry.billId || entry.purchaseId || entry.linkedInvoiceId; const credit = linked ? 0 : Number(entry.balance ?? Math.max(0, Number(entry.total || entry.amount || 0) - Number(entry.received || 0))); return { id: `debit-note:${entry.id}`, source: "Debit Note", number: entry.refNo || entry.returnNo || entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.total || entry.amount || 0), received: Number(entry.received || 0), balance: credit, receivableBalance: credit, payableBalance: 0, status: entry.status || "Supplier Credit", raw: entry }; }),
   ].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const visiblePartyTransactions = partyTransactions.filter((entry) => [entry.source, entry.number, entry.date, entry.total, entry.received, entry.balance, entry.status, entry.raw?.paymentType, entry.raw?.description].join(" ").toLowerCase().includes(transactionSearch.toLowerCase()));
   const openingBalance = Math.abs(Number(selectedParty?.openingBalance || 0));
@@ -709,7 +715,7 @@ function PartyDetails() {
     <div className="flex h-full min-h-[calc(100vh-7.5rem)] flex-col bg-slate-200">
       <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-700">Parties</h1>
-        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700"><FiPlus /> Add Party</Button><FiSettings className="text-xl text-slate-500" /><FiMoreVertical className="text-xl text-slate-500" /></div>
+        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700"><FiPlus /> Add Party</Button><FiMoreVertical className="text-xl text-slate-500" /></div>
       </div>
       {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
       <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(300px,29%)_1fr]">
@@ -747,7 +753,7 @@ function PartyDetails() {
             )}
             {filteredParties.map((party) => {
               const info = getPartyBalanceInfo(party);
-              return <button key={party.id} onClick={() => setSelectedPartyId(party.id)} className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-5 text-left text-sm ${String(selectedPartyId) === String(party.id) ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"}`}><span className="truncate font-medium text-slate-800">{party.partyName}</span><span className="text-right"><span className={`block font-medium ${info.balanceType === "to-pay" ? "text-rose-500" : "text-emerald-500"}`}>{info.balanceAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>{info.balanceAmount > 0 && <span className="text-xs text-slate-400">{info.balanceType === "to-pay" ? "To Pay" : "To Receive"}</span>}</span></button>;
+              return <button key={party.id} onClick={() => setSelectedPartyId(party.id)} className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-4 text-left text-sm ${String(selectedPartyId) === String(party.id) ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"}`}><span className="truncate font-medium text-slate-800">{party.partyName}</span><span className="text-right">{info.receivable > 0 && <span className="block text-xs font-medium text-emerald-600">{info.receivable.toLocaleString("en-IN", { minimumFractionDigits: 2 })} To Receive</span>}{info.payable > 0 && <span className="block text-xs font-medium text-rose-600">{info.payable.toLocaleString("en-IN", { minimumFractionDigits: 2 })} To Pay</span>}{info.receivable <= 0 && info.payable <= 0 && <span className="text-xs text-slate-400">Settled</span>}</span></button>;
             })}
             {filteredParties.length === 0 && (
               <div className="py-12 text-center text-xs text-slate-400">
@@ -755,10 +761,10 @@ function PartyDetails() {
               </div>
             )}
           </div>
-          <div className="m-2 flex items-center gap-3 rounded-lg border border-emerald-100 bg-emerald-50 p-4 text-sm text-slate-700"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-600"><FiUsers className="text-xl" /></span><span>Use contacts from your Phone or Gmail to <b>quickly create</b> parties.</span><span className="ml-auto text-emerald-600">›</span></div>
+          
         </section>
         <section className="min-w-0 overflow-hidden rounded-md bg-white">
-          <div className="flex h-[68px] items-center justify-between border-b border-slate-200 px-4"><div><h2 className="font-semibold text-slate-700">{cashSaleName} {selectedParty && <button aria-label="Edit party" title="Edit party" onClick={() => { setPartyBeingEdited(selectedParty); setIsModalOpen(true); }} className="ml-2 text-blue-500">✎</button>}</h2>{selectedParty && selectedOpeningBalance > 0 && <p className="mt-1 text-xs text-slate-500">₹ {selectedOpeningBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })} {selectedBalanceType === "to-pay" ? "To Pay" : "To Receive"}</p>}</div><div className="flex gap-4 text-lg"><span className="text-amber-500">●</span><span className="text-green-500">●</span><span className="text-orange-400">◷</span></div></div>
+          <div className="flex min-h-[68px] items-center justify-between border-b border-slate-200 px-4 py-2"><div><h2 className="font-semibold text-slate-700">{cashSaleName} {selectedParty && <><button aria-label="Edit party" title="Edit party" onClick={() => { setPartyBeingEdited(selectedParty); setIsModalOpen(true); }} className="ml-2 text-blue-500">✎</button><button type="button" aria-label="Delete party" title="Delete party" onClick={removeParty} className="ml-3 text-rose-500 hover:text-rose-700"><FiTrash2 /></button></>}</h2>{selectedPartyBalance && <p className="mt-1 flex flex-wrap gap-x-4 text-xs">{selectedPartyBalance.receivable > 0 && <span className="text-emerald-700">To Receive {money(selectedPartyBalance.receivable)}</span>}{selectedPartyBalance.payable > 0 && <span className="text-rose-700">To Pay {money(selectedPartyBalance.payable)}</span>}{selectedPartyBalance.receivable === 0 && selectedPartyBalance.payable === 0 && selectedOpeningBalance > 0 && <span className="text-slate-500">Opening balance {money(selectedOpeningBalance)} {selectedBalanceType === "to-pay" ? "To Pay" : "To Receive"}</span>}</p>}</div><div className="flex gap-4 text-lg"><span className="text-amber-500">●</span><span className="text-green-500">●</span><span className="text-orange-400">◷</span></div></div>
           <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3"><h2 className="font-semibold text-slate-700">Transactions</h2><div className="flex items-center gap-3 text-slate-500">
             {transactionSearchOpen && <input autoFocus value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search transactions" className="h-10 w-48 rounded-md border border-slate-300 px-3 text-sm text-slate-700 outline-none focus:border-blue-500" />}
             <button type="button" aria-label="Search transactions" title="Search transactions" onClick={() => { setTransactionSearchOpen((open) => !open); setTransactionSearch(""); }} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100"><FiSearch className="text-2xl" /></button>
@@ -768,7 +774,7 @@ function PartyDetails() {
           </div></div>
           <div className="overflow-auto"><table className="w-full min-w-[690px] text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => <th key={label} className="border-b border-r border-slate-200 px-3 py-3 font-semibold">{label}{label && <FiFilter className="float-right mt-0.5 text-slate-400" />}</th>)}</tr></thead><tbody>
             {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && <tr className="border-b border-slate-100 bg-sky-100 text-slate-800"><td className="px-3 py-4">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td className="px-3 py-4">—</td><td className="px-3 py-4">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-rose-500">Unpaid</td><td className="px-3 py-4">{transactionActions(null, "opening")}</td></tr>}
-            {visiblePartyTransactions.map((entry) => <tr key={entry.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">{entry.source}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{money(entry.total)}</td><td className="px-3 py-4 text-right">{entry.source === "Payment-In" ? "—" : money(entry.balance)}</td><td className={`px-3 py-4 ${["Paid", "Used"].includes(entry.status) ? "text-emerald-500" : "text-rose-500"}`}>{entry.status}</td><td className="px-3 py-4">{entry.source === "Sale" ? transactionActions(entry.raw) : <button type="button" title="View transaction" onClick={() => { setStatementOpen(true); setPrintStatementOnOpen(false); }} className="rounded p-1 text-slate-500 hover:bg-slate-100"><FiMoreVertical /></button>}</td></tr>)}
+            {visiblePartyTransactions.map((entry) => <tr key={entry.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">{entry.source}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{money(entry.total)}</td><td className="px-3 py-4 text-right">{(entry.source === "Payment-In" || entry.source === "Payment-Out") && !entry.balance ? "—" : money(entry.balance)}</td><td className={`px-3 py-4 ${entry.status === "Paid" || entry.status === "Used" ? "text-emerald-500" : entry.status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{entry.status}</td><td className="px-3 py-4">{entry.source === "Sale" ? transactionActions(entry.raw, "sale") : entry.source === "Purchase" ? transactionActions(entry.raw, "purchase") : <button type="button" title="View transaction" onClick={() => { setStatementOpen(true); setPrintStatementOnOpen(false); }} className="rounded p-1 text-slate-500 hover:bg-slate-100"><FiMoreVertical /></button>}</td></tr>)}
             {!visiblePartyTransactions.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && <tr><td colSpan="7" className="h-48 text-center text-slate-400">{transactionSearch ? "No matching transactions" : "No transactions to show"}</td></tr>}
           </tbody></table></div>
         </section>
@@ -800,8 +806,8 @@ function PartyDetails() {
             total: Number(entry.total || 0),
             received: Number(entry.received || 0),
             balance: Number(entry.balance || 0),
-            receivableBalance: selectedBalanceType === "to-receive" ? Number(entry.balance || 0) : 0,
-            payableBalance: selectedBalanceType === "to-pay" ? Number(entry.balance || 0) : 0,
+            receivableBalance: Number(entry.receivableBalance || 0),
+            payableBalance: Number(entry.payableBalance || 0),
           })),
         ];
 

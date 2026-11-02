@@ -14,7 +14,9 @@ import LowStockSummaryReport from "./LowStockSummaryReport";
 import StockDetailReport from "./StockDetailReport";
 import ItemDetailReport from "./ItemDetailReport";
 import BillWiseProfitReport from "./BillWiseProfitReport";
+import BalanceSheetReport from "./BalanceSheetReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
+import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import {
   FiBarChart2,
   FiPrinter,
@@ -35,7 +37,6 @@ const reportGroups = [
       "Profit And Loss",
       "Bill Wise Profit",
       "Cash flow",
-      "Trial Balance Report",
       "Balance Sheet",
     ],
   },
@@ -94,12 +95,12 @@ const reportGroups = [
 ];
 
 const reportTitle = (name) =>
-  ({
-    Sale: "Sale Invoices",
-    Purchase: "Purchase Bills",
-    "All Transactions": "All Transactions",
-    "Day book": "Day book",
-  }[name] || name);
+({
+  Sale: "Sale Invoices",
+  Purchase: "Purchase Bills",
+  "All Transactions": "All Transactions",
+  "Day book": "Day book",
+}[name] || name);
 
 const money = (value) =>
   `₹ ${Number(value || 0).toLocaleString("en-IN", {
@@ -132,30 +133,30 @@ const userOf = (row) =>
 const amountOf = (row) =>
   Number(
     row.totals?.finalTotal ??
-      row.totals?.grandTotal ??
-      row.totalAmount ??
-      row.amount ??
-      (row.rows || []).reduce(
-        (sum, line) =>
-          sum +
-          Number(
-            line.amount ||
-              Number(line.qty || line.quantity || 0) *
-                Number(line.price || line.rate || 0)
-          ),
-        0
-      )
+    row.totals?.grandTotal ??
+    row.totalAmount ??
+    row.amount ??
+    (row.rows || []).reduce(
+      (sum, line) =>
+        sum +
+        Number(
+          line.amount ||
+          Number(line.qty || line.quantity || 0) *
+          Number(line.price || line.rate || 0)
+        ),
+      0
+    )
   );
 
 const receivedOf = (row) =>
   Number(
     row.totals?.received ??
-      row.received ??
-      row.paid ??
-      (row.payments || []).reduce(
-        (sum, payment) => sum + Number(payment.amount || 0),
-        0
-      )
+    row.received ??
+    row.paid ??
+    (row.payments || []).reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    )
   );
 
 const partyOf = (row) =>
@@ -218,6 +219,7 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("low-stock-summary")) return "Low Stock Summary";
     if (location.pathname.includes("stock-detail")) return "Stock Detail";
     if (location.pathname.includes("item-detail")) return "Item Detail";
+    if (location.pathname.includes("balance-sheet")) return "Balance Sheet";
     return "Sale";
   };
 
@@ -235,6 +237,8 @@ function Reports({ defaultReport }) {
       setActiveReport("All Transactions");
     } else if (location.pathname.includes("cash-flow")) {
       setActiveReport("Cash flow");
+    } else if (location.pathname.includes("balance-sheet")) {
+      setActiveReport("Balance Sheet");
     } else if (location.pathname.includes("all-parties")) {
       setActiveReport("All parties");
     } else if (location.pathname.includes("party-report-by-item")) {
@@ -407,7 +411,7 @@ function Reports({ defaultReport }) {
           const dateMatches = isDayBook
             ? !to || !date || date === to
             : (!from || !date || date >= from) &&
-              (!to || !date || date <= to);
+            (!to || !date || date <= to);
 
           return (
             dateMatches &&
@@ -549,54 +553,59 @@ function Reports({ defaultReport }) {
       ? ["Party Name", "Phone", "Amount", "Updated"]
       : isDayBook
         ? [
-            "Name",
-            "Ref. No.",
-            "Type",
-            "Payment Type",
-            "Total",
-            "Money In",
-            "Money Out",
-            "Print / Share",
-          ]
+          "Name",
+          "Ref. No.",
+          "Type",
+          "Payment Type",
+          "Total",
+          "Money In",
+          "Money Out",
+          "Print / Share",
+        ]
         : isAllTransactions
           ? [
-              "#",
+            "#",
+            "Date",
+            "Ref. No.",
+            "Party Name",
+            "Category",
+            "Type",
+            "Total",
+            "Received",
+            "Balance",
+            "Print / Share",
+            "Status",
+            "Actions",
+          ]
+          : isPurchase
+            ? [
               "Date",
-              "Ref. No.",
+              "Invoice No.",
               "Party Name",
-              "Category",
-              "Type",
-              "Total",
-              "Received",
-              "Balance",
-              "Print / Share",
+              "Payment Type",
+              "Amount",
+              "Balance Due",
               "Status",
               "Actions",
             ]
-          : isPurchase
-            ? [
-                "Date",
-                "Invoice No.",
-                "Party Name",
-                "Payment Type",
-                "Amount",
-                "Balance Due",
-                "Status",
-                "Actions",
-              ]
             : [
-                "Date",
-                "Invoice no",
-                "Party Name",
-                "Transaction",
-                "Payment Type",
-                "Amount",
-                "Balance",
-                "Status",
-                "Actions",
-              ];
+              "Date",
+              "Invoice no",
+              "Party Name",
+              "Transaction",
+              "Payment Type",
+              "Amount",
+              "Balance",
+              "Status",
+              "Actions",
+            ];
 
   const getStatus = (row, amount, received) => {
+    if (["Sale", "Purchase"].includes(row.reportType)) {
+      const settlement = calculateInvoiceSettlement(row, { kind: row.reportType === "Purchase" ? "purchase" : "sale" });
+      if (settlement.status === "Partially Paid") return "Partial";
+      return settlement.status;
+    }
     if (
       ["Cancelled", "Unused", "Unpaid", "Partial", "Paid"].includes(
         row.status
@@ -631,7 +640,7 @@ function Reports({ defaultReport }) {
           title: `Transaction ${invoiceNo}`,
           text: `${party} - ${money(amount)}`,
         })
-        .catch(() => {});
+        .catch(() => { });
     } else {
       window.prompt("Copy transaction details", text);
     }
@@ -672,6 +681,8 @@ function Reports({ defaultReport }) {
                     navigate("/reports/bill-wise-profit", { replace: true });
                   } else if (report === "Cash flow") {
                     navigate("/reports/cash-flow", { replace: true });
+                  } else if (report === "Balance Sheet") {
+                    navigate("/reports/balance-sheet", { replace: true });
                   } else if (report === "All parties") {
                     navigate("/reports/all-parties", { replace: true });
                   } else if (report === "Party Report By Item") {
@@ -696,11 +707,10 @@ function Reports({ defaultReport }) {
                     navigate("/reports", { replace: true });
                   }
                 }}
-                className={`w-full border-l-4 px-4 py-3 text-left text-sm transition-colors ${
-                  activeReport === report
+                className={`w-full border-l-4 px-4 py-3 text-left text-sm transition-colors ${activeReport === report
                     ? "border-sky-600 bg-slate-100 font-semibold text-[#263b57]"
                     : "border-transparent text-[#313b50] hover:bg-slate-50"
-                }`}
+                  }`}
               >
                 {report}
               </button>
@@ -725,6 +735,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Cash flow" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <CashFlowReport />
+        </div>
+      ) : activeReport === "Balance Sheet" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <BalanceSheetReport />
         </div>
       ) : activeReport === "All parties" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
@@ -768,682 +782,677 @@ function Reports({ defaultReport }) {
         </div>
       ) : (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">
-        <header className="flex min-h-[64px] items-center justify-between gap-3 rounded-md bg-white px-4">
-          <h1 className="text-xl font-semibold">
-            {reportTitle(activeReport)}
-          </h1>
+          <header className="flex min-h-[64px] items-center justify-between gap-3 rounded-md bg-white px-4">
+            <h1 className="text-xl font-semibold">
+              {reportTitle(activeReport)}
+            </h1>
 
-          {activeReport === "Sale" && (
-            <button
-              type="button"
-              onClick={() => navigate("/sales/sale-invoices/new")}
-              className="rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-700"
-            >
-              ＋ Add Sale
-            </button>
-          )}
-
-          {isPurchase && (
-            <div className="flex gap-3">
-              
-
+            {activeReport === "Sale" && (
               <button
                 type="button"
-                onClick={() =>
-                  navigate("/purchase-expense/purchase-bills/new")
-                }
-                className="rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white"
+                onClick={() => navigate("/sales/sale-invoices/new")}
+                className="rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-700"
               >
-                ＋ Add Purchase
+                ＋ Add Sale
               </button>
-            </div>
-          )}
-        </header>
+            )}
 
-        {/* Filters */}
-        <section
-          className={`flex flex-wrap items-center gap-3 rounded-md bg-white px-4 py-4 ${
-            isAllTransactions ? "min-h-[174px] content-start" : ""
-          }`}
-        >
-          {!isDayBook && (
-            <>
-              <span className="text-sm font-medium">
-                {isPurchase ? "Filter by:" : ""}
-              </span>
+            {isPurchase && (
+              <div className="flex gap-3">
 
-              <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
-                <select
-                  aria-label="Report period"
-                  value={period}
-                  onChange={(event) => {
-                    const selected = event.target.value;
-                    setPeriod(selected);
 
-                    const now = new Date();
-
-                    if (selected === "This Month") {
-                      const last = new Date(
-                        now.getFullYear(),
-                        now.getMonth() + 1,
-                        0
-                      );
-
-                      setFrom(
-                        `${now.getFullYear()}-${String(
-                          now.getMonth() + 1
-                        ).padStart(2, "0")}-01`
-                      );
-
-                      setTo(
-                        `${last.getFullYear()}-${String(
-                          last.getMonth() + 1
-                        ).padStart(2, "0")}-${String(
-                          last.getDate()
-                        ).padStart(2, "0")}`
-                      );
-                    } else if (selected === "This Year") {
-                      setFrom(`${now.getFullYear()}-01-01`);
-                      setTo(`${now.getFullYear()}-12-31`);
-                    } else {
-                      setFrom("");
-                      setTo("");
-                    }
-                  }}
-                  className="bg-transparent outline-none"
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("/purchase-expense/purchase-bills/new")
+                  }
+                  className="rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white"
                 >
-                  <option>This Month</option>
-                  <option>This Year</option>
-                  <option>All Time</option>
-                  <option>Custom</option>
-                </select>
-              </label>
+                  ＋ Add Purchase
+                </button>
+              </div>
+            )}
+          </header>
 
-              <div className="flex flex-wrap items-center gap-2 rounded-full bg-sky-100 px-4 py-2 text-sm">
-                <span>▦</span>
+          {/* Filters */}
+          <section
+            className={`flex flex-wrap items-center gap-3 rounded-md bg-white px-4 py-4 ${isAllTransactions ? "min-h-[174px] content-start" : ""
+              }`}
+          >
+            {!isDayBook && (
+              <>
+                <span className="text-sm font-medium">
+                  {isPurchase ? "Filter by:" : ""}
+                </span>
+
+                <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
+                  <select
+                    aria-label="Report period"
+                    value={period}
+                    onChange={(event) => {
+                      const selected = event.target.value;
+                      setPeriod(selected);
+
+                      const now = new Date();
+
+                      if (selected === "This Month") {
+                        const last = new Date(
+                          now.getFullYear(),
+                          now.getMonth() + 1,
+                          0
+                        );
+
+                        setFrom(
+                          `${now.getFullYear()}-${String(
+                            now.getMonth() + 1
+                          ).padStart(2, "0")}-01`
+                        );
+
+                        setTo(
+                          `${last.getFullYear()}-${String(
+                            last.getMonth() + 1
+                          ).padStart(2, "0")}-${String(
+                            last.getDate()
+                          ).padStart(2, "0")}`
+                        );
+                      } else if (selected === "This Year") {
+                        setFrom(`${now.getFullYear()}-01-01`);
+                        setTo(`${now.getFullYear()}-12-31`);
+                      } else {
+                        setFrom("");
+                        setTo("");
+                      }
+                    }}
+                    className="bg-transparent outline-none"
+                  >
+                    <option>This Month</option>
+                    <option>This Year</option>
+                    <option>All Time</option>
+                    <option>Custom</option>
+                  </select>
+                </label>
+
+                <div className="flex flex-wrap items-center gap-2 rounded-full bg-sky-100 px-4 py-2 text-sm">
+                  <span>▦</span>
+
+                  <input
+                    aria-label="Start date"
+                    type="date"
+                    value={from}
+                    onChange={(event) => {
+                      setFrom(event.target.value);
+                      setPeriod("Custom");
+                    }}
+                    className="w-[132px] bg-transparent outline-none"
+                  />
+
+                  <span>To</span>
+
+                  <input
+                    aria-label="End date"
+                    type="date"
+                    value={to}
+                    onChange={(event) => {
+                      setTo(event.target.value);
+                      setPeriod("Custom");
+                    }}
+                    className="w-[132px] bg-transparent outline-none"
+                  />
+                </div>
+              </>
+            )}
+
+            {isDayBook && (
+              <label className="rounded border border-slate-300 px-4 py-2 text-sm">
+                <span className="mr-3 text-slate-500">Date</span>
 
                 <input
-                  aria-label="Start date"
-                  type="date"
-                  value={from}
-                  onChange={(event) => {
-                    setFrom(event.target.value);
-                    setPeriod("Custom");
-                  }}
-                  className="w-[132px] bg-transparent outline-none"
-                />
-
-                <span>To</span>
-
-                <input
-                  aria-label="End date"
+                  aria-label="Day book date"
                   type="date"
                   value={to}
                   onChange={(event) => {
                     setTo(event.target.value);
-                    setPeriod("Custom");
+                    setFrom(event.target.value);
                   }}
-                  className="w-[132px] bg-transparent outline-none"
+                  className="bg-transparent outline-none"
                 />
-              </div>
-            </>
-          )}
+              </label>
+            )}
 
-          {isDayBook && (
-            <label className="rounded border border-slate-300 px-4 py-2 text-sm">
-              <span className="mr-3 text-slate-500">Date</span>
-
-              <input
-                aria-label="Day book date"
-                type="date"
-                value={to}
-                onChange={(event) => {
-                  setTo(event.target.value);
-                  setFrom(event.target.value);
-                }}
-                className="bg-transparent outline-none"
-              />
-            </label>
-          )}
-
-          <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
-            <select
-              aria-label="Firm filter"
-              value={store}
-              onChange={(event) => setStore(event.target.value)}
-              className="bg-transparent outline-none"
-            >
-              <option>All Stores</option>
-              {storeOptions.map((option) => (
-                <option key={option}>{option}</option>
-              ))}
-            </select>
-          </label>
-
-          {!isDayBook && (
             <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
               <select
-                aria-label="User filter"
-                value={user}
-                onChange={(event) => setUser(event.target.value)}
+                aria-label="Firm filter"
+                value={store}
+                onChange={(event) => setStore(event.target.value)}
                 className="bg-transparent outline-none"
               >
-                <option>All Users</option>
-                {userOptions.map((option) => (
+                <option>All Stores</option>
+                {storeOptions.map((option) => (
                   <option key={option}>{option}</option>
                 ))}
               </select>
             </label>
-          )}
 
-          {isAllTransactions && (
-            <div className="basis-full h-0" aria-hidden="true" />
-          )}
-
-          {isAllTransactions && (
-            <>
-              <label className="rounded border border-slate-300 px-4 py-2 text-sm">
+            {!isDayBook && (
+              <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
                 <select
-                  aria-label="Transaction type"
-                  value={transactionType}
-                  onChange={(event) =>
-                    setTransactionType(event.target.value)
-                  }
+                  aria-label="User filter"
+                  value={user}
+                  onChange={(event) => setUser(event.target.value)}
                   className="bg-transparent outline-none"
                 >
-                  <option>All Transaction</option>
-
-                  {[...new Set(records.map((row) => row.reportType))].map(
-                    (type) => (
-                      <option key={type}>{type}</option>
-                    )
-                  )}
+                  <option>All Users</option>
+                  {userOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
                 </select>
               </label>
+            )}
 
-              <label className="rounded border border-slate-300 px-4 py-2 text-sm">
-                <select
-                  aria-label="Payment filter"
-                  value={paymentFilter}
-                  onChange={(event) => setPaymentFilter(event.target.value)}
-                  className="bg-transparent outline-none"
-                >
-                  <option>All Payment</option>
+            {isAllTransactions && (
+              <div className="basis-full h-0" aria-hidden="true" />
+            )}
 
-                  {[...new Set(records.map(paymentTypeOf).filter(Boolean))].map(
-                    (type) => (
-                      <option key={type}>{type}</option>
-                    )
-                  )}
-                </select>
-              </label>
-            </>
-          )}
-
-          {isDayBook && (
-            <div className="ml-auto flex items-center gap-4 text-sm">
-              <button type="button" onClick={exportCsv}>
-                ▣ Excel Report
-              </button>
-
-              <button type="button" onClick={() => setPrintModalOpen(true)}>
-                ▣ Print
-              </button>
-            </div>
-          )}
-        </section>
-
-        {/* Summary cards: hidden for All Transactions */}
-        {!isDayBook && !isAllTransactions && (
-          <section className="min-h-[145px] rounded-md bg-white p-4">
-            {isPurchase ? (
-              <div className="flex flex-wrap items-center gap-4">
-                                            {[
-                                              ["Paid", paidTotal, "bg-emerald-900/50 text-emerald-300"],
-                                              ["Unpaid", unpaidTotal, "bg-blue-900/60 text-blue-200"],
-                                              ["Total", totals.amount, "bg-blue-700 text-white"],
-                                            ].map(([label, amount, color], index) => (
-                  <div
-                    key={label}
-                    className="flex items-center gap-4"
+            {isAllTransactions && (
+              <>
+                <label className="rounded border border-slate-300 px-4 py-2 text-sm">
+                  <select
+                    aria-label="Transaction type"
+                    value={transactionType}
+                    onChange={(event) =>
+                      setTransactionType(event.target.value)
+                    }
+                    className="bg-transparent outline-none"
                   >
-                    <div
-                      className={`min-w-[190px] rounded-xl ${color} px-5 py-4`}
-                    >
-                      <p>{label}</p>
-                      <strong className="text-xl">{money(amount)}</strong>
-                    </div>
+                    <option>All Transaction</option>
 
-                    {index === 0 && <b className="text-2xl">+</b>}
-                    {index === 1 && <b className="text-2xl">=</b>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="inline-block min-w-[340px] rounded-lg border border-violet-200 bg-[#fcf9ff] px-4 py-3">
-                <p className="text-sm text-slate-500">
-                  {activeReport === "Sale"
-                    ? "Total Sales Amount"
-                    : `Total ${reportTitle(activeReport)}`}
-                </p>
+                    {[...new Set(records.map((row) => row.reportType))].map(
+                      (type) => (
+                        <option key={type}>{type}</option>
+                      )
+                    )}
+                  </select>
+                </label>
 
-                <p className="text-2xl font-bold">
-                  {money(totals.amount)}
-                </p>
+                <label className="rounded border border-slate-300 px-4 py-2 text-sm">
+                  <select
+                    aria-label="Payment filter"
+                    value={paymentFilter}
+                    onChange={(event) => setPaymentFilter(event.target.value)}
+                    className="bg-transparent outline-none"
+                  >
+                    <option>All Payment</option>
 
-                <p className="mt-4 text-sm text-slate-500">
-                  Received:{" "}
-                  <strong className="text-slate-700">
-                    {money(totals.received)}
-                  </strong>
+                    {[...new Set(records.map(paymentTypeOf).filter(Boolean))].map(
+                      (type) => (
+                        <option key={type}>{type}</option>
+                      )
+                    )}
+                  </select>
+                </label>
+              </>
+            )}
 
-                  <span className="mx-3 text-slate-300">|</span>
+            {isDayBook && (
+              <div className="ml-auto flex items-center gap-4 text-sm">
+                <button type="button" onClick={exportCsv}>
+                  ▣ Excel Report
+                </button>
 
-                  Balance:{" "}
-                  <strong className="text-slate-700">
-                    {money(totals.balance)}
-                  </strong>
-                </p>
+                <button type="button" onClick={() => setPrintModalOpen(true)}>
+                  ▣ Print
+                </button>
               </div>
             )}
           </section>
-        )}
 
-        {/* Transactions table */}
-        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md bg-white">
-          <div
-            className={`flex min-h-[64px] flex-wrap items-center justify-between gap-3 px-4 ${
-              isAllTransactions ? "min-h-[54px]" : ""
-            }`}
-          >
-            <h2 className="text-lg font-semibold">Transactions</h2>
-
-            <div className="flex items-center gap-4 text-slate-500">
-              <label
-                className={`flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 ${
-                  isAllTransactions ? "w-[280px]" : ""
-                }`}
-              >
-                <FiSearch />
-
-                <input
-                  aria-label="Search report"
-                  placeholder={
-                    isAllTransactions
-                      ? "Search"
-                      : `Search ${activeReport.toLowerCase()}`
-                  }
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-                />
-              </label>
-
-              <button
-                type="button"
-                title="Toggle chart"
-                aria-label="Toggle chart"
-                onClick={() => setChartOpen((value) => !value)}
-                className={`text-xl ${
-                  chartOpen ? "text-sky-600" : ""
-                }`}
-              >
-                <FiBarChart2 />
-              </button>
-
-              <button
-                type="button"
-                title="Download Excel-compatible CSV"
-                aria-label="Download report"
-                onClick={exportCsv}
-                className="rounded bg-emerald-600 px-1.5 py-1 text-xs font-bold text-white"
-              >
-                xls
-              </button>
-
-              <button
-                type="button"
-                title="Print report"
-                aria-label="Print report"
-                onClick={() => setPrintModalOpen(true)}
-                className="text-xl"
-              >
-                <FiPrinter />
-              </button>
-            </div>
-          </div>
-
-          {chartOpen && (
-            <div className="mx-4 mb-3 rounded-md border border-slate-100 bg-slate-50 p-3">
-              <p className="mb-2 text-sm text-slate-500">
-                {reportTitle(activeReport)} overview
-              </p>
-
-              <div className="flex h-20 items-end gap-2">
-                {visible.slice(0, 12).map((row, index) => {
-                  const amount = amountOf(row);
-
-                  const max = Math.max(
-                    1,
-                    ...visible.map((item) => amountOf(item))
-                  );
-
-                  return (
+          {/* Summary cards: hidden for All Transactions */}
+          {!isDayBook && !isAllTransactions && (
+            <section className="min-h-[145px] rounded-md bg-white p-4">
+              {isPurchase ? (
+                <div className="flex flex-wrap items-center gap-4">
+                  {[
+                    ["Paid", paidTotal, "bg-emerald-900/50 text-emerald-300"],
+                    ["Unpaid", unpaidTotal, "bg-blue-900/60 text-blue-200"],
+                    ["Total", totals.amount, "bg-blue-700 text-white"],
+                  ].map(([label, amount, color], index) => (
                     <div
-                      key={row.id || index}
-                      title={money(amount)}
-                      className="min-w-3 flex-1 rounded-t bg-sky-500"
-                      style={{
-                        height: `${Math.max(5, (amount / max) * 100)}%`,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
+                      key={label}
+                      className="flex items-center gap-4"
+                    >
+                      <div
+                        className={`min-w-[190px] rounded-xl ${color} px-5 py-4`}
+                      >
+                        <p>{label}</p>
+                        <strong className="text-xl">{money(amount)}</strong>
+                      </div>
+
+                      {index === 0 && <b className="text-2xl">+</b>}
+                      {index === 1 && <b className="text-2xl">=</b>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="inline-block min-w-[340px] rounded-lg border border-violet-200 bg-[#fcf9ff] px-4 py-3">
+                  <p className="text-sm text-slate-500">
+                    {activeReport === "Sale"
+                      ? "Total Sales Amount"
+                      : `Total ${reportTitle(activeReport)}`}
+                  </p>
+
+                  <p className="text-2xl font-bold">
+                    {money(totals.amount)}
+                  </p>
+
+                  <p className="mt-4 text-sm text-slate-500">
+                    Received:{" "}
+                    <strong className="text-slate-700">
+                      {money(totals.received)}
+                    </strong>
+
+                    <span className="mx-3 text-slate-300">|</span>
+
+                    Balance:{" "}
+                    <strong className="text-slate-700">
+                      {money(totals.balance)}
+                    </strong>
+                  </p>
+                </div>
+              )}
+            </section>
           )}
 
-          <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-            <table
-              className={`w-full ${
-                isAllTransactions
-                  ? "min-w-[1180px]"
-                  : isDayBook
-                    ? "min-w-[900px]"
-                    : "min-w-[760px]"
-              } border-collapse text-left text-sm`}
+          {/* Transactions table */}
+          <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md bg-white">
+            <div
+              className={`flex min-h-[64px] flex-wrap items-center justify-between gap-3 px-4 ${isAllTransactions ? "min-h-[54px]" : ""
+                }`}
             >
-              <thead className="sticky top-0 z-[1] bg-slate-50 text-slate-500">
-                <tr>
-                  {columns.map((column) => (
-                    <th
-                      key={column}
-                      className="whitespace-nowrap border-b border-slate-200 px-3 py-3 font-semibold"
-                    >
-                      {column}
+              <h2 className="text-lg font-semibold">Transactions</h2>
 
-                      {!["Actions", "Print / Share"].includes(column) && (
-                        <span className="ml-2 inline-flex text-slate-400">
-                          {isAllTransactions ? (
-                            <FiFilter size={13} />
-                          ) : (
-                            "▽"
-                          )}
-                        </span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+              <div className="flex items-center gap-4 text-slate-500">
+                <label
+                  className={`flex h-10 items-center gap-2 rounded-md border border-slate-300 px-3 ${isAllTransactions ? "w-[280px]" : ""
+                    }`}
+                >
+                  <FiSearch />
 
-              <tbody>
-                {visible.map((row, index) => {
-                  const amount = amountOf(row);
-                  const received = receivedOf(row);
-                  const party = partyOf(row);
-                  const invoiceNo = referenceOf(row) || index + 1;
-                  const balance = Math.max(0, amount - received);
-                  const type = row.reportType || activeReport;
+                  <input
+                    aria-label="Search report"
+                    placeholder={
+                      isAllTransactions
+                        ? "Search"
+                        : `Search ${activeReport.toLowerCase()}`
+                    }
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                  />
+                </label>
 
-                  const isIncoming = [
-                    "Sale",
-                    "Sale Order",
-                    "Payment-In",
-                    "Cash Increase",
-                  ].includes(type);
+                <button
+                  type="button"
+                  title="Toggle chart"
+                  aria-label="Toggle chart"
+                  onClick={() => setChartOpen((value) => !value)}
+                  className={`text-xl ${chartOpen ? "text-sky-600" : ""
+                    }`}
+                >
+                  <FiBarChart2 />
+                </button>
 
-                  const isOutgoing = [
-                    "Purchase",
-                    "Purchase Order",
-                    "Payment-Out",
-                    "Expense",
-                    "Credit Note",
-                    "Cash Decrease",
-                  ].includes(type);
+                <button
+                  type="button"
+                  title="Download Excel-compatible CSV"
+                  aria-label="Download report"
+                  onClick={exportCsv}
+                  className="rounded bg-emerald-600 px-1.5 py-1 text-xs font-bold text-white"
+                >
+                  xls
+                </button>
 
-                  const incomingAmount = isIncoming
-                    ? ["Payment-In", "Cash Increase"].includes(type)
-                      ? amount
-                      : received
-                    : 0;
+                <button
+                  type="button"
+                  title="Print report"
+                  aria-label="Print report"
+                  onClick={() => setPrintModalOpen(true)}
+                  className="text-xl"
+                >
+                  <FiPrinter />
+                </button>
+              </div>
+            </div>
 
-                  const outgoingAmount = isOutgoing
-                    ? [
+            {chartOpen && (
+              <div className="mx-4 mb-3 rounded-md border border-slate-100 bg-slate-50 p-3">
+                <p className="mb-2 text-sm text-slate-500">
+                  {reportTitle(activeReport)} overview
+                </p>
+
+                <div className="flex h-20 items-end gap-2">
+                  {visible.slice(0, 12).map((row, index) => {
+                    const amount = amountOf(row);
+
+                    const max = Math.max(
+                      1,
+                      ...visible.map((item) => amountOf(item))
+                    );
+
+                    return (
+                      <div
+                        key={row.id || index}
+                        title={money(amount)}
+                        className="min-w-3 flex-1 rounded-t bg-sky-500"
+                        style={{
+                          height: `${Math.max(5, (amount / max) * 100)}%`,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
+              <table
+                className={`w-full ${isAllTransactions
+                    ? "min-w-[1180px]"
+                    : isDayBook
+                      ? "min-w-[900px]"
+                      : "min-w-[760px]"
+                  } border-collapse text-left text-sm`}
+              >
+                <thead className="sticky top-0 z-[1] bg-slate-50 text-slate-500">
+                  <tr>
+                    {columns.map((column) => (
+                      <th
+                        key={column}
+                        className="whitespace-nowrap border-b border-slate-200 px-3 py-3 font-semibold"
+                      >
+                        {column}
+
+                        {!["Actions", "Print / Share"].includes(column) && (
+                          <span className="ml-2 inline-flex text-slate-400">
+                            {isAllTransactions ? (
+                              <FiFilter size={13} />
+                            ) : (
+                              "▽"
+                            )}
+                          </span>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {visible.map((row, index) => {
+                    const amount = amountOf(row);
+                    const received = receivedOf(row);
+                    const party = partyOf(row);
+                    const invoiceNo = referenceOf(row) || index + 1;
+                    const balance = Math.max(0, amount - received);
+                    const type = row.reportType || activeReport;
+
+                    const isIncoming = [
+                      "Sale",
+                      "Sale Order",
+                      "Payment-In",
+                      "Cash Increase",
+                    ].includes(type);
+
+                    const isOutgoing = [
+                      "Purchase",
+                      "Purchase Order",
+                      "Payment-Out",
+                      "Expense",
+                      "Credit Note",
+                      "Cash Decrease",
+                    ].includes(type);
+
+                    const incomingAmount = isIncoming
+                      ? ["Payment-In", "Cash Increase"].includes(type)
+                        ? amount
+                        : received
+                      : 0;
+
+                    const outgoingAmount = isOutgoing
+                      ? [
                         "Payment-Out",
                         "Expense",
                         "Credit Note",
                         "Cash Decrease",
                       ].includes(type)
-                      ? amount
-                      : received
-                    : 0;
+                        ? amount
+                        : received
+                      : 0;
 
-                  const status = getStatus(row, amount, received);
+                    const status = getStatus(row, amount, received);
 
-                  return (
-                    <tr
-                      key={`${row.id || invoiceNo}-${index}`}
-                      className="odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"
-                    >
-                      {activeReport === "All parties" ||
-                      activeReport === "Party Statement" ? (
-                        <>
-                          {cell(party)}
-                          {cell(row.phone || "—")}
-                          {cell(money(row.openingBalance || 0))}
-                          {cell(row.updatedAt?.slice(0, 10) || "—")}
-                        </>
-                      ) : isDayBook ? (
-                        <>
-                          {cell(party)}
-                          {cell(invoiceNo, "text-right")}
-                          {cell(type)}
-                          {cell(paymentTypeOf(row))}
-                          {cell(money(amount), "text-right")}
+                    return (
+                      <tr
+                        key={`${row.id || invoiceNo}-${index}`}
+                        className="odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"
+                      >
+                        {activeReport === "All parties" ||
+                          activeReport === "Party Statement" ? (
+                          <>
+                            {cell(party)}
+                            {cell(row.phone || "—")}
+                            {cell(money(row.openingBalance || 0))}
+                            {cell(row.updatedAt?.slice(0, 10) || "—")}
+                          </>
+                        ) : isDayBook ? (
+                          <>
+                            {cell(party)}
+                            {cell(invoiceNo, "text-right")}
+                            {cell(type)}
+                            {cell(paymentTypeOf(row))}
+                            {cell(money(amount), "text-right")}
 
-                          {cell(
-                            incomingAmount ? money(incomingAmount) : "—",
-                            "text-right text-emerald-700"
-                          )}
+                            {cell(
+                              incomingAmount ? money(incomingAmount) : "—",
+                              "text-right text-emerald-700"
+                            )}
 
-                          {cell(
-                            outgoingAmount ? money(outgoingAmount) : "—",
-                            "text-right text-rose-600"
-                          )}
+                            {cell(
+                              outgoingAmount ? money(outgoingAmount) : "—",
+                              "text-right text-rose-600"
+                            )}
 
-                          {cell(
-                            <button
-                              type="button"
-                              onClick={() => setPrintModalOpen(true)}
-                              className="text-slate-500 hover:text-sky-600"
-                              title="Print day book"
-                            >
-                              Print
-                            </button>
-                          )}
-                        </>
-                      ) : isAllTransactions ? (
-                        <>
-                          {cell(index + 1)}
-                          {cell(
-                            dateOf(row) || "—",
-                            "whitespace-nowrap"
-                          )}
-                          {cell(invoiceNo, "text-right")}
-                          {cell(party)}
-                          {cell(row.category || row.form?.category || "—")}
-                          {cell(type)}
-
-                          {cell(
-                            amount ? money(amount) : "—",
-                            "whitespace-nowrap text-right"
-                          )}
-
-                          {cell(
-                            received ? money(received) : "—",
-                            "whitespace-nowrap text-right"
-                          )}
-
-                          {cell(
-                            amount ? money(balance) : "—",
-                            "whitespace-nowrap text-right"
-                          )}
-
-                          {cell(
-                            <div className="flex items-center gap-3 text-slate-500">
+                            {cell(
                               <button
                                 type="button"
                                 onClick={() => setPrintModalOpen(true)}
-                                title="Print transaction"
-                                aria-label="Print transaction"
-                                className="hover:text-sky-600"
+                                className="text-slate-500 hover:text-sky-600"
+                                title="Print day book"
                               >
-                                <FiPrinter size={19} />
+                                Print
                               </button>
+                            )}
+                          </>
+                        ) : isAllTransactions ? (
+                          <>
+                            {cell(index + 1)}
+                            {cell(
+                              dateOf(row) || "—",
+                              "whitespace-nowrap"
+                            )}
+                            {cell(invoiceNo, "text-right")}
+                            {cell(party)}
+                            {cell(row.category || row.form?.category || "—")}
+                            {cell(type)}
 
+                            {cell(
+                              amount ? money(amount) : "—",
+                              "whitespace-nowrap text-right"
+                            )}
+
+                            {cell(
+                              received ? money(received) : "—",
+                              "whitespace-nowrap text-right"
+                            )}
+
+                            {cell(
+                              amount ? money(balance) : "—",
+                              "whitespace-nowrap text-right"
+                            )}
+
+                            {cell(
+                              <div className="flex items-center gap-3 text-slate-500">
+                                <button
+                                  type="button"
+                                  onClick={() => setPrintModalOpen(true)}
+                                  title="Print transaction"
+                                  aria-label="Print transaction"
+                                  className="hover:text-sky-600"
+                                >
+                                  <FiPrinter size={19} />
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleShare(invoiceNo, party, amount)
+                                  }
+                                  title="Share transaction"
+                                  aria-label="Share transaction"
+                                  className="hover:text-sky-600"
+                                >
+                                  <FiShare2 size={18} />
+                                </button>
+                              </div>
+                            )}
+
+                            {cell(
+                              status,
+                              `font-medium ${statusClass(status)}`
+                            )}
+
+                            {cell(
                               <button
                                 type="button"
-                                onClick={() =>
-                                  handleShare(invoiceNo, party, amount)
-                                }
-                                title="Share transaction"
-                                aria-label="Share transaction"
-                                className="hover:text-sky-600"
-                              >
-                                <FiShare2 size={18} />
-                              </button>
-                            </div>
-                          )}
-
-                          {cell(
-                            status,
-                            `font-medium ${statusClass(status)}`
-                          )}
-
-                          {cell(
-                            <button
-                              type="button"
-                              title="More actions"
-                              aria-label="More actions"
-                              onClick={() => setPrintModalOpen(true)}
-                              className="text-slate-500 hover:text-sky-600"
-                            >
-                              <FiMoreVertical size={18} />
-                            </button>
-                          )}
-                        </>
-                      ) : isPurchase ? (
-                        <>
-                          {cell(dateOf(row) || "—")}
-                          {cell(invoiceNo, "text-right")}
-                          {cell(party)}
-                          {cell(paymentTypeOf(row))}
-                          {cell(
-                            amount ? money(amount) : "—",
-                            "text-right"
-                          )}
-                          {cell(
-                            amount ? money(balance) : "—",
-                            "text-right"
-                          )}
-                          {cell(
-                            status,
-                            `font-medium ${statusClass(status)}`
-                          )}
-                          {cell(
-                            <button
-                              type="button"
-                              onClick={() => setPrintModalOpen(true)}
-                              className="text-slate-500 hover:text-sky-600"
-                              title="Print purchase bill"
-                            >
-                              Print
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {cell(dateOf(row) || "—")}
-                          {cell(invoiceNo, "text-right")}
-                          {cell(party)}
-                          {cell(type)}
-                          {cell(paymentTypeOf(row))}
-                          {cell(
-                            amount ? money(amount) : "—",
-                            "text-right"
-                          )}
-                          {cell(
-                            amount ? money(balance) : "—",
-                            "text-right"
-                          )}
-                          {cell(
-                            status,
-                            `font-medium ${statusClass(status)}`
-                          )}
-                          {cell(
-                            type === "Sale" && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  navigate("/sales/sale-invoices/new", {
-                                    state: { editInvoice: row },
-                                  })
-                                }
+                                title="More actions"
+                                aria-label="More actions"
+                                onClick={() => setPrintModalOpen(true)}
                                 className="text-slate-500 hover:text-sky-600"
                               >
-                                View/Edit
+                                <FiMoreVertical size={18} />
                               </button>
-                            )
-                          )}
-                        </>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            )}
+                          </>
+                        ) : isPurchase ? (
+                          <>
+                            {cell(dateOf(row) || "—")}
+                            {cell(invoiceNo, "text-right")}
+                            {cell(party)}
+                            {cell(paymentTypeOf(row))}
+                            {cell(
+                              amount ? money(amount) : "—",
+                              "text-right"
+                            )}
+                            {cell(
+                              amount ? money(balance) : "—",
+                              "text-right"
+                            )}
+                            {cell(
+                              status,
+                              `font-medium ${statusClass(status)}`
+                            )}
+                            {cell(
+                              <button
+                                type="button"
+                                onClick={() => setPrintModalOpen(true)}
+                                className="text-slate-500 hover:text-sky-600"
+                                title="Print purchase bill"
+                              >
+                                Print
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {cell(dateOf(row) || "—")}
+                            {cell(invoiceNo, "text-right")}
+                            {cell(party)}
+                            {cell(type)}
+                            {cell(paymentTypeOf(row))}
+                            {cell(
+                              amount ? money(amount) : "—",
+                              "text-right"
+                            )}
+                            {cell(
+                              amount ? money(balance) : "—",
+                              "text-right"
+                            )}
+                            {cell(
+                              status,
+                              `font-medium ${statusClass(status)}`
+                            )}
+                            {cell(
+                              type === "Sale" && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    navigate("/sales/sale-invoices/new", {
+                                      state: { editInvoice: row },
+                                    })
+                                  }
+                                  className="text-slate-500 hover:text-sky-600"
+                                >
+                                  View/Edit
+                                </button>
+                              )
+                            )}
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
 
-            {visible.length === 0 && (
-              <div className="grid min-h-40 place-items-center text-sm text-slate-500">
-                {records.length
-                  ? "No transactions match these filters."
-                  : "No report data to show yet."}
-              </div>
+              {visible.length === 0 && (
+                <div className="grid min-h-40 place-items-center text-sm text-slate-500">
+                  {records.length
+                    ? "No transactions match these filters."
+                    : "No report data to show yet."}
+                </div>
+              )}
+            </div>
+
+            {isDayBook && visible.length > 0 && (
+              <footer className="flex flex-wrap justify-between gap-3 border-t border-slate-200 px-4 py-4 text-sm font-semibold">
+                <span className="text-emerald-600">
+                  Total Money-In: {money(moneyIn)}
+                </span>
+
+                <span className="text-rose-500">
+                  Total Money-Out: {money(moneyOut)}
+                </span>
+
+                <span
+                  className={
+                    netMoney >= 0 ? "text-emerald-600" : "text-rose-500"
+                  }
+                >
+                  Money In - Money Out: {money(netMoney)}
+                </span>
+              </footer>
             )}
-          </div>
-
-          {isDayBook && visible.length > 0 && (
-            <footer className="flex flex-wrap justify-between gap-3 border-t border-slate-200 px-4 py-4 text-sm font-semibold">
-              <span className="text-emerald-600">
-                Total Money-In: {money(moneyIn)}
-              </span>
-
-              <span className="text-rose-500">
-                Total Money-Out: {money(moneyOut)}
-              </span>
-
-              <span
-                className={
-                  netMoney >= 0 ? "text-emerald-600" : "text-rose-500"
-                }
-              >
-                Money In - Money Out: {money(netMoney)}
-              </span>
-            </footer>
-          )}
-        </section>
-      <ReportPrintPreviewModal
-        isOpen={printModalOpen}
-        onClose={() => setPrintModalOpen(false)}
-        title={`${activeReport} Report`}
-        dateFrom={from}
-        dateTo={to}
-        user={user}
-        records={visible}
-        totalLabel={`Total ${activeReport}:`}
-        totalAmount={totals.amount}
-      />
-    </div>
+          </section>
+          <ReportPrintPreviewModal
+            isOpen={printModalOpen}
+            onClose={() => setPrintModalOpen(false)}
+            title={`${activeReport} Report`}
+            dateFrom={from}
+            dateTo={to}
+            user={user}
+            records={visible}
+            totalLabel={`Total ${activeReport}:`}
+            totalAmount={totals.amount}
+          />
+        </div>
       )}
     </div>
   );
