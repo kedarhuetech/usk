@@ -1,3 +1,4 @@
+import { getAppSettings } from "../../services/appSettingsStorage";
 // Implements the sale invoices page.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -192,7 +193,21 @@ function InvoiceActionsMenu({ invoice, open, onToggle, onAction }) {
     document.addEventListener("pointerdown", closeWhenOutside);
     return () => document.removeEventListener("pointerdown", closeWhenOutside);
   }, [open, onToggle]);
-  const actions = ["View/Edit", "Generate e-Invoice", "Convert To Return", "Preview Delivery Challan", "Payment History", "Cancel Invoice", "Delete", "Open PDF", "Preview", "Print", "View History"];
+  const appSettings = getAppSettings();
+  const actions = [
+    "View/Edit",
+    ...(appSettings.enableRepeatInvoices ? ["Repeat Invoice"] : []),
+    "Generate e-Invoice",
+    "Convert To Return",
+    "Preview Delivery Challan",
+    "Payment History",
+    "Cancel Invoice",
+    "Delete",
+    "Open PDF",
+    "Preview",
+    "Print",
+    "View History",
+  ];
   // Toggles result.
   const toggle = (event) => {
     if (open) { onToggle(false); return; }
@@ -304,6 +319,12 @@ function SaleInvoices() {
     if (action === "Share") { shareInvoice(invoice); return; }
     if (action === "Cancel Invoice" && !window.confirm("Cancel this invoice in this browser? Its saved invoice will remain unchanged.")) return;
     if (action === "Delete" && !window.confirm("Hide this invoice from the Sale Invoices list in this browser? Its saved invoice will remain unchanged.")) return;
+    if (action === "Repeat Invoice") {
+      navigate("/sales/sale-invoices/new", {
+        state: { editInvoice: { ...invoice, id: undefined, form: { ...invoice.form, invoiceNumber: String(Number(invoice.invoiceNumber || 1) + 1) } } },
+      });
+      return;
+    }
     if (action === "Convert To Return") {
       navigate("/sales/sale-return-credit-note", {
         state: {

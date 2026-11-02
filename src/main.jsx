@@ -5,8 +5,13 @@ import './index.css'
 import App from './App.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { ensureLocalTestData } from './services/localTransactionTestData.js'
+import { applyScreenZoom, checkAndRunAutoBackup, getAppSettings } from './services/appSettingsStorage.js'
 
 ensureLocalTestData();
+try {
+  applyScreenZoom(getAppSettings().screenZoom);
+  checkAndRunAutoBackup();
+} catch {}
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -15,7 +20,6 @@ createRoot(document.getElementById('root')).render(
     </ThemeProvider>
   </StrictMode>,
 )
-
 
 // Global helper: ensure clicking anywhere on a date input or its label/wrapper opens the calendar picker
 if (typeof window !== "undefined") {

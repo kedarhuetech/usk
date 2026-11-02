@@ -7,9 +7,11 @@ import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { businessGrowthApi } from "../../services/apiClient.js";
 import { normalizePersistedAssetUrls } from "../../services/businessGrowthData.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
 
 // Color palette for accent colors.
 const colorOptions = [
+  { name: "Magenta", bg: "bg-[#881337]", text: "text-[#881337]", border: "border-[#881337]", hex: "#881337", bgLight: "bg-rose-50", textLight: "text-[#881337]", borderLight: "border-rose-200" },
   { name: "Indigo", bg: "bg-indigo-600", text: "text-indigo-600", border: "border-indigo-600", hex: "#4f46e5", bgLight: "bg-indigo-50", textLight: "text-indigo-700", borderLight: "border-indigo-200" },
   { name: "Sky", bg: "bg-sky-600", text: "text-sky-600", border: "border-sky-600", hex: "#0284c7", bgLight: "bg-sky-50", textLight: "text-sky-700", borderLight: "border-sky-200" },
   { name: "Slate", bg: "bg-slate-600", text: "text-slate-600", border: "border-slate-600", hex: "#475569", bgLight: "bg-slate-50", textLight: "text-slate-700", borderLight: "border-slate-200" },
@@ -20,7 +22,7 @@ const colorOptions = [
   { name: "Purple", bg: "bg-purple-600", text: "text-purple-600", border: "border-purple-600", hex: "#9333ea", bgLight: "bg-purple-50", textLight: "text-purple-700", borderLight: "border-purple-200" },
 ];
 
-const themeList = ["Classic Themes", "Tally Theme", "GST Theme 1", "GST Theme 3", "Double Divine", "French Elite"];
+const themeList = ["GST Theme 5", "GST Theme 1", "GST Theme 3", "Classic Themes", "Tally Theme", "Double Divine", "French Elite"];
 
 // Discards placeholder 'My Company' and resolves actual company name.
 function getEffectiveCompanyName(profile, savedBusiness, invoiceBusiness) {
@@ -173,7 +175,9 @@ function normalizeInvoiceData(raw) {
 
 // ─────────────────── SIGNATURE BLOCK ───────────────────
 
-function SignatureBlock({ companyName, signature, color }) {
+function SignatureBlock({ companyName, signature, color, appSettings = {} }) {
+  if (appSettings.printSignature === false) return null;
+  const label = appSettings.printSignatureText || "Authorized Signatory";
   return (
     <div className="inline-block min-w-[170px] text-center">
       <p className="text-xs font-semibold text-slate-800">For, {companyName}</p>
@@ -184,7 +188,202 @@ function SignatureBlock({ companyName, signature, color }) {
           <div className="mt-9 w-36 border-b border-dashed border-slate-400" />
         )}
       </div>
-      <p className="text-[11px] font-medium text-slate-500">Authorized Signatory</p>
+      <p className="text-[11px] font-medium text-slate-500">{label}</p>
+    </div>
+  );
+}
+
+// ─────────────────── THEME RENDERERS ───────────────────
+
+// GST Theme 5 - Vyapar Signature Magenta Layout
+function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+  const hex = color?.hex || appSettings.themeColor || "#881337";
+  const docTitle = appSettings.transactionNames?.saleInvoice || "Tax Invoice";
+  const showBank = appSettings.printBankDetails !== false;
+  const showTerms = appSettings.printTermsAndConditions !== false && Boolean(data.terms);
+  const showSign = appSettings.printSignature !== false;
+  const signText = appSettings.printSignatureText || "Authorized Signature";
+
+  return (
+    <div className="mx-auto min-h-[680px] w-full max-w-[920px] bg-white p-6 text-[12px] leading-tight text-slate-800 shadow-lg print:min-h-0 print:max-w-none print:p-6 print:text-xs print:shadow-none">
+      {/* Title */}
+      <div className="text-center pb-2 relative">
+        <h2 className="text-base font-bold uppercase tracking-wider text-slate-900">{docTitle}</h2>
+        {appSettings.printOriginalDuplicate && (
+          <span className="absolute right-0 top-0 text-[10px] font-bold text-slate-400 border border-slate-300 px-2 py-0.5 rounded">
+            ORIGINAL FOR RECIPIENT
+          </span>
+        )}
+      </div>
+
+      {/* Header Row: Logo Left, Company Name Right */}
+      <div className="flex items-start justify-between pb-3 pt-1">
+        {appSettings.printCompanyLogo !== false && (
+          <div className="h-16 w-28 rounded bg-slate-100 border border-slate-300 flex items-center justify-center text-xs text-slate-400 font-semibold overflow-hidden">
+            {companyLogo ? (
+              <img src={companyLogo} alt="" className="h-full w-full object-contain" />
+            ) : (
+              "LOGO"
+            )}
+          </div>
+        )}
+
+        <div className="text-right">
+          {appSettings.printCompanyName !== false && (
+            <h1 className="text-xl font-bold text-slate-900">{companyName}</h1>
+          )}
+          {appSettings.printPhoneNumber !== false && companyPhone && (
+            <p className="text-slate-600 text-xs mt-0.5">Ph. no : {companyPhone}</p>
+          )}
+          {appSettings.printAddress !== false && companyAddress && (
+            <p className="text-slate-500 text-[11px]">{companyAddress}</p>
+          )}
+          {appSettings.printGstinOnSale !== false && companyGstin && (
+            <p className="text-slate-600 text-[11px] font-semibold mt-0.5">GSTIN : {companyGstin}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Color Accent Band */}
+      <div className="w-full h-1.5 mb-3 rounded-full" style={{ backgroundColor: hex }} />
+
+      {/* 3-Column Metadata */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-b py-3 text-xs" style={{ borderColor: hex }}>
+        <div>
+          <p className="font-bold uppercase tracking-wider text-xs" style={{ color: hex }}>Bill To:</p>
+          <p className="font-semibold text-slate-900 mt-0.5">{data.customer}</p>
+          {data.billingAddress && <p className="text-slate-600 text-[11px]">{data.billingAddress}</p>}
+          {data.phone && <p className="text-slate-600 text-[11px]">Contact No: {data.phone}</p>}
+        </div>
+        <div>
+          <p className="font-bold uppercase tracking-wider text-xs" style={{ color: hex }}>Shipping To</p>
+          <p className="text-slate-600 text-[11px] mt-0.5">{data.shippingAddress || data.billingAddress}</p>
+        </div>
+        <div className="text-left md:text-right space-y-0.5">
+          <p className="font-bold uppercase tracking-wider text-xs" style={{ color: hex }}>Invoice Details</p>
+          <p><span className="text-slate-500">Invoice No.:</span> <span className="font-bold">{data.invoiceNumber}</span></p>
+          <p><span className="text-slate-500">Date:</span> <span>{data.invoiceDateFormatted}</span></p>
+          <p><span className="text-slate-500">Place of Supply:</span> <span>{data.stateOfSupply}</span></p>
+        </div>
+      </div>
+
+      {/* Items Table */}
+      <table className="mt-4 w-full border-collapse text-xs">
+        <thead>
+          <tr className="text-white font-bold" style={{ backgroundColor: hex }}>
+            <th className="p-2 text-center w-8">#</th>
+            <th className="p-2 text-left">Item name</th>
+            <th className="p-2 text-center">Quantity</th>
+            <th className="p-2 text-right">Price/unit</th>
+            <th className="p-2 text-right">Discount</th>
+            <th className="p-2 text-right">GST</th>
+            <th className="p-2 text-right">Amount</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {data.rows.map((row, idx) => (
+            <tr key={row.id || idx}>
+              <td className="p-2 text-center">{idx + 1}</td>
+              <td className="p-2 font-semibold text-slate-900">{row.item}</td>
+              <td className="p-2 text-center">{row.qty}</td>
+              <td className="p-2 text-right">₹ {row.price.toFixed(2)}</td>
+              <td className="p-2 text-right text-slate-600">₹ {row.discount.toFixed(2)}</td>
+              <td className="p-2 text-right text-slate-600">₹ {row.tax.toFixed(2)}</td>
+              <td className="p-2 text-right font-bold text-slate-900">₹ {row.amount.toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-300 font-bold bg-slate-50">
+            <td className="p-2" colSpan="2">Total</td>
+            <td className="p-2 text-center">{appSettings.printTotalItemQty !== false ? data.totals.qty : ""}</td>
+            <td className="p-2"></td>
+            <td className="p-2 text-right">₹ {data.totals.discount.toFixed(2)}</td>
+            <td className="p-2 text-right">₹ {data.totals.tax.toFixed(2)}</td>
+            <td className="p-2 text-right">₹ {data.totals.finalTotal.toFixed(2)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      {/* Tax Breakdown & Totals */}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs border-t border-slate-200 pt-3">
+        <div>
+          {appSettings.printTaxDetails !== false && (
+            <div className="border border-slate-200 rounded overflow-hidden">
+              <table className="w-full text-left text-[11px]">
+                <thead>
+                  <tr className="text-white font-bold" style={{ backgroundColor: hex }}>
+                    <th className="p-1.5">Tax Type</th>
+                    <th className="p-1.5 text-right">Taxable</th>
+                    <th className="p-1.5 text-right">Tax Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-600">
+                  <tr><td className="p-1.5">GST Summary</td><td className="p-1.5 text-right">₹ {(data.totals.finalTotal - data.totals.tax).toFixed(2)}</td><td className="p-1.5 text-right">₹ {data.totals.tax.toFixed(2)}</td></tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-1.5 text-right text-xs">
+          <div className="flex justify-between font-bold" style={{ color: hex }}>
+            <span>Amounts</span>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>Sub Total:</span>
+            <span>₹ {(data.totals.finalTotal - data.totals.tax).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>Tax:</span>
+            <span>₹ {data.totals.tax.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between font-bold text-base text-slate-900 border-t border-slate-200 pt-1">
+            <span>Total:</span>
+            <span>₹ {data.totals.finalTotal.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Amount in Words */}
+      <div className="mt-4 rounded px-3 py-2 text-xs flex items-center justify-between text-white font-medium" style={{ backgroundColor: hex }}>
+        <span><strong>Amount in Words:</strong> {numberToWords(data.totals.finalTotal)}</span>
+      </div>
+
+      {/* Footer Cards: Bank Details, Terms, Signature */}
+      <div className={`mt-4 grid gap-3 border-t border-slate-200 pt-3 text-xs ${showBank ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"}`}>
+        {showBank && (
+          <div className="border border-slate-200 rounded p-2.5 space-y-1 bg-white">
+            <p className="font-bold text-xs" style={{ color: hex }}>Bank Details</p>
+            <div className="text-[11px] text-slate-600 space-y-0.5">
+              <p>Bank: HDFC Bank</p>
+              <p>A/c No: 50200012345678</p>
+              <p>IFSC: HDFC0001234</p>
+            </div>
+          </div>
+        )}
+
+        {showTerms && (
+          <div className="border border-slate-200 rounded p-2.5 bg-white">
+            <p className="font-bold text-xs" style={{ color: hex }}>Terms and Conditions</p>
+            <p className="mt-1 text-slate-600 text-[11px]">{data.terms}</p>
+          </div>
+        )}
+
+        {showSign && (
+          <div className="border border-slate-200 rounded p-2.5 text-center flex flex-col justify-between bg-white">
+            <p className="text-[11px] font-semibold text-slate-700">For : {companyName}</p>
+            <div className="my-2 h-12 flex items-center justify-center">
+              {companySignature ? (
+                <img src={companySignature} alt="" className="max-h-10 object-contain" />
+              ) : (
+                <div className="w-28 border-b border-dashed border-slate-300" />
+              )}
+            </div>
+            <p className="text-[11px] font-bold text-slate-800">{signText}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -390,7 +589,7 @@ function TallyTheme({ companyName, companyPhone, companyGstin, companyAddress, c
 }
 
 // GST Theme 1 - Colored header table.
-function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color }) {
+function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
   return (
     <div className="mx-auto min-h-[680px] w-full max-w-[920px] bg-white p-5 text-[13px] shadow-lg print:min-h-0 print:max-w-none print:p-7 print:text-sm print:shadow-none">
       <div className={`flex min-w-0 justify-between gap-4 border-b pb-4 ${color.borderLight}`}>
@@ -474,15 +673,23 @@ function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddress, co
         </div>
       )}
 
-      <div className="mt-8 flex justify-end print:mt-14">
-        <SignatureBlock companyName={companyName} signature={companySignature} color={color} />
+      <div className="mt-8 flex justify-between items-end print:mt-14">
+        {appSettings.printBankDetails !== false && (
+          <div className="border border-slate-200 rounded p-2.5 text-xs text-slate-700 space-y-0.5">
+            <p className="font-bold">Bank Details</p>
+            <p>Bank: HDFC Bank</p>
+            <p>A/c No: 50200012345678</p>
+            <p>IFSC: HDFC0001234</p>
+          </div>
+        )}
+        <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
       </div>
     </div>
   );
 }
 
 // GST Theme 3 - Striped rows with colored accents.
-function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color }) {
+function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
   return (
     <div className="mx-auto min-h-[680px] w-full max-w-[920px] bg-white text-[13px] shadow-lg print:min-h-0 print:max-w-none print:text-sm print:shadow-none">
       <div className={`h-2 ${color.bg}`} />
@@ -572,8 +779,16 @@ function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddress, co
           </div>
         )}
 
-        <div className="mt-8 flex justify-end print:mt-14">
-          <SignatureBlock companyName={companyName} signature={companySignature} color={color} />
+        <div className="mt-8 flex justify-between items-end print:mt-14">
+          {appSettings.printBankDetails !== false && (
+            <div className="border border-slate-200 rounded p-2.5 text-xs text-slate-700 space-y-0.5">
+              <p className="font-bold">Bank Details</p>
+              <p>Bank: HDFC Bank</p>
+              <p>A/c No: 50200012345678</p>
+              <p>IFSC: HDFC0001234</p>
+            </div>
+          )}
+          <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
       </div>
       <div className={`h-2 ${color.bg}`} />
@@ -793,10 +1008,11 @@ function FrenchEliteTheme({ companyName, companyPhone, companyGstin, companyAddr
 
 // Theme mapping.
 const themeComponents = {
-  "Classic Themes": ClassicTheme,
-  "Tally Theme": TallyTheme,
+  "GST Theme 5": GSTTheme5,
   "GST Theme 1": GSTTheme1,
   "GST Theme 3": GSTTheme3,
+  "Classic Themes": ClassicTheme,
+  "Tally Theme": TallyTheme,
   "Double Divine": DoubleDivineTheme,
   "French Elite": FrenchEliteTheme,
 };
@@ -808,8 +1024,12 @@ function SalePreview() {
   const { state } = useLocation();
   const rawInvoice = state?.invoice || readStoredInvoice();
   const [savedBusiness, setSavedBusiness] = useState(null);
-  const [selectedTheme, setSelectedTheme] = useState("GST Theme 1");
-  const [selectedColorIndex, setSelectedColorIndex] = useState(0);
+  const appSettings = getAppSettings();
+  const [selectedTheme, setSelectedTheme] = useState(() => appSettings.selectedTheme || "GST Theme 5");
+  const [selectedColorIndex, setSelectedColorIndex] = useState(() => {
+    const idx = colorOptions.findIndex((c) => c.hex.toLowerCase() === (appSettings.themeColor || "").toLowerCase());
+    return idx !== -1 ? idx : 0;
+  });
 
   useEffect(() => {
     let active = true;
@@ -900,14 +1120,15 @@ function SalePreview() {
         {/* Invoice Preview */}
         <section className="min-w-0 print:block">
           <ThemeComponent
-            companyName={companyName}
-            companyPhone={companyPhone}
-            companyGstin={companyGstin}
-            companyAddress={companyAddress}
-            companyLogo={companyLogo}
+            companyName={appSettings.printCompanyName !== false ? (appSettings.companyNamePrint || companyName) : ""}
+            companyPhone={appSettings.printPhoneNumber !== false ? (appSettings.phoneNumberPrint || companyPhone) : ""}
+            companyGstin={appSettings.printGstinOnSale !== false ? companyGstin : ""}
+            companyAddress={appSettings.printAddress !== false ? (appSettings.addressPrint || companyAddress) : ""}
+            companyLogo={appSettings.printCompanyLogo !== false ? companyLogo : ""}
             companySignature={companySignature}
             data={normalized}
             color={currentColor}
+            appSettings={appSettings}
           />
         </section>
 

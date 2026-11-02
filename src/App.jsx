@@ -3,6 +3,7 @@ import BusinessGrowthGuard from "./pages/BusinessGrowth/BusinessGrowthGuard";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
 import Settings from "./pages/Settings/Settings";
+import FeatureRouteGuard from "./components/Navigation/FeatureRouteGuard";
 import { AppPasscodeGuard, AppPasscodeProvider } from "./components/Passcode/AppPasscodeGate";
 import ComingSoon from "./pages/ComingSoon";
 import Reports from "./pages/Reports/Reports";
@@ -114,11 +115,11 @@ function App() {
           </Route>
 
           <Route path="sales/sale-invoices" element={<SaleInvoices />} />
-          <Route path="sales/estimate-quotation" element={<EstimateQuotation />} />
-          <Route path="sales/proforma-invoice" element={<ProformaInvoices />} />
+          <Route path="sales/estimate-quotation" element={<FeatureRouteGuard featureKey="enableEstimateQuotation" fallback="/sales/sale-invoices"><EstimateQuotation /></FeatureRouteGuard>} />
+          <Route path="sales/proforma-invoice" element={<FeatureRouteGuard featureKey="enableProformaInvoice" fallback="/sales/sale-invoices"><ProformaInvoices /></FeatureRouteGuard>} />
           <Route path="sales/payment-in" element={<PaymentIn />} />
-          <Route path="sales/sale-order" element={<SaleOrders />} />
-          <Route path="sales/delivery-challan" element={<DeliveryChallans />} />
+          <Route path="sales/sale-order" element={<FeatureRouteGuard featureKey="enableSalePurchaseOrder" fallback="/sales/sale-invoices"><SaleOrders /></FeatureRouteGuard>} />
+          <Route path="sales/delivery-challan" element={<FeatureRouteGuard featureKey="enableDeliveryChallan" fallback="/sales/sale-invoices"><DeliveryChallans /></FeatureRouteGuard>} />
           <Route path="sales/sale-return-credit-note" element={<SaleReturns />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
@@ -130,7 +131,7 @@ function App() {
           />
           <Route path="purchase-expense/payment-out" element={<PaymentOut />} />
           <Route path="purchase-expense/expenses" element={<Expenses />} />
-          <Route path="purchase-expense/purchase-order" element={<PurchaseOrders />} />
+          <Route path="purchase-expense/purchase-order" element={<FeatureRouteGuard featureKey="enableSalePurchaseOrder" fallback="/purchase-expense/purchase-bills"><PurchaseOrders /></FeatureRouteGuard>} />
           <Route
             path="purchase-expense/purchase-return-debit-note"
             element={<PurchaseReturns />}

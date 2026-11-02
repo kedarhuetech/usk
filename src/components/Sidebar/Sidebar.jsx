@@ -1,5 +1,5 @@
 // Renders the sidebar interface component.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FiChevronRight, FiEdit3, FiZap, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -15,6 +15,7 @@ import {
   getCompanyProfile,
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
+import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 
 // Renders the sidebar interface.
 function Sidebar() {
@@ -28,9 +29,56 @@ function Sidebar() {
   const CompanyIcon = companySwitcher.icon;
   const isProfileActive = pathname === "/company-profile" || pathname === "/edit-profile";
 
+  // Use a counter to force re-reads of settings
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  const settings = useMemo(() => getAppSettings(), [settingsVersion]);
+
+  // Refresh settings whenever the custom event fires, storage changes, or pathname changes
+  useEffect(() => {
+    const bump = () => setSettingsVersion((v) => v + 1);
+    window.addEventListener(APP_SETTINGS_UPDATED_EVENT, bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener(APP_SETTINGS_UPDATED_EVENT, bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
+
+  // Also re-read settings whenever we navigate (catches changes made on the Settings page)
+  useEffect(() => {
+    setSettingsVersion((v) => v + 1);
+  }, [pathname]);
+
+  const filteredNavigation = useMemo(() => {
+    return sidebarNavigation.map((group) => {
+      if (group.id === "sales") {
+        return {
+          ...group,
+          children: (group.children || []).filter((child) => {
+            if (child.id === "estimate-quotation" && !settings.enableEstimateQuotation) return false;
+            if (child.id === "proforma-invoice" && !settings.enableProformaInvoice) return false;
+            if (child.id === "sale-order" && !settings.enableSalePurchaseOrder) return false;
+            if (child.id === "delivery-challan" && !settings.enableDeliveryChallan) return false;
+            return true;
+          }),
+        };
+      }
+      if (group.id === "purchase-expense") {
+        return {
+          ...group,
+          children: (group.children || []).filter((child) => {
+            if (child.id === "purchase-order" && !settings.enableSalePurchaseOrder) return false;
+            return true;
+          }),
+        };
+      }
+      return group;
+    });
+  }, [settings]);
+
   const searchableItems = useMemo(
     () =>
-      sidebarNavigation.flatMap((item) =>
+      filteredNavigation.flatMap((item) =>
         item.path
           ? [{ id: item.id, label: item.label, path: item.path }]
           : (item.children || []).map((child) => ({
@@ -40,7 +88,7 @@ function Sidebar() {
               parentLabel: item.label,
             })),
       ),
-    [],
+    [filteredNavigation],
   );
   const filteredItems = searchableItems.filter((item) =>
     item.label.toLowerCase().includes(query.trim().toLowerCase()),
@@ -122,7 +170,7 @@ function Sidebar() {
       </div>
 
       <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2.5 pb-3">
-        {sidebarNavigation.map((item) => (
+        {filteredNavigation.map((item) => (
           <SidebarItem key={item.id} item={item} />
         ))}
       </nav>

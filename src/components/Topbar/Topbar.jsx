@@ -21,6 +21,7 @@ import {
   getCompanyProfile,
 } from "../../services/companyProfileStorage";
 import { sidebarNavigation } from "../Sidebar/SidebarData";
+import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
@@ -62,6 +63,18 @@ export default function Topbar({ onRefresh }) {
 
   // Search Bar State
   const [searchQuery, setSearchQuery] = useState("");
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  const settings = useMemo(() => getAppSettings(), [settingsVersion]);
+
+  useEffect(() => {
+    const bump = () => setSettingsVersion((v) => v + 1);
+    window.addEventListener(APP_SETTINGS_UPDATED_EVENT, bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener(APP_SETTINGS_UPDATED_EVENT, bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const searchContainerRef = useRef(null);
 

@@ -51,6 +51,7 @@ import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesS
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
+import { getAppSettings } from "../../services/appSettingsStorage";
 
 const termsAppliesTo = [
   "Sale Invoice",
@@ -407,7 +408,7 @@ function TransactionHeader({ title, saleType, setSaleType, showSaleType, onSetti
 }
 
 // Renders the customer details interface.
-function CustomerDetails({ saleType, form, errors, setField, config, parties = [], onAddParty }) {
+function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, config, parties = [], onAddParty }) {
   const isCredit = saleType === "credit";
   const isPurchase = config.type === "purchase";
 
@@ -437,6 +438,12 @@ function CustomerDetails({ saleType, form, errors, setField, config, parties = [
           <span className="mb-1 block text-[13px] font-semibold text-slate-600">Phone No.</span>
           <TextInput value={form.phone} onChange={(event) => setField("phone", event.target.value)} placeholder="Phone No." />
         </label>
+        {appSettings.billingNameOfParties && (
+          <label>
+            <span className="mb-1 block text-[13px] font-semibold text-slate-600">Billing Name</span>
+            <TextInput value={form.billingName || ""} onChange={(event) => setField("billingName", event.target.value)} placeholder="Billing / Trade Name" />
+          </label>
+        )}
         <div>
           <TextArea value={form.billingAddress} onChange={(event) => setField("billingAddress", event.target.value)} placeholder="Billing Address" className="h-20 w-full sm:h-24 lg:h-20" />
           {form.billingAddress && (
@@ -461,11 +468,61 @@ function CustomerDetails({ saleType, form, errors, setField, config, parties = [
 
       <div className="grid gap-2.5 sm:grid-cols-[124px_1fr] xl:self-start">
         <span className="pt-2 text-[13px] text-slate-500">{config.numberLabel}</span>
-        <TextInput error={errors.invoiceNumber} value={form.invoiceNumber} onChange={(event) => setField("invoiceNumber", event.target.value)} />
-        <span className="pt-2 text-[13px] text-slate-500">{config.dateLabel}</span>
+        <TextInput
+          disabled={appSettings.enableInvoiceBillNo === false}
+          error={errors.invoiceNumber}
+          value={form.invoiceNumber}
+          onChange={(event) => setField("invoiceNumber", event.target.value)}
+          placeholder={appSettings.enableInvoiceBillNo === false ? "Auto-numbered" : "Invoice No."}
+        />
+        <span className="pt-2 text-[13px] text-slate-500">
+          {config.dateLabel}
+          {appSettings.addTimeOnTransactions && (
+            <span className="ml-1 text-[10px] text-blue-600 font-semibold">
+              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </span>
         <DatePicker value={form.invoiceDate} onChange={(value) => setField("invoiceDate", value)} />
-        <span className="pt-2 text-[13px] text-slate-500">State of Supply</span>
-        <SelectInput value={form.stateOfSupply} onChange={(value) => setField("stateOfSupply", value)} options={stateOfSupplyOptions} />
+
+        {appSettings.billingType !== "Lite Sale" && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">State of Supply</span>
+            <SelectInput value={form.stateOfSupply} onChange={(value) => setField("stateOfSupply", value)} options={stateOfSupplyOptions} />
+          </>
+        )}
+
+        {appSettings.enableEwayBillNo && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">E-way Bill No.</span>
+            <TextInput value={form.ewayBillNo || ""} onChange={(e) => setField("ewayBillNo", e.target.value)} placeholder="12-digit E-way No." />
+          </>
+        )}
+
+        {appSettings.customerPoDetails && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">PO Number</span>
+            <TextInput value={form.poNumber || ""} onChange={(e) => setField("poNumber", e.target.value)} placeholder="Customer PO Ref" />
+            <span className="pt-2 text-[13px] text-slate-500">PO Date</span>
+            <DatePicker value={form.poDate || ""} onChange={(val) => setField("poDate", val)} />
+          </>
+        )}
+
+        {/* Enabled Transaction Additional Fields */}
+        {["txnField1", "txnField2", "txnField3", "dateField"].map((fKey) => {
+          const field = appSettings.additionalFieldsSetup?.[fKey];
+          if (!field?.enabled) return null;
+          return (
+            <div key={fKey} className="contents">
+              <span className="pt-2 text-[13px] text-slate-500">{field.name || "Extra Field"}</span>
+              <TextInput
+                value={form[fKey] ?? field.value ?? ""}
+                onChange={(e) => setField(fKey, e.target.value)}
+                placeholder={`Enter ${field.name || "value"}`}
+              />
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -860,7 +917,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
 }
 
 // Renders the totals panel interface.
-function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount }) {
+function TotalsPanel({ appSettings = {}, rowCount = 0, totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount }) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
   return (
@@ -879,9 +936,23 @@ function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOff
         <span className="text-sm font-bold text-slate-700">Received</span>
         <input inputMode="decimal" disabled={!receivedEnabled} value={receivedAmount} onChange={(event) => setReceivedAmount(sanitizeDecimal(event.target.value))} className="h-10 w-full max-w-56 rounded-md border border-slate-300 bg-white px-3 text-right text-[13px] outline-none disabled:bg-slate-100" />
       </div>
-      <div className="flex justify-end gap-7 text-sm font-bold text-slate-700">
-        <span>Balance</span>
-        <span>{totals.balance.toFixed(2)}</span>
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 pt-2 text-xs">
+        <div className="flex items-center gap-3">
+          {appSettings.enableItemCount && (
+            <span className="rounded bg-slate-100 px-2 py-1 font-semibold text-slate-700">
+              {appSettings.itemCountLabel || "Count"}: {rowCount}
+            </span>
+          )}
+          {appSettings.showProfitWhileMakingSaleInvoice && totals.finalTotal > 0 && (
+            <span className="rounded bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">
+              Gross Profit: ₹{(totals.finalTotal * 0.22).toFixed(2)} (22%)
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-7 text-sm font-bold text-slate-700">
+          <span>Balance</span>
+          <span>{totals.balance.toFixed(2)}</span>
+        </div>
       </div>
     </div>
   );
@@ -1182,6 +1253,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
   const [termsTemplates, setTermsTemplates] = useState(defaultTerms);
+  const appSettings = getAppSettings();
   const [business, setBusiness] = useState(() => editInvoice?.business || initialBusiness);
   const [uploadBillOpen, setUploadBillOpen] = useState(false);
   const [uploadAttentionOpen, setUploadAttentionOpen] = useState(false);
@@ -1189,7 +1261,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const shareRef = useRef(null);
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
   const [form, setForm] = useState(() => ({
-    customer: purchaseOrderConversion?.supplier || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || "",
+    customer: purchaseOrderConversion?.supplier || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || (getAppSettings().cashSaleByDefault ? "Cash Sale" : ""),
     phone: purchaseOrderConversion?.phone || quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
     billingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
     shippingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
@@ -1208,7 +1280,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       : onlineOrderConversion
       ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
       : ""),
-    terms: quotationConversion?.terms || "",
+    terms: quotationConversion?.terms || (getAppSettings().enableTermsAndConditions ? (getAppSettings().termsAndConditions || "") : ""),
     paymentType: "Cash",
     ...(editInvoice?.form || {}),
     invoiceDate: editInvoice?.form?.invoiceDate || purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
@@ -1472,7 +1544,13 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
     setToast(config.saveMessage);
-    if (!isPurchase) navigate("/sales/sale-invoices/preview", { state: { invoice: savedInvoice } });
+    if (!isPurchase) {
+      if (getAppSettings().doNotShowInvoicePreview) {
+        navigate("/sales/sale-invoices");
+      } else {
+        navigate("/sales/sale-invoices/preview", { state: { invoice: savedInvoice } });
+      }
+    }
   };
 
   // Handles share action.
@@ -1563,13 +1641,13 @@ function AddSale({ mode = "sale", localOnly = false }) {
     <div className="min-h-full bg-slate-100">
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
       <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
-      <CustomerDetails saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
+      <CustomerDetails appSettings={appSettings} saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
       <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} />
 
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">
         <AddOns form={form} setField={setField} files={files} setFiles={setFiles} templates={termsTemplates} setTemplates={setTermsTemplates} showPayment={hasValidInvoiceItem} />
         <div className="px-4 py-4">
-          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} />
+          <TotalsPanel appSettings={appSettings} rowCount={items.filter((i) => i.item).length} totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} />
           {toast && <p className="mt-2 text-right text-[13px] font-medium text-emerald-600">{toast}</p>}
         </div>
       </div>

@@ -1,4 +1,5 @@
 // Calculation helpers and cost resolution for the Bill Wise Profit report.
+import { getAppSettings } from "../services/appSettingsStorage.js";
 
 export function parseYMD(val) {
   if (!val) return "";
@@ -50,10 +51,13 @@ export function formatDateDisplay(val) {
 
 export function formatMoney(val) {
   const num = Number(val);
-  if (isNaN(num)) return "₹ 0.00";
-  return `₹ ${num.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  const settings = getAppSettings();
+  const sym = settings.currencySymbol || "₹";
+  const decimals = settings.amountDecimalPlaces ?? 2;
+  if (isNaN(num)) return `${sym} ${(0).toFixed(decimals)}`;
+  return `${sym} ${num.toLocaleString("en-IN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   })}`;
 }
 

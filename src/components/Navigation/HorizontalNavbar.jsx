@@ -5,6 +5,7 @@ import {
   sidebarBrand,
   sidebarNavigation,
 } from "../Sidebar/SidebarData";
+import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 
 export default function HorizontalNavbar() {
   const navigate = useNavigate();
@@ -14,6 +15,53 @@ export default function HorizontalNavbar() {
   const [query, setQuery] = useState("");
   const searchInputRef = useRef(null);
   const navContainerRef = useRef(null);
+
+  // Settings reactivity using version counter (same pattern as Sidebar)
+  const [settingsVersion, setSettingsVersion] = useState(0);
+  const settings = useMemo(() => getAppSettings(), [settingsVersion]);
+
+  useEffect(() => {
+    const bump = () => setSettingsVersion((v) => v + 1);
+    window.addEventListener(APP_SETTINGS_UPDATED_EVENT, bump);
+    window.addEventListener("storage", bump);
+    return () => {
+      window.removeEventListener(APP_SETTINGS_UPDATED_EVENT, bump);
+      window.removeEventListener("storage", bump);
+    };
+  }, []);
+
+  // Also re-read settings on navigation
+  useEffect(() => {
+    setSettingsVersion((v) => v + 1);
+  }, [location.pathname]);
+
+  // Filter navigation items based on settings
+  const filteredNavigation = useMemo(() => {
+    return sidebarNavigation.map((group) => {
+      if (group.id === "sales") {
+        return {
+          ...group,
+          children: (group.children || []).filter((child) => {
+            if (child.id === "estimate-quotation" && !settings.enableEstimateQuotation) return false;
+            if (child.id === "proforma-invoice" && !settings.enableProformaInvoice) return false;
+            if (child.id === "sale-order" && !settings.enableSalePurchaseOrder) return false;
+            if (child.id === "delivery-challan" && !settings.enableDeliveryChallan) return false;
+            return true;
+          }),
+        };
+      }
+      if (group.id === "purchase-expense") {
+        return {
+          ...group,
+          children: (group.children || []).filter((child) => {
+            if (child.id === "purchase-order" && !settings.enableSalePurchaseOrder) return false;
+            return true;
+          }),
+        };
+      }
+      return group;
+    });
+  }, [settings]);
 
   // Close dropdown when route/location changes
   useEffect(() => {
@@ -55,7 +103,7 @@ export default function HorizontalNavbar() {
 
   const searchableItems = useMemo(
     () =>
-      sidebarNavigation.flatMap((item) =>
+      filteredNavigation.flatMap((item) =>
         item.path
           ? [{ id: item.id, label: item.label, path: item.path }]
           : (item.children || []).map((child) => ({
@@ -65,7 +113,7 @@ export default function HorizontalNavbar() {
               parentLabel: item.label,
             }))
       ),
-    []
+    [filteredNavigation]
   );
 
   const filteredItems = searchableItems.filter((item) =>
@@ -96,8 +144,8 @@ export default function HorizontalNavbar() {
               <span>{sidebarBrand.name}</span>
             </div>
 
-            {/* Nav Items */}
-            {sidebarNavigation.map((item) => {
+            {/* Nav Items — now uses filteredNavigation */}
+            {filteredNavigation.map((item) => {
               const Icon = item.icon;
               const hasChildren = Boolean(item.children?.length);
               const isChildActive = hasChildren
