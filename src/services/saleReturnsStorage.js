@@ -79,14 +79,19 @@ export function saveSaleReturn(input) {
     if (records.some((record) => record.type === input.type && String(record.number) === String(input.number) && record.id !== input.id)) {
       throw new Error(`A ${input.type} with number ${input.number} already exists.`);
     }
-    const original = input.invoiceId ? invoices.find((invoice) => String(invoice.id || invoice.invoiceId) === String(input.invoiceId)) : null;
+    let original = input.invoiceId ? invoices.find((invoice) => String(invoice.id || invoice.invoiceId) === String(input.invoiceId)) : null;
+    if (!original && input.invoice) {
+      original = input.invoice;
+      invoices.push(original);
+      window.localStorage.setItem(invoicesKey, JSON.stringify(invoices));
+    }
     if (input.type === "Credit Note" && !original) throw new Error("A Credit Note must be linked to a saved sales invoice.");
     if (original) {
       if (original.cancelled || original.deleted || original.isDeleted || String(original.status || "").toLowerCase() === "cancelled") throw new Error("A cancelled or deleted invoice cannot receive a Credit Note.");
       const invoiceCustomer = String(original.form?.customer || original.customer || "").trim().toLowerCase();
-      if (invoiceCustomer && invoiceCustomer !== String(input.party || "").trim().toLowerCase()) throw new Error("The selected customer does not match the original invoice.");
+      if (invoiceCustomer && input.party && invoiceCustomer !== String(input.party || "").trim().toLowerCase()) throw new Error("The selected customer does not match the original invoice.");
       const invoicePartyId = original.partyId || original.form?.partyId || "";
-      if (invoicePartyId && input.partyId && String(invoicePartyId) !== String(input.partyId)) throw new Error("The selected customer ID does not match the original invoice.");
+      if (invoicePartyId && input.partyId && String(invoicePartyId) !== String(input.partyId) && input.partyId !== "cash-sale") throw new Error("The selected customer ID does not match the original invoice.");
       const priorByRow = new Map();
       records.filter((record) => record.id !== input.id && record.invoiceId === original.id && !record.cancelled)
         .forEach((record) => (record.rows || []).forEach((row) => {

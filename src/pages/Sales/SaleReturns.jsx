@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { loadSalesInvoices } from "../../services/businessRecords";
 import { FiCalendar, FiMoreHorizontal, FiPlus, FiPrinter, FiSearch, FiX, FiEye } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
@@ -60,6 +61,46 @@ const newReturn = (type, records) => ({
   paymentType: "Cash",
   received: "",
 });
+
+const createReturnFromInvoice = (invoice, records, targetItem) => {
+  const partyName = invoiceCustomer(invoice) || "Cash Sale";
+  const partyId = invoice.partyId || (partyName.toLowerCase() === "cash sale" ? "cash-sale" : `cust-${partyName.toLowerCase().replace(/\s+/g, "-")}`);
+  const prior = records.filter((record) => record.invoiceId === invoice.id && !record.cancelled).flatMap((record) => record.rows || []);
+
+  const rows = (invoice.rows || []).map((row) => {
+    const id = rowIdentity(row);
+    const returnedQty = prior.filter((returnRow) => String(returnRow.sourceRowId || returnRow.sourceItemId || returnRow.item || "") === id).reduce((sum, returnRow) => sum + Number(returnRow.qty || 0), 0);
+    const blank = blankRow(row, returnedQty);
+    if (targetItem) {
+      const match = (targetItem.id && (row.sourceItemId === targetItem.id || row.itemId === targetItem.id)) ||
+                    (targetItem.name && (row.item || row.itemName) === targetItem.name);
+      if (match) {
+        blank.qty = String(targetItem.qty != null ? targetItem.qty : blank.remainingQty);
+      }
+    } else {
+      blank.qty = String(blank.remainingQty);
+    }
+    return blank;
+  }).filter((row) => row.remainingQty > 0);
+
+  return {
+    id: "",
+    type: "Credit Note",
+    number: String(Math.max(0, ...records.map((record) => Number(record.number) || 0)) + 1),
+    date: today(),
+    party: partyName,
+    partyId: partyId,
+    phone: invoice.form?.phone || invoice.phone || "",
+    invoiceId: invoice.id,
+    invoiceNumber: invoice.invoiceNumber || invoice.form?.invoiceNumber || "",
+    invoiceDate: invoice.form?.invoiceDate || invoice.invoiceDate || today(),
+    rows,
+    reason: targetItem ? `Return for ${targetItem.name || "item"}` : "Sales return",
+    settlementMode: "apply",
+    paymentType: invoice.form?.paymentType || "Cash",
+    received: "",
+  };
+};
 const readSavedReturns = () => {
   try { return { records: getSaleReturns(), error: "" }; }
   catch (error) { return { records: [], error: error.message }; }
@@ -121,13 +162,22 @@ function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, o
     const rows = (invoice.rows || []).map((row) => {
       const id = rowIdentity(row);
       const returnedQty = prior.filter((returnRow) => String(returnRow.sourceRowId || returnRow.sourceItemId || returnRow.item || "") === id).reduce((sum, returnRow) => sum + Number(returnRow.qty || 0), 0);
-      return blankRow(row, returnedQty);
+      const blank = blankRow(row, returnedQty);
+      blank.qty = String(blank.remainingQty);
+      return blank;
     }).filter((row) => row.remainingQty > 0);
-    onChange({ ...value, invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber || invoice.form?.invoiceNumber || "", invoiceDate: invoice.form?.invoiceDate || invoice.invoiceDate || "", party: invoiceCustomer(invoice), partyId: invoice.partyId || value.partyId || "", phone: invoice.form?.phone || value.phone || "", rows });
+    const partyName = invoiceCustomer(invoice) || "Cash Sale";
+    const partyId = invoice.partyId || value.partyId || (partyName.toLowerCase() === "cash sale" ? "cash-sale" : "");
+    onChange({ ...value, invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber || invoice.form?.invoiceNumber || "", invoiceDate: invoice.form?.invoiceDate || invoice.invoiceDate || "", party: partyName, partyId, phone: invoice.form?.phone || value.phone || "", rows });
   };
   const submit = () => {
     setError("");
     const selectedRows = value.rows.filter((row) => Number(row.qty) > 0);
+    if (!value.partyId && value.party) {
+      const match = parties.find((p) => (p.partyName || p.name || "").toLowerCase() === value.party.toLowerCase());
+      if (match) value.partyId = match.id;
+      else if (value.party.toLowerCase() === "cash sale") value.partyId = "cash-sale";
+    }
     if (!value.partyId || !parties.some((party) => String(party.id) === String(value.partyId))) { setError("Select an existing customer."); return; }
     if (!selectedInvoice) { setError("Select an active sales invoice for this customer."); return; }
     if (!selectedRows.length) { setError("Enter a return quantity for at least one item."); return; }
@@ -135,6 +185,7 @@ function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, o
     if (value.settlementMode === "refund" && (received <= 0 || received > refundableLimit)) { setError(`Refund must be greater than zero and no more than ${money(refundableLimit)}.`); return; }
     const saved = {
       ...value,
+      invoice: selectedInvoice,
       rows: selectedRows,
       received,
       adjustedAmount,
@@ -281,6 +332,7 @@ function ViewTransactionModal({ record, onClose }) {
 
 export default function SaleReturns() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [initial] = useState(readSavedReturns);
   const [records, setRecords] = useState(initial.records);
   const [loadError] = useState(initial.error);
@@ -298,6 +350,7 @@ export default function SaleReturns() {
   const [customerFilter, setCustomerFilter] = useState("All customers");
   const [firmFilter, setFirmFilter] = useState("ALL FIRMS");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [remoteInvoices, setRemoteInvoices] = useState([]);
 
   useEffect(() => {
     ensureLocalTestData();
@@ -314,9 +367,58 @@ export default function SaleReturns() {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    loadSalesInvoices().then((rows) => {
+      if (active && Array.isArray(rows)) setRemoteInvoices(rows.filter((inv) => inv.transactionType !== "purchase"));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [refreshTrigger]);
+
   const parties = useMemo(() => getParties(), [refreshTrigger]);
   const inventoryItems = useMemo(() => getInventoryItems().filter((item) => item.type !== "service"), [refreshTrigger]);
   const invoices = useMemo(() => getSaleInvoices(), [refreshTrigger]);
+
+  const allInvoices = useMemo(() => {
+    const map = new Map();
+    invoices.forEach((inv) => map.set(String(inv.id), inv));
+    remoteInvoices.forEach((inv) => { if (!map.has(String(inv.id))) map.set(String(inv.id), inv); });
+    if (location.state?.convertInvoice) {
+      map.set(String(location.state.convertInvoice.id), location.state.convertInvoice);
+    }
+    return [...map.values()];
+  }, [invoices, remoteInvoices, location.state]);
+
+  const allParties = useMemo(() => {
+    const list = [...parties];
+    if (!list.some((p) => (p.partyName || p.name || "").toLowerCase() === "cash sale")) {
+      list.unshift({ id: "cash-sale", partyName: "Cash Sale", name: "Cash Sale" });
+    }
+    allInvoices.forEach((inv) => {
+      const cust = invoiceCustomer(inv);
+      if (cust && !list.some((p) => (p.partyName || p.name || "").toLowerCase() === cust.toLowerCase())) {
+        list.push({ id: inv.partyId || `cust-${cust.toLowerCase().replace(/\s+/g, "-")}`, partyName: cust, name: cust });
+      }
+    });
+    return list;
+  }, [parties, allInvoices]);
+
+  useEffect(() => {
+    if (location.state?.convertInvoice || location.state?.invoiceId) {
+      const incomingInvoice = location.state.convertInvoice || allInvoices.find((inv) => String(inv.id) === String(location.state.invoiceId));
+      if (incomingInvoice) {
+        const targetItem = location.state.targetItemId || location.state.targetItemName ? {
+          id: location.state.targetItemId,
+          name: location.state.targetItemName,
+          qty: location.state.targetQty,
+        } : null;
+        const initialReturn = createReturnFromInvoice(incomingInvoice, records, targetItem);
+        setRecordType("Credit Note");
+        setEditor({ mode: "new", value: initialReturn });
+        window.history.replaceState({}, document.title);
+      }
+    }
+  }, [location.state, allInvoices, records]);
   const transactionLoad = useMemo(() => {
     try { return { rows: getAllLocalTransactions(), error: "" }; }
     catch (error) { return { rows: [], error: error.message }; }
@@ -493,7 +595,7 @@ export default function SaleReturns() {
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 text-sm sm:px-5"><span className="text-slate-600">{visibleTransactions.length} record{visibleTransactions.length === 1 ? "" : "s"}</span><div className="flex gap-6"><span className="text-slate-600">Total amount <b className="ml-1 text-slate-900">{money(totalSum)}</b></span><span className="text-slate-600">Balance <b className="ml-1 text-slate-900">{money(balanceSum)}</b></span></div></footer>
     </Card>
 
-    {editor && <CreditNoteEditor value={editor.value} mode={editor.mode} records={records} parties={parties} invoices={invoices} onChange={(value) => setEditor((current) => ({ ...current, value }))} onClose={() => setEditor(null)} onSave={save}/>}
+    {editor && <CreditNoteEditor value={editor.value} mode={editor.mode} records={records} parties={allParties} invoices={allInvoices} onChange={(value) => setEditor((current) => ({ ...current, value }))} onClose={() => setEditor(null)} onSave={save}/>}
     {jobWorkEditor && <PurchaseJobWorkEditor initial={jobWorkEditor.id ? jobWorkEditor : null} parties={parties} items={inventoryItems} onClose={() => setJobWorkEditor(null)} onSave={() => setJobWorkEditor(null)}/>}
     {viewDetailModal && <ViewTransactionModal record={viewDetailModal} onClose={() => setViewDetailModal(null)}/>}
   </main>;

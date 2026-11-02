@@ -17,6 +17,7 @@ import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
 import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
+import { getSaleReturns } from "../../services/saleReturnsStorage";
 import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOverridesStorageKey, deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
 import { deleteAllInventoryItems, previewDeleteAllInventoryItems } from "../../services/inventoryItemBulkDelete";
@@ -239,7 +240,28 @@ function transactionRows(item, sales, purchases) {
     status: "Recorded locally",
     source: entry,
   }));
-  const rows = [...saleRows, ...purchaseRows, ...adjustments, ...openingStockRow, ...copiedRows, ...returnedRows];
+  let savedReturnRows = [];
+  try {
+    savedReturnRows = getSaleReturns().filter((ret) => !ret.cancelled).flatMap((ret) => {
+      return (ret.rows || []).filter(matches).map((r) => ({
+        id: `sale-return-${ret.id}-${r.id}`,
+        sourceId: ret.id,
+        source: ret,
+        type: "Sale Return",
+        invoice: ret.invoiceNumber || ret.number || "-",
+        name: ret.party || "Customer",
+        date: ret.date,
+        quantity: r.qty || 0,
+        unit: r.unit || item.unit || "",
+        price: r.price || 0,
+        amount: r.calculated?.amount ?? (Number(r.qty || 0) * Number(r.price || 0)),
+        status: ret.status || "Recorded",
+      }));
+    });
+  } catch (err) {
+    console.warn("Could not load saved returns for item", err);
+  }
+  const rows = [...saleRows, ...purchaseRows, ...adjustments, ...openingStockRow, ...copiedRows, ...returnedRows, ...savedReturnRows];
   return rows.filter((row) => !actions.deleted?.includes(row.sourceId || row.id)).map((row) => ({
     ...row,
     status: actions.cancelled?.[row.sourceId] ? "Cancelled" : row.status,
@@ -675,9 +697,41 @@ function ItemsDashboard() {
                     refresh();
                     setNotice(action === "Delete" ? "Transaction hidden from the Items screen." : `${action} saved in this browser only.`);
                   };
-                  const actions = row.type === "Sale" ? ["View/Edit", "Cancel Invoice", "Delete", "Duplicate", "Open PDF", "Preview", "Print", "Convert To Return", "Payment History", "View History"] : ["View Details", "Delete", "Duplicate", "Preview", "Print", "Payment History", "View History"];
+                  const actions = row.type === "Sale" ? ["View/Edit", "Cancel Invoice", "Delete", "Open PDF", "Preview", "Print", "Convert To Return", "Payment History", "View History"] : ["View Details", "Delete", "Preview", "Print", "Payment History", "View History"];
                   return <tr key={row.id} className="border-b border-slate-100 hover:bg-slate-50"><td className="whitespace-nowrap px-3 py-3"><span className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${row.type === "Sale" ? "bg-emerald-500" : row.type === "Purchase" ? "bg-emerald-900" : "bg-rose-900"}`} />{row.type}</td><td className="px-3 py-3">{row.invoice}</td><td className="px-3 py-3">{row.name}</td><td className="whitespace-nowrap px-3 py-3">{dateLabel(row.date)}</td><td className="whitespace-nowrap px-3 py-3">{row.quantity} {row.unit}</td><td className="whitespace-nowrap px-3 py-3">{row.price === "-" ? "-" : money(row.price)}</td><td className="whitespace-nowrap px-3 py-3">{row.amount === "-" ? "-" : money(row.amount)}</td><td className="px-3 py-3">{row.status}</td><td className="px-3 py-3 text-slate-400"><div className="relative" data-item-transaction-actions><button type="button" aria-label={`Actions for ${row.type}`} onClick={() => setRowMenu((current) => current === `transaction-${row.id}` ? "" : `transaction-${row.id}`)} className="grid h-8 w-7 place-items-center rounded hover:bg-slate-100"><FiMoreVertical /></button>{rowMenu === `transaction-${row.id}` && <div className="absolute right-0 top-8 z-40 max-h-[min(440px,70vh)] w-52 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 text-slate-700 shadow-xl">{actions.map((action) => <button key={action} type="button" onClick={() => {
                     setRowMenu("");
+                    if (action === "Convert To Return") {
+                      const invoiceToConvert = row.source || {
+                        id: row.sourceId || `sale-${Date.now()}`,
+                        invoiceNumber: row.invoice,
+                        form: {
+                          invoiceNumber: row.invoice,
+                          customer: row.name,
+                          invoiceDate: row.date,
+                        },
+                        rows: [{
+                          id: `row-${Date.now()}`,
+                          sourceItemId: selectedItem?.id,
+                          item: selectedItem?.itemName || "Item",
+                          qty: row.quantity,
+                          price: row.price,
+                          unit: row.unit,
+                        }],
+                        totals: { finalTotal: row.amount },
+                      };
+                      navigate("/sales/sale-return-credit-note", {
+                        state: {
+                          convertInvoice: invoiceToConvert,
+                          invoiceId: row.sourceId || row.source?.id,
+                          invoiceNumber: row.invoice,
+                          customerName: row.name,
+                          targetItemId: selectedItem?.id,
+                          targetItemName: selectedItem?.itemName,
+                          targetQty: row.quantity,
+                        },
+                      });
+                      return;
+                    }
                     if (action === "View Details" || action === "Payment History") { setTransactionDetails(row); return; }
                     if (action === "Preview") { if (row.type === "Sale" && row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source } }); else setTransactionDetails(row); return; }
                     if (action === "View/Edit") { if (row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source } }); else setTransactionDetails(row); return; }
