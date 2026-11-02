@@ -10,6 +10,7 @@ import { getParties, saveParty as savePartyLocally } from "../../services/partie
 import { deleteSaleInvoice, getSaleInvoices, saveSaleInvoice } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
+import { businessDataChangedEvent } from "../../services/businessDataChanged";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -485,6 +486,20 @@ function PartyDetails() {
     } catch (error) {
       setLoadError(error.message || "Could not load saved parties from this browser.");
     }
+  }, []);
+
+  useEffect(() => {
+    const reloadLocalData = () => {
+      setParties(getParties());
+      setInvoices(getSaleInvoices());
+      setPurchases(getPurchaseBills());
+    };
+    window.addEventListener(businessDataChangedEvent, reloadLocalData);
+    window.addEventListener("storage", reloadLocalData);
+    return () => {
+      window.removeEventListener(businessDataChangedEvent, reloadLocalData);
+      window.removeEventListener("storage", reloadLocalData);
+    };
   }, []);
 
   useEffect(() => {

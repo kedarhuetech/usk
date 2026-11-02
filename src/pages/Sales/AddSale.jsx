@@ -35,7 +35,7 @@ import {
   stateOfSupplyOptions,
 } from "../../constants/salesData";
 import { markOnlineStoreOrderConverted } from "../../services/onlineStoreOrdersStorage";
-import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import {
   loadBusinessItems,
   loadBusinessParties,
@@ -1260,6 +1260,19 @@ function AddSale({ mode = "sale", localOnly = false }) {
         });
     return () => { active = false; };
   }, [isPurchase, localOnlyPurchase, editInvoice?.id, quotationConversion, deliveryChallanConversions.length]);
+
+  useEffect(() => {
+    const reloadLocalSelections = () => {
+      setItems(getInventoryItems().map(saleItemFromInventory));
+      setParties(getParties().map(partyOption).filter((party) => party.name));
+    };
+    window.addEventListener(businessDataChangedEvent, reloadLocalSelections);
+    window.addEventListener("storage", reloadLocalSelections);
+    return () => {
+      window.removeEventListener(businessDataChangedEvent, reloadLocalSelections);
+      window.removeEventListener("storage", reloadLocalSelections);
+    };
+  }, []);
 
   const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);

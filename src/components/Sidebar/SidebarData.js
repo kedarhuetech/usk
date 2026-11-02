@@ -212,12 +212,8 @@ export const sidebarNavigation = [
     label: "Sync, Share & Backup",
     icon: FiRefreshCw,
     children: [
-      {
-        id: "sync-share",
-        label: "Sync & Share",
-        path: "/sync-share-backup/sync-share",
-      },
-    
+
+
       {
         id: "backup-to-computer",
         label: "Backup To Computer",
