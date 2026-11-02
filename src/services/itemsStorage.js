@@ -256,7 +256,9 @@ function saleRowItemId(row = {}) {
 
 // This helper handles row quantity logic.
 function saleRowQuantity(row = {}) {
-  return Math.max(toNumber(row.qty ?? row.quantity), 0);
+  const qty = Math.max(toNumber(row.qty ?? row.quantity), 0);
+  const freeQty = Math.max(toNumber(row.freeQty), 0);
+  return qty + freeQty;
 }
 
 // Applies sale invoice stock update.
