@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiFilter,
@@ -7,6 +7,7 @@ import {
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
+import { calculatePartyBalances } from "../../services/partyBalances";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -23,29 +24,6 @@ const money = (val) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-
-function parseYMD(val) {
-  if (!val) return "";
-  if (typeof val === "string") {
-    const s = val.trim();
-    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (dmySlash)
-      return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
-    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (dmyDash)
-      return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
-    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (ymd)
-      return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
-  }
-  const d = new Date(val);
-  if (!isNaN(d.getTime())) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-      d.getDate()
-    ).padStart(2, "0")}`;
-  }
-  return "";
-}
 
 function isoDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -86,188 +64,36 @@ export default function AllPartiesReport() {
   const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
   const paymentIns = useMemo(() => readLocal("ledgerly:paymentIns.v1"), [refreshTrigger]);
   const paymentOuts = useMemo(() => readLocal("ledgerly:paymentOuts.v1"), [refreshTrigger]);
+  const debitNotes = useMemo(() => readLocal("ledgerly:purchaseReturns.v1"), [refreshTrigger]);
+  const saleUi = useMemo(() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } }, [refreshTrigger]);
 
-  // Consolidate all parties (including Cash Sale and any party mentioned in sales/purchases)
+  // Balance calculation shared with the Parties page and dashboard.
   const consolidatedParties = useMemo(() => {
-    const partyMap = new Map();
-
-    // 1. Always ensure "Cash Sale" is present
-    partyMap.set("cash sale", {
-      id: "cash-sale",
-      partyName: "Cash Sale",
-      email: "",
-      phone: "",
-      openingBalance: 0,
-      openingBalanceType: "to-receive",
-      creditLimit: "",
+    const result = calculatePartyBalances({
+      parties: [{ id: "cash-sale", partyName: "Cash Sale", openingBalance: 0, openingBalanceType: "to-receive" }, ...storedParties],
+      sales,
+      purchases,
+      paymentIns,
+      paymentOuts,
+      creditNotes: saleReturns,
+      debitNotes,
+      saleUi,
+      from: dateFilterActive ? from : "",
+      to: dateFilterActive ? to : "",
     });
-
-    // 2. Add saved parties
-    storedParties.forEach((p) => {
-      const name = (p.partyName || p.name || "").trim();
-      if (!name) return;
-      const key = name.toLowerCase();
-      partyMap.set(key, {
-        id: p.id || `party-${key}`,
-        partyName: name,
-        email: p.email || "",
-        phone: p.phone || p.phoneNumber || p.mobile || "",
-        openingBalance: Number(p.openingBalance || 0),
-        openingBalanceType: p.openingBalanceType || "to-receive",
-        creditLimit: p.creditLimitType === "custom-limit" && p.creditLimit ? p.creditLimit : "",
-        raw: p,
-      });
-    });
-
-    // 3. Scan sales for any party not yet in map
-    sales.forEach((s) => {
-      const name = (s.form?.customer || s.customer || s.partyName || "").trim();
-      if (!name) return;
-      const key = name.toLowerCase();
-      if (!partyMap.has(key)) {
-        partyMap.set(key, {
-          id: `txn-party-${key}`,
-          partyName: name,
-          email: s.form?.email || s.email || "",
-          phone: s.form?.phone || s.phone || "",
-          openingBalance: 0,
-          openingBalanceType: "to-receive",
-          creditLimit: "",
-        });
-      }
-    });
-
-    // 4. Scan purchases for any party not yet in map
-    purchases.forEach((p) => {
-      const name = (p.form?.customer || p.supplier || p.partyName || p.party || "").trim();
-      if (!name) return;
-      const key = name.toLowerCase();
-      if (!partyMap.has(key)) {
-        partyMap.set(key, {
-          id: `txn-party-${key}`,
-          partyName: name,
-          email: p.form?.email || p.email || "",
-          phone: p.form?.phone || p.phone || "",
-          openingBalance: 0,
-          openingBalanceType: "to-pay",
-          creditLimit: "",
-        });
-      }
-    });
-
-    // Check helper for date filtering
-    const isInDateRange = (dateStr) => {
-      if (!dateFilterActive) return true;
-      const ymd = parseYMD(dateStr);
-      if (!ymd) return true;
-      if (from && ymd < from) return false;
-      if (to && ymd > to) return false;
-      return true;
-    };
-
-    // 5. Calculate net balance for each party
-    const list = Array.from(partyMap.values()).map((party) => {
-      const pKey = party.partyName.toLowerCase();
-      let netBalance = 0; // Positive = Receivable (customer owes business), Negative = Payable (business owes supplier)
-
-      // Opening balance
-      if (party.openingBalance) {
-        if (party.openingBalanceType === "to-pay") {
-          netBalance -= party.openingBalance;
-        } else {
-          netBalance += party.openingBalance;
-        }
-      }
-
-      // Add unpaid sales
-      sales.forEach((s) => {
-        if (s.cancelled || s.status === "Cancelled") return;
-        if (!isInDateRange(s.form?.invoiceDate || s.date || s.createdAt)) return;
-        const cust = (s.form?.customer || s.customer || s.partyName || "").trim().toLowerCase();
-        if (cust === pKey) {
-          const total = Number(s.totals?.finalTotal ?? s.totals?.grandTotal ?? s.total ?? 0);
-          const rec = Number(s.totals?.received ?? s.receivedAmount ?? (s.saleType === "cash" ? total : 0));
-          const bal = Math.max(0, total - rec);
-          netBalance += bal;
-        }
-      });
-
-      // Subtract unpaid purchases
-      purchases.forEach((p) => {
-        if (p.cancelled || p.status === "Cancelled") return;
-        if (!isInDateRange(p.form?.invoiceDate || p.form?.billDate || p.date || p.createdAt)) return;
-        const supp = (p.form?.customer || p.supplier || p.partyName || p.party || "").trim().toLowerCase();
-        if (supp === pKey) {
-          const total = Number(p.totals?.finalTotal ?? p.totals?.grandTotal ?? p.totalAmount ?? p.total ?? 0);
-          const paid = Number(p.totals?.received ?? p.paidAmount ?? (p.form?.paymentType === "Cash" ? total : 0));
-          const bal = Math.max(0, total - paid);
-          netBalance -= bal;
-        }
-      });
-
-      // Credit notes reduce the customer's receivable without being counted as new sales.
-      saleReturns.forEach((creditNote) => {
-        if (creditNote.cancelled) return;
-        if (!isInDateRange(creditNote.date || creditNote.createdAt)) return;
-        const customer = String(creditNote.party || creditNote.customer || creditNote.partyName || "").trim().toLowerCase();
-        if (customer === pKey) netBalance -= Number(creditNote.total || 0);
-      });
-
-      // Subtract unlinked payment-ins
-      paymentIns.forEach((pi) => {
-        if (!isInDateRange(pi.date || pi.createdAt)) return;
-        const cust = (pi.customer || pi.partyName || pi.party || "").trim().toLowerCase();
-        if (cust === pKey && !pi.linkedInvoiceId) {
-          netBalance -= Number(pi.amount || 0);
-        }
-      });
-
-      // Add payment-outs
-      paymentOuts.forEach((po) => {
-        // A Credit Note already reduces this customer's balance above; its linked
-        // refund is shown as an activity, but must not reduce the balance twice.
-        if (po.linkedCreditNoteId) return;
-        if (!isInDateRange(po.date || po.createdAt)) return;
-        const supp = (po.customer || po.party || po.partyName || "").trim().toLowerCase();
-        if (supp === pKey) {
-          netBalance += Number(po.amount || 0);
-        }
-      });
-
-      let receivableBalance = null;
-      let payableBalance = null;
-
-      if (netBalance > 0) {
-        receivableBalance = netBalance;
-      } else if (netBalance < 0) {
-        payableBalance = Math.abs(netBalance);
-      } else {
-        // Zero balance: if customer / cash sale, show ₹ 0.00 under receivable
-        receivableBalance = 0;
-      }
-
-      return {
-        ...party,
-        netBalance,
-        receivableBalance,
-        payableBalance,
-      };
-    });
-
-    // Put "Cash Sale" at the very top, followed by rest of parties
-    return list.sort((a, b) => {
-      if (a.partyName.toLowerCase() === "cash sale") return -1;
-      if (b.partyName.toLowerCase() === "cash sale") return 1;
-      return a.partyName.localeCompare(b.partyName);
-    });
-  }, [storedParties, sales, purchases, saleReturns, paymentIns, paymentOuts, dateFilterActive, from, to]);
-
+    return result.parties.map((party) => ({
+      ...party,
+      netBalance: party.net,
+      receivableBalance: party.receivable > 0 ? party.receivable : null,
+      payableBalance: party.payable > 0 ? party.payable : null,
+    })).sort((a, b) => a.partyName.toLowerCase() === "cash sale" ? -1 : b.partyName.toLowerCase() === "cash sale" ? 1 : a.partyName.localeCompare(b.partyName));
+  }, [storedParties, sales, purchases, saleReturns, paymentIns, paymentOuts, debitNotes, saleUi, dateFilterActive, from, to]);
   // Filtered rows based on party type and search query
   const filteredRows = useMemo(() => {
     return consolidatedParties.filter((p) => {
       // Party Type filter
-      if (partyTypeFilter === "Receivable" && p.receivableBalance == null) return false;
-      if (partyTypeFilter === "Payable" && p.payableBalance == null) return false;
+      if (partyTypeFilter === "Receivable" && !(p.receivableBalance > 0)) return false;
+      if (partyTypeFilter === "Payable" && !(p.payableBalance > 0)) return false;
 
       // Search filter
       if (search.trim()) {

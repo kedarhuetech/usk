@@ -15,6 +15,7 @@ import {
 import * as XLSX from "xlsx";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { transactionTypes } from "../../services/transactionRecordsStorage";
+import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -221,11 +222,10 @@ export default function AllTransactionsReport() {
   const allRecords = useMemo(() => {
     const list = [
       ...sales.map((r) => {
-        const total = Number(r.totals?.finalTotal ?? r.totals?.grandTotal ?? r.total ?? r.amount ?? 0);
-        const received = Number(r.totals?.received ?? r.receivedAmount ?? (r.saleType === "cash" ? total : 0));
-        const balance = Math.max(0, total - received);
+        const settlement = calculateInvoiceSettlement(r, { kind: "sale" });
+        const { total, paid: received, outstanding: balance } = settlement;
         const isCancelled = r.status === "Cancelled" || r.cancelled || r.isCancelled;
-        const status = isCancelled ? "Cancelled" : balance === 0 ? "Paid" : received > 0 ? "Partial" : "Unpaid";
+        const status = isCancelled ? "Cancelled" : settlement.status === "Partially Paid" ? "Partial" : settlement.status;
         return {
           id: r.id || `sale-${Math.random()}`,
           date: r.form?.invoiceDate || r.date || r.createdAt?.slice(0, 10) || "",
@@ -243,11 +243,10 @@ export default function AllTransactionsReport() {
         };
       }),
       ...purchases.map((r) => {
-        const total = Number(r.totals?.finalTotal ?? r.totals?.grandTotal ?? r.totalAmount ?? r.total ?? 0);
-        const received = Number(r.totals?.received ?? r.paidAmount ?? (r.form?.paymentType === "Cash" ? total : 0));
-        const balance = Math.max(0, total - received);
+        const settlement = calculateInvoiceSettlement(r, { kind: "purchase" });
+        const { total, paid: received, outstanding: balance } = settlement;
         const isCancelled = r.status === "Cancelled" || r.cancelled;
-        const status = isCancelled ? "Cancelled" : balance === 0 ? "Paid" : received > 0 ? "Partial" : "Unpaid";
+        const status = isCancelled ? "Cancelled" : settlement.status === "Partially Paid" ? "Partial" : settlement.status;
         return {
           id: r.id || `purch-${Math.random()}`,
           date: r.form?.invoiceDate || r.date || r.createdAt?.slice(0, 10) || "",

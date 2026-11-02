@@ -10,7 +10,11 @@ import {
   FiX,
   FiClock,
 } from "react-icons/fi";
-import { RiFileExcel2Line } from "react-icons/ri";
+import {
+  buildCashFlowEntries,
+  filterAndCalculateCashFlow,
+  parseYMD,
+} from "../../utils/cashFlowCalculations";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const readLocal = (...keys) => {
@@ -24,6 +28,17 @@ const readLocal = (...keys) => {
     } catch {}
   }
   return [];
+};
+
+const readLocalObject = (key) => {
+  try {
+    const val = window.localStorage.getItem(key);
+    if (val) {
+      const parsed = JSON.parse(val);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return {};
 };
 
 const writeLocal = (key, data) => {
@@ -55,24 +70,6 @@ const fmtDateDisplay = (dStr) => {
   return dStr;
 };
 
-function parseYMD(val) {
-  if (!val) return "";
-  if (typeof val === "string") {
-    const s = val.trim();
-    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
-    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
-    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
-  }
-  const d = new Date(val);
-  if (!isNaN(d.getTime())) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }
-  return "";
-}
-
 function isoDate(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -93,6 +90,7 @@ export default function CashFlowReport() {
   const [from, setFrom] = useState(defaultFrom());
   const [to, setTo] = useState(defaultTo());
   const [firm, setFirm] = useState("ALL FIRMS");
+  const [accountType, setAccountType] = useState("ALL");
   const [showZeroAmount, setShowZeroAmount] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedRowId, setSelectedRowId] = useState(null);
@@ -150,200 +148,40 @@ export default function CashFlowReport() {
     }
   };
 
-  /* ── Load all cash transactions ── */
+  /* ── Load all cash transactions using robust accounting calculations ── */
   const allCashEntries = useMemo(() => {
-    const list = [];
-
-    // 1. Sales & POS Sales
     const sales = readLocal("ledgerly:saleInvoices.v1");
-    sales.forEach((s) => {
-      if (s.cancelled || String(s.status || "").toLowerCase() === "cancelled") return;
-      const paymentMode = String(s.form?.paymentType || s.paymentType || s.saleType || "").toLowerCase();
-      const isCash = paymentMode === "cash" || paymentMode === "" || s.saleType === "cash";
-      const total = Number(s.totals?.finalTotal ?? s.totals?.grandTotal ?? s.total ?? s.amount ?? 0);
-      const received = Number(s.totals?.received ?? s.receivedAmount ?? (isCash ? total : 0));
-      const cashIn = isCash ? (received > 0 ? received : total) : received;
-
-      if (cashIn > 0 || total === 0) {
-        list.push({
-          id: s.id || `sale-${Math.random()}`,
-          date: s.form?.invoiceDate || s.date || s.createdAt || "",
-          refNo: s.form?.invoiceNumber || s.invoiceNumber || s.invoiceNo || s.number || "—",
-          name: s.form?.customer || s.party || s.partyName || s.customer || "Cash Sale",
-          category: s.category || s.form?.category || "",
-          type: s.isPos || String(s.invoiceNumber || "").includes("POS") ? "PoS Sale" : "Sale",
-          cashIn,
-          cashOut: 0,
-          raw: s,
-          storageKey: "ledgerly:saleInvoices.v1",
-        });
-      }
-    });
-
-    // 2. Purchases
     const purchases = readLocal("ledgerly:purchaseBills.v1");
-    purchases.forEach((p) => {
-      if (p.cancelled || String(p.status || "").toLowerCase() === "cancelled") return;
-      const paymentMode = String(p.form?.paymentType || p.paymentType || "").toLowerCase();
-      const isCash = paymentMode === "cash" || paymentMode === "";
-      const total = Number(p.totals?.finalTotal ?? p.totals?.grandTotal ?? p.totalAmount ?? p.total ?? 0);
-      const paid = Number(p.totals?.received ?? p.paidAmount ?? (isCash ? total : 0));
-      const cashOut = isCash ? (paid > 0 ? paid : total) : paid;
-
-      if (cashOut > 0 || total === 0) {
-        list.push({
-          id: p.id || `purch-${Math.random()}`,
-          date: p.form?.invoiceDate || p.form?.billDate || p.date || p.createdAt || "",
-          refNo: p.form?.invoiceNumber || p.invoiceNumber || p.billNumber || "—",
-          name: p.form?.customer || p.form?.party || p.supplier || p.partyName || "Supplier",
-          category: p.category || "",
-          type: "Purchase",
-          cashIn: 0,
-          cashOut,
-          raw: p,
-          storageKey: "ledgerly:purchaseBills.v1",
-        });
-      }
-    });
-
-    // 3. Payment-Ins
     const paymentIns = readLocal("ledgerly:paymentIns.v1");
-    paymentIns.forEach((pi) => {
-      const amt = Number(pi.amount || pi.total || 0);
-      list.push({
-        id: pi.id || `payin-${Math.random()}`,
-        date: pi.date || pi.createdAt || "",
-        refNo: pi.number || pi.refNo || "—",
-        name: pi.customer || pi.partyName || pi.party || "Party",
-        category: "",
-        type: "Payment-In",
-        cashIn: amt,
-        cashOut: 0,
-        raw: pi,
-        storageKey: "ledgerly:paymentIns.v1",
-      });
-    });
-
-    // 4. Payment-Outs
     const paymentOuts = readLocal("ledgerly:paymentOuts.v1");
-    paymentOuts.forEach((po) => {
-      const amt = Number(po.amount || po.total || 0);
-      list.push({
-        id: po.id || `payout-${Math.random()}`,
-        date: po.date || po.createdAt || "",
-        refNo: po.number || po.refNo || "—",
-        name: po.customer || po.party || po.partyName || "Supplier",
-        category: "",
-        type: "Payment-Out",
-        cashIn: 0,
-        cashOut: amt,
-        raw: po,
-        storageKey: "ledgerly:paymentOuts.v1",
-      });
-    });
-
-    // 5. Expenses
     const expenses = readLocal("ledgerly:expenses.v1");
-    expenses.forEach((e) => {
-      let amt = Number(e.amount || 0);
-      if (!amt && Array.isArray(e.rows) && e.rows.length > 0) {
-        amt = e.rows.reduce((sum, r) => {
-          const base = (Number(r.qty) || 0) * (Number(r.price) || 0);
-          const discounted = base - (base * (Number(r.discount) || 0)) / 100;
-          return sum + (discounted || Number(r.amount || 0));
-        }, 0);
-      }
-      list.push({
-        id: e.id || `exp-${Math.random()}`,
-        date: e.date || e.createdAt || "",
-        refNo: e.number || "—",
-        name: e.category || e.party || "Expense",
-        category: e.category || "",
-        type: "Expense",
-        cashIn: 0,
-        cashOut: amt,
-        raw: e,
-        storageKey: "ledgerly:expenses.v1",
-      });
-    });
-
-    // 6. Cash Adjustments
     const adjustments = readLocal("ledgerly:cashAdjustments.v1");
-    adjustments.forEach((adj) => {
-      const amt = Number(adj.amount || 0);
-      const isIncrease = amt >= 0;
-      list.push({
-        id: adj.id || `adj-${Math.random()}`,
-        date: adj.date || adj.createdAt || "",
-        refNo: adj.reference || "—",
-        name: adj.reason || "Cash adjustment",
-        category: "",
-        type: isIncrease ? "Cash Increase" : "Cash Reduce",
-        cashIn: isIncrease ? Math.abs(amt) : 0,
-        cashOut: !isIncrease ? Math.abs(amt) : 0,
-        raw: adj,
-        storageKey: "ledgerly:cashAdjustments.v1",
-      });
-    });
+    const saleInvoiceUi = readLocalObject("ledgerly:saleInvoiceUiActions.v1");
+    const bankTransactions = readLocal("ledgerly:bankTransactions.v1", "bank-transactions");
 
-    // Sort chronologically ASCENDING (earliest to latest)
-    return list.sort((a, b) => {
-      const ymdA = parseYMD(a.date);
-      const ymdB = parseYMD(b.date);
-      return ymdA.localeCompare(ymdB);
+    return buildCashFlowEntries({
+      sales,
+      purchases,
+      paymentIns,
+      paymentOuts,
+      expenses,
+      adjustments,
+      bankTransactions,
+      saleInvoiceUi,
     });
   }, [refreshTrigger]);
 
-  // Calculate Opening Cash-in Hand (all cash movements before `from` date)
-  const openingCashInHand = useMemo(() => {
-    if (!from) return 0;
-    let balance = 0;
-    allCashEntries.forEach((entry) => {
-      const ymd = parseYMD(entry.date);
-      if (ymd && ymd < from) {
-        balance += entry.cashIn - entry.cashOut;
-      }
+  // Filter entries in range & search, and calculate opening balance and running balance
+  const { openingBalance, filteredRows, totalCashIn, totalCashOut, closingBalance } = useMemo(() => {
+    return filterAndCalculateCashFlow(allCashEntries, {
+      from,
+      to,
+      showZeroAmount,
+      search,
+      firm,
+      accountType,
     });
-    return balance;
-  }, [allCashEntries, from]);
-
-  // Filter entries in range & search, and calculate running balance
-  const { filteredRows, totalCashIn, totalCashOut, closingCashInHand } = useMemo(() => {
-    let running = openingCashInHand;
-    let sumIn = 0;
-    let sumOut = 0;
-
-    const filtered = [];
-    allCashEntries.forEach((row) => {
-      const ymd = parseYMD(row.date);
-      if (from && ymd && ymd < from) return;
-      if (to && ymd && ymd > to) return;
-
-      if (!showZeroAmount && row.cashIn === 0 && row.cashOut === 0) return;
-
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const haystack = `${row.refNo} ${row.name} ${row.category} ${row.type}`.toLowerCase();
-        if (!haystack.includes(q)) return;
-      }
-
-      running += row.cashIn - row.cashOut;
-      sumIn += row.cashIn;
-      sumOut += row.cashOut;
-
-      filtered.push({
-        ...row,
-        runningBalance: running,
-      });
-    });
-
-    return {
-      filteredRows: filtered,
-      totalCashIn: sumIn,
-      totalCashOut: sumOut,
-      closingCashInHand: running,
-    };
-  }, [allCashEntries, from, to, showZeroAmount, search, openingCashInHand]);
+  }, [allCashEntries, from, to, showZeroAmount, search, firm, accountType]);
 
   useEffect(() => {
     if (filteredRows.length > 0 && !selectedRowId) {
@@ -437,21 +275,24 @@ export default function CashFlowReport() {
   // Export Excel
   const handleExportExcel = () => {
     const rows = [
-      ["DATE", "REF NO.", "NAME", "CATEGORY", "TYPE", "CASH IN", "CASH OUT", "RUNNING BALANCE"],
+      ["DATE", "REF NO.", "NAME", "CATEGORY", "TYPE", "PAYMENT METHOD", "STATUS", "CASH IN", "CASH OUT", "RUNNING BALANCE"],
       ...filteredRows.map((r) => [
         fmtDateDisplay(r.date),
         r.refNo,
         r.name,
         r.category,
         r.type,
+        r.paymentMethod || "",
+        r.isUnpaid ? "Unpaid (No movement)" : r.isPartial ? "Partial" : "Paid",
         r.cashIn || "",
         r.cashOut || "",
         r.runningBalance,
       ]),
       [],
+      ["Opening Balance", openingBalance],
       ["Total Cash-in", totalCashIn],
       ["Total Cash-out", totalCashOut],
-      ["Closing Cash-in Hand", closingCashInHand],
+      ["Closing Balance", closingBalance],
     ];
     const ws = XLSX.utils.aoa_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -464,7 +305,7 @@ export default function CashFlowReport() {
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[#263b57]">
       {/* ── Top Bar ── */}
-      <div className="flex flex-wrap items-center justify-between border-b border-gray-200 px-6 py-3.5">
+      <div className="flex flex-wrap items-center justify-between border-b border-gray-200 px-6 py-3.5 gap-3">
         <div className="flex flex-wrap items-center gap-3">
           {/* Period selector */}
           <div className="relative">
@@ -520,6 +361,21 @@ export default function CashFlowReport() {
             </select>
             <FiChevronDown className="absolute right-2 top-2.5 h-3.5 w-3.5 pointer-events-none text-gray-500" />
           </div>
+
+          {/* Account Filter (Explicitly separated or combined) */}
+          <div className="relative">
+            <select
+              value={accountType}
+              onChange={(e) => setAccountType(e.target.value)}
+              className="appearance-none rounded-md border border-gray-200 bg-white px-3 py-1.5 pr-7 text-xs font-semibold text-gray-700 outline-none cursor-pointer hover:bg-slate-50"
+              title="Filter by account type"
+            >
+              <option value="ALL">All (Cash &amp; Bank)</option>
+              <option value="Cash">Cash in Hand Only</option>
+              <option value="Bank">Bank Accounts Only</option>
+            </select>
+            <FiChevronDown className="absolute right-2 top-2.5 h-3.5 w-3.5 pointer-events-none text-gray-500" />
+          </div>
         </div>
 
         {/* Right actions: Excel & Print */}
@@ -546,8 +402,12 @@ export default function CashFlowReport() {
       {/* ── Sub-header: Opening Cash & Zero Amount Checkbox ── */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 px-6 py-2.5 bg-[#fbfcfd]">
         <div className="flex items-center gap-6">
-          <span className="text-xs font-medium text-teal-600">
-            Opening Cash-in Hand: {fmt(openingCashInHand)}
+          <span className="text-xs font-semibold text-teal-700">
+            {accountType === "Cash"
+              ? `Opening Cash-in Hand: ${fmt(openingBalance)}`
+              : accountType === "Bank"
+              ? `Opening Bank Balance: ${fmt(openingBalance)}`
+              : `Opening Balance (Cash & Bank): ${fmt(openingBalance)}`}
           </span>
           <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-600">
             <input
@@ -556,7 +416,7 @@ export default function CashFlowReport() {
               onChange={(e) => setShowZeroAmount(e.target.checked)}
               className="h-3.5 w-3.5 rounded border-gray-300 accent-sky-600"
             />
-            Show zero amount transaction
+            Show zero amount transaction (unpaid invoices)
           </label>
         </div>
       </div>
@@ -569,7 +429,7 @@ export default function CashFlowReport() {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder=""
+            placeholder="Search transactions..."
             className="w-full rounded border border-gray-200 py-1 pl-8 pr-3 text-xs outline-none focus:border-sky-500"
           />
         </div>
@@ -593,12 +453,12 @@ export default function CashFlowReport() {
                 CATEGORY <span className="inline-block text-[10px] text-gray-400">▼</span>
               </th>
               <th className="py-2.5 px-3 font-semibold">
-                TYPE <span className="inline-block text-[10px] text-gray-400">▼</span>
+                TYPE / METHOD <span className="inline-block text-[10px] text-gray-400">▼</span>
               </th>
-              <th className="py-2.5 px-4 text-right font-semibold">
+              <th className="py-2.5 px-4 text-right font-semibold text-emerald-700">
                 CASH IN <span className="inline-block text-[10px] text-gray-400">▼</span>
               </th>
-              <th className="py-2.5 px-4 text-right font-semibold">
+              <th className="py-2.5 px-4 text-right font-semibold text-rose-700">
                 CASH OUT <span className="inline-block text-[10px] text-gray-400">▼</span>
               </th>
               <th className="py-2.5 px-4 text-right font-semibold">
@@ -622,19 +482,43 @@ export default function CashFlowReport() {
                   <td className="py-2.5 px-4 whitespace-nowrap text-gray-700">
                     {fmtDateDisplay(row.date)}
                   </td>
-                  <td className="py-2.5 px-3 text-gray-700">{row.refNo}</td>
+                  <td className="py-2.5 px-3 text-gray-700 font-mono text-[11px]">{row.refNo}</td>
                   <td className="py-2.5 px-4 font-medium text-[#263b57]">{row.name}</td>
-                  <td className="py-2.5 px-3 text-gray-600">{row.category || ""}</td>
-                  <td className="py-2.5 px-3 text-gray-700">{row.type}</td>
-                  <td className="py-2.5 px-4 text-right font-medium text-gray-800">
+                  <td className="py-2.5 px-3 text-gray-600">{row.category || "—"}</td>
+                  <td className="py-2.5 px-3 text-gray-700">
+                    <div className="font-medium text-slate-800">{row.type}</div>
+                    <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                      {row.paymentMethod && (
+                        <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                          {row.paymentMethod}
+                        </span>
+                      )}
+                      {row.isUnpaid && (
+                        <span className="inline-block rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-600">
+                          Unpaid (No cash movement)
+                        </span>
+                      )}
+                      {row.isPartial && (
+                        <span className="inline-block rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
+                          Partial
+                        </span>
+                      )}
+                      {row.isDuplicate && (
+                        <span className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500" title={row.duplicateReason}>
+                          Linked receipt
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2.5 px-4 text-right font-semibold text-emerald-600">
                     {row.cashIn > 0 ? fmt(row.cashIn) : ""}
                   </td>
-                  <td className="py-2.5 px-4 text-right font-medium text-gray-800">
+                  <td className="py-2.5 px-4 text-right font-semibold text-rose-600">
                     {row.cashOut > 0 ? fmt(row.cashOut) : ""}
                   </td>
                   <td
-                    className={`py-2.5 px-4 text-right font-medium ${
-                      isNegative ? "text-rose-500" : "text-teal-600"
+                    className={`py-2.5 px-4 text-right font-semibold ${
+                      isNegative ? "text-rose-600" : "text-teal-700"
                     }`}
                   >
                     {fmt(row.runningBalance)}
@@ -782,7 +666,7 @@ export default function CashFlowReport() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Ref / Invoice No:</span>
-                  <span className="font-semibold text-slate-800">{historyModal.refNo}</span>
+                  <span className="font-semibold text-slate-800 font-mono">{historyModal.refNo}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Party / Name:</span>
@@ -793,8 +677,24 @@ export default function CashFlowReport() {
                   <span className="font-semibold text-slate-800">{fmtDateDisplay(historyModal.date)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Amount:</span>
-                  <span className="font-semibold text-teal-600">
+                  <span className="text-gray-500">Payment Method:</span>
+                  <span className="font-semibold text-slate-800">{historyModal.paymentMethod || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Payment Status:</span>
+                  <span className={`font-semibold ${historyModal.isUnpaid ? "text-rose-600" : "text-emerald-600"}`}>
+                    {historyModal.isUnpaid ? "Unpaid (No cash movement)" : historyModal.isPartial ? "Partially Paid" : "Paid"}
+                  </span>
+                </div>
+                {historyModal.total > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Invoice / Bill Total:</span>
+                    <span className="font-semibold text-slate-700">{fmt(historyModal.total)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-slate-200 pt-2">
+                  <span className="text-gray-500">Actual Cash Movement:</span>
+                  <span className="font-bold text-teal-700">
                     {fmt(historyModal.cashIn || historyModal.cashOut)}
                   </span>
                 </div>
@@ -817,15 +717,19 @@ export default function CashFlowReport() {
       )}
 
       {/* ── Footer Summary Bar matching Screenshot ── */}
-      <div className="flex flex-wrap items-center justify-between border-t border-gray-200 bg-white px-6 py-3 text-xs">
-        <span className="font-semibold text-teal-600">
+      <div className="flex flex-wrap items-center justify-between border-t border-gray-200 bg-white px-6 py-3 text-xs gap-3">
+        <span className="font-semibold text-emerald-700">
           Total Cash-in: {fmt(totalCashIn)}
         </span>
-        <span className="font-semibold text-rose-500">
+        <span className="font-semibold text-rose-600">
           Total Cash-out: {fmt(totalCashOut)}
         </span>
-        <span className="font-semibold text-teal-600">
-          Closing Cash-in Hand: {fmt(closingCashInHand)}
+        <span className="font-semibold text-teal-700">
+          {accountType === "Cash"
+            ? `Closing Cash-in Hand: ${fmt(closingBalance)}`
+            : accountType === "Bank"
+            ? `Closing Bank Balance: ${fmt(closingBalance)}`
+            : `Closing Balance (Cash & Bank): ${fmt(closingBalance)}`}
         </span>
       </div>
     </div>
