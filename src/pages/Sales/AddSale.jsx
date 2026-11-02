@@ -35,7 +35,7 @@ import {
   stateOfSupplyOptions,
 } from "../../constants/salesData";
 import { markOnlineStoreOrderConverted } from "../../services/onlineStoreOrdersStorage";
-import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import {
   loadBusinessItems,
   loadBusinessParties,
@@ -860,7 +860,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
 }
 
 // Renders the totals panel interface.
-function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount }) {
+function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, error = "" }) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
   return (
@@ -878,6 +878,7 @@ function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOff
         <input type="checkbox" checked={receivedEnabled} onChange={(event) => { const checked = event.target.checked; setReceivedEnabled(checked); setReceivedAmount(checked ? totals.finalTotal.toFixed(2) : ""); }} className="h-4 w-4 accent-blue-600" />
         <span className="text-sm font-bold text-slate-700">Received</span>
         <input inputMode="decimal" disabled={!receivedEnabled} value={receivedAmount} onChange={(event) => setReceivedAmount(sanitizeDecimal(event.target.value))} className="h-10 w-full max-w-56 rounded-md border border-slate-300 bg-white px-3 text-right text-[13px] outline-none disabled:bg-slate-100" />
+        {error && <span role="alert" className="text-xs font-medium text-rose-600">{error}</span>}
       </div>
       <div className="flex justify-end gap-7 text-sm font-bold text-slate-700">
         <span>Balance</span>
@@ -1322,6 +1323,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (Object.keys(rowErrors).length) nextErrors.rows[row.id] = rowErrors;
     });
 
+    if (receivedEnabled && toNumber(receivedAmount) > totals.finalTotal) {
+      nextErrors.received = "Received amount cannot exceed the invoice total.";
+    }
+
     setErrors(nextErrors);
     return !nextErrors.customer && !nextErrors.invoiceNumber && Object.keys(nextErrors.rows).length === 0;
   };
@@ -1437,17 +1442,23 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     if (editInvoice) {
       try {
-        const key = "ledgerly:saleInvoiceUiActions.v1";
-        const current = JSON.parse(window.localStorage.getItem(key) || "{}");
-        const next = {
-          ...current,
-          edits: { ...(current.edits || {}), [invoice.id]: invoice },
-          history: [{ id: `${invoice.id}-${Date.now()}`, invoiceId: invoice.id, invoiceNumber: invoice.form.invoiceNumber, action: "View/Edit saved", at: new Date().toISOString() }, ...(current.history || [])],
-        };
-        window.localStorage.setItem(key, JSON.stringify(next));
-        notifyBusinessDataChanged();
-        sessionStorage.setItem(config.storageKey, JSON.stringify(invoice));
-        setToast("Sale updated in this browser.");
+        const existingFields = { ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt };
+        const savedInvoice = isPurchase
+          ? await saveBusinessPurchaseBill(existingFields)
+          : await saveBusinessSaleInvoice(existingFields);
+        if (!isPurchase) {
+          const key = "ledgerly:saleInvoiceUiActions.v1";
+          try {
+            const current = JSON.parse(window.localStorage.getItem(key) || "{}");
+            if (current.edits?.[savedInvoice.id]) {
+              const edits = { ...current.edits };
+              delete edits[savedInvoice.id];
+              window.localStorage.setItem(key, JSON.stringify({ ...current, edits }));
+            }
+          } catch { /* The canonical invoice has already been saved. */ }
+        }
+        sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
+        setToast(`${isPurchase ? "Purchase bill" : "Sale"} updated in this browser.`);
         navigate(returnPath);
       } catch (error) {
         setToast(error.message || "Could not update this sale in local storage.");
@@ -1569,7 +1580,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">
         <AddOns form={form} setField={setField} files={files} setFiles={setFiles} templates={termsTemplates} setTemplates={setTermsTemplates} showPayment={hasValidInvoiceItem} />
         <div className="px-4 py-4">
-          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} />
+      <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} error={errors.received} />
           {toast && <p className="mt-2 text-right text-[13px] font-medium text-emerald-600">{toast}</p>}
         </div>
       </div>
