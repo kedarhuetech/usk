@@ -29,15 +29,15 @@ body {
 }
 
 table {
-  color: #1e293b;
+  color: #0f172a !important;
 }
 
 table tbody tr td {
-  color: #1e293b;
+  color: #0f172a !important;
 }
 
 table thead th {
-  color: #475569;
+  color: #334155 !important;
 }
 
 html.dark body {
