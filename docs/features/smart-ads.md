@@ -10,6 +10,18 @@
 
 Smart Ads Dashboard -> Connect Meta -> Meta OAuth -> Fetch Business/Page/Instagram/Ad Account assets -> Select assets -> Create Ad -> Ad Details -> Creative -> Audience -> Budget & Schedule -> Review -> Save Draft / Create Campaign -> Campaign Dashboard.
 
+## Persistence and Campaign Management
+
+- Smart Ads UI calls the repository functions in `src/services/smartAdsStorage.js`; components do not read or write browser storage directly.
+- The current repository uses a business-scoped `usk.smartAds.v1` LocalStorage record for drafts, local campaign references, selected non-sensitive Meta asset IDs, and Meta Insights snapshots. Meta access tokens and app secrets remain server-side.
+- Existing backend campaign rows are imported once when the local campaign collection is empty. This preserves the previous data path during the move to browser drafts.
+- Draft updates keep a stable ID, wizard step, creation time, selected asset references, and all serializable campaign form fields. Browser video `File` objects cannot be restored; users must reselect the video after reopening a draft.
+- To migrate to MySQL later, keep the repository method contract (`getSmartAdsCampaigns`, `getSmartAdsCampaignById`, `saveDraft`, `updateDraft`, `deleteSmartAdsCampaign`, settings, and metrics snapshot methods) and replace its LocalStorage implementation with API calls. No schema or database changes are included here.
+- Meta's actual account campaign list is fetched separately from USV drafts. Status changes are sent to Meta and confirmed before the interface changes. Insights are sourced from Meta and cached locally only as snapshots.
+- Billing eligibility shows Meta's account status and reports a funding-source signal only when Meta returns it. The API response cannot establish from an empty field that no payment method exists.
+- Publishing from this flow first creates the Campaign, Ad Set, Creative, and Ad in `PAUSED` state. The explicit Publish action activates dependent Ads, then Ad Sets, then the Campaign. Meta review, billing, account restrictions, and delivery eligibility can still prevent delivery.
+- Click-to-WhatsApp creation remains unavailable until the connected Page's WhatsApp Business destination and the required account permissions can be discovered and the current Marketing API payload is verified for this app/account.
+
 ## Frontend Status
 
 - Dashboard, campaign metrics, status filters, campaign cards, draft reopen/edit, and local campaign records are implemented.

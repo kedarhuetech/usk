@@ -1,23 +1,83 @@
 // Defines backend API routes for google auth.
+import crypto from "node:crypto";
 import { Router } from "express";
 import { google } from "googleapis";
-import googleOAuthClient from "../config/googleOAuth.js";
+import { createGoogleOAuthClient, getGoogleOAuthConfig } from "../config/googleOAuth.js";
 
 const router = Router();
 
+const GOOGLE_PROFILE_STATE_COOKIE = "usv_google_profile_oauth_state";
+const GOOGLE_PROFILE_SESSION_COOKIE = "usv_google_profile_session";
+const COOKIE_PATH = "/api/auth/google";
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const states = new Map();
+const sessions = new Map();
+
+function isSecureRequest(req) {
+  return req.secure || String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https";
+}
+
+function cookieOptions(req, maxAge) {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isSecureRequest(req),
+    path: COOKIE_PATH,
+    ...(maxAge ? { maxAge } : {}),
+  };
+}
+
+function readCookie(req, name) {
+  const cookies = String(req.headers.cookie || "").split(";");
+  const found = cookies.find((cookie) => cookie.trim().startsWith(`${name}=`));
+  if (!found) return "";
+  return decodeURIComponent(found.trim().slice(name.length + 1));
+}
+
+function cleanupExpired(now = Date.now()) {
+  for (const [state, record] of states) if (record.expiresAt <= now) states.delete(state);
+  for (const [sessionKey, session] of sessions) if (session.expiresAt <= now) sessions.delete(sessionKey);
+}
+
+function getGoogleSession(req) {
+  cleanupExpired();
+  const sessionId = readCookie(req, GOOGLE_PROFILE_SESSION_COOKIE);
+  if (sessionId && sessions.has(sessionId)) {
+    return sessions.get(sessionId);
+  }
+  return req.session?.googleUser || null;
+}
+
 // Helper to set OAuth tokens from the current user session
 const getAuthenticatedClient = (req) => {
-  const tokens = req.session?.googleUser?.tokens;
+  const session = getGoogleSession(req);
+  const tokens = session?.tokens;
   if (!tokens) return null;
-  googleOAuthClient.setCredentials(tokens);
-  return googleOAuthClient;
+  const client = createGoogleOAuthClient();
+  client.setCredentials(tokens);
+  return client;
 };
 
+function getFrontendUrl() {
+  const candidate = (process.env.FRONTEND_URL || (process.env.CLIENT_ORIGIN || "").split(",")[0] || "http://localhost:5173").trim();
+  return candidate.replace(/\/+$/, "");
+}
+
 // 1. Google OAuth Initiation
-router.get("/google", (_req, res) => {
-  const authorizationUrl = googleOAuthClient.generateAuthUrl({
+router.get("/google", (req, res) => {
+  cleanupExpired();
+  const client = createGoogleOAuthClient();
+  const state = crypto.randomBytes(32).toString("base64url");
+  states.set(state, { expiresAt: Date.now() + OAUTH_STATE_TTL_MS });
+
+  res.cookie(GOOGLE_PROFILE_STATE_COOKIE, state, cookieOptions(req, OAUTH_STATE_TTL_MS));
+
+  const authorizationUrl = client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent select_account",
+    state,
     scope: [
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",
@@ -30,8 +90,23 @@ router.get("/google", (_req, res) => {
 
 // 2. Google OAuth Callback (Verifies Business Status)
 router.get("/google/callback", async (req, res) => {
-  const { code } = req.query;
-  const frontendUrl = process.env.FRONTEND_URL || "https://9hdxck8r-5173.inc1.devtunnels.ms/";
+  const { code, state, error: oauthError, error_description } = req.query;
+  const frontendUrl = getFrontendUrl();
+  const cookieState = readCookie(req, GOOGLE_PROFILE_STATE_COOKIE);
+  res.clearCookie(GOOGLE_PROFILE_STATE_COOKIE, cookieOptions(req));
+
+  if (oauthError) {
+    const message = error_description || oauthError || "Google login was cancelled.";
+    return res.redirect(
+      `${frontendUrl}/business-growth/google-profile-manager?status=error&message=${encodeURIComponent(message)}`,
+    );
+  }
+
+  if (state && cookieState && state !== cookieState) {
+    return res.redirect(
+      `${frontendUrl}/business-growth/google-profile-manager?status=error&message=${encodeURIComponent("Invalid or expired OAuth state.")}`,
+    );
+  }
 
   if (!code) {
     return res.redirect(
@@ -40,17 +115,18 @@ router.get("/google/callback", async (req, res) => {
   }
 
   try {
-    const { tokens } = await googleOAuthClient.getToken(code);
-    googleOAuthClient.setCredentials(tokens);
+    const client = createGoogleOAuthClient();
+    const { tokens } = await client.getToken(String(code));
+    client.setCredentials(tokens);
 
     // 1. User Info
-    const oauth2 = google.oauth2({ version: "v2", auth: googleOAuthClient });
+    const oauth2 = google.oauth2({ version: "v2", auth: client });
     const { data: userInfo } = await oauth2.userinfo.get();
 
     // 2. Query Google My Business Accounts
     const accountMgmt = google.mybusinessaccountmanagement({
       version: "v1",
-      auth: googleOAuthClient,
+      auth: client,
     });
     const accountsRes = await accountMgmt.accounts.list();
     const accounts = accountsRes.data.accounts || [];
@@ -58,7 +134,7 @@ router.get("/google/callback", async (req, res) => {
     if (accounts.length === 0) {
       return res.redirect(
         `${frontendUrl}/business-growth/google-profile-manager?status=unverified&email=${encodeURIComponent(
-          userInfo.email,
+          userInfo.email || "",
         )}&reason=no_accounts`,
       );
     }
@@ -66,7 +142,7 @@ router.get("/google/callback", async (req, res) => {
     // 3. Query Google Locations
     const bizInfo = google.mybusinessbusinessinformation({
       version: "v1",
-      auth: googleOAuthClient,
+      auth: client,
     });
     const locationsRes = await bizInfo.accounts.locations.list({
       parent: accounts[0].name,
@@ -81,21 +157,28 @@ router.get("/google/callback", async (req, res) => {
     if (!verifiedLoc) {
       return res.redirect(
         `${frontendUrl}/business-growth/google-profile-manager?status=unverified&email=${encodeURIComponent(
-          userInfo.email,
+          userInfo.email || "",
         )}&reason=not_verified_merchant`,
       );
     }
 
-    // 4. Save to Session
-    req.session = req.session || {};
-    req.session.googleUser = {
+    // 4. Save to Persistent Session Store
+    const sessionData = {
       email: userInfo.email,
       name: userInfo.name,
       businessName: verifiedLoc.title,
       locationId: verifiedLoc.name, // e.g. "locations/12345678"
       isVerified: true,
       tokens,
+      expiresAt: Date.now() + SESSION_TTL_MS,
     };
+
+    const sessionId = crypto.randomBytes(32).toString("base64url");
+    sessions.set(sessionId, sessionData);
+    res.cookie(GOOGLE_PROFILE_SESSION_COOKIE, sessionId, cookieOptions(req, SESSION_TTL_MS));
+
+    req.session = req.session || {};
+    req.session.googleUser = sessionData;
 
     return res.redirect(
       `${frontendUrl}/business-growth/google-profile-manager?status=connected`,
@@ -112,7 +195,7 @@ router.get("/google/callback", async (req, res) => {
 
 // 3. Status Check for Frontend Guard
 router.get("/google/verify-status", (req, res) => {
-  const sessionUser = req.session?.googleUser;
+  const sessionUser = getGoogleSession(req);
 
   if (!sessionUser) {
     return res.json({
@@ -136,7 +219,8 @@ router.get("/google/verify-status", (req, res) => {
 router.get("/google/live-details", async (req, res) => {
   try {
     const authClient = getAuthenticatedClient(req);
-    const locationId = req.session?.googleUser?.locationId;
+    const session = getGoogleSession(req);
+    const locationId = session?.locationId;
 
     if (!authClient || !locationId) {
       return res
@@ -170,7 +254,6 @@ router.get("/google/live-details", async (req, res) => {
     const businessHours = days.map((day) => {
       const match = periods.find((p) => p.openDay === dayToGoogle[day]);
       if (!match) return { day, open: "", close: "", isClosed: true };
-      // Handles result.
       const pad = (n) => String(n).padStart(2, "0");
       return {
         day,
@@ -205,8 +288,9 @@ router.get("/google/live-details", async (req, res) => {
 router.patch("/google/live-details", async (req, res) => {
   try {
     const authClient = getAuthenticatedClient(req);
-    const locationId = req.session?.googleUser?.locationId;
-    const form = req.body;
+    const session = getGoogleSession(req);
+    const locationId = session?.locationId;
+    const form = req.body?.businessDetails || req.body || {};
 
     if (!authClient || !locationId) {
       return res
@@ -263,6 +347,22 @@ router.patch("/google/live-details", async (req, res) => {
     console.error("Failed to patch Google:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
+});
+
+// 6. Disconnect from Google Business Profile
+router.post("/google/disconnect", (req, res) => {
+  const sessionId = readCookie(req, GOOGLE_PROFILE_SESSION_COOKIE);
+  if (sessionId) {
+    sessions.delete(sessionId);
+  }
+  if (req.session) {
+    delete req.session.googleUser;
+  }
+  res.clearCookie(GOOGLE_PROFILE_SESSION_COOKIE, cookieOptions(req));
+  return res.json({
+    success: true,
+    message: "Disconnected from Google Business Profile",
+  });
 });
 
 export default router;

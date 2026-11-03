@@ -1,5 +1,5 @@
 // Implements the smart ads page.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiAlertCircle,
   FiBarChart2,
@@ -15,6 +15,7 @@ import {
   FiPlus,
   FiRefreshCw,
   FiSave,
+  FiTrash2,
   FiTarget,
   FiUpload,
   FiUsers,
@@ -30,13 +31,17 @@ import { calculateInventoryItemPricing } from "../../../services/itemsStorage";
 import {
   disconnectMeta,
   getMetaAdsInsights,
+  getMetaAccountEligibility,
   getMetaAssets,
+  getMetaCampaigns,
+  getMetaCampaignInsights,
   getMetaConnectionStatus,
   publishMetaCampaign,
   saveMetaAssetSelection,
+  setMetaCampaignStatus,
   startMetaConnection,
 } from "../../../services/smartAdsMetaService";
-import { loadGrowthCampaigns, loadGrowthItems, saveGrowthCampaign } from "../../../services/businessGrowthData.js";
+import { deleteGrowthCampaign, loadGrowthCampaigns, loadGrowthItems, saveGrowthCampaign } from "../../../services/businessGrowthData.js";
 
 const goalOptions = [
   { id: "whatsapp", label: "Get WhatsApp Messages" },
@@ -137,6 +142,13 @@ function statusLabel(status) {
     .split("-")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function accountEligibilityLabel(status, disableReason) {
+  if (status === 1) return "Active according to Meta";
+  if ([2, 3, 7, 8, 9, 100, 101, 202].includes(Number(status))) return `Meta reports a restricted or non-active account (status ${status}${disableReason != null ? `, reason ${disableReason}` : ""})`;
+  if (status === 201) return "Meta reports one or more active accounts";
+  return status == null ? "Unavailable" : `Meta account status code ${status}`;
 }
 
 // This helper handles result logic.
@@ -335,7 +347,7 @@ function formFromCampaign(campaign) {
 }
 
 // This helper handles from form logic.
-function campaignFromForm(form, status, inventoryItems, templateOptions, sessionDesigns) {
+function campaignFromForm(form, status, inventoryItems, templateOptions, sessionDesigns, wizardStep = 0, selectedAssets = {}) {
   const selectedItem = inventoryItems.find((item) => item.id === form.selectedItemId);
   const selectedTemplate = templateOptions.find((template) => template.id === form.templateId);
   const selectedSessionDesign = sessionDesigns.find((design) => design.id === form.sessionDesignId);
@@ -392,6 +404,9 @@ function campaignFromForm(form, status, inventoryItems, templateOptions, session
       endTime: form.scheduleMode === "custom" ? form.endTime : "",
     },
     status,
+    source: "usv",
+    wizardStep,
+    selectedAssets: { ...selectedAssets },
     analytics: { reach: 0, clicks: 0, spend: 0, leads: 0 },
     meta: { connectionStatus: "not-connected", campaignId: null, adSetId: null, adId: null },
   };
@@ -404,7 +419,7 @@ function campaignWithPublishResult(campaign, publish, status, message = "") {
     ...campaign,
     status,
     meta: {
-      connectionStatus: status === "published" ? "published" : "publish-failed",
+      connectionStatus: status === "publish-failed" ? "publish-failed" : "published",
       campaignId: ids.metaCampaignId || null,
       adSetId: ids.metaAdSetId || null,
       imageHash: ids.metaImageHash || null,
@@ -1067,9 +1082,21 @@ function SmartAds() {
   });
   const [metaAssets, setMetaAssets] = useState(() => emptyMetaAssets());
   const [metaSelection, setMetaSelection] = useState(() => emptyMetaSelection());
+  const [metaCampaigns, setMetaCampaigns] = useState([]);
+  const [metaCampaignsLoading, setMetaCampaignsLoading] = useState(false);
+  const [metaCampaignsError, setMetaCampaignsError] = useState("");
+  const [metaCampaignSearch, setMetaCampaignSearch] = useState("");
+  const [metaCampaignFilter, setMetaCampaignFilter] = useState("ALL");
+  const [metaCampaignNext, setMetaCampaignNext] = useState("");
+  const [eligibility, setEligibility] = useState(null);
+  const [eligibilityError, setEligibilityError] = useState("");
+  const [campaignInsights, setCampaignInsights] = useState({});
+  const [campaignInsightsRange, setCampaignInsightsRange] = useState("last_30d");
+  const [campaignActionId, setCampaignActionId] = useState("");
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState(callbackNotice.error);
   const [publishing, setPublishing] = useState(false);
+  const publishLock = useRef(false);
   const [touched, setTouched] = useState({ headline: false, caption: false, creative: false });
 
   const templateOptions = useMemo(() => marketingTemplates.slice(0, 10), []);
@@ -1108,6 +1135,8 @@ function SmartAds() {
         setMetaSelection(status.selection || emptyMetaSelection());
         setMetaError((current) => current || status.lastError || "");
         if (!status.connected) return null;
+        refreshMetaCampaigns();
+        checkAccountEligibility();
         return getMetaAssets({ businessId: status.selection?.businessId });
       })
       .then((assetsStatus) => {
@@ -1315,7 +1344,10 @@ function SmartAds() {
     }
 
     try {
-      const saved = await saveGrowthCampaign(campaignFromForm(form, status, inventoryItems, templateOptions, sessionDesigns));
+      const existing = campaigns.find((campaign) => campaign.id === form.id);
+      const nextStatus = status === "draft" && existing?.meta?.campaignId ? existing.status : status;
+      const candidate = campaignFromForm(form, nextStatus, inventoryItems, templateOptions, sessionDesigns, step, metaSelection);
+      const saved = await saveGrowthCampaign(existing ? { ...existing, ...candidate, meta: existing.meta, source: existing.source } : candidate);
       setCampaigns((current) => [saved, ...current.filter((campaign) => campaign.id !== saved.id)]);
       setForm(formFromCampaign(saved));
       setError("");
@@ -1333,6 +1365,12 @@ function SmartAds() {
 
   // Handles campaign to meta.
   async function publishCampaignToMeta() {
+    if (publishLock.current) return;
+    const existing = campaigns.find((campaign) => campaign.id === form.id);
+    if (existing?.meta?.campaignId || existing?.meta?.adSetId || existing?.meta?.adId) {
+      setError("This draft already has Meta objects. Manage its existing campaign from My Meta Campaigns to avoid creating duplicates.");
+      return;
+    }
     const message = validateAllSteps();
     if (message) {
       setError(message);
@@ -1347,10 +1385,11 @@ function SmartAds() {
       return;
     }
 
+    publishLock.current = true;
     setPublishing(true);
     setError("");
 
-    const baseCampaign = campaignFromForm(form, "published", inventoryItems, templateOptions, sessionDesigns);
+    const baseCampaign = campaignFromForm(form, "published", inventoryItems, templateOptions, sessionDesigns, step, metaSelection);
 
     try {
       const imageDataUrl = form.mediaType === "image" ? await resolvePublishableCreativeDataUrl(creativeImage) : "";
@@ -1373,10 +1412,11 @@ function SmartAds() {
             : {}),
         },
       });
-      const saved = await saveGrowthCampaign(campaignWithPublishResult(baseCampaign, response.publish, "published"));
+      const saved = await saveGrowthCampaign(campaignWithPublishResult(baseCampaign, response.publish, "paused"));
       setCampaigns(await loadGrowthCampaigns());
       setForm(formFromCampaign(saved));
-      setToast("Campaign published to Meta in paused state.");
+      setToast("Campaign created in Meta as paused. Use Publish on its campaign card when you are ready to activate it.");
+      refreshMetaCampaigns();
       setView("dashboard");
       setStep(0);
     } catch (publishError) {
@@ -1396,6 +1436,7 @@ function SmartAds() {
         setError(formatMetaPublishError(publishError));
       }
     } finally {
+      publishLock.current = false;
       setPublishing(false);
     }
   }
@@ -1413,11 +1454,83 @@ function SmartAds() {
   // Handles campaign.
   function editCampaign(campaign) {
     setForm(formFromCampaign(campaign));
+    if (campaign.selectedAssets && Object.values(campaign.selectedAssets).some(Boolean)) {
+      setMetaSelection({ ...emptyMetaSelection(), ...campaign.selectedAssets });
+      saveMetaAssetSelection({ ...emptyMetaSelection(), ...campaign.selectedAssets }).catch((error) => setMetaError(error.message || "Saved Meta assets need to be selected again."));
+    }
+    setStep(campaign.status === "draft" ? campaign.wizardStep || 0 : 0);
     setTouched({ headline: true, caption: true, creative: true });
     setError("");
     setToast("");
     setStep(0);
     setView("builder");
+  }
+
+  async function removeCampaign(campaign) {
+    if (!window.confirm(`Delete “${campaign.name}”? This removes the saved Smart Ads record from this browser.`)) return;
+    try {
+      await deleteGrowthCampaign(campaign.id);
+      setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
+      setToast("Saved campaign removed.");
+    } catch (deleteError) {
+      setCampaignsLoadError(deleteError.message || "Unable to delete this saved campaign.");
+    }
+  }
+
+  async function refreshMetaCampaigns({ after = "", append = false } = {}) {
+    setMetaCampaignsLoading(true);
+    setMetaCampaignsError("");
+    try {
+      const result = await getMetaCampaigns({ after, limit: 25 });
+      setMetaCampaigns((current) => append ? [...current, ...(result.campaigns || [])] : (result.campaigns || []));
+      setMetaCampaignNext(result.paging?.cursors?.after || "");
+      return result;
+    } catch (loadError) {
+      setMetaCampaignsError(loadError.message || "Unable to load Meta campaigns.");
+      return null;
+    } finally {
+      setMetaCampaignsLoading(false);
+    }
+  }
+
+  async function checkAccountEligibility() {
+    setEligibilityError("");
+    try { setEligibility(await getMetaAccountEligibility()); }
+    catch (error) { setEligibility(null); setEligibilityError(error.message || "Unable to verify account information."); }
+  }
+
+  async function loadCampaignInsights(campaignId, datePreset = campaignInsightsRange) {
+    try {
+      const result = await getMetaCampaignInsights(campaignId, { datePreset });
+      setCampaignInsights((current) => ({ ...current, [campaignId]: result }));
+    } catch (error) {
+      setCampaignInsights((current) => ({ ...current, [campaignId]: { error: error.message || "Unable to load campaign performance." } }));
+    }
+  }
+
+  async function changeCampaignStatus(campaign, nextStatus) {
+    const metaCampaignId = campaign.meta?.campaignId || campaign.id;
+    const linkedRecord = campaigns.find((item) => item.meta?.campaignId === metaCampaignId);
+    const name = campaign.name || "this campaign";
+    if (nextStatus === "ACTIVE") {
+      const selectedPage = metaAssets.pages.find((page) => page.id === metaSelection.pageId)?.name || metaSelection.pageId || "Not selected";
+      const selectedAccount = metaAssets.adAccounts.find((account) => account.id === metaSelection.adAccountId);
+      const budget = linkedRecord?.budget?.dailyBudget ? `${formatCurrency(linkedRecord.budget.dailyBudget)} per day` : campaign.daily_budget ? `${formatCurrency(Number(campaign.daily_budget) / 100)} per day` : "not available from the campaign record";
+      if (!window.confirm(`Publish “${name}” to Meta?\nBudget: ${budget}\nAd Account: ${selectedAccount?.name || selectedAccount?.id || "Not selected"}\nFacebook Page: ${selectedPage}\nMeta review, billing, restrictions, and delivery eligibility still apply.`)) return;
+    } else if (!window.confirm(`Pause “${name}” in Meta?`)) return;
+    setCampaignActionId(metaCampaignId);
+    try {
+      const result = await setMetaCampaignStatus(metaCampaignId, nextStatus);
+      if (!result.success) throw new Error("Meta did not confirm the status update.");
+      if (linkedRecord) {
+        const updated = { ...linkedRecord, status: nextStatus === "ACTIVE" ? "active" : "paused", meta: { ...linkedRecord.meta, publishStatus: nextStatus } };
+        await saveGrowthCampaign(updated);
+        setCampaigns((current) => current.map((item) => item.id === updated.id ? updated : item));
+      }
+      await refreshMetaCampaigns();
+      setToast(nextStatus === "ACTIVE" ? "Meta accepted the activation request. Review and delivery eligibility still apply." : "Meta confirmed the campaign is paused.");
+    } catch (error) { setError(error.message || "Unable to update this Meta campaign."); }
+    finally { setCampaignActionId(""); }
   }
 
   // Refreshes meta connection.
@@ -1436,6 +1549,10 @@ function SmartAds() {
       setMetaStatus({ ...nextStatus, loading: false });
       setMetaAssets(nextStatus.assets || emptyMetaAssets());
       setMetaSelection(nextStatus.selection || emptyMetaSelection());
+      if (nextStatus.connected) {
+        refreshMetaCampaigns();
+        checkAccountEligibility();
+      }
       return nextStatus;
     } catch (metaRequestError) {
       const message = metaRequestError.message || "Unable to refresh Meta connection.";
@@ -2104,12 +2221,46 @@ function SmartAds() {
 
         <MetaInsights status={metaStatus} connectionError={metaError} campaignCount={campaigns.length} onRefresh={refreshMetaConnection} />
 
+        {metaStatus.connected && (
+          <section className="grid gap-5 lg:grid-cols-[1fr_330px]">
+            <Card className="p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div><h2 className="text-lg font-black text-slate-950">My Meta Campaigns</h2><p className="mt-1 text-sm font-semibold text-slate-500">Live campaign records fetched from the selected Meta Ad Account.</p></div>
+                <Button onClick={() => refreshMetaCampaigns()} disabled={metaCampaignsLoading} className="border border-slate-200 bg-white text-slate-700 disabled:opacity-50"><FiRefreshCw />{metaCampaignsLoading ? "Refreshing…" : "Refresh"}</Button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <input value={metaCampaignSearch} onChange={(event) => setMetaCampaignSearch(event.target.value)} placeholder="Search name or campaign ID" className="h-10 min-w-56 flex-1 rounded-lg border border-slate-200 px-3 text-sm" />
+                <select value={metaCampaignFilter} onChange={(event) => setMetaCampaignFilter(event.target.value)} className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold"><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="PAUSED">Paused</option><option value="ARCHIVED">Archived</option></select>
+              </div>
+              {metaCampaignsError && <p className="mt-4 rounded-lg bg-rose-50 p-3 text-sm font-bold text-rose-700">{metaCampaignsError}</p>}
+              {metaCampaignsLoading && !metaCampaigns.length ? <div className="mt-4 rounded-lg bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">Loading campaigns from Meta…</div> : null}
+              {!metaCampaignsLoading && !metaCampaignsError && !metaCampaigns.length ? <div className="mt-4 rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm font-semibold text-slate-500">No Meta campaigns were returned for this account.</div> : null}
+              <div className="mt-4 space-y-3">
+                {metaCampaigns.filter((item) => (metaCampaignFilter === "ALL" || item.status === metaCampaignFilter) && `${item.name} ${item.id}`.toLowerCase().includes(metaCampaignSearch.toLowerCase())).map((campaign) => {
+                  const metrics = campaignInsights[campaign.id];
+                  return <article key={campaign.id} className="rounded-xl border border-slate-200 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-black text-slate-950">{campaign.name}</h3><p className="mt-1 break-all text-xs font-semibold text-slate-500">ID {campaign.id} · {campaign.objective || "Objective unavailable"} · {campaign.created_time ? formatDate(campaign.created_time.slice(0, 10)) : "Creation date unavailable"}</p><p className="mt-1 text-xs font-bold text-slate-600">Status: {campaign.status || "Unavailable"} · Effective: {campaign.effective_status || "Unavailable"}{campaign.daily_budget ? ` · Budget: ${formatCurrency(Number(campaign.daily_budget) / 100)} / day` : ""}</p></div>
+                      <div className="flex flex-wrap gap-2">{campaign.status === "PAUSED" ? <Button onClick={() => changeCampaignStatus(campaign, "ACTIVE")} disabled={Boolean(campaignActionId)} className="bg-emerald-600 px-3 text-white disabled:opacity-50">{campaignActionId === campaign.id ? "Updating…" : "Publish"}</Button> : campaign.status === "ACTIVE" ? <Button onClick={() => changeCampaignStatus(campaign, "PAUSED")} disabled={Boolean(campaignActionId)} className="border border-slate-200 bg-white px-3 text-slate-700 disabled:opacity-50">{campaignActionId === campaign.id ? "Updating…" : "Pause"}</Button> : null}<Button onClick={() => loadCampaignInsights(campaign.id)} className="border border-slate-200 bg-white px-3 text-slate-700">Performance</Button></div>
+                    </div>
+                    {metrics && (metrics.error ? <p className="mt-3 text-sm font-bold text-rose-700">{metrics.error}</p> : <div className="mt-3"><label className="text-xs font-bold text-slate-600">Date range <select value={campaignInsightsRange} onChange={(event) => { setCampaignInsightsRange(event.target.value); loadCampaignInsights(campaign.id, event.target.value); }} className="ml-1 rounded border border-slate-200 bg-white p-1"><option value="last_7d">7 days</option><option value="last_30d">30 days</option><option value="this_month">This month</option><option value="last_90d">90 days</option></select></label>{(metrics.rows || []).length ? metrics.rows.map((row, index) => <div key={`${row.date_start}-${index}`} className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">{[["Impressions", row.impressions], ["Reach", row.reach], ["Clicks", row.clicks], ["Amount spent", row.spend == null ? null : `${metrics.currency || ""} ${row.spend}`], ["CTR", row.ctr == null ? null : `${row.ctr}%`], ["CPC", row.cpc == null ? null : `${metrics.currency || ""} ${row.cpc}`]].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-2"><p className="text-[10px] font-black uppercase text-slate-500">{label}</p><p className="mt-1 text-sm font-black text-slate-800">{value ?? "Not reported"}</p></div>)}</div>) : <p className="mt-2 text-xs font-semibold text-slate-500">No Insights rows yet; reporting may be delayed or unavailable for this date range.</p>}</div>)}
+                  </article>;
+                })}
+              </div>
+              {metaCampaignNext && <Button onClick={() => refreshMetaCampaigns({ after: metaCampaignNext, append: true })} disabled={metaCampaignsLoading} className="mt-4 border border-slate-200 bg-white text-slate-700">{metaCampaignsLoading ? "Loading…" : "Load more"}</Button>}
+            </Card>
+            <Card className="p-5 shadow-sm">
+              <div className="flex items-center justify-between gap-2"><h2 className="font-black text-slate-950">Ad Account Eligibility</h2><Button onClick={checkAccountEligibility} className="border border-slate-200 bg-white px-3 text-slate-700">Check</Button></div>
+              {eligibilityError ? <p className="mt-3 text-sm font-bold text-rose-700">Unable to verify billing status: {eligibilityError}</p> : eligibility ? <div className="mt-3 space-y-2 text-sm font-semibold text-slate-700"><p>Account: {eligibility.account?.name || "Selected Ad Account"}</p><p>Account status: {accountEligibilityLabel(eligibility.accountStatus, eligibility.disableReason)}</p><p>Payment data: {eligibility.paymentStatus === "payment-source-reported" ? "Meta reports a funding source; this does not guarantee the account can deliver ads." : eligibility.paymentStatus === "expired-source-reported" ? "Meta reports an expired funding source." : "Meta did not confirm payment method availability."}</p>{eligibility.paymentStatus !== "payment-source-reported" && <p className="rounded-lg bg-amber-50 p-3 text-amber-800">Please add or verify your payment method in Meta Ads Manager before running advertisements.</p>}</div> : <p className="mt-3 text-sm font-semibold text-slate-500">Account information has not been checked.</p>}
+            </Card>
+          </section>
+        )}
+
         <section className="grid gap-5 lg:grid-cols-[1fr_330px]">
           <Card className="p-5 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-black text-slate-950">Campaigns</h2>
-                <p className="mt-1 text-sm font-semibold text-slate-500">Campaigns are saved to your business database.</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">Drafts and USV campaign records are saved in this browser. Meta campaigns are identified separately.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {statusFilters.map((item) => (
@@ -2133,7 +2284,7 @@ function SmartAds() {
             <div className="mt-5 space-y-3">
               {campaignsLoading && !campaigns.length ? (
                 <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
-                  Loading campaigns from your business database...
+                  Loading saved Smart Ads campaigns...
                 </div>
               ) : filteredCampaigns.length ? (
                 filteredCampaigns.map((campaign) => (
@@ -2174,8 +2325,9 @@ function SmartAds() {
                     <div className="flex items-center gap-2 lg:flex-col lg:items-end">
                       <Button onClick={() => editCampaign(campaign)} className="border border-slate-200 bg-white px-4 text-slate-700 shadow-sm hover:bg-slate-50">
                         <FiEdit2 />
-                        Edit
+                        {campaign.status === "draft" ? "Continue Draft" : "Edit"}
                       </Button>
+                      {campaign.status === "draft" && <Button onClick={() => removeCampaign(campaign)} className="border border-rose-200 bg-white px-4 text-rose-700 shadow-sm hover:bg-rose-50"><FiTrash2 />Delete</Button>}
                     </div>
                   </article>
                 ))

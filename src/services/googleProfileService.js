@@ -31,6 +31,19 @@ export const googleProfileService = {
   },
 
   /**
+   * Disconnects the linked Google Business Profile session
+   * Hits the backend endpoint: POST /api/auth/google/disconnect
+   */
+  async disconnectGoogleBusinessAccount() {
+    try {
+      await apiRequest("/auth/google/disconnect", { method: "POST" });
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  },
+
+  /**
    * Fetches live business details directly from Google My Business API
    * Hits the backend endpoint: GET /api/auth/google/live-details
    */
@@ -49,31 +62,31 @@ export const googleProfileService = {
    * Hits the backend endpoint: PATCH /api/auth/google/live-details
    */
   async saveBusinessDetails(businessDetails) {
-  let googleSynced = true;
-  let googleSyncError = null;
+    let googleSynced = true;
+    let googleSyncError = null;
 
-  try {
-    await apiRequest("/auth/google/live-details", {
-      method: "PATCH",
-      body: businessDetails,
-    });
-  } catch (err) {
-    googleSynced = false;
-    googleSyncError = err.message || "Google update failed.";
-    console.warn("Direct Google API patch warning:", googleSyncError);
-  }
+    try {
+      await apiRequest("/auth/google/live-details", {
+        method: "PATCH",
+        body: JSON.stringify(businessDetails),
+      });
+    } catch (err) {
+      googleSynced = false;
+      googleSyncError = err.message || "Google update failed.";
+      console.warn("Direct Google API patch warning:", googleSyncError);
+    }
 
-  const saved = await businessGrowthApi.save(
-    "google-profile",
-    businessDetails,
-  );
+    const saved = await businessGrowthApi.save(
+      "google-profile",
+      businessDetails,
+    );
 
-  return {
-    saved,
-    googleSynced,
-    googleSyncError,
-  };
-},
+    return {
+      saved,
+      googleSynced,
+      googleSyncError,
+    };
+  },
 
   async getProfile() {
     try {

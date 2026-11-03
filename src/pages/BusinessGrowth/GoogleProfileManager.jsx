@@ -81,7 +81,7 @@ function StateSwitch({ status, setStatus }) {
 }
 
 // Renders the page header interface.
-function PageHeader({ status, setStatus, connected, onRefresh }) {
+function PageHeader({ status, setStatus, connected, onRefresh, onDisconnect }) {
   return (
     <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -102,6 +102,16 @@ function PageHeader({ status, setStatus, connected, onRefresh }) {
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <StateSwitch status={status} setStatus={setStatus} />
+        {connected && onDisconnect && (
+          <button
+            type="button"
+            onClick={onDisconnect}
+            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100"
+            title="Disconnect Google Account"
+          >
+            Disconnect
+          </button>
+        )}
         <button
           type="button"
           onClick={onRefresh}
@@ -744,6 +754,7 @@ function BusinessDetails({ details, profile, onSave }) {
   // business details: keep state synced dynamically with server/Google updates
   useEffect(() => {
     if (details) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         businessName: details.businessName || "",
         primaryCategory: details.primaryCategory || "",
@@ -1176,7 +1187,24 @@ function GoogleProfileManager() {
 
     try {
       const profileData = await googleProfileService.getProfile();
-      setData(profileData);
+      let liveDetails = null;
+      try {
+        liveDetails = await googleProfileService.getLiveBusinessDetails();
+      } catch {
+        // Fallback to stored profile details
+      }
+      const merged = {
+        ...profileData,
+        ...(liveDetails ? { businessDetails: liveDetails } : {}),
+        profile: {
+          ...profileData.profile,
+          name: liveDetails?.businessName || authCheck.account?.businessName || profileData.profile?.name,
+          category: liveDetails?.primaryCategory || profileData.profile?.category,
+          location: liveDetails?.address || profileData.profile?.location,
+          status: "Verified & Connected",
+        },
+      };
+      setData(merged);
       setStatus("connected");
     } catch (error) {
       setStatus("error");
@@ -1187,6 +1215,7 @@ function GoogleProfileManager() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     verifyAndLoadData();
   }, []);
 
@@ -1202,7 +1231,7 @@ function GoogleProfileManager() {
         location: businessDetails.address,
       },
     };
-    await googleProfileService.saveBusinessDetails(updated);
+    await googleProfileService.saveBusinessDetails(businessDetails);
     setData(updated);
   };
 
@@ -1232,6 +1261,12 @@ function GoogleProfileManager() {
     }));
   };
 
+  // Handles disconnect Google account.
+  const handleDisconnect = async () => {
+    await googleProfileService.disconnectGoogleBusinessAccount();
+    setStatus("disconnected");
+  };
+
   const connected = status === "connected";
 
   return (
@@ -1241,6 +1276,7 @@ function GoogleProfileManager() {
         setStatus={setStatus}
         connected={connected}
         onRefresh={verifyAndLoadData}
+        onDisconnect={handleDisconnect}
       />
       {profileError && (
         <p role="alert" className="bg-rose-50 px-4 py-2 text-sm text-rose-700">

@@ -75,6 +75,7 @@ router.get("/meta", (req, res) => {
 });
 
 router.get("/meta/callback", async (req, res) => {
+  console.log("[DEBUG metaAuth] GET /api/auth/meta/callback entered. Query params:", req.query);
   const { code, state, error, error_description } = req.query;
   const stateCookie = readCookie(req, META_OAUTH_STATE_COOKIE);
   clearMetaOAuthStateCookie(req, res);
