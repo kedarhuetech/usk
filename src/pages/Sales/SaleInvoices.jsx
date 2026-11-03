@@ -249,6 +249,50 @@ function SaleInvoices() {
   const openAddSale = () => navigate("/sales/sale-invoices/new", { state: { from: pathname } });
   // Opens preview.
   const openPreview = (invoice, printAfterOpen = false) => navigate("/sales/sale-invoices/preview", { state: { invoice, printAfterOpen } });
+  // Opens delivery challan preview page.
+  const openDeliveryChallanPreview = (invoice) => {
+    const rawRows = invoice.rows || invoice.items || [];
+    const challanRows = rawRows.length > 0
+      ? rawRows.filter((r) => r.item || r.name || r.itemName || r.qty).map((row, idx) => ({
+          id: row.id || `row-${idx}`,
+          item: row.item || row.name || row.itemName || "Item",
+          description: row.description || "",
+          hsn: row.hsn || row.hsnCode || row.sac || "",
+          qty: Number(row.qty || row.quantity || 1),
+          unit: row.unit || "NONE",
+          price: Number(row.price || row.rate || 0),
+          discount: Number(row.discount || row.discountPercent || 0),
+          tax: row.tax || "NONE",
+          cess: Number(row.cess || 0),
+        }))
+      : [{ id: "row-0", item: "Sale Items", description: "", hsn: "", qty: 1, unit: "NONE", price: invoiceAmount(invoice), discount: 0, tax: "NONE", cess: 0 }];
+
+    const invDate = invoiceDate(invoice);
+    const dateFormatted = invoice.form?.invoiceDate || (invDate ? isoDate(invDate) : new Date().toISOString().slice(0, 10));
+
+    const challan = {
+      id: invoice.id ? `challan-${invoice.id}` : `challan-${Date.now()}`,
+      number: String(invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"),
+      date: dateFormatted,
+      dueDate: invoice.form?.dueDate || invoice.dueDate || dateFormatted,
+      party: invoice.form?.customer || invoice.partyName || invoice.customer || "Cash Sale",
+      phone: invoice.form?.phone || invoice.customerPhone || "",
+      status: "Open",
+      total: invoiceAmount(invoice),
+      rows: challanRows,
+    };
+
+    try {
+      sessionStorage.setItem("ledgerly:previewChallan", JSON.stringify(challan));
+    } catch {}
+
+    navigate("/sales/delivery-challan/preview", {
+      state: {
+        previewChallan: challan,
+        from: pathname,
+      },
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -328,6 +372,10 @@ function SaleInvoices() {
       });
       return;
     }
+    if (action === "Preview Delivery Challan") {
+      openDeliveryChallanPreview(invoice);
+      return;
+    }
     if (action === "Convert To Return") {
       navigate("/sales/sale-return-credit-note", {
         state: {
@@ -344,7 +392,7 @@ function SaleInvoices() {
     else if (action === "Duplicate") {
       const duplicate = { ...invoice, id: `local-copy-${Date.now()}`, localOnly: true, createdAt: new Date().toISOString(), form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` } };
       saveInvoiceUi((current) => ({ ...current, duplicates: [duplicate, ...(current.duplicates || [])], history: recordInvoiceHistory(current, invoice, action) }));
-    } else if (["Generate e-Invoice", "Preview Delivery Challan", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
+    } else if (["Generate e-Invoice", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
   };
 
   // Handles invoice.
@@ -389,7 +437,7 @@ function SaleInvoices() {
       </Card>
       {activeDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveDialog(null); }}><section className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{activeDialog.type === "edit" ? "View / Edit Invoice" : activeDialog.type}</h2><p className="mt-1 text-sm text-slate-500">Invoice {activeDialog.invoice.form?.invoiceNumber || activeDialog.invoice.invoiceNumber || "—"} · {activeDialog.invoice.form?.customer || "Cash Sale"}</p></div><button type="button" aria-label="Close" onClick={() => setActiveDialog(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header>
         {activeDialog.type === "Generate e-Invoice" && <div className="space-y-4 p-5"><p className="text-sm text-slate-600">Create a demo e-invoice record for {formatMoney(invoiceAmount(activeDialog.invoice))}. This does not submit to a government portal.</p>{activeDialog.generated && <p role="status" className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">Demo e-invoice generated: {activeDialog.reference}</p>}<div className="flex justify-end gap-2"><Button onClick={() => setActiveDialog(null)} className="bg-slate-100 text-slate-700">Close</Button>{!activeDialog.generated && <Button onClick={() => { const reference = `DEMO-${Date.now()}`; saveInvoiceUi((current) => ({ ...current, eInvoices: { ...(current.eInvoices || {}), [activeDialog.invoice.id]: reference }, history: recordInvoiceHistory(current, activeDialog.invoice, "Demo e-Invoice generated") })); setActiveDialog((current) => ({ ...current, generated: true, reference })); }} className="bg-blue-600 text-white">Generate Demo e-Invoice</Button>}</div></div>}
-        {activeDialog.type === "Preview Delivery Challan" && <div className="space-y-4 p-5"><div className="grid grid-cols-2 gap-3 text-sm"><p><b>Date:</b> {formatDate(invoiceDate(activeDialog.invoice))}</p><p><b>Party:</b> {activeDialog.invoice.form?.customer || "Cash Sale"}</p></div><div className="max-h-64 overflow-auto rounded border border-slate-200"><table className="w-full text-left text-sm"><thead className="bg-slate-50"><tr><th className="p-2">Item</th><th className="p-2">Quantity</th><th className="p-2">Unit</th></tr></thead><tbody>{(activeDialog.invoice.rows || []).filter((row) => row.item || row.qty).map((row, index) => <tr key={row.id || index} className="border-t border-slate-100"><td className="p-2">{row.item || "—"}</td><td className="p-2">{row.qty || "—"}</td><td className="p-2">{row.unit || "—"}</td></tr>)}</tbody></table></div><div className="flex justify-end"><Button onClick={() => window.print()} className="bg-blue-600 text-white"><FiPrinter /> Print Challan</Button></div></div>}
+        
         {activeDialog.type === "Payment History" && <div className="space-y-3 p-5 text-sm text-slate-700"><div className="flex justify-between border-b pb-3"><span>Invoice total</span><b>{formatMoney(invoiceAmount(activeDialog.invoice))}</b></div><div className="flex justify-between border-b pb-3"><span>Received</span><b className="text-emerald-600">{formatMoney(invoiceReceived(activeDialog.invoice))}</b></div><div className="flex justify-between"><span>Balance</span><b className="text-rose-600">{formatMoney(invoiceBalance(activeDialog.invoice))}</b></div><p className="text-xs text-slate-500">Payment entries are shown from this invoice’s saved received amount.</p></div>}
         {activeDialog.type === "View History" && <div className="max-h-80 space-y-3 overflow-y-auto p-5">{(invoiceUi.history || []).filter((entry) => entry.invoiceId === activeDialog.invoice.id).map((entry) => <div key={entry.id} className="flex justify-between gap-3 border-b border-slate-100 pb-3 text-sm"><span className="font-medium text-slate-700">{entry.action}</span><time className="text-slate-500">{new Date(entry.at).toLocaleString()}</time></div>)}{!(invoiceUi.history || []).some((entry) => entry.invoiceId === activeDialog.invoice.id) && <p className="text-sm text-slate-500">No local action history for this invoice yet.</p>}</div>}
         <footer className="flex justify-end border-t border-slate-100 px-5 py-3"><Button onClick={() => setActiveDialog(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}

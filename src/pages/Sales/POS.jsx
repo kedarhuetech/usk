@@ -34,6 +34,8 @@ import {
   updatePosBill,
 } from "../../services/posBillState.js";
 import { calculatePosBill } from "../../services/posBillCalculations.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 
 const STORAGE = {
   draft: "pos_draft_v1",
@@ -139,6 +141,302 @@ function ActionButton({ children, primary = false, onClick, disabled = false }) 
   );
 }
 
+// Dedicated isolated printing engine honoring Settings -> Print Settings
+function printPosBill(draft, calculations) {
+  const settings = getAppSettings() || {};
+  const profile = getCompanyProfile() || {};
+  const isThermal = (settings.printActiveTab || "thermal") === "thermal";
+  const companyName = settings.companyNamePrint || profile.companyName || profile.businessName || "Sai Kirana Stores";
+  const phone = settings.phoneNumberPrint || profile.phoneNumber || "";
+  const address = settings.addressPrint || profile.address || "";
+  const gstin = settings.printGstinOnSale ? (profile.gstin || "") : "";
+  const invoiceNo = draft?.invoiceNo || "POS-001";
+  const dateStr = draft?.savedAt ? new Date(draft.savedAt).toLocaleDateString("en-IN") : new Date().toLocaleDateString("en-IN");
+  const timeStr = draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }) : new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+  const customer = draft?.customer || "Walk-in Customer";
+  const customerPhone = draft?.customerPhone || "";
+  const paymentMode = draft?.paymentMode || "Cash";
+  const lines = calculations?.lines || [];
+  const themeColor = settings.themeColor || "#881337";
+
+  let bodyHtml = "";
+
+  if (isThermal) {
+    const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
+    const itemRows = lines.map((line) => `
+      <div style="padding: 4px 0; border-bottom: 1px dotted #ccc;">
+        <div style="font-weight: 700; color: #111; font-size: 11px;">${line.name}</div>
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #333; margin-top: 1px;">
+          <span>${line.qty} ${line.unit || ""} × ₹${Number(line.price || 0).toFixed(2)}</span>
+          <span style="font-weight: 800; color: #000;">₹${Number(line.total || 0).toFixed(2)}</span>
+        </div>
+        ${line.discount > 0 ? `<div style="font-size: 10px; color: #047857; text-align: right;">(Disc: -₹${Number(line.discount).toFixed(2)})</div>` : ''}
+      </div>
+    `).join("");
+
+    bodyHtml = `
+      <div style="width: 290px; max-width: 100%; margin: 0 auto; font-family: 'Courier New', Courier, monospace, sans-serif; font-size: 11px; line-height: 1.35; color: #000; padding: 6px 4px;">
+        ${settings.printCompanyLogo && settings.companyLogo ? `<div style="text-align: center; margin-bottom: 6px;"><img src="${settings.companyLogo}" style="max-height: 48px; max-width: 120px; object-fit: contain;" /></div>` : ''}
+        <div style="text-align: center;">
+          <div style="font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;">${companyName}</div>
+          ${address ? `<div style="font-size: 10px; color: #333; margin-top: 2px;">${address}</div>` : ''}
+          ${phone ? `<div style="font-size: 10px; color: #333;">Ph: ${phone}</div>` : ''}
+          ${gstin ? `<div style="font-size: 10px; font-weight: 700; margin-top: 2px;">GSTIN: ${gstin}</div>` : ''}
+          <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin-top: 6px; font-weight: 900; letter-spacing: 1px; font-size: 11px;">
+            ${settings.transactionNames?.saleInvoice || "TAX INVOICE / CASH MEMO"}
+          </div>
+        </div>
+
+        <div style="margin-top: 6px; font-size: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
+          <div style="display: flex; justify-content: space-between;">
+            <span>Bill: <b>${invoiceNo}</b></span>
+            <span>${dateStr} ${timeStr}</span>
+          </div>
+          ${customer ? `
+            <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+              <span>Cust: ${customer}</span>
+              ${customerPhone ? `<span>Ph: ${customerPhone}</span>` : ''}
+            </div>` : ''}
+          <div style="display: flex; justify-content: space-between; color: #444; margin-top: 2px;">
+            <span>Mode: ${paymentMode}</span>
+            <span>Counter: POS 1</span>
+          </div>
+        </div>
+
+        <div style="margin-top: 4px;">
+          <div style="display: flex; justify-content: space-between; font-weight: 900; border-bottom: 1px dashed #000; padding-bottom: 3px; font-size: 10px;">
+            <span>ITEM</span>
+            <span>QTY × PRICE</span>
+            <span>TOTAL</span>
+          </div>
+          <div>${itemRows}</div>
+        </div>
+
+        <div style="border-top: 1px dashed #000; padding-top: 6px; margin-top: 6px; font-size: 11px;">
+          <div style="display: flex; justify-content: space-between; font-size: 10px; color: #444;">
+            <span>Total Items / Qty:</span>
+            <span>${lines.length} items / ${totalQty} pcs</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+            <span>Subtotal:</span>
+            <span>₹${Number(calculations?.subtotal || 0).toFixed(2)}</span>
+          </div>
+          ${(Number(calculations?.itemDiscount || 0) + Number(calculations?.billDiscount || 0) + Number(calculations?.loyaltyDiscount || 0)) > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #047857; margin-top: 2px;">
+              <span>Total Discount:</span>
+              <span>-₹${(Number(calculations?.itemDiscount || 0) + Number(calculations?.billDiscount || 0) + Number(calculations?.loyaltyDiscount || 0)).toFixed(2)}</span>
+            </div>` : ''}
+          ${Number(calculations?.tax || 0) > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+              <span>GST / Taxes:</span>
+              <span>₹${Number(calculations?.tax || 0).toFixed(2)}</span>
+            </div>` : ''}
+          ${Number(calculations?.charges || 0) > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+              <span>Addl Charges:</span>
+              <span>₹${Number(calculations?.charges || 0).toFixed(2)}</span>
+            </div>` : ''}
+          <div style="border-top: 2px dashed #000; border-bottom: 2px dashed #000; padding: 6px 0; margin-top: 6px; display: flex; justify-content: space-between; font-size: 14px; font-weight: 900;">
+            <span>GRAND TOTAL:</span>
+            <span>₹${Number(calculations?.total || 0).toFixed(2)}</span>
+          </div>
+          ${settings.printReceivedAmount ? `
+            <div style="display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px;">
+              <span>Received:</span>
+              <span>₹${Number(calculations?.received || calculations?.total || 0).toFixed(2)}</span>
+            </div>` : ''}
+          ${Number(calculations?.change || 0) > 0 ? `
+            <div style="display: flex; justify-content: space-between; margin-top: 2px; font-size: 11px;">
+              <span>Change Returned:</span>
+              <span>₹${Number(calculations?.change || 0).toFixed(2)}</span>
+            </div>` : ''}
+          ${settings.printBalanceAmount && Number(calculations?.balance || 0) > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #be123c; font-weight: 700; margin-top: 2px; font-size: 11px;">
+              <span>Balance Due:</span>
+              <span>₹${Number(calculations?.balance || 0).toFixed(2)}</span>
+            </div>` : ''}
+        </div>
+
+        <div style="border-top: 1px dashed #000; margin-top: 10px; padding-top: 8px; text-align: center; font-size: 10px; color: #444;">
+          <div style="font-weight: 800; color: #000; text-transform: uppercase;">Thank You! Visit Again</div>
+          ${settings.printTermsAndConditions && settings.termsAndConditions ? `<div style="font-size: 8px; font-style: italic; margin-top: 4px; color: #555;">${settings.termsAndConditions}</div>` : ''}
+          <div style="font-size: 8px; margin-top: 4px; color: #777;">*** ${companyName} ***</div>
+        </div>
+      </div>
+    `;
+  } else {
+    // Regular A4 Invoice
+    const itemRows = lines.map((line, idx) => `
+      <tr style="border-bottom: 1px solid #e2e8f0;">
+        <td style="padding: 8px; text-align: left; color: #64748b;">${idx + 1}</td>
+        <td style="padding: 8px; text-align: left; font-weight: 700; color: #0f172a;">${line.name}</td>
+        <td style="padding: 8px; text-align: center;">${line.qty} ${line.unit || ""}</td>
+        <td style="padding: 8px; text-align: right;">₹${Number(line.price || 0).toFixed(2)}</td>
+        <td style="padding: 8px; text-align: right; color: #047857;">${line.discount > 0 ? `₹${Number(line.discount).toFixed(2)}` : "-"}</td>
+        <td style="padding: 8px; text-align: right;">${line.itemTax > 0 ? `₹${Number(line.itemTax).toFixed(2)}` : "-"}</td>
+        <td style="padding: 8px; text-align: right; font-weight: 700;">₹${Number(line.total || 0).toFixed(2)}</td>
+      </tr>
+    `).join("");
+
+    bodyHtml = `
+      <div style="max-width: 800px; margin: 0 auto; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; font-size: 12px; line-height: 1.4;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid ${themeColor}; padding-bottom: 16px;">
+          <div>
+            ${settings.printCompanyLogo && settings.companyLogo ? `<img src="${settings.companyLogo}" style="max-height: 56px; margin-bottom: 8px; object-fit: contain;" />` : ''}
+            <div style="font-size: 22px; font-weight: 900; text-transform: uppercase; color: ${themeColor};">${companyName}</div>
+            ${address ? `<div style="font-size: 12px; color: #475569; margin-top: 2px;">${address}</div>` : ''}
+            ${phone ? `<div style="font-size: 12px; color: #475569;">Phone: ${phone}</div>` : ''}
+            ${gstin ? `<div style="font-size: 12px; font-weight: 700; margin-top: 2px;">GSTIN: ${gstin}</div>` : ''}
+          </div>
+          <div style="text-align: right;">
+            <div style="display: inline-block; background: ${themeColor}; color: #ffffff; font-weight: 900; font-size: 13px; padding: 4px 14px; border-radius: 4px; text-transform: uppercase;">
+              ${settings.transactionNames?.saleInvoice || "TAX INVOICE"}
+            </div>
+            <div style="font-size: 13px; font-weight: 800; margin-top: 8px;">Invoice #: ${invoiceNo}</div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 2px;">Date: ${dateStr}</div>
+            <div style="font-size: 12px; color: #64748b;">Mode: ${paymentMode}</div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-top: 16px; font-size: 12px;">
+          <div>
+            <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b;">BILL TO:</div>
+            <div style="font-size: 14px; font-weight: 800; color: #0f172a; margin-top: 2px;">${customer}</div>
+            ${customerPhone ? `<div style="color: #475569; margin-top: 1px;">Ph: ${customerPhone}</div>` : ''}
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b;">PAYMENT STATUS:</div>
+            <div style="font-size: 12px; font-weight: 700; color: ${Number(calculations?.balance || 0) > 0 ? '#be123c' : '#047857'}; margin-top: 2px;">
+              ${Number(calculations?.balance || 0) > 0 ? 'PARTIAL / BALANCE DUE' : 'PAID IN FULL'}
+            </div>
+            <div style="color: #64748b; font-size: 11px; margin-top: 1px;">Via ${paymentMode}</div>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px;">
+          <thead>
+            <tr style="background: ${themeColor}; color: #ffffff;">
+              <th style="padding: 8px; text-align: left;">#</th>
+              <th style="padding: 8px; text-align: left;">ITEM NAME</th>
+              <th style="padding: 8px; text-align: center;">QTY</th>
+              <th style="padding: 8px; text-align: right;">PRICE</th>
+              <th style="padding: 8px; text-align: right;">DISCOUNT</th>
+              <th style="padding: 8px; text-align: right;">TAX</th>
+              <th style="padding: 8px; text-align: right;">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 16px; font-size: 12px;">
+          <div style="width: 50%;">
+            ${settings.printTermsAndConditions && settings.termsAndConditions ? `
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px; margin-bottom: 12px;">
+                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #64748b;">TERMS &amp; CONDITIONS:</div>
+                <div style="color: #475569; margin-top: 2px; font-size: 11px;">${settings.termsAndConditions}</div>
+              </div>` : ''}
+            ${settings.printSignature ? `
+              <div style="margin-top: 24px; width: 180px; text-align: center;">
+                ${settings.signatureImage ? `<img src="${settings.signatureImage}" style="max-height: 44px; margin: 0 auto 4px auto; display: block;" />` : '<div style="height: 40px;"></div>'}
+                <div style="border-top: 1px solid #94a3b8; padding-top: 4px; font-weight: 700; font-size: 11px; color: #334155;">
+                  ${settings.printSignatureText || "Authorized Signatory"}
+                </div>
+              </div>` : ''}
+          </div>
+
+          <div style="width: 280px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <span>Subtotal:</span>
+              <span style="font-weight: 600;">₹${Number(calculations?.subtotal || 0).toFixed(2)}</span>
+            </div>
+            ${(Number(calculations?.itemDiscount || 0) + Number(calculations?.billDiscount || 0)) > 0 ? `
+              <div style="display: flex; justify-content: space-between; color: #047857; margin-bottom: 4px;">
+                <span>Total Discount:</span>
+                <span>-₹${(Number(calculations?.itemDiscount || 0) + Number(calculations?.billDiscount || 0)).toFixed(2)}</span>
+              </div>` : ''}
+            ${Number(calculations?.tax || 0) > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Tax (GST):</span>
+                <span>₹${Number(calculations?.tax || 0).toFixed(2)}</span>
+              </div>` : ''}
+            ${Number(calculations?.charges || 0) > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Addl Charges:</span>
+                <span>₹${Number(calculations?.charges || 0).toFixed(2)}</span>
+              </div>` : ''}
+            <div style="border-top: 2px solid ${themeColor}; margin-top: 6px; padding-top: 6px; display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; color: ${themeColor};">
+              <span>GRAND TOTAL:</span>
+              <span>₹${Number(calculations?.total || 0).toFixed(2)}</span>
+            </div>
+            ${settings.printReceivedAmount ? `
+              <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 11px; color: #475569;">
+                <span>Received:</span>
+                <span>₹${Number(calculations?.received || calculations?.total || 0).toFixed(2)}</span>
+              </div>` : ''}
+            ${settings.printBalanceAmount && Number(calculations?.balance || 0) > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin-top: 3px; font-size: 11px; font-weight: 700; color: #be123c;">
+                <span>Balance Due:</span>
+                <span>₹${Number(calculations?.balance || 0).toFixed(2)}</span>
+              </div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${isThermal ? 'Receipt' : 'Invoice'} - ${invoiceNo}</title>
+  <style>
+    @page {
+      size: ${isThermal ? '80mm auto' : 'A4 portrait'};
+      margin: ${isThermal ? '2mm 3mm' : '10mm'};
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #000000;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+  </style>
+</head>
+<body>
+  ${bodyHtml}
+</body>
+</html>`;
+
+  // Hidden print iframe - guarantees 100% clean print preview without any blank page or main page interference
+  let iframe = document.getElementById("pos-print-isolated-iframe");
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.id = "pos-print-isolated-iframe";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+  }
+
+  const iframeDoc = iframe.contentWindow.document;
+  iframeDoc.open();
+  iframeDoc.write(fullHtml);
+  iframeDoc.close();
+
+  iframe.contentWindow.focus();
+  setTimeout(() => {
+    iframe.contentWindow.print();
+  }, 300);
+}
 export default function PointOfSale() {
   const navigate = useNavigate();
   const [initialStorageError] = useState(validatePosStorage);
@@ -520,7 +818,7 @@ export default function PointOfSale() {
     }
     if (draft.savedAt) {
       showToast(`Bill ${draft.invoiceNo} is already saved.`, "info");
-      if (print) window.setTimeout(() => window.print(), 150);
+      if (print) printPosBill(draft, calculations);
       return;
     }
     if (draft.items.length === 0) {
@@ -618,7 +916,7 @@ export default function PointOfSale() {
     saveBillLockRef.current = false;
 
     if (print) {
-      window.setTimeout(() => window.print(), 150);
+      printPosBill(draft, calculations);
     }
   }
 
@@ -2652,20 +2950,6 @@ export default function PointOfSale() {
         </div>
       )}
 
-      {/* Print stylesheet */}
-      <style>{`
-        @media print {
-          header, nav, aside, section > label, section > div:last-child,
-          section > div:nth-last-child(2) { display: none !important; }
-          main { height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; }
-          main > div { display: block !important; overflow: visible !important; padding: 0 !important; }
-          section { display: block !important; min-height: 0 !important; }
-          section > div { overflow: visible !important; border: 0 !important; }
-          table { min-width: 0 !important; width: 100% !important; }
-          th, td { padding: 5px !important; border: 1px solid #ddd !important; color: black !important; }
-          button { display: none !important; }
-        }
-      `}</style>
-    </main>
+      </main>
   );
 }
