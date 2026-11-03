@@ -75,11 +75,20 @@ function getFileExtension(mimeType) {
 }
 
 // This helper handles python segmentation logic.
-function runPythonSegmentation(inputPath) {
+function getPythonBinary() {
   const configuredPython = process.env.PYTHON_BIN?.trim();
+  if (configuredPython && existsSync(configuredPython)) {
+    return configuredPython;
+  }
   const localVenvPython = path.resolve(__dirname, "../../.venv-image-to-layers", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  const useLocalVenv = !configuredPython && existsSync(localVenvPython);
-  const pythonBinary = configuredPython || (useLocalVenv ? localVenvPython : process.platform === "win32" ? "python" : "python3");
+  if (existsSync(localVenvPython)) {
+    return localVenvPython;
+  }
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function runPythonSegmentation(inputPath) {
+  const pythonBinary = getPythonBinary();
   const pythonArgs = [PYTHON_SCRIPT_PATH, "--input", inputPath];
 
   return new Promise((resolve, reject) => {

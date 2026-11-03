@@ -57,7 +57,7 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
-app.use((error, _req, res) => {
+app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ success: false, message: error.code === "LIMIT_FILE_SIZE" ? "Image must be 10 MB or smaller." : "Invalid image upload." });
   if (error.message === "File type not allowed") return res.status(400).json({ success: false, message: "Only JPG, PNG, WEBP, and GIF images are accepted." });
   return res.status(400).json({ success: false, message: "Invalid request." });

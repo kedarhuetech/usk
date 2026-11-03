@@ -32,7 +32,7 @@ import {
 } from "../../constants/marketingStudioData";
 import { getLocalMarketingEvents, loadMarketingEvents } from "../../services/marketingStudio/eventCalendarService";
 import { convertImageToLayers, createImageToLayersDesign, validateImageToLayersFile } from "../../services/marketingStudio/imageToLayersService";
-import { deleteSessionDesign, getRecentImageToLayersDesigns, saveSessionDesign } from "../../services/marketingStudio/sessionDesignService";
+import { deleteSessionDesign, getRecentImageToLayersDesigns, getSessionDesigns, saveSessionDesign } from "../../services/marketingStudio/sessionDesignService";
 
 const toneStyles = {
   rose: "bg-rose-50 text-rose-700 ring-rose-100",
@@ -99,6 +99,7 @@ function getNearestRelevantDateKey(dates) {
 
 // Renders the studio header interface.
 function StudioHeader({ searchQuery, onSearchChange }) {
+  const navigate = useNavigate();
   return (
     <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
@@ -127,7 +128,11 @@ function StudioHeader({ searchQuery, onSearchChange }) {
               placeholder="Search templates, sections, tags"
             />
           </label>
-          <Button className="h-11 rounded-full bg-[#FF5A1F] px-5 text-white hover:bg-[#E84E0F] active:bg-[#D4430B] shadow-[0_3px_12px_rgba(255,90,31,0.35)] transition">
+          <Button
+            type="button"
+            onClick={() => navigate("/business-growth/marketing-tools/editor/blank-square")}
+            className="h-11 rounded-full bg-[#FF5A1F] px-5 text-white hover:bg-[#E84E0F] active:bg-[#D4430B] shadow-[0_3px_12px_rgba(255,90,31,0.35)] transition cursor-pointer"
+          >
             <FiPlus className="h-4 w-4" />
             Create
           </Button>
@@ -165,7 +170,23 @@ function SectionTitle({ icon: Icon, title, description, action, onAction }) {
 }
 
 // Renders the quick create grid interface.
-function QuickCreateGrid() {
+function QuickCreateGrid({ onSelectTab }) {
+  const navigate = useNavigate();
+
+  const handleAction = (id) => {
+    if (id === "festival-post") {
+      onSelectTab?.("festivals");
+      document.getElementById("marketing-discovery-section")?.scrollIntoView({ behavior: "smooth" });
+    } else if (id === "product-promotion") {
+      onSelectTab?.("product");
+      document.getElementById("marketing-discovery-section")?.scrollIntoView({ behavior: "smooth" });
+    } else if (id === "business-offer") {
+      onSelectTab?.("business");
+      document.getElementById("marketing-discovery-section")?.scrollIntoView({ behavior: "smooth" });
+    } else if (id === "blank-design") {
+      navigate("/business-growth/marketing-tools/editor/blank-square");
+    }
+  };
   return (
     <Card className="p-5 shadow-sm">
       <SectionTitle icon={FiPlus} title="Quick Create" description="Start common marketing designs quickly." />
@@ -176,7 +197,8 @@ function QuickCreateGrid() {
             <button
               key={action.id}
               type="button"
-              className="flex min-h-[92px] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#1A1F71]/20 hover:shadow-md"
+              onClick={() => handleAction(action.id)}
+              className="flex min-h-[92px] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/40 hover:shadow-md cursor-pointer dark:bg-[#161922] dark:border-[#252B37] dark:hover:border-[#FF5A1F]"
             >
               <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ring-1 ${toneStyles[action.tone]}`}>
                 <Icon className="h-5 w-5" />
@@ -285,16 +307,16 @@ function ImageToLayersBetaCard() {
   };
 
   return (
-    <div className="mt-5 rounded-lg border border-indigo-100 bg-indigo-50/60 p-4">
+    <div className="mt-5 rounded-lg border border-indigo-100 bg-indigo-50/60 p-4 dark:border-[#252B37] dark:bg-[#161922]">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#1A1F71] shadow-sm">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-[#FF5A1F] dark:bg-[#1A1E27] shadow-sm">
               <FiLayers className="h-4 w-4" />
             </span>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-bold text-slate-900">Image to Layers</h3>
+                <h3 className="font-bold text-slate-900 dark:text-white">Image to Layers</h3>
                 <span className="rounded-full bg-[#F97316]/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-[#C2410C]">
                   Beta
                 </span>
@@ -1061,14 +1083,49 @@ function MarketingDiscovery({ activeTab, onTabChange, searchQuery, selectedBusin
 
 // Renders the recent designs interface.
 function RecentDesigns() {
+  const navigate = useNavigate();
+  const [designs, setDesigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getSessionDesigns()
+      .then((saved) => {
+        if (active) {
+          const list = (saved || []).filter((d) => !d.id?.startsWith("image-to-layers-"));
+          setDesigns(list.slice(0, 6));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
   return (
     <Card className="p-5 shadow-sm">
       <SectionTitle icon={FiClock} title="Recent Designs" description="Drafts and saved designs will appear here after you create them." />
-      {recentDesigns.length ? (
+      {designs.length ? (
         <div className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-4">
-            {recentDesigns.map((design) => (
-              <TemplateCard key={design.id} template={design} />
+            {designs.map((design) => (
+              <article
+                key={design.id}
+                onClick={() => navigate(`/business-growth/marketing-tools/editor/${design.id}`)}
+                className="flex h-[240px] w-[200px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/40 hover:shadow-md dark:bg-[#161922] dark:border-[#252B37]"
+              >
+                <div className="flex h-[150px] items-center justify-center bg-slate-50 p-2 dark:bg-[#0B0D11]">
+                  {design.thumbnail || design.elements?.find((el) => el.type === "image")?.src ? (
+                    <img src={design.thumbnail || design.elements?.find((el) => el.type === "image")?.src} alt="" className="max-h-full max-w-full object-contain rounded" />
+                  ) : (
+                    <FiEdit3 className="h-8 w-8 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col justify-between p-3">
+                  <h3 className="line-clamp-1 text-sm font-bold text-slate-800 dark:text-slate-100">{design.title || design.name || "Custom Draft"}</h3>
+                  <p className="text-xs font-semibold text-[#FF5A1F]">Continue Editing &rarr;</p>
+                </div>
+              </article>
             ))}
           </div>
         </div>
@@ -1189,7 +1246,7 @@ function MarketingStudioHome() {
       <StudioHeader searchQuery={searchQuery} onSearchChange={setSearchQuery} />
       <main className="space-y-5 p-4 sm:p-5">
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <QuickCreateGrid />
+          <QuickCreateGrid onSelectTab={setActiveTab} />
           <RecentDesigns />
         </div>
         <RecentImageToLayers />

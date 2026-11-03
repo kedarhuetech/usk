@@ -17,6 +17,15 @@ function getCalendarificApiKey() {
   return process.env.CALENDARIFIC_API_KEY || process.env.VITE_CALENDARIFIC_API_KEY || "";
 }
 
+router.get("/health", (_req, res) => {
+  res.json({
+    success: true,
+    service: "marketing-studio",
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 router.get("/calendar-events", async (req, res) => {
   const year = Number(req.query.year) || new Date().getFullYear();
   const apiKey = getCalendarificApiKey();

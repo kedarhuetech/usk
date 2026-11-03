@@ -21,6 +21,7 @@ import {
   FiImage,
   FiLayers,
   FiLock,
+  FiUnlock,
   FiMail,
   FiMapPin,
   FiMinus,
@@ -298,7 +299,7 @@ function createEditorSnapshot(design, brandKit) {
 
 // Checks whether element interactive.
 function isElementInteractive(element) {
-  return element.editable !== false && !element.locked;
+  return true;
 }
 
 const BRAND_BINDING_PATHS = {
@@ -447,7 +448,7 @@ function hasBrandOverride(element) {
 
 // Checks whether quick personalize design.
 function isQuickPersonalizeDesign(design) {
-  return design?.templateType === "flat" && design?.editMode === "quick-personalize";
+  return false;
 }
 
 // Gets quick personalize element.
@@ -1108,7 +1109,7 @@ function CanvasElement({ element, selected, onSelect, onChange, brandKit, export
   // Handles select.
   const handleSelect = (event) => {
     event.cancelBubble = true;
-    if (interactive) onSelect(element.id);
+    onSelect(element.id);
   };
 
   // Handles drag end.
@@ -2093,7 +2094,7 @@ function LayersPanel({ design, selectedId, onSelectLayer }) {
       <PanelHeader title="Layers" description="Select and inspect the visual stack." icon={FiLayers} />
       <div className="space-y-2 overflow-y-auto pr-1">
         {layers.map((layer) => {
-          const selectable = layer.kind === "element" && isElementInteractive(layer.element);
+          const selectable = layer.kind === "element";
           const selected = selectedId === layer.id;
 
           return (
@@ -2934,7 +2935,7 @@ function QuickPersonalizePanel({
       <PanelHeader title="Personalize" description="Quick edit the unlocked logo, business name and heading." icon={FiBriefcase} />
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-800">
-        Poster artwork is locked. Personalization layers remain movable, resizable and editable on the canvas.
+        All layers on this poster are selectable, movable, and editable on the canvas.
       </div>
 
       <div className={EDITOR_UI.propertyCard}>
@@ -3212,6 +3213,9 @@ function EditorToolsPanel({
   onAddBrandField,
   onAddQuickPersonalizeElement,
   onQuickPersonalizeElementChange,
+  onLayerAction,
+  onElementChange,
+  onDelete,
 }) {
   const quickPersonalizeActive = isQuickPersonalizeDesign(design);
   const panelByTool = {
@@ -3255,7 +3259,16 @@ function EditorToolsPanel({
         onAddBrandField={onAddBrandField}
       />
     ),
-    layers: <LayersPanel design={design} selectedId={selectedId} onSelectLayer={onSelectLayer} />,
+    layers: (
+      <LayersPanel
+        design={design}
+        selectedId={selectedId}
+        onSelectLayer={onSelectLayer}
+        onLayerAction={onLayerAction}
+        onElementChange={onElementChange}
+        onDelete={onDelete}
+      />
+    ),
   };
 
   return (
@@ -4189,7 +4202,22 @@ function Inspector({
       {selectedElement ? (
         <div className="space-y-3 text-sm">
           {isElementInteractive(selectedElement) && (
-            <div className="grid grid-cols-2 gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-2">
+            <div className="grid grid-cols-3 gap-2 rounded-md border border-slate-200 bg-slate-50/80 p-2">
+              <button
+                type="button"
+                onClick={() =>
+                  onElementChange(
+                    selectedElement.id,
+                    { locked: !selectedElement.locked, editable: true },
+                    { historyLabel: selectedElement.locked ? "Unlock element" : "Lock element" }
+                  )
+                }
+                className={`${EDITOR_UI.secondaryButton} h-9 px-2 text-xs`}
+                title={selectedElement.locked ? "Unlock element" : "Lock element"}
+              >
+                {selectedElement.locked ? <FiUnlock className="h-4 w-4" /> : <FiLock className="h-4 w-4" />}
+                {selectedElement.locked ? "Unlock" : "Lock"}
+              </button>
               <button
                 type="button"
                 onClick={onDuplicate}
@@ -5358,6 +5386,9 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
           onAddBrandField={handleAddBrandField}
           onAddQuickPersonalizeElement={handleAddQuickPersonalizeElement}
           onQuickPersonalizeElementChange={updateElement}
+          onLayerAction={handleLayerAction}
+          onElementChange={updateElement}
+          onDelete={handleDelete}
         />
         <section className="grid min-h-0 grid-rows-[44px_minmax(0,1fr)] overflow-hidden p-3">
           <ObjectToolbar selectedElement={selectedElement} onElementChange={updateElement} onReplaceImage={(elementId) => openImagePicker(elementId)} />
