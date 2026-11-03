@@ -4,6 +4,186 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ══════════════════════════════════════════════════════════════════════════ */
+/*           CHARCOAL AND BOLD ORANGE THEME (GLOBAL STYLES)                   */
+/* ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --brand-charcoal-darkest: #0B0D11;
+  --brand-charcoal-darker: #101217;
+  --brand-charcoal-dark: #151821;
+  --brand-charcoal-surface: #1B1F28;
+  --brand-charcoal-border: #252B37;
+  --brand-charcoal-muted: #8F99AC;
+
+  --brand-orange: #FF5A1F;
+  --brand-orange-hover: #E84E0F;
+  --brand-orange-active: #D4430B;
+  --brand-orange-glow: rgba(255, 90, 31, 0.35);
+  --brand-orange-tint: rgba(255, 90, 31, 0.08);
+  --brand-orange-border: rgba(255, 90, 31, 0.25);
+}
+
+/* ── Baseline High-Contrast Typography (Light vs Dark Mode) ── */
+body {
+  color: #0f172a;
+}
+
+table {
+  color: #1e293b;
+}
+
+table tbody tr td {
+  color: #1e293b;
+}
+
+table thead th {
+  color: #475569;
+}
+
+html.dark body {
+  color: #f1f5f9 !important;
+}
+
+html.dark table,
+html.dark table tbody tr td {
+  color: #f8fafc !important;
+}
+
+html.dark table thead th {
+  color: #94a3b8 !important;
+}
+
+/* ── Primary Call-To-Action (CTA) & Buttons Across Entire Website ── */
+button.bg-blue-600,
+a.bg-blue-600,
+.bg-blue-600:not(.theme-exempt) {
+  background-color: #FF5A1F !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(255, 90, 31, 0.28) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+button.bg-blue-600:hover,
+a.bg-blue-600:hover,
+.hover\:bg-blue-700:hover,
+.hover\:bg-blue-600:hover {
+  background-color: #E84E0F !important;
+  box-shadow: 0 4px 14px rgba(255, 90, 31, 0.40) !important;
+}
+
+button.bg-blue-600:active,
+a.bg-blue-600:active,
+.active\:bg-blue-800:active {
+  background-color: #D4430B !important;
+}
+
+/* ── Navy, Indigo & Hardcoded Brand Blue CTAs -> Bold Orange ── */
+button.bg-\[\#1A1F71\],
+button.bg-\[\#27308F\],
+button.bg-\[\#1a1f71\],
+button.bg-\[\#27308f\],
+button.bg-indigo-600,
+button.bg-blue-500,
+a.bg-\[\#1A1F71\],
+a.bg-\[\#27308F\],
+a.bg-indigo-600,
+.bg-\[\#1A1F71\]:not(.theme-exempt),
+.bg-\[\#27308F\]:not(.theme-exempt),
+.bg-\[\#1a1f71\]:not(.theme-exempt),
+.bg-indigo-600:not(.theme-exempt) {
+  background-color: #FF5A1F !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(255, 90, 31, 0.28) !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+button.bg-\[\#1A1F71\]:hover,
+button.bg-\[\#27308F\]:hover,
+button.bg-indigo-600:hover,
+.hover\:bg-\[\#14185D\]:hover,
+.hover\:bg-\[\#1A1F71\]:hover,
+.hover\:bg-\[\#27308F\]:hover,
+.hover\:bg-indigo-700:hover {
+  background-color: #E84E0F !important;
+  box-shadow: 0 4px 14px rgba(255, 90, 31, 0.40) !important;
+}
+
+.border-\[\#1A1F71\],
+.border-\[\#27308F\],
+.border-indigo-600 {
+  border-color: #FF5A1F !important;
+}
+
+/* Secondary CTA / Outline buttons hover */
+.hover\:border-blue-500:hover,
+.hover\:border-blue-400:hover {
+  border-color: #FF5A1F !important;
+}
+
+/* ── Form Controls, Focus States & Accents ── */
+input[type="checkbox"],
+input[type="radio"],
+.accent-blue-600 {
+  accent-color: #FF5A1F !important;
+}
+
+.focus\:border-blue-500:focus,
+.focus\:border-blue-600:focus,
+.focus\:border-blue-400:focus {
+  border-color: #FF5A1F !important;
+}
+
+.focus-within\:border-blue-500:focus-within {
+  border-color: #FF5A1F !important;
+}
+
+.focus\:ring-blue-100:focus,
+.focus\:ring-blue-500:focus {
+  --tw-ring-color: rgba(255, 90, 31, 0.25) !important;
+}
+
+/* ── Text Accents & Active Links ── */
+.text-blue-600:not(.theme-exempt),
+.hover\:text-blue-600:hover,
+.hover\:text-blue-700:hover {
+  color: #FF5A1F !important;
+}
+
+/* ── Active Tab Indicators ── */
+.border-b-2.border-blue-600,
+.border-blue-600:not(table) {
+  border-color: #FF5A1F !important;
+}
+
+/* ── Subtle Orange Tints for Selected Rows & Soft Accents ── */
+.bg-blue-50:not(.theme-exempt),
+.bg-sky-50:not(.theme-exempt) {
+  background-color: rgba(255, 90, 31, 0.06) !important;
+}
+
+.hover\:bg-blue-50:hover,
+.hover\:bg-sky-50:hover {
+  background-color: rgba(255, 90, 31, 0.10) !important;
+}
+
+/* Custom Scrollbars in Light & Dark ── Charcoal & Orange Accent */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #FF5A1F;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════ */
 /*                       DARK MODE GLOBAL THEME                               */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
@@ -12,28 +192,28 @@ html.dark {
 }
 
 html.dark body {
-  background-color: #0b0f19 !important;
+  background-color: #0B0D11 !important;
   color: #f1f5f9 !important;
 }
 
 /* ── Surfaces & Backgrounds ── */
 html.dark .bg-white {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
 }
 
 html.dark .bg-slate-50,
 html.dark .bg-gray-50 {
-  background-color: #0b0f19 !important;
+  background-color: #0B0D11 !important;
 }
 
 html.dark .bg-slate-100,
 html.dark .bg-gray-100 {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
 }
 
 html.dark .bg-slate-200,
 html.dark .bg-gray-200 {
-  background-color: #0f172a !important;
+  background-color: #11141B !important;
 }
 
 /* ── Opacity & Tinted Surfaces (Modals, filters, detail panels) ── */
@@ -42,7 +222,7 @@ html.dark .bg-slate-50\/70,
 html.dark .bg-slate-50\/80,
 html.dark .bg-gray-50\/50,
 html.dark .bg-gray-50\/70 {
-  background-color: #162035 !important;
+  background-color: #13161E !important;
   color: #f1f5f9 !important;
 }
 
@@ -51,13 +231,13 @@ html.dark .bg-white\/80,
 html.dark .bg-white\/85,
 html.dark .bg-white\/90,
 html.dark .bg-white\/95 {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #f8fafc !important;
 }
 
 html.dark .bg-slate-100\/70,
 html.dark .bg-slate-100\/80 {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
   color: #f8fafc !important;
 }
 
@@ -73,7 +253,7 @@ html.dark .bg-blue-50\/40,
 html.dark .bg-blue-50\/50,
 html.dark .bg-blue-50\/60,
 html.dark .bg-blue-50\/70 {
-  background-color: #1d3354 !important;
+  background-color: #1E232F !important;
   color: #f8fafc !important;
 }
 
@@ -98,7 +278,7 @@ html.dark .odd\:bg-sky-50:nth-child(odd),
 html.dark .odd\:bg-sky-50:nth-child(2n+1),
 html.dark .odd\:bg-sky-100:nth-child(odd),
 html.dark .odd\:bg-sky-100:nth-child(2n+1) {
-  background-color: #162035 !important;
+  background-color: #13161E !important;
   color: #f8fafc !important;
 }
 
@@ -134,7 +314,7 @@ html.dark .even\:bg-sky-50:nth-child(even),
 html.dark .even\:bg-sky-50:nth-child(2n),
 html.dark .even\:bg-sky-100:nth-child(even),
 html.dark .even\:bg-sky-100:nth-child(2n) {
-  background-color: #121a2d !important;
+  background-color: #12151D !important;
   color: #f8fafc !important;
 }
 
@@ -146,14 +326,14 @@ html.dark table tbody tr.hover\:bg-blue-50:hover,
 html.dark table tbody tr.hover\:bg-blue-100:hover,
 html.dark table tbody tr.hover\:bg-slate-50:hover,
 html.dark table tbody tr.hover\:bg-slate-100:hover {
-  background-color: #1d3354 !important;
+  background-color: #1E232F !important;
   color: #f8fafc !important;
 }
 html.dark .hover\:bg-slate-50:hover,
 html.dark .hover\:bg-gray-50:hover,
 html.dark .hover\:bg-slate-50\/50:hover,
 html.dark .hover\:bg-slate-50\/70:hover {
-  background-color: #1a253a !important;
+  background-color: #1A1E26 !important;
   color: #f8fafc !important;
 }
 
@@ -161,7 +341,7 @@ html.dark .hover\:bg-slate-100:hover,
 html.dark .hover\:bg-gray-100:hover,
 html.dark .hover\:bg-slate-200:hover,
 html.dark .hover\:bg-gray-200:hover {
-  background-color: #22304a !important;
+  background-color: #202532 !important;
   color: #f8fafc !important;
 }
 
@@ -170,12 +350,12 @@ html.dark .hover\:bg-blue-100:hover,
 html.dark .hover\:bg-sky-50:hover,
 html.dark .hover\:bg-sky-100:hover,
 html.dark .hover\:bg-blue-50\/60:hover {
-  background-color: #1d3354 !important;
+  background-color: #1E232F !important;
   color: #f8fafc !important;
 }
 
 html.dark .hover\:bg-white:hover {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
   color: #f8fafc !important;
 }
 
@@ -206,7 +386,7 @@ html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
 html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #25334d !important;
+  border-color: #252B37 !important;
 }
 
 html.dark .border-rose-100,
@@ -282,7 +462,7 @@ html.dark .text-\[\#1A1F71\],
 html.dark .text-\[\#1a1f71\],
 html.dark .text-\[\#27308F\],
 html.dark .text-\[\#343B9A\] {
-  color: #93c5fd !important;
+  color: #FFA67A !important;
 }
 
 /* ── Vibrant Status & Accent Colors in Dark Mode ── */
@@ -296,7 +476,7 @@ html.dark .text-indigo-600,
 html.dark .text-indigo-700,
 html.dark .text-indigo-800,
 html.dark .text-indigo-900 {
-  color: #38bdf8 !important;
+  color: #FF7A3D !important;
 }
 
 html.dark .text-emerald-600,
@@ -361,9 +541,9 @@ html.dark .bg-purple-100 {
 html.dark input:not([type="checkbox"]):not([type="radio"]),
 html.dark select,
 html.dark textarea {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
   color: #f8fafc !important;
-  border-color: #2b3b57 !important;
+  border-color: #282F3E !important;
 }
 
 html.dark input:disabled,
@@ -376,7 +556,7 @@ html.dark textarea:disabled {
 }
 
 html.dark select option {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #f8fafc !important;
 }
 
@@ -415,15 +595,15 @@ html.dark input[type="date"]::-webkit-calendar-picker-indicator {
 html.dark table thead,
 html.dark table thead tr,
 html.dark table thead th {
-  background-color: #162035 !important;
+  background-color: #13161E !important;
   color: #cbd5e1 !important;
-  border-color: #25334d !important;
+  border-color: #252B37 !important;
 }
 
 html.dark table tfoot,
 html.dark table tfoot tr {
-  background-color: #162035 !important;
-  border-color: #25334d !important;
+  background-color: #13161E !important;
+  border-color: #252B37 !important;
   color: #f1f5f9 !important;
 }
 
@@ -443,10 +623,10 @@ html.dark ::-webkit-scrollbar {
   height: 7px;
 }
 html.dark ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #11141B;
 }
 html.dark ::-webkit-scrollbar-thumb {
-  background: #2b3b57;
+  background: #282F3E;
   border-radius: 4px;
 }
 html.dark ::-webkit-scrollbar-thumb:hover {
@@ -456,20 +636,20 @@ html.dark ::-webkit-scrollbar-thumb:hover {
 /* ── AddSale / AddPurchase form: tab strip, totals panel, focused cells ── */
 html.dark .bg-slate-100.px-3.pt-1,
 html.dark .bg-slate-100.min-h-8 {
-  background-color: #0f172a !important;
+  background-color: #11141B !important;
 }
 html.dark .focus\:bg-white:focus {
-  background-color: #1d2f4a !important;
+  background-color: #1E232E !important;
   color: #f8fafc !important;
 }
 /* Active tab (bg-white) vs inactive tab (bg-slate-200) in AddSale */
 html.dark .bg-slate-200.text-slate-600 {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
   color: #94a3b8 !important;
 }
 /* Min-h full page container */
 html.dark .min-h-full.bg-slate-100 {
-  background-color: #0b0f19 !important;
+  background-color: #0B0D11 !important;
 }
 
 /* ── POS (Point of Sale) specific surfaces ── */
@@ -478,26 +658,26 @@ html.dark .bg-\[\#f8f9fc\],
 html.dark .bg-\[\#f4f5f8\],
 html.dark .bg-\[\#f8fafc\],
 html.dark .bg-\[\#fafafa\] {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #e2e8f0 !important;
 }
 html.dark .bg-\[\#f3f4f6\] {
-  background-color: #162035 !important;
+  background-color: #13161E !important;
   color: #cbd5e1 !important;
 }
 /* POS selected item row */
 html.dark .bg-\[\#e3f1ff\] {
-  background-color: #1d3354 !important;
+  background-color: #1E232F !important;
   color: #f8fafc !important;
 }
 /* POS tab active state */
 html.dark .border-blue-600.bg-\[\#f8f9fc\] {
-  background-color: #1a2a45 !important;
+  background-color: #181C25 !important;
 }
 
 /* ── Reports.jsx sidebar and section backgrounds ── */
 html.dark .bg-\[\#eaf0f6\] {
-  background-color: #0f172a !important;
+  background-color: #11141B !important;
   color: #e2e8f0 !important;
 }
 html.dark .bg-\[\#eff8f7\] {
@@ -506,7 +686,7 @@ html.dark .bg-\[\#eff8f7\] {
 }
 /* Reports sidebar nav links */
 html.dark .border-sky-600.bg-slate-100 {
-  background-color: #1d3354 !important;
+  background-color: #1E232F !important;
   color: #f8fafc !important;
 }
 /* Upgrade card (violet tinted) */
@@ -520,11 +700,11 @@ html.dark .border-violet-200 {
 
 /* ── EditProfile.jsx ── */
 html.dark .bg-\[\#f8fafc\] {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #e2e8f0 !important;
 }
 html.dark .bg-\[\#eef5fc\] {
-  background-color: #1a2a45 !important;
+  background-color: #181C25 !important;
 }
 /* text-[#1e293b] already covered but repeated here for safety */
 html.dark .text-\[\#1e293b\] {
@@ -541,7 +721,7 @@ html.dark .text-\[\#107c41\] {
 }
 html.dark .bg-\[\#0078d4\],
 html.dark .hover\:bg-\[\#006abc\]:hover {
-  background-color: #1d4ed8 !important;
+  background-color: #FF5A1F !important;
 }
 html.dark .bg-\[\#9da8b6\] {
   background-color: #334155 !important;
@@ -599,14 +779,14 @@ html.dark .bg-orange-50 {
 html.dark .absolute.bg-white,
 html.dark .absolute.rounded-lg.bg-white,
 html.dark .absolute.rounded-md.bg-white {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #f8fafc !important;
-  border-color: #25334d !important;
+  border-color: #252B37 !important;
 }
 
 /* ── Slide-in panels / drawers (aside with bg-white shadow-2xl) ── */
 html.dark aside.bg-white {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #f8fafc !important;
 }
 
@@ -618,23 +798,23 @@ html.dark .focus\:ring-blue-100:focus {
 /* ── Additional hex backgrounds found in page scan ── */
 /* CashFlowReport, ProfitAndLoss tinted surfaces */
 html.dark .bg-\[\#dbeafe\] {
-  background-color: #1d3354 !important;
+  background-color: #1E232F !important;
   color: #bfdbfe !important;
 }
 html.dark .bg-\[\#fbfcfd\] {
-  background-color: #131b2e !important;
+  background-color: #151821 !important;
   color: #e2e8f0 !important;
 }
 /* SaleOrders, Expenses light gray containers */
 html.dark .bg-\[\#f3f3f3\],
 html.dark .bg-\[\#f4f4f4\] {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
   color: #e2e8f0 !important;
 }
 /* PurchaseReturns hover MS-blue */
 html.dark .bg-\[\#006abc\],
 html.dark .hover\:bg-\[\#006abc\]:hover {
-  background-color: #1d4ed8 !important;
+  background-color: #FF5A1F !important;
 }
 /* EditProfile delete button hover */
 html.dark .bg-\[\#be123c\],
@@ -645,7 +825,7 @@ html.dark .hover\:bg-\[\#be123c\]:hover {
 html.dark .bg-\[\#e8eef5\],
 html.dark .bg-\[\#eef2f7\],
 html.dark .bg-\[\#f1f5f9\] {
-  background-color: #1a2438 !important;
+  background-color: #1A1E27 !important;
   color: #e2e8f0 !important;
 }
 html.dark .bg-\[\#ecfeff\] {

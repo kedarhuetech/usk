@@ -79,12 +79,8 @@ function runPythonSegmentation(inputPath) {
   const configuredPython = process.env.PYTHON_BIN?.trim();
   const localVenvPython = path.resolve(__dirname, "../../.venv-image-to-layers", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
   const useLocalVenv = !configuredPython && existsSync(localVenvPython);
-  const pythonBinary = configuredPython || (useLocalVenv ? localVenvPython : process.platform === "win32" ? "py" : "python3");
-  const pythonArgs = configuredPython || useLocalVenv
-    ? [PYTHON_SCRIPT_PATH, "--input", inputPath]
-    : process.platform === "win32"
-      ? ["-3", PYTHON_SCRIPT_PATH, "--input", inputPath]
-      : [PYTHON_SCRIPT_PATH, "--input", inputPath];
+  const pythonBinary = configuredPython || (useLocalVenv ? localVenvPython : process.platform === "win32" ? "python" : "python3");
+  const pythonArgs = [PYTHON_SCRIPT_PATH, "--input", inputPath];
 
   return new Promise((resolve, reject) => {
     const child = spawn(pythonBinary, pythonArgs, {

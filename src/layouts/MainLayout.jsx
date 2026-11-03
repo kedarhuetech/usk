@@ -32,25 +32,25 @@ function MainLayout() {
 
   if (isFullscreenRoute) {
     return (
-      <div className="h-screen w-screen overflow-hidden bg-white">
+      <div className="h-screen w-screen overflow-hidden bg-[#0B0D11] text-slate-100">
         {outlet && cloneElement(outlet, { key: refreshKey })}
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100">
       <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
       {!isTransactionRoute && <HorizontalNavbar />}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {showBackButton && (
-          <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white px-4 sm:px-6">
+          <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white text-slate-800 dark:border-[#252B37] dark:bg-[#12151B] dark:text-slate-100 px-4 sm:px-6">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+              className="inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#1A1E27] dark:hover:text-[#FF5A1F]"
               aria-label="Go back to the previous page"
             >
               <FiArrowLeft className="h-4 w-4" />

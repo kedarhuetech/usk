@@ -243,7 +243,7 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
             <button
               type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-medium text-[#1A1F71] hover:bg-blue-100 transition cursor-pointer"
+              className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-medium text-[#FF5A1F] font-semibold hover:bg-blue-100 transition cursor-pointer"
             >
               <FiCalendar className="h-3.5 w-3.5 text-blue-600" />
               {selectedPeriod}
@@ -294,8 +294,8 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
         >
           <defs>
             <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#FF5A1F" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#FF5A1F" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -308,7 +308,7 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
             y1={padding.top + plotH}
             x2={viewWidth - padding.right}
             y2={padding.top + plotH}
-            stroke="#3b82f6"
+            stroke="rgba(255, 90, 31, 0.4)"
             strokeWidth="2"
           />
 
@@ -317,7 +317,7 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
             <path
               d={linePath}
               fill="none"
-              stroke="#2563eb"
+              stroke="#FF5A1F"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -365,7 +365,7 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
                     cx={cx}
                     cy={cy}
                     r={isHovered ? 5.5 : 4}
-                    fill={isHovered ? "#1d4ed8" : "#2563eb"}
+                    fill={isHovered ? "#E84E0F" : "#FF5A1F"}
                     stroke="#ffffff"
                     strokeWidth="2"
                     className="transition-all duration-150"
