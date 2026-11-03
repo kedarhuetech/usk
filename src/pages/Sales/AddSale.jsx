@@ -51,7 +51,7 @@ import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesS
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
-import { getAppSettings } from "../../services/appSettingsStorage";
+import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 
 const termsAppliesTo = [
   "Sale Invoice",
@@ -130,6 +130,9 @@ function createRow() {
     discountAmount: "",
     discountMode: "percent",
     taxRate: "NONE",
+    hsn: "",
+    cessPercent: "",
+    cessAmount: "",
     sourceItemId: "",
   };
 }
@@ -485,11 +488,32 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
         </span>
         <DatePicker value={form.invoiceDate} onChange={(value) => setField("invoiceDate", value)} />
 
-        {appSettings.billingType !== "Lite Sale" && (
+        {appSettings.billingType !== "Lite Sale" && appSettings.enablePlaceOfSupply !== false && (
           <>
             <span className="pt-2 text-[13px] text-slate-500">State of Supply</span>
             <SelectInput value={form.stateOfSupply} onChange={(value) => setField("stateOfSupply", value)} options={stateOfSupplyOptions} />
           </>
+        )}
+
+        {appSettings.reverseCharge && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">Reverse Charge</span>
+            <label className="flex items-center gap-2 pt-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.isRcm || false}
+                onChange={(e) => setField("isRcm", e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-600 cursor-pointer"
+              />
+              <span className="text-xs text-slate-700 font-medium">Tax payable on RCM basis</span>
+            </label>
+          </>
+        )}
+
+        {appSettings.compositeScheme && (
+          <div className="col-span-full rounded-md bg-amber-50 border border-amber-200 p-2 text-xs text-amber-900 font-medium">
+            <strong>Composition Scheme ({appSettings.compositeSchemeType || "Manufacturer 1.0%"}):</strong> Bill of Supply. Not eligible to collect tax on supplies.
+          </div>
         )}
 
         {appSettings.enableEwayBillNo && (
@@ -601,14 +625,14 @@ function CellInput({ error, className = "", ...props }) {
 }
 
 // Renders the invoice table interface.
-function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
+function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {} }) {
   // Updates row.
   const updateRow = (id, field, value) => {
     setRows((current) =>
       current.map((row) => {
         if (row.id !== id) return row;
 
-        const numericFields = ["qty", "price", "discountPercent", "discountAmount"];
+        const numericFields = ["qty", "price", "discountPercent", "discountAmount", "cessPercent", "cessAmount"];
         let nextValue = numericFields.includes(field) ? sanitizeDecimal(value) : value;
         let nextRow = { ...row, [field]: nextValue };
         if (field === "item") nextRow = { ...nextRow, sourceItemId: "" };
@@ -637,6 +661,8 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
           ? syncDiscount({
               ...row,
               item: item.name,
+              hsn: item.hsn || item.sac || row.hsn || "",
+              cessPercent: item.cessPercent || item.cess || row.cessPercent || "",
               unit: item.unit || row.unit,
               price: item.price || row.price,
               priceMode: item.priceMode || row.priceMode,
@@ -662,11 +688,16 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
           <tr className="bg-white text-left text-xs font-bold uppercase text-slate-700">
             <th rowSpan="2" className="w-10 border-r border-slate-200 px-2 py-1.5 text-center">#</th>
             <th rowSpan="2" className="w-[25%] min-w-[220px] border-r border-slate-200 px-2 py-1.5">Item</th>
+            {appSettings.enableHsnSacCode !== false && (
+              <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5 text-center">HSN/SAC</th>
+            )}
             <th rowSpan="2" className="w-16 border-r border-slate-200 px-2 py-1.5">Qty</th>
             <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5">Unit</th>
             <th className="w-36 border-r border-slate-200 px-2 py-1.5 text-center">Price/Unit</th>
             <th colSpan="2" className="w-40 border-r border-slate-200 px-2 py-1.5 text-center">Discount</th>
-            <th colSpan="2" className="w-44 border-r border-slate-200 px-2 py-1.5 text-center">Tax</th>
+            {appSettings.enableGst !== false && (
+              <th colSpan={appSettings.additionalCessOnItem ? 3 : 2} className="w-44 border-r border-slate-200 px-2 py-1.5 text-center">Tax</th>
+            )}
             <th rowSpan="2" className="w-24 px-2 py-1.5">Amount</th>
           </tr>
           <tr className="bg-white text-xs font-medium text-slate-600">
@@ -675,7 +706,14 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
             </th>
             <th className="w-16 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
             <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">Amount</th>
-            <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
+            {appSettings.enableGst !== false && (
+              <>
+                <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
+                    {appSettings.additionalCessOnItem && (
+                  <th className="w-20 border-r border-t border-slate-200 px-2 py-1.5 text-center">Cess %</th>
+                )}
+              </>
+            )}
             <th className="w-20 border-r border-t border-slate-200 px-2 py-1.5 text-center">Amount</th>
           </tr>
         </thead>
@@ -697,6 +735,11 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
                 <td className="border-r border-slate-200 p-1">
                   <ItemPicker value={row.item} items={items} onChange={(value) => updateRow(row.id, "item", value)} onSelect={(item) => applyItem(row.id, item)} onAddItem={() => onAddItem(row.id)} />
                 </td>
+                {appSettings.enableHsnSacCode !== false && (
+                  <td className="border-r border-slate-200 p-1">
+                    <CellInput value={row.hsn || ""} onChange={(event) => updateRow(row.id, "hsn", event.target.value)} placeholder="HSN" />
+                  </td>
+                )}
                 <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.qty} value={row.qty} onChange={(event) => updateRow(row.id, "qty", event.target.value)} /></td>
                 <td className="border-r border-slate-200 p-1"><UnitSelector value={row.unit} onChange={(value) => updateRow(row.id, "unit", value)} className="[&_button]:h-8 [&_button]:px-2 [&_button]:text-[13px]" /></td>
                 <td className="border-r border-slate-200 p-1">
@@ -707,7 +750,16 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
                 </td>
                 <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.discountPercent} value={row.discountPercent} onChange={(event) => updateRow(row.id, "discountPercent", event.target.value)} /></td>
                 <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.discountAmount} value={row.discountAmount} onChange={(event) => updateRow(row.id, "discountAmount", event.target.value)} /></td>
-                <td className="border-r border-slate-200 p-1"><SelectInput value={row.taxRate} onChange={(value) => updateRow(row.id, "taxRate", value)} options={saleTaxOptions} className="border-transparent bg-transparent focus:bg-white" /></td>
+                {appSettings.enableGst !== false && (
+                  <>
+                    <td className="border-r border-slate-200 p-1"><SelectInput value={row.taxRate} onChange={(value) => updateRow(row.id, "taxRate", value)} options={saleTaxOptions} className="border-transparent bg-transparent focus:bg-white" /></td>
+                        {appSettings.additionalCessOnItem && (
+                      <td className="border-r border-slate-200 p-1">
+                        <CellInput inputMode="decimal" value={row.cessPercent || ""} onChange={(event) => updateRow(row.id, "cessPercent", event.target.value)} placeholder="0%" />
+                      </td>
+                    )}
+                  </>
+                )}
                 <td className="border-r border-slate-200 px-2 py-1.5 text-right text-slate-700">{calculated.tax.toFixed(2)}</td>
                 <td className="px-2 py-1.5 text-right font-semibold text-slate-700">{calculated.amount.toFixed(2)}</td>
               </tr>
@@ -720,13 +772,21 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem }) {
                 Add Row
               </button>
             </td>
+            {appSettings.enableHsnSacCode !== false && <td className="border-r border-slate-200" />}
             <td className="border-r border-slate-200 px-2 text-right">{totals.qty}</td>
             <td className="border-r border-slate-200" />
             <td className="border-r border-slate-200 text-right">Total</td>
             <td className="border-r border-slate-200" />
             <td className="border-r border-slate-200 px-2 text-right">{totals.discount.toFixed(2)}</td>
             <td className="border-r border-slate-200" />
-            <td className="border-r border-slate-200 px-2 text-right">{totals.tax.toFixed(2)}</td>
+            {appSettings.enableGst !== false && (
+              <>
+                <td className="border-r border-slate-200 px-2 text-right">{totals.tax.toFixed(2)}</td>
+                {appSettings.additionalCessOnItem && (
+                  <td className="border-r border-slate-200 px-2 text-right">{(totals.cess || 0).toFixed(2)}</td>
+                )}
+              </>
+            )}
             <td className="px-2 text-right">{totals.amount.toFixed(2)}</td>
           </tr>
         </tbody>
@@ -917,7 +977,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
 }
 
 // Renders the totals panel interface.
-function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount }) {
+function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, appSettings = {}, rowCount = 0 }) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
   return (
@@ -928,6 +988,24 @@ function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOff
           Round Off
         </label>
         <input inputMode="decimal" value={displayedRoundOff} onChange={(event) => setRoundOffValue(sanitizeDecimal(event.target.value, true))} className="h-9 w-20 rounded-md border border-slate-300 px-2 text-[13px] outline-none focus:border-blue-500" />
+        {totals.cess > 0 && (
+          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">Cess Total:</span>
+            <span className="font-bold text-slate-800">₹{totals.cess.toFixed(2)}</span>
+          </div>
+        )}
+        {appSettings.enableTcs && totals.tcsAmount > 0 && (
+          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">TCS ({appSettings.tcsRate || 0.1}%):</span>
+            <span className="font-bold text-slate-900">+₹{totals.tcsAmount.toFixed(2)}</span>
+          </div>
+        )}
+        {appSettings.enableTds && totals.tdsAmount > 0 && (
+          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">TDS Deductible ({appSettings.tdsRate || 0.1}%):</span>
+            <span className="font-bold text-rose-600">-₹{totals.tdsAmount.toFixed(2)}</span>
+          </div>
+        )}
         <span className="text-sm font-bold text-slate-700">Total</span>
         <input readOnly value={totals.finalTotal.toFixed(2)} className="h-10 w-full max-w-56 rounded-md border border-slate-300 bg-white px-3 text-right text-[13px] font-bold outline-none" />
       </div>
@@ -1254,7 +1332,12 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
   const [termsTemplates, setTermsTemplates] = useState(defaultTerms);
-  const appSettings = getAppSettings();
+  const [appSettings, setAppSettings] = useState(getAppSettings);
+  useEffect(() => {
+    const handleUpdate = (e) => setAppSettings(e.detail || getAppSettings());
+    window.addEventListener(APP_SETTINGS_UPDATED_EVENT, handleUpdate);
+    return () => window.removeEventListener(APP_SETTINGS_UPDATED_EVENT, handleUpdate);
+  }, []);
   const [business, setBusiness] = useState(() => editInvoice?.business || initialBusiness);
   const [uploadBillOpen, setUploadBillOpen] = useState(false);
   const [uploadAttentionOpen, setUploadAttentionOpen] = useState(false);
@@ -1653,12 +1736,12 @@ function AddSale({ mode = "sale", localOnly = false }) {
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
       <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
       <CustomerDetails appSettings={appSettings} saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
-      <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} />
+      <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} appSettings={appSettings} />
 
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">
         <AddOns form={form} setField={setField} files={files} setFiles={setFiles} templates={termsTemplates} setTemplates={setTermsTemplates} showPayment={hasValidInvoiceItem} />
         <div className="px-4 py-4">
-          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} />
+          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} appSettings={appSettings} rowCount={rows.filter((r) => r.item.trim()).length} />
           {toast && <p className="mt-2 text-right text-[13px] font-medium text-emerald-600">{toast}</p>}
         </div>
       </div>

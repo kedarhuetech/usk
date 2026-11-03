@@ -46,6 +46,7 @@ import {
   getAuditTrailLogs,
 } from "../../services/auditTrailStorage.js";
 import PrintTab from "./PrintTab";
+import TaxesTab from "./TaxesTab";
 
 const TABS = [
   { id: "general", label: "GENERAL", icon: FiSliders },
@@ -2855,70 +2856,8 @@ function TransactionTab({ settings, update, updateMultiple }) {
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
-// TAXES & GST TAB
+// TAXES & GST TAB (Delegated to TaxesTab.jsx)
 // -------------------------------------------------------------
-function TaxesTab({ settings, update }) {
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Goods and Services Tax (GST)</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableGst ?? true}
-              onChange={(e) => update("enableGst", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable GST & Tax Calculations
-          </label>
-
-          {settings.enableGst && (
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700">Default Tax Rate</label>
-                <select
-                  value={settings.defaultTaxRate || "18%"}
-                  onChange={(e) => update("defaultTaxRate", e.target.value)}
-                  className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
-                >
-                  <option value="0%">0% (Exempted)</option>
-                  <option value="5%">5% (CGST 2.5% + SGST 2.5%)</option>
-                  <option value="12%">12% (CGST 6% + SGST 6%)</option>
-                  <option value="18%">18% (CGST 9% + SGST 9%)</option>
-                  <option value="28%">28% (CGST 14% + SGST 14%)</option>
-                </select>
-              </div>
-
-              <div className="space-y-2 pt-2">
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={settings.reverseChargeApplicable || false}
-                    onChange={(e) => update("reverseChargeApplicable", e.target.checked)}
-                    className="h-4 w-4 rounded accent-blue-600"
-                  />
-                  Reverse Charge Mechanism (RCM) Available
-                </label>
-
-                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={settings.compositeScheme || false}
-                    onChange={(e) => update("compositeScheme", e.target.checked)}
-                    className="h-4 w-4 rounded accent-blue-600"
-                  />
-                  Composition Scheme Dealer
-                </label>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
 
 // -------------------------------------------------------------
 // TRANSACTION MESSAGE TAB

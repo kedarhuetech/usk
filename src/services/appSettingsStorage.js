@@ -200,11 +200,30 @@ export const DEFAULT_SETTINGS = {
   printBankDetails: true,
   printGstSummary: true,
 
-  // Taxes & GST
+  // Taxes & GST (Matching Vyapar GST Settings)
   enableGst: true,
+  enableHsnSacCode: true,
+  additionalCessOnItem: true,
+  reverseCharge: true,
+  reverseChargeApplicable: true,
+  enablePlaceOfSupply: true,
+  compositeScheme: true,
+  compositeSchemeType: "Manufacturer 1.0%",
+  enableTcs: false,
+  enableTds: false,
+  tcsRate: 0.1,
+  tdsRate: 0.1,
   defaultTaxRate: "18%",
-  reverseChargeApplicable: false,
-  compositeScheme: false,
+  taxRatesList: [
+    { id: "tax-0", name: "Exempt (0%)", rate: 0, igst: 0, cgst: 0, sgst: 0, cess: 0, isDefault: false },
+    { id: "tax-0.25", name: "GST @ 0.25%", rate: 0.25, igst: 0.25, cgst: 0.125, sgst: 0.125, cess: 0, isDefault: false },
+    { id: "tax-3", name: "GST @ 3%", rate: 3, igst: 3, cgst: 1.5, sgst: 1.5, cess: 0, isDefault: false },
+    { id: "tax-5", name: "GST @ 5%", rate: 5, igst: 5, cgst: 2.5, sgst: 2.5, cess: 0, isDefault: false },
+    { id: "tax-12", name: "GST @ 12%", rate: 12, igst: 12, cgst: 6, sgst: 6, cess: 0, isDefault: false },
+    { id: "tax-18", name: "GST @ 18%", rate: 18, igst: 18, cgst: 9, sgst: 9, cess: 0, isDefault: true },
+    { id: "tax-28", name: "GST @ 28%", rate: 28, igst: 28, cgst: 14, sgst: 14, cess: 0, isDefault: false },
+    { id: "tax-28-cess12", name: "GST @ 28% + Cess 12%", rate: 28, igst: 28, cgst: 14, sgst: 14, cess: 12, isDefault: false },
+  ],
 
   // Transaction Message
   sendSmsOnSale: false,
