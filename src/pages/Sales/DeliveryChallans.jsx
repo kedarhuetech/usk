@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiX } from "react-icons/fi";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { FiArrowLeft, FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiX } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
@@ -21,12 +21,12 @@ const rowAmount = (row) => {
 
 export default function DeliveryChallans() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [challans, setChallans] = useState(readChallans);
   const [editor, setEditor] = useState(null);
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState("");
   const [openItemRow, setOpenItemRow] = useState("");
-  const [previewChallan, setPreviewChallan] = useState(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectorSearch, setSelectorSearch] = useState("");
@@ -39,6 +39,40 @@ export default function DeliveryChallans() {
   const [toDate, setToDate] = useState(today);
   const parties = useMemo(() => getParties(), []);
   const business = useMemo(() => getCompanyProfile(), []);
+  const companyDisplayName = business.companyName || business.businessName || "Sai Kirana Stores";
+  const companyPhone = business.phoneNumber || business.phone || "";
+
+  const [previewChallan, setPreviewChallan] = useState(() => {
+    if (location.state?.previewChallan) return location.state.previewChallan;
+    try {
+      const stored = sessionStorage.getItem("ledgerly:previewChallan");
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    if (location.pathname.endsWith("/preview")) {
+      const all = readChallans();
+      if (all.length > 0) return all[0];
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (location.state?.previewChallan) {
+      setPreviewChallan(location.state.previewChallan);
+    }
+  }, [location.state]);
+
+  const closePreview = () => {
+    setPreviewChallan(null);
+    try { sessionStorage.removeItem("ledgerly:previewChallan"); } catch {}
+    if (location.pathname.endsWith("/preview")) {
+      if (location.state?.from) {
+        navigate(location.state.from);
+      } else {
+        navigate("/sales/delivery-challan");
+      }
+    }
+  };
+
   const inventory = useMemo(() => getInventoryItems().filter((item) => item.type !== "service"), []);
   const filtered = challans.filter((challan) => `${challan.party} ${challan.number} ${challan.status}`.toLowerCase().includes(search.toLowerCase()) && (!fromDate || challan.date >= fromDate) && (!toDate || challan.date <= toDate));
   const conversionCandidates = challans.filter((challan) => challan.status !== "Converted to Sale"
@@ -81,15 +115,146 @@ export default function DeliveryChallans() {
     XLSX.utils.book_append_sheet(workbook, itemSheet, "Items");
     XLSX.writeFile(workbook, `Delivery_Challans_${today()}.xlsx`);
   };
+
   const printChallan = (challan, autoPrint = false) => {
-    const popup = window.open("", "_blank", "width=1000,height=750");
-    if (!popup) return;
+    if (!challan) return;
     const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-    const items = (challan.rows || []).map((row, index) => `<tr><td>${index + 1}</td><td>${escape(row.item)}</td><td>${escape(row.hsn || row.sac || "")}</td><td>${escape(row.qty)}</td><td>${escape(row.unit)}</td><td>${money(row.price)}</td><td>${money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)} (${escape(row.discount || 0)}%)</td><td>${money(rowAmount(row))}</td></tr>`).join("");
-    popup.document.write(`<html><head><title>Delivery Challan ${escape(challan.number)}</title><style>body{font-family:Arial,sans-serif;color:#111;padding:24px}h2{text-align:center;text-decoration:underline;margin:34px 0 24px}.company{text-align:center;font-size:22px;font-weight:bold}.phone{text-align:center;margin-top:6px}table{width:100%;border-collapse:collapse;margin-top:28px}th,td{border-bottom:1px solid #999;padding:9px 6px;text-align:left;font-size:13px}th{background:#d6d6d6} .sub{width:82%;margin-left:auto;margin-top:10px}.right{text-align:right}.details{font-size:15px;font-weight:bold;margin:22px 0}@media print{body{padding:0}button{display:none}}</style></head><body><div class="company">${escape(business.companyName || business.name || "My Company")}</div><div class="phone">${business.phone ? `Phone no.: ${escape(business.phone)}` : ""}</div><h2>Delivery Challan Report</h2><div class="details">Date: ${dateLabel(challan.date)} &nbsp;&nbsp; Challan No.: ${escape(challan.number)} &nbsp;&nbsp; Party: ${escape(challan.party)}</div><table><thead><tr><th>#</th><th>Item name</th><th>HSN / SAC</th><th>Quantity</th><th>Unit</th><th>Price / Unit</th><th>Discount</th><th>Amount</th></tr></thead><tbody>${items}</tbody></table><table class="sub"><tbody><tr><th>Total Quantity</th><td class="right">${(challan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}</td><th>Subtotal</th><td class="right">${money(challan.total)}</td></tr><tr><th>Due Date</th><td>${dateLabel(challan.dueDate)}</td><th>Total</th><td class="right"><b>${money(challan.total)}</b></td></tr></tbody></table><button onclick="window.print()">Print / Save PDF</button></body></html>`);
-    popup.document.close();
-    if (autoPrint) popup.setTimeout(() => popup.print(), 350);
+    const items = (challan.rows || []).map((row, index) => {
+      const q = Number(row.qty || 0);
+      const p = Number(row.price || 0);
+      const d = Number(row.discount || 0);
+      const discAmt = (q * p * d) / 100;
+      return `<tr>
+        <td style="text-align:center">${index + 1}</td>
+        <td style="font-weight:600">${escape(row.item || "—")}</td>
+        <td style="text-align:center">${escape(row.hsn || row.sac || "—")}</td>
+        <td style="text-align:center">${escape(row.qty || "0")}</td>
+        <td style="text-align:center">${escape(row.unit || "—")}</td>
+        <td style="text-align:right">${money(row.price)}</td>
+        <td style="text-align:right">${money(discAmt)} (${escape(row.discount || 0)}%)</td>
+        <td style="text-align:right;font-weight:600">${money(rowAmount(row))}</td>
+      </tr>`;
+    }).join("");
+
+    const totalQty = (challan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Delivery Challan - ${escape(challan.number)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; margin: 0; padding: 24px; background: #fff; }
+    .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 16px; margin-bottom: 20px; }
+    .company { font-size: 24px; font-weight: 800; color: #0f172a; }
+    .phone { font-size: 13px; color: #64748b; margin-top: 4px; }
+    .title { font-size: 18px; font-weight: 700; color: #0284c7; letter-spacing: 1px; margin-top: 10px; text-transform: uppercase; }
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; font-size: 13px; background: #f8fafc; padding: 12px 16px; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .meta-row { margin-bottom: 4px; }
+    .meta-label { color: #64748b; font-weight: 500; }
+    .meta-val { font-weight: 600; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+    th { background: #f1f5f9; color: #334155; font-weight: 700; text-align: left; padding: 10px 8px; border: 1px solid #cbd5e1; }
+    td { padding: 9px 8px; border: 1px solid #e2e8f0; }
+    .totals-wrap { display: flex; justify-content: flex-end; margin-top: 16px; }
+    .totals-box { width: 320px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; }
+    .total-line { display: flex; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid #e2e8f0; }
+    .total-final { background: #0284c7; color: #fff; font-size: 15px; font-weight: 700; }
+    .total-final span { color: #fff; }
+    .footer-note { margin-top: 32px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="company">${escape(companyDisplayName)}</div>
+    ${companyPhone ? `<div class="phone">Phone: ${escape(companyPhone)}</div>` : ""}
+    <div class="title">Delivery Challan</div>
+  </div>
+
+  <div class="meta-grid">
+    <div>
+      <div class="meta-row"><span class="meta-label">Challan No:</span> <span class="meta-val">${escape(challan.number)}</span></div>
+      <div class="meta-row"><span class="meta-label">Date:</span> <span class="meta-val">${dateLabel(challan.date)}</span></div>
+      ${challan.dueDate ? `<div class="meta-row"><span class="meta-label">Due Date:</span> <span class="meta-val">${dateLabel(challan.dueDate)}</span></div>` : ""}
+    </div>
+    <div>
+      <div class="meta-row"><span class="meta-label">Party Name:</span> <span class="meta-val">${escape(challan.party)}</span></div>
+      ${challan.phone ? `<div class="meta-row"><span class="meta-label">Phone:</span> <span class="meta-val">${escape(challan.phone)}</span></div>` : ""}
+      <div class="meta-row"><span class="meta-label">Status:</span> <span class="meta-val">${escape(challan.status || "Open")}</span></div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;text-align:center">#</th>
+        <th>Item Name</th>
+        <th style="width:90px;text-align:center">HSN/SAC</th>
+        <th style="width:70px;text-align:center">Qty</th>
+        <th style="width:60px;text-align:center">Unit</th>
+        <th style="width:95px;text-align:right">Price/Unit</th>
+        <th style="width:110px;text-align:right">Discount</th>
+        <th style="width:105px;text-align:right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${items}
+    </tbody>
+  </table>
+
+  <div class="totals-wrap">
+    <div class="totals-box">
+      <div class="total-line"><span>Total Qty</span><span style="font-weight:600">${totalQty}</span></div>
+      <div class="total-line"><span>Sub Total</span><span>${money(challan.total)}</span></div>
+      <div class="total-line total-final"><span>Total Amount</span><span>${money(challan.total)}</span></div>
+    </div>
+  </div>
+
+  <div class="footer-note">This is a computer-generated delivery challan.</div>
+</body>
+</html>`;
+
+    let iframe = document.getElementById("ledgerly-challan-print-frame");
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "ledgerly-challan-print-frame";
+      iframe.style.position = "fixed";
+      iframe.style.top = "-9999px";
+      iframe.style.left = "-9999px";
+      iframe.style.width = "0px";
+      iframe.style.height = "0px";
+      iframe.style.border = "none";
+      document.body.appendChild(iframe);
+    }
+    const frameDoc = iframe.contentDocument || iframe.contentWindow.document;
+    frameDoc.open();
+    frameDoc.write(html);
+    frameDoc.close();
+
+    if (autoPrint) {
+      setTimeout(() => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      }, 300);
+    } else {
+      const popup = window.open("", "_blank", "width=1000,height=750");
+      if (popup) {
+        popup.document.open();
+        popup.document.write(html);
+        popup.document.close();
+      } else {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      }
+    }
   };
+
   const convertOne = (challan) => navigate("/sales/sale-invoices/new", { state: { from: "/sales/delivery-challan", deliveryChallansConversion: [challan] } });
   const openBulkConvert = () => { setSelectedIds([]); setSelectorSearch(""); setSelectorParty(""); setSelectorPreset("This Month"); setSelectorFrom(`${today().slice(0, 7)}-01`); setSelectorTo(today()); setSelectorOpen(true); };
   const changeSelectorPreset = (preset) => {
@@ -122,7 +287,7 @@ export default function DeliveryChallans() {
   };
 
   return <main className="flex h-full min-h-0 flex-col gap-1.5 bg-slate-100 p-1.5 text-slate-700">
-    <div className="flex h-[66px] shrink-0 items-center justify-center border-b-2 border-sky-500 bg-white text-lg font-bold text-slate-400">DELIVERY CHALLAN</div>
+    <div className="flex h-[66px] shrink-0 items-center justify-center border-b-2 border-sky-500 bg-white text-lg font-bold text-slate-700">DELIVERY CHALLAN</div>
     <section className="flex shrink-0 flex-wrap items-center gap-4 bg-white px-6 py-5 shadow-sm">
       <label className="relative text-lg font-semibold"> <select value={filterPreset} onChange={(event) => setFilterPreset(event.target.value)} className="appearance-none bg-transparent pr-7 outline-none">{["This Month", "Today", "All Time", "Custom"].map((preset) => <option key={preset}>{preset}</option>)}</select><FiChevronDown className="pointer-events-none absolute right-0 top-1.5" /></label>
       <span className="flex items-center gap-2 rounded border px-3 py-2 text-sm text-slate-600"><span className="bg-slate-400 px-2 py-1 font-semibold text-white">Between</span><FiCalendar /><input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="w-32 outline-none" />To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="w-32 outline-none" /></span>
@@ -132,7 +297,166 @@ export default function DeliveryChallans() {
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-4"><div className="flex flex-wrap items-center justify-between gap-3 py-2"><h2 className="text-lg font-semibold">TRANSACTIONS</h2><div className="flex flex-wrap items-center gap-3"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search challans" className="h-10 w-56 rounded border border-slate-300 pl-9 pr-3 outline-none" /></label><Button onClick={openBulkConvert} className="border border-rose-500 text-rose-600">Bulk Convert To Sale</Button><Button onClick={startNew} className="rounded-md bg-blue-600 text-white"><FiPlus /> Add Delivery Challan</Button></div></div>
       {filtered.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[950px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["DATE", "PARTY", "CHALLAN NO.", "DUE DATE", "TOTAL AMOUNT", "STATUS", "ACTION"].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-4">{heading}{heading !== "ACTION" && <FiFilter className="ml-2 inline" />}</th>)}</tr></thead><tbody>{filtered.map((challan) => <tr key={challan.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white"><td className="px-3 py-4">{dateLabel(challan.date)}</td><td className="px-3 py-4 font-medium">{challan.party}</td><td className="px-3 py-4">{challan.number}</td><td className="px-3 py-4">{dateLabel(challan.dueDate)} Due: {challan.dueDate === today() ? "Today" : "—"}</td><td className="px-3 py-4 text-right">{money(challan.total)}</td><td className={`px-3 py-4 ${challan.status === "Converted to Sale" ? "text-emerald-600" : "text-blue-600"}`}>{challan.status}</td><td className="relative px-3 py-2"><div className="flex items-center gap-2"><Button disabled={challan.status === "Converted to Sale"} onClick={() => convertOne(challan)} className="h-8 rounded-sm bg-slate-100 px-3 text-xs text-blue-600 shadow">Convert to Sale</Button><button aria-label="Challan actions" onClick={() => setMenuId(menuId === challan.id ? "" : challan.id)} className="p-2 text-slate-500"><FiMoreVertical /></button></div>{menuId === challan.id && <div className="absolute right-3 top-10 z-20 w-48 rounded-lg bg-white p-1 shadow-xl">{["View/Edit", "Delete", "Duplicate", "Open PDF", "Preview", "Print"].map((action) => <button key={action} onClick={() => act(action, challan)} className="block w-full rounded px-3 py-2.5 text-left hover:bg-blue-50">{action}</button>)}</div>}</td></tr>)}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"><div className="mb-5 grid h-36 w-36 place-items-center rounded-full bg-blue-50 text-6xl text-sky-500">▤</div><h3 className="text-lg font-semibold">No Transactions to show</h3><p className="mt-2 text-slate-400">You haven't added any delivery challans yet.</p><Button onClick={startNew} className="mt-7 rounded-full bg-rose-600 px-6 py-3 text-base text-white"><FiPlus /> Add Delivery Challan</Button></div>}</Card>
 
-    {previewChallan && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-3"><section className="flex max-h-[96vh] w-full max-w-[1440px] flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl"><header className="flex h-[86px] shrink-0 items-center justify-between border-b px-6"><h2 className="text-2xl font-semibold text-black">Preview</h2><button onClick={() => setPreviewChallan(null)} aria-label="Close preview" className="text-3xl text-slate-600">×</button></header><div className="min-h-0 flex-1 overflow-auto px-6 py-7 text-black"><div className="text-center"><h3 className="text-2xl font-bold">{business.companyName || business.name || "My Company"}</h3>{business.phone && <p className="mt-1 text-sm">Phone no.: {business.phone}</p>}<h1 className="mt-10 text-3xl font-bold underline">Delivery Challan Report</h1></div><div className="my-6 text-xl font-bold">Date: {dateLabel(previewChallan.date)} &nbsp; · &nbsp; Challan No.: {previewChallan.number}<p className="mt-3">Party Name: {previewChallan.party}</p></div><div className="overflow-x-auto"><table className="w-full min-w-[960px] border-collapse text-sm"><thead className="bg-neutral-300"><tr>{["DATE", "Ref No.", "Party Name", "Category Name", "TYPE", "TXN STATUS", "TOTAL", "PAYMENT TYPE", "RECEIVED / PAID", "BALANCE"].map((heading) => <th key={heading} className="px-2 py-3 text-left">{heading}</th>)}</tr></thead><tbody><tr className="border-b border-neutral-400 font-semibold"><td className="px-2 py-4">{dateLabel(previewChallan.date)}</td><td className="px-2 py-4">{previewChallan.number}</td><td className="px-2 py-4">{previewChallan.party}</td><td className="px-2 py-4">Delivery Challan</td><td className="px-2 py-4">Delivery Challan</td><td className="px-2 py-4">{previewChallan.status}</td><td className="px-2 py-4">{money(previewChallan.total)}</td><td className="px-2 py-4">—</td><td className="px-2 py-4">—</td><td className="px-2 py-4">{money(previewChallan.total)}</td></tr></tbody></table><table className="ml-auto mt-2 w-[82%] min-w-[760px] border-collapse text-sm"><thead className="bg-neutral-300"><tr>{["#", "Item name", "HSN / SAC", "Quantity", "Unit", "Price / Unit", "Discount", "Amount"].map((heading) => <th key={heading} className="px-2 py-2 text-left">{heading}</th>)}</tr></thead><tbody>{(previewChallan.rows || []).map((row, index) => <tr key={row.id || index} className="border-b border-neutral-400"><td className="px-2 py-2">{index + 1}</td><td className="px-2 py-2 font-semibold">{row.item || "—"}</td><td className="px-2 py-2">{row.hsn || row.sac || "—"}</td><td className="px-2 py-2">{row.qty || "—"}</td><td className="px-2 py-2">{row.unit || "—"}</td><td className="px-2 py-2">{money(row.price)}</td><td className="px-2 py-2">{money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)} ({row.discount || 0}%)</td><td className="px-2 py-2">{money(rowAmount(row))}</td></tr>)}</tbody></table></div><div className="ml-auto mt-8 w-[45%] min-w-[360px] border-y border-neutral-500 py-3 text-right"><div>Sub Total <span className="ml-12">{money(previewChallan.total)}</span></div><div className="mt-2">Total <b className="ml-12">{money(previewChallan.total)}</b></div></div></div><footer className="flex shrink-0 flex-wrap justify-end gap-3 border-t px-5 py-3"><button onClick={() => printChallan(previewChallan)} className="rounded-full border border-rose-500 px-6 py-3 text-lg text-rose-600">Open PDF</button><button onClick={() => printChallan(previewChallan, true)} className="rounded-full border border-rose-500 px-6 py-3 text-lg text-rose-600">Print</button><button onClick={() => printChallan(previewChallan, true)} className="rounded-full border border-rose-500 px-6 py-3 text-lg text-rose-600">Save PDF</button><button onClick={() => window.location.href = `mailto:?subject=${encodeURIComponent(`Delivery Challan ${previewChallan.number}`)}&body=${encodeURIComponent("Please attach the saved delivery challan PDF before sending.")}`} className="rounded-full border border-rose-500 px-6 py-3 text-lg text-rose-600">Email PDF</button><button onClick={() => setPreviewChallan(null)} className="rounded-full bg-rose-600 px-6 py-3 text-lg text-white">Close</button></footer></section></div>}
+    {previewChallan && (
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-sm">
+        <section className="flex max-h-[96vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl">
+          <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-6 bg-slate-50">
+            <div className="flex items-center gap-3">
+              {location.state?.from && (
+                <button
+                  type="button"
+                  onClick={closePreview}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-100"
+                >
+                  <FiArrowLeft className="h-4 w-4" /> Back to Invoices
+                </button>
+              )}
+              <h2 className="text-lg font-bold text-slate-800">Delivery Challan Preview</h2>
+              <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
+                #{previewChallan.number}
+              </span>
+            </div>
+            <button
+              onClick={closePreview}
+              aria-label="Close preview"
+              className="rounded-lg p-1.5 text-2xl text-slate-500 hover:bg-slate-200 hover:text-slate-800"
+            >
+              ×
+            </button>
+          </header>
+
+          <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-4 sm:p-8">
+            <div className="mx-auto max-w-[920px] rounded-lg border border-slate-300 bg-white p-6 sm:p-10 shadow-md text-slate-900">
+              <div className="text-center pb-6 border-b border-slate-200">
+                <h3 className="text-2xl font-black text-slate-900">{companyDisplayName}</h3>
+                {companyPhone && <p className="mt-1 text-sm font-medium text-slate-500">Phone: {companyPhone}</p>}
+                <h1 className="mt-4 inline-block rounded bg-sky-50 px-6 py-1.5 text-lg font-black tracking-wider text-sky-700 uppercase">
+                  Delivery Challan Report
+                </h1>
+              </div>
+
+              <div className="my-6 grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-lg bg-slate-50 p-4 text-sm border border-slate-200">
+                <div>
+                  <p className="text-slate-500">Challan No:</p>
+                  <p className="font-bold text-slate-900 text-base">{previewChallan.number}</p>
+                  <p className="mt-2 text-slate-500">Date:</p>
+                  <p className="font-semibold text-slate-800">{dateLabel(previewChallan.date)}</p>
+                  {previewChallan.dueDate && (
+                    <>
+                      <p className="mt-2 text-slate-500">Due Date:</p>
+                      <p className="font-semibold text-slate-800">{dateLabel(previewChallan.dueDate)}</p>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <p className="text-slate-500">Party Name (Customer):</p>
+                  <p className="font-bold text-slate-900 text-base">{previewChallan.party}</p>
+                  {previewChallan.phone && (
+                    <>
+                      <p className="mt-2 text-slate-500">Phone:</p>
+                      <p className="font-semibold text-slate-800">{previewChallan.phone}</p>
+                    </>
+                  )}
+                  <p className="mt-2 text-slate-500">Status:</p>
+                  <span className="inline-block rounded-full bg-emerald-100 px-3 py-0.5 text-xs font-bold text-emerald-700">
+                    {previewChallan.status || "Open"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded border border-slate-200">
+                <table className="w-full min-w-[700px] border-collapse text-left text-sm">
+                  <thead className="bg-slate-100 text-xs font-bold uppercase text-slate-600">
+                    <tr>
+                      <th className="px-3 py-3 w-12 text-center">#</th>
+                      <th className="px-3 py-3">Item Name</th>
+                      <th className="px-3 py-3 text-center">HSN / SAC</th>
+                      <th className="px-3 py-3 text-center">Qty</th>
+                      <th className="px-3 py-3 text-center">Unit</th>
+                      <th className="px-3 py-3 text-right">Price / Unit</th>
+                      <th className="px-3 py-3 text-right">Discount</th>
+                      <th className="px-3 py-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {(previewChallan.rows || []).map((row, index) => (
+                      <tr key={row.id || index} className="hover:bg-slate-50/60">
+                        <td className="px-3 py-3 text-center text-slate-500">{index + 1}</td>
+                        <td className="px-3 py-3 font-semibold text-slate-800">{row.item || "—"}</td>
+                        <td className="px-3 py-3 text-center text-slate-600">{row.hsn || row.sac || "—"}</td>
+                        <td className="px-3 py-3 text-center font-medium text-slate-800">{row.qty || "0"}</td>
+                        <td className="px-3 py-3 text-center text-slate-600">{row.unit || "—"}</td>
+                        <td className="px-3 py-3 text-right text-slate-700">{money(row.price)}</td>
+                        <td className="px-3 py-3 text-right text-slate-600">
+                          {money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)} ({row.discount || 0}%)
+                        </td>
+                        <td className="px-3 py-3 text-right font-bold text-slate-900">{money(rowAmount(row))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <div className="w-80 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Quantity</span>
+                    <span className="font-semibold text-slate-800">
+                      {(previewChallan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal</span>
+                    <span className="font-semibold text-slate-800">{money(previewChallan.total)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-300 pt-2 text-base font-black text-sky-700">
+                    <span>Total Amount</span>
+                    <span>{money(previewChallan.total)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <footer className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+            <button
+              onClick={() => printChallan(previewChallan)}
+              className="rounded-lg border border-rose-500 px-5 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+            >
+              Open PDF
+            </button>
+            <button
+              onClick={() => printChallan(previewChallan, true)}
+              className="rounded-lg border border-rose-500 px-5 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+            >
+              Print
+            </button>
+            <button
+              onClick={() => printChallan(previewChallan, true)}
+              className="rounded-lg border border-rose-500 px-5 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+            >
+              Save PDF
+            </button>
+            <button
+              onClick={() => {
+                window.location.href = `mailto:?subject=${encodeURIComponent(
+                  `Delivery Challan ${previewChallan.number}`
+                )}&body=${encodeURIComponent("Please find attached the delivery challan.")}`;
+              }}
+              className="rounded-lg border border-rose-500 px-5 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50"
+            >
+              Email PDF
+            </button>
+            <button
+              onClick={closePreview}
+              className="rounded-lg bg-rose-600 px-6 py-2.5 text-sm font-bold text-white shadow hover:bg-rose-700"
+            >
+              Close
+            </button>
+          </footer>
+        </section>
+      </div>
+    )}
 
     {selectorOpen && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4"><section className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-semibold">Select delivery challans to convert</h2><button onClick={() => setSelectorOpen(false)} aria-label="Close"><FiX className="text-2xl"/></button></header><div className="space-y-5 overflow-auto px-6 py-5"><label className="block max-w-md text-sm text-slate-500">Customer<select value={selectorParty} onChange={(event) => setSelectorParty(event.target.value)} className="mt-1 h-12 w-full rounded border bg-white px-3"><option value="">All customers</option>{parties.map((party) => <option key={party.id} value={party.partyName}>{party.partyName}</option>)}</select></label><div className="flex flex-wrap items-center gap-3 border-y py-4"><span className="font-semibold">Filter By:</span><select value={selectorPreset} onChange={(event) => changeSelectorPreset(event.target.value)} className="rounded px-3 py-2">{["This Month", "Today", "All Time"].map((preset) => <option key={preset}>{preset}</option>)}</select><span>Between</span><input type="date" value={selectorFrom} onChange={(event) => { setSelectorFrom(event.target.value); setSelectorPreset("Custom"); }} className="rounded border p-2"/><span>To</span><input type="date" value={selectorTo} onChange={(event) => { setSelectorTo(event.target.value); setSelectorPreset("Custom"); }} className="rounded border p-2"/></div><div className="flex items-center justify-between gap-4"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={selectorSearch} onChange={(event) => setSelectorSearch(event.target.value)} placeholder="Search by challan no." className="h-10 w-80 rounded-full border pl-9 pr-3"/></label><span className="italic text-slate-400">{conversionCandidates.length} challans found</span></div><div className="max-h-[45vh] overflow-auto"><table className="w-full border-collapse text-left"><thead className="sticky top-0 bg-slate-100"><tr><th className="border p-3"><input type="checkbox" checked={conversionCandidates.length > 0 && conversionCandidates.every((challan) => selectedIds.includes(challan.id))} onChange={(event) => setSelectedIds(event.target.checked ? conversionCandidates.map((challan) => challan.id) : [])}/> Select All</th>{["DATE", "CHALLAN NO.", "DUE DATE", "TOTAL AMOUNT (₹)"].map((label) => <th key={label} className="border p-3">{label}</th>)}</tr></thead><tbody>{conversionCandidates.map((challan) => <tr key={challan.id}><td className="border p-3"><input type="checkbox" checked={selectedIds.includes(challan.id)} onChange={(event) => setSelectedIds((ids) => event.target.checked ? [...ids, challan.id] : ids.filter((id) => id !== challan.id))}/></td><td className="border p-3">{dateLabel(challan.date)}</td><td className="border p-3">{challan.number}</td><td className="border p-3">{dateLabel(challan.dueDate)}</td><td className="border p-3">{money(challan.total)}</td></tr>)}</tbody></table>{!conversionCandidates.length && <p className="p-12 text-center text-slate-400">No open delivery challans match the selected filters.</p>}</div></div><footer className="flex justify-end gap-3 border-t px-6 py-4"><Button onClick={() => setSelectorOpen(false)} className="bg-slate-100">Cancel</Button><Button disabled={!selectedIds.length} onClick={convertSelected} className="bg-blue-600 text-white">Convert {selectedIds.length} Challans To Sale</Button></footer></section></div>}
 

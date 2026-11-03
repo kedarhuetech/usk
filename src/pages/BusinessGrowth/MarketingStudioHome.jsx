@@ -4,6 +4,7 @@ import {
   FiAlertCircle,
   FiChevronLeft,
   FiChevronRight,
+  FiChevronUp,
   FiArrowRight,
   FiCalendar,
   FiCheckCircle,
@@ -724,30 +725,30 @@ function DiscoveryTabs({ tabs, activeTab, onTabChange }) {
 }
 
 // Renders the template card interface.
-function TemplateCard({ template }) {
+function TemplateCard({ template, className = "" }) {
   const navigate = useNavigate();
 
   return (
-    <article className="flex h-[338px] w-[250px] shrink-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#1A1F71]/20 hover:shadow-md sm:w-[270px]">
-      <div className="flex h-[210px] items-center justify-center bg-slate-50 p-3">
-        <div className="flex h-full w-full items-center justify-center rounded-lg border border-slate-100 bg-white/80 p-2.5">
+    <article className={`flex h-[338px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/30 hover:shadow-md dark:border-[#252B37] dark:bg-[#161922] ${className || "w-[250px] shrink-0 sm:w-[270px]"}`}>
+      <div className="flex h-[210px] items-center justify-center bg-slate-50 p-3 dark:bg-[#0B0D11]">
+        <div className="flex h-full w-full items-center justify-center rounded-lg border border-slate-100 bg-white/80 p-2.5 dark:border-[#252B37] dark:bg-[#1B1F28]">
           <img src={template.thumbnail} alt={template.thumbnailAlt} className="max-h-full max-w-full object-contain" loading="lazy" />
         </div>
       </div>
-      <div className="flex h-[128px] shrink-0 flex-col justify-between border-t border-slate-100 p-3.5">
+      <div className="flex h-[128px] shrink-0 flex-col justify-between border-t border-slate-100 p-3.5 dark:border-[#252B37]">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="line-clamp-2 min-w-0 text-sm font-bold leading-5 text-slate-900">{template.title || template.name}</h3>
-          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+          <h3 className="line-clamp-2 min-w-0 text-sm font-bold leading-5 text-slate-900 dark:text-slate-100">{template.title || template.name}</h3>
+          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-[#252B37] dark:text-slate-300">
             {template.category}
           </span>
         </div>
-        <p className="text-xs font-semibold capitalize text-slate-500">{template.editMode.replace("-", " ")}</p>
+        <p className="text-xs font-semibold capitalize text-slate-500 dark:text-slate-400">{template.editMode?.replace("-", " ") || "Template"}</p>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-semibold uppercase text-slate-400">{template.templateType}</span>
+          <span className="text-[11px] font-semibold uppercase text-slate-400 dark:text-slate-500">{template.templateType}</span>
           <button
             type="button"
             onClick={() => navigate(`/business-growth/marketing-tools/editor/${template.id}`)}
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:text-blue-700"
+            className="inline-flex items-center gap-1 text-sm font-semibold text-[#FF5A1F] hover:text-[#E84E0F] transition"
           >
             Customize
             <FiArrowRight className="h-4 w-4" />
@@ -823,6 +824,7 @@ function FilterChips({ sectionId, filters, activeFilter, onFilterChange }) {
 
 // Renders the template section interface.
 function TemplateSection({ section, activeFilter, onFilterChange }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const filteredTemplates = useMemo(() => {
     if (!activeFilter) return section.templates;
     const filterQuery = normalize(activeFilter);
@@ -837,23 +839,52 @@ function TemplateSection({ section, activeFilter, onFilterChange }) {
     <Card className="p-4 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h2 className="text-lg font-bold text-slate-950">{section.title}</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">{section.subtitle}</p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-950 dark:text-slate-100">{section.title}</h2>
+            {isExpanded && (
+              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-[#FF5A1F] dark:bg-orange-950/40">
+                All {filteredTemplates.length} templates
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">{section.subtitle}</p>
         </div>
         {section.viewAllEnabled && (
-          <button type="button" className="inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700">
-            View all
-            <FiArrowRight className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold text-[#FF5A1F] transition hover:bg-[#FF5A1F]/10 hover:text-[#E84E0F] active:scale-95"
+            aria-label={isExpanded ? `Collapse ${section.title}` : `View all templates in ${section.title}`}
+          >
+            {isExpanded ? (
+              <>
+                Show less
+                <FiChevronUp className="h-4 w-4" />
+              </>
+            ) : (
+              <>
+                View all
+                <FiArrowRight className="h-4 w-4" />
+              </>
+            )}
           </button>
         )}
       </div>
       <FilterChips sectionId={section.id} filters={section.filters} activeFilter={activeFilter} onFilterChange={onFilterChange} />
-      <div className="mt-3">
-        <TemplateRail>
-          {filteredTemplates.map((templateItem) => (
-            <TemplateCard key={templateItem.id} template={templateItem} />
-          ))}
-        </TemplateRail>
+      <div className="mt-4">
+        {isExpanded ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 animate-in fade-in duration-200">
+            {filteredTemplates.map((templateItem) => (
+              <TemplateCard key={templateItem.id} template={templateItem} className="w-full" />
+            ))}
+          </div>
+        ) : (
+          <TemplateRail>
+            {filteredTemplates.map((templateItem) => (
+              <TemplateCard key={templateItem.id} template={templateItem} />
+            ))}
+          </TemplateRail>
+        )}
       </div>
     </Card>
   );

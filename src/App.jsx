@@ -120,6 +120,7 @@ function App() {
           <Route path="sales/payment-in" element={<PaymentIn />} />
           <Route path="sales/sale-order" element={<FeatureRouteGuard featureKey="enableSalePurchaseOrder" fallback="/sales/sale-invoices"><SaleOrders /></FeatureRouteGuard>} />
           <Route path="sales/delivery-challan" element={<FeatureRouteGuard featureKey="enableDeliveryChallan" fallback="/sales/sale-invoices"><DeliveryChallans /></FeatureRouteGuard>} />
+          <Route path="sales/delivery-challan/preview" element={<FeatureRouteGuard featureKey="enableDeliveryChallan" fallback="/sales/sale-invoices"><DeliveryChallans /></FeatureRouteGuard>} />
           <Route path="sales/sale-return-credit-note" element={<SaleReturns />} />
           <Route path="sales/sale-invoices/new" element={<AddSale />} />
           <Route path="sales/sale-invoices/preview" element={<SalePreview />} />
