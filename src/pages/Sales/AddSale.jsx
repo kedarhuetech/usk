@@ -977,7 +977,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
 }
 
 // Renders the totals panel interface.
-function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, appSettings = {}, rowCount = 0 }) {
+function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, appSettings = {}, rowCount = 0, error = "" }) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
   return (
@@ -1741,7 +1741,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">
         <AddOns form={form} setField={setField} files={files} setFiles={setFiles} templates={termsTemplates} setTemplates={setTermsTemplates} showPayment={hasValidInvoiceItem} />
         <div className="px-4 py-4">
-          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} appSettings={appSettings} rowCount={rows.filter((r) => r.item.trim()).length} />
+          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} appSettings={appSettings} rowCount={rows.filter((r) => r.item.trim()).length} error={errors?.received || ""} />
           {toast && <p className="mt-2 text-right text-[13px] font-medium text-emerald-600">{toast}</p>}
         </div>
       </div>

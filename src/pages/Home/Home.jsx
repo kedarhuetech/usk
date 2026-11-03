@@ -148,7 +148,7 @@ function Home() {
   return (
     <div className="min-h-full bg-slate-100 p-4 sm:p-5">
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="flex flex-col gap-4 rounded-xl bg-gradient-to-r from-[#1A1F71] to-[#343B9A] p-5 text-white sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col gap-4 rounded-xl bg-gradient-to-r from-[#14171E] to-[#1F2430] border border-[#FF5A1F]/30 p-5 text-white sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm text-white/70">Business overview</p>
             <h1 className="mt-1 text-2xl font-bold">Welcome back</h1>
@@ -158,7 +158,7 @@ function Home() {
           </div>
           <Button
             onClick={() => navigate("/dashboard")}
-            className="shrink-0 bg-white text-[#1A1F71] hover:bg-blue-50"
+            className="shrink-0 bg-[#FF5A1F] text-white hover:bg-[#E84E0F] shadow-lg"
           >
             Open Dashboard
             <FiArrowRight className="h-4 w-4" />

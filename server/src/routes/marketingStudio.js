@@ -16,10 +16,14 @@ router.get("/calendar-events", async (req, res) => {
   const apiKey = getCalendarificApiKey();
 
   if (!apiKey) {
-    res.status(503).json({
-      success: false,
-      code: "CALENDARIFIC_KEY_MISSING",
-      message: "Calendarific API key is not configured on the backend.",
+    res.json({
+      success: true,
+      source: "local",
+      country: "IN",
+      year,
+      holidays: [],
+      configured: false,
+      message: "Calendarific API key is not configured on the backend. Built-in festival calendar active.",
     });
     return;
   }

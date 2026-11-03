@@ -144,10 +144,10 @@ function Sidebar() {
 
   return (
     <>
-      <aside className="hidden h-screen w-52 shrink-0 flex-col bg-gradient-to-b from-[#1A1F71] to-[#14185D] text-white xl:w-56 lg:flex">
+      <aside className="hidden h-screen w-52 shrink-0 flex-col bg-gradient-to-b from-[#14171E] to-[#0D0F14] border-r border-[#222733] text-white xl:w-56 lg:flex">
       <div className="shrink-0 px-3 py-3">
         <div className="mb-3 flex items-center gap-2.5 px-1">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-[#1A1F71]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#FF5A1F] text-sm font-bold text-white shadow-[0_0_10px_rgba(255,90,31,0.5)]">
             L
           </div>
           <div className="min-w-0">
@@ -177,12 +177,12 @@ function Sidebar() {
 
       <div className="shrink-0 space-y-2.5 p-2.5">
         {/* Grab Sale Banner matching screenshot */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#e00826] via-[#be051c] to-[#7f0010] p-3 text-white shadow-md">
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#202532] via-[#161922] to-[#0F1117] border border-[#FF5A1F]/30 p-3 text-white shadow-md">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-[11px] font-bold text-white">
               <span className="text-xs text-amber-300">⚡</span> Vyapar
             </span>
-            <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-black text-rose-950 leading-none">
+            <span className="rounded bg-[#FF5A1F] px-1.5 py-0.5 text-[9px] font-black text-white leading-none">
               Upto 60% OFF
             </span>
           </div>
@@ -206,7 +206,7 @@ function Sidebar() {
             <button
               type="button"
               onClick={() => navigate("/plans-pricing")}
-              className="rounded-full bg-amber-400 px-3 py-1 text-xs font-black text-slate-900 shadow-sm transition hover:bg-amber-300 active:scale-95"
+              className="rounded-full bg-[#FF5A1F] px-3 py-1 text-xs font-bold text-white shadow-sm transition hover:bg-[#E84E0F] active:scale-95"
             >
               Buy Now
             </button>
@@ -219,11 +219,11 @@ function Sidebar() {
           onClick={openCompanyProfile}
           className={`flex h-10 w-full items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] font-semibold transition ${
             isProfileActive
-              ? "bg-[#1d4ed8] text-white shadow-sm ring-1 ring-white/20"
+              ? "bg-[#FF5A1F] text-white shadow-sm ring-1 ring-white/20"
               : "bg-white/10 text-white hover:bg-white/15"
           }`}
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white text-[#1A1F71]">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FF5A1F] text-white">
             {companyProfile.logo ? (
               <img
                 src={companyProfile.logo}

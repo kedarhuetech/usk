@@ -28,9 +28,9 @@ function FeatureIcon({ status }) {
 // Renders the plan card interface.
 function PlanCard({ plan, onChoose, isSelected, message }) {
   return (
-    <Card className={`relative flex h-full flex-col p-5 ${isSelected ? "border-[#343B9A] ring-2 ring-indigo-100" : plan.recommended ? "border-[#343B9A] shadow-md" : ""}`}>
+    <Card className={`relative flex h-full flex-col p-5 ${isSelected ? "border-[#FF5A1F] ring-2 ring-indigo-100" : plan.recommended ? "border-[#FF5A1F] shadow-md" : ""}`}>
       {plan.recommended && (
-        <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-[#343B9A]">
+        <span className="absolute right-4 top-4 inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-[#FF5A1F]">
           <FiStar className="h-3.5 w-3.5" /> Recommended
         </span>
       )}
@@ -40,7 +40,7 @@ function PlanCard({ plan, onChoose, isSelected, message }) {
       <p className="mt-1 text-xs text-slate-500">{plan.billingPeriod}</p>
       <Button
         onClick={() => onChoose(plan)}
-        className={`mt-5 w-full ${isSelected ? "bg-[#1A1F71] text-white hover:bg-[#14185D]" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
+        className={`mt-5 w-full ${isSelected ? "bg-[#FF5A1F] text-white hover:bg-[#E84E0F] shadow-lg" : "border border-slate-300 text-slate-700 hover:bg-slate-50"}`}
       >
         {isSelected ? "Plan Selected" : "Choose Plan"}
       </Button>
@@ -105,7 +105,7 @@ function PlansPricing() {
   return (
     <div className="min-h-full bg-slate-100 p-4 sm:p-5">
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="rounded-xl bg-gradient-to-r from-[#1A1F71] to-[#343B9A] p-5 text-white sm:p-7">
+        <section className="rounded-xl bg-gradient-to-r from-[#1A1F71] to-[#FF5A1F] p-5 text-white sm:p-7">
           <p className="text-sm text-white/70">Your plans</p>
           <div className="mt-1">
             <div>

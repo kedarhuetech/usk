@@ -681,7 +681,7 @@ def build_text_layers(lines, image_width, image_height):
 
         heights = sorted(l["h"] for l in paragraph)
         median_h = heights[len(heights) // 2]
-        font_size = int(clamp(median_h * 0.82, 8, max(14, image_height * 0.4)))
+        font_size = int(clamp(median_h * 0.94, 10, max(14, image_height * 0.4)))
 
         line_height = 1.2
         if len(paragraph) > 1:
@@ -798,19 +798,14 @@ class MultiScaleFillProvider(BaseBackgroundReconstructionProvider):
             weight_fine = np.exp(-distance / band)[:, :, None].astype("float32")
             filled = fine.astype("float32") * weight_fine + coarse.astype("float32") * (1.0 - weight_fine)
 
-            # Grain matching so the patch doesn't look plasticky next to photographic texture.
-            gray = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2GRAY).astype("float32")
-            ring = cv2.bitwise_and(cv2.dilate(mask, box_kernel(odd(0.02 * longest))), cv2.bitwise_not(mask))
-            high_pass = gray - cv2.GaussianBlur(gray, (0, 0), 1.5)
-            ring_values = high_pass[ring > 0]
-            if ring_values.size > 50:
-                sigma = min(6.0, float(np.std(ring_values)))
-                if sigma > 0.5:
-                    noise = np.random.default_rng(7).normal(0.0, sigma, (height, width)).astype("float32")
-                    filled += noise[:, :, None]
-
             inside = (mask > 0)[:, :, None]
             result = np.where(inside, np.clip(filled, 0, 255), original_bgr.astype("float32")).astype("uint8")
+            # Subtle boundary smoothing so the filled patch blends seamlessly
+            border_ring = cv2.dilate(mask, box_kernel(5)) - cv2.erode(mask, box_kernel(3))
+            if cv2.countNonZero(border_ring) > 0:
+                smoothed_result = cv2.bilateralFilter(result, 5, 25, 25)
+                smooth_mask = (border_ring > 0)[:, :, None]
+                result = np.where(smooth_mask, smoothed_result, result)
 
             ratio = cv2.countNonZero(mask) / float(height * width)
             return result, ("high" if ratio < 0.15 else "best-effort"), "opencv_multiscale"
@@ -917,7 +912,7 @@ def reconstruct_background(bgr, object_mask, text_mask, lama_model=None):
     height, width = bgr.shape[:2]
     if cv2.countNonZero(object_mask) > 0:
         # Grow past the soft cut-out edge so no halo of the object survives in the background.
-        object_removal = cv2.dilate(object_mask, box_kernel(odd(0.006 * max(height, width), 9)))
+        object_removal = cv2.dilate(object_mask, box_kernel(odd(0.003 * max(height, width), 3)))
     else:
         object_removal = object_mask
 
@@ -1123,13 +1118,27 @@ def build_object_layers(original, found, text_pixel_mask, max_objects):
         x1, y1 = min(width, bx + bw + pad), min(height, by + bh + pad)
 
         crop_mask = mask[y0:y1, x0:x1]
-        hard = cv2.dilate(crop_mask, box_kernel(5))
-        interior = cv2.erode(crop_mask, box_kernel(5))
-        soft = cv2.GaussianBlur(alpha[y0:y1, x0:x1], (0, 0), sigmaX=0.8)
-        # Opaque interior, soft anti-aliased rim (instead of a hard binary cut).
-        layer_alpha = np.where(interior > 0, 255, np.where(hard > 0, soft, 0)).astype("uint8")
+        crop_alpha = alpha[y0:y1, x0:x1].copy()
+        # Clean pixels outside the component mask
+        crop_alpha[crop_mask == 0] = 0
+
+        # Canva-grade subpixel soft antialiased edge without blocky erosion
+        layer_alpha = cv2.GaussianBlur(crop_alpha, (3, 3), 0.5)
+        layer_alpha = np.where(crop_alpha >= 235, 255, layer_alpha)
+        layer_alpha = np.where(layer_alpha < 14, 0, layer_alpha).astype("uint8")
 
         crop_rgb = original_rgba[y0:y1, x0:x1, :3].copy()
+
+        # Defringe / Color Decontamination:
+        # Diffuse inner foreground color into semi-transparent border pixels to eliminate halo/bleed
+        edge_fringe = ((layer_alpha > 0) & (layer_alpha < 240)).astype("uint8") * 255
+        if int(np.count_nonzero(edge_fringe)) > 0 and int(np.count_nonzero(layer_alpha >= 240)) > 0:
+            crop_bgr = cv2.cvtColor(crop_rgb, cv2.COLOR_RGB2BGR)
+            inpaint_mask = (layer_alpha < 210).astype("uint8") * 255
+            decontaminated = cv2.inpaint(crop_bgr, inpaint_mask, 2, cv2.INPAINT_TELEA)
+            blend_w = (layer_alpha.astype("float32") / 255.0)[:, :, None]
+            crop_bgr = np.clip(crop_bgr.astype("float32") * blend_w + decontaminated.astype("float32") * (1.0 - blend_w), 0, 255).astype("uint8")
+            crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
 
         # Text sitting on top of this object lives in its own layer, so heal the object pixels
         # underneath it instead of leaving holes in the cut-out.
