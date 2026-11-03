@@ -125,7 +125,7 @@ export default function HorizontalNavbar() {
       <nav
         ref={navContainerRef}
         aria-label="Main Navigation"
-        className="relative z-40 shrink-0 border-b border-[#0f1345] bg-[#1A1F71] text-white shadow-md select-none overflow-visible"
+        className="relative z-40 shrink-0 border-b border-[#252A36] bg-[#12151B] text-white shadow-lg select-none overflow-visible"
       >
         <div className="flex h-11 items-center justify-between px-4 overflow-visible">
           {/* Left Brand Badge + Navigation Items */}
@@ -136,12 +136,12 @@ export default function HorizontalNavbar() {
                 setActiveDropdown(null);
                 navigate("/dashboard");
               }}
-              className="mr-3 flex cursor-pointer items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold tracking-wide transition hover:bg-white/20 shrink-0"
+              className="mr-3 flex cursor-pointer items-center gap-2 rounded-lg bg-[#1B1F27] border border-[#2B313F] px-2.5 py-1 text-xs font-bold tracking-wide transition hover:border-[#FF5A1F] hover:bg-[#202530] shrink-0 group"
             >
-              <div className="flex h-5 w-5 items-center justify-center rounded bg-white text-[11px] font-black text-[#1A1F71]">
+              <div className="flex h-5 w-5 items-center justify-center rounded-md bg-[#FF5A1F] text-[11px] font-black text-white shadow-[0_0_10px_rgba(255,90,31,0.5)] group-hover:scale-105 transition">
                 {sidebarBrand.name[0]}
               </div>
-              <span>{sidebarBrand.name}</span>
+              <span className="text-white group-hover:text-orange-400 transition">{sidebarBrand.name}</span>
             </div>
 
             {/* Nav Items — now uses filteredNavigation */}
@@ -162,9 +162,7 @@ export default function HorizontalNavbar() {
                     to={item.path}
                     onClick={() => setActiveDropdown(null)}
                     className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all whitespace-nowrap shrink-0 ${
-                      isActive
-                        ? "bg-white/20 text-white shadow-xs font-semibold"
-                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                      isActive ? "bg-white/10 text-white shadow-xs font-semibold ring-1 ring-[#FF5A1F]/60" : "text-white/80 hover:bg-white/10 hover:text-orange-300"
                     }`}
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
@@ -202,7 +200,7 @@ export default function HorizontalNavbar() {
                   {/* Dropdown Menu — stays open until clicked or clicked outside */}
                   {isOpen && (
                     <div
-                      className="absolute left-0 top-full mt-1 min-w-[210px] rounded-lg border border-[#2c3396] bg-[#14185D] p-1.5 shadow-2xl z-[9999] overflow-hidden"
+                      className="absolute left-0 top-full mt-1 min-w-[210px] rounded-xl border border-[#2B3242] bg-[#161922] p-1.5 shadow-2xl z-[9999] overflow-hidden"
                       style={{ filter: "drop-shadow(0 15px 25px rgba(0,0,0,0.5))" }}
                     >
                       {item.children.map((child) => {
@@ -214,7 +212,7 @@ export default function HorizontalNavbar() {
                             onClick={() => setActiveDropdown(null)}
                             className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs transition-colors whitespace-nowrap ${
                               isChildLinkActive
-                                ? "bg-rose-600 font-semibold text-white"
+                                ? "bg-[#FF5A1F] font-semibold text-white shadow-xs"
                                 : "text-white/85 hover:bg-white/15 hover:text-white"
                             }`}
                           >
@@ -239,7 +237,7 @@ export default function HorizontalNavbar() {
                 setQuery("");
                 setSearchOpen(true);
               }}
-              className="flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-white/10 px-2.5 text-[11px] font-medium text-white/80 transition hover:bg-white/20 hover:text-white cursor-pointer"
+              className="flex h-7 items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2.5 text-[11px] font-medium text-white/80 transition hover:border-[#FF5A1F]/50 hover:bg-[#FF5A1F]/15 hover:text-orange-300 cursor-pointer"
               title="Open Anything (Ctrl+F)"
             >
               <FiSearch className="h-3 w-3" />

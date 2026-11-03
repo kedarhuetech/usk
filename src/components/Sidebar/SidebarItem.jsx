@@ -31,7 +31,7 @@ function SidebarItem({ item }) {
         {({ isActive }) => (
           <>
             <span
-              className={`absolute left-0 h-5 w-0.5 rounded-r-full bg-rose-500 ${
+              className={`absolute left-0 h-5 w-0.5 rounded-r-full bg-[#FF5A1F] shadow-[0_0_8px_rgba(255,90,31,0.8)] ${
                 isActive ? "opacity-100" : "opacity-0"
               }`}
             />
@@ -74,7 +74,7 @@ function SidebarItem({ item }) {
               {({ isActive }) => (
                 <>
                   <span
-                    className={`absolute left-0 h-5 w-0.5 rounded-r-full bg-rose-500 ${
+                    className={`absolute left-0 h-5 w-0.5 rounded-r-full bg-[#FF5A1F] shadow-[0_0_8px_rgba(255,90,31,0.8)] ${
                       isActive ? "opacity-100" : "opacity-0"
                     }`}
                   />

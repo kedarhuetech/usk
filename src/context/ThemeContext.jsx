@@ -1,18 +1,22 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 const THEME_KEY = "ledgerly:theme";
+const THEME_MIGRATION_KEY = "ledgerly:charcoal_theme_applied_v2";
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
     try {
-      const saved = localStorage.getItem(THEME_KEY);
-      if (saved === "dark" || saved === "light") return saved;
-      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      const migrated = localStorage.getItem(THEME_MIGRATION_KEY);
+      if (!migrated) {
+        localStorage.setItem(THEME_MIGRATION_KEY, "true");
+        localStorage.setItem(THEME_KEY, "dark");
         return "dark";
       }
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === "dark" || saved === "light") return saved;
     } catch {}
-    return "light";
+    return "dark";
   });
 
   useEffect(() => {

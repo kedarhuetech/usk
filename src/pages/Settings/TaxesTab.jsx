@@ -1,15 +1,33 @@
 import React, { useState } from "react";
-import { FiInfo, FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import { FiHelpCircle, FiPlus, FiTrash2, FiX } from "react-icons/fi";
 
 function InfoTooltip({ text }) {
+  const [visible, setVisible] = useState(false);
+
   return (
-    <span
-      className="inline-flex cursor-help items-center text-slate-400 hover:text-slate-600 ml-1.5 shrink-0"
-      title={text}
-      aria-label={text}
+    <div
+      className="relative inline-flex items-center ml-1.5"
+      onMouseEnter={() => setVisible(true)}
+      onMouseLeave={() => setVisible(false)}
     >
-      <FiInfo className="h-4 w-4" />
-    </span>
+      <button
+        type="button"
+        aria-label="Info"
+        className="inline-flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-help focus:outline-none"
+      >
+        <FiHelpCircle className="h-4 w-4" />
+      </button>
+
+      {visible && (
+        <div
+          role="tooltip"
+          className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 z-50 w-max max-w-xs rounded-md bg-slate-900 px-3 py-1.5 text-[11px] font-medium leading-snug text-white shadow-xl pointer-events-none transition-all duration-150 animate-in fade-in"
+        >
+          {text}
+          <span className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -22,7 +40,6 @@ const COMPOSITE_SCHEME_TYPES = [
 
 export default function TaxesTab({ settings, update }) {
   const [showTaxListModal, setShowTaxListModal] = useState(false);
-  const [showVideoModal, setShowVideoModal] = useState(false);
   const [taxRates, setTaxRates] = useState(
     () =>
       settings.taxRatesList || [
@@ -109,7 +126,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Enable GST</span>
           </label>
-          <InfoTooltip text="Enable GST calculations, HSN reporting, and statutory tax invoices" />
+          <InfoTooltip text="Enables GST tax calculations and tax invoice generation." />
         </div>
 
         {/* 2. Enable HSN/SAC Code */}
@@ -123,7 +140,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Enable HSN/SAC Code</span>
           </label>
-          <InfoTooltip text="Show HSN/SAC code columns in invoice items table and item masters" />
+          <InfoTooltip text="Shows HSN/SAC code column on invoices and items." />
         </div>
 
         {/* 3. Additional Cess On Item */}
@@ -137,7 +154,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Additional Cess On Item</span>
           </label>
-          <InfoTooltip text="Allow specifying GST Compensation Cess percentage or amount on item rows" />
+          <InfoTooltip text="Allows adding GST compensation cess to items." />
         </div>
 
         {/* 4. Reverse Charge */}
@@ -151,7 +168,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Reverse Charge</span>
           </label>
-          <InfoTooltip text="Enable Reverse Charge Mechanism (RCM) where recipient is liable to pay tax to government" />
+          <InfoTooltip text="Enables Reverse Charge (RCM) where recipient pays tax." />
         </div>
 
         {/* 5. Enable Place of Supply */}
@@ -165,7 +182,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Enable Place of Supply</span>
           </label>
-          <InfoTooltip text="Show Place of Supply (State) on transactions to determine CGST+SGST vs IGST" />
+          <InfoTooltip text="Shows state of supply to calculate CGST/SGST vs IGST." />
         </div>
 
         {/* 6. Composite Scheme + inline dropdown */}
@@ -179,7 +196,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Composite Scheme</span>
           </label>
-          <InfoTooltip text="For Composition Scheme dealers (ineligible to collect tax on supplies; Bill of Supply issued)" />
+          <InfoTooltip text="For composition dealers; generates Bill of Supply with 0% tax." />
 
           {/* Inline dropdown right next to info tooltip */}
           {settings.compositeScheme && (
@@ -210,11 +227,11 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Enable TCS</span>
           </label>
-          <InfoTooltip text="Tax Collected at Source (Section 206C) on high value sales of goods" />
+          <InfoTooltip text="Tax Collected at Source (Sec 206C) on sale of goods." />
         </div>
 
-        {/* 8. Enable TDS with YouTube video icon */}
-        <div className="flex items-center gap-1.5">
+        {/* 8. Enable TDS */}
+        <div className="flex items-center">
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -224,19 +241,7 @@ export default function TaxesTab({ settings, update }) {
             />
             <span className="font-medium text-slate-800">Enable TDS</span>
           </label>
-          <InfoTooltip text="Tax Deducted at Source (Section 194Q) deductible by customer on purchase invoices" />
-
-          {/* Red YouTube Video Icon */}
-          <button
-            type="button"
-            onClick={() => setShowVideoModal(true)}
-            title="Watch TDS guide video"
-            className="inline-flex items-center justify-center text-red-600 hover:text-red-700 ml-1 cursor-pointer transition transform hover:scale-110"
-          >
-            <span className="inline-flex items-center justify-center h-4 w-6 rounded bg-red-600 text-white shadow-2xs text-[9px] font-bold">
-              ▶
-            </span>
-          </button>
+          <InfoTooltip text="Tax Deducted at Source (Sec 194Q) deductible by customer." />
         </div>
 
         {/* 9. Tax List > Button */}
@@ -244,7 +249,7 @@ export default function TaxesTab({ settings, update }) {
           <button
             type="button"
             onClick={() => setShowTaxListModal(true)}
-            className="inline-flex items-center justify-center rounded-lg bg-sky-50 px-4 py-2 text-xs font-semibold text-sky-600 border border-sky-100 hover:bg-sky-100 hover:border-sky-200 transition cursor-pointer shadow-2xs"
+            className="inline-flex items-center justify-center rounded-lg bg-[#FF5A1F]/10 px-4 py-2 text-xs font-semibold text-[#FF5A1F] border border-[#FF5A1F]/30 hover:bg-[#FF5A1F] hover:text-white hover:border-[#FF5A1F] transition cursor-pointer shadow-xs"
           >
             Tax List &gt;
           </button>
@@ -400,57 +405,6 @@ export default function TaxesTab({ settings, update }) {
                 className="rounded-lg bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer shadow-sm"
               >
                 Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────── VIDEO MODAL ─────────────────── */}
-      {showVideoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center h-4 w-6 rounded bg-red-600 text-white text-[9px] font-bold">
-                  ▶
-                </span>
-                <h3 className="text-base font-bold text-slate-900">How TDS works under GST / Income Tax</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowVideoModal(false)}
-                className="text-slate-400 hover:text-slate-700 cursor-pointer"
-              >
-                <FiX className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mt-4 space-y-3 text-xs text-slate-600 leading-relaxed">
-              <p className="font-semibold text-slate-800">
-                Understanding Section 194Q &amp; GST TDS:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5">
-                <li>
-                  <strong>TDS (Tax Deducted at Source):</strong> When enabled, buyers deduct TDS (e.g. 0.1% or 1%) when purchasing goods exceeding threshold limits.
-                </li>
-                <li>
-                  The deductible TDS amount is subtracted from the total receivable balance from the customer.
-                </li>
-                <li>
-                  The buyer deposits this TDS to the government on your behalf, reflected in Form 26AS / AIS.
-                </li>
-              </ul>
-              <div className="rounded-lg bg-blue-50 p-3 border border-blue-100 text-[11px] text-blue-800">
-                You can configure default TDS percentage or override on individual transaction invoices.
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowVideoModal(false)}
-                className="rounded-lg bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer"
-              >
-                Got It
               </button>
             </div>
           </div>

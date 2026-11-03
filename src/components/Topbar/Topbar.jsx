@@ -295,7 +295,7 @@ export default function Topbar({ onRefresh }) {
 
   return (
     <header
-      className={`relative shrink-0 border-b border-slate-200 bg-white select-none ${
+      className={`relative shrink-0 border-b border-[#252B37] bg-[#12151B] text-white select-none ${
         isSearchFocused && searchQuery.trim() ? "z-[60]" : "z-30"
       }`}
     >
@@ -303,11 +303,11 @@ export default function Topbar({ onRefresh }) {
 
       <div className="flex h-[52px] items-center justify-between px-4 py-2">
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <span className="h-2 w-2 rounded-full bg-rose-500" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#FF5A1F] shadow-[0_0_8px_rgba(255,90,31,0.6)]" />
           <span
             onClick={() => navigate("/company-profile")}
             title="Click to view Company Profile"
-            className="hidden text-sm font-semibold text-slate-700 sm:block cursor-pointer hover:text-blue-600 transition"
+            className="hidden text-sm font-semibold text-slate-100 sm:block cursor-pointer hover:text-[#FF5A1F] transition"
           >
             {companyProfile.businessName ||
               companyProfile.companyName ||
@@ -320,9 +320,9 @@ export default function Topbar({ onRefresh }) {
             className="relative ml-3 hidden max-w-md flex-1 lg:block"
           >
             <div
-              className={`flex h-9 items-center gap-2 rounded-lg bg-slate-100 px-3 border transition ${
+              className={`flex h-9 items-center gap-2 rounded-lg bg-[#1A1E27] px-3 border border-[#2B313F] transition ${
                 isSearchFocused
-                  ? "border-blue-500 bg-white shadow-xs"
+                  ? "border-[#FF5A1F] bg-white shadow-xs ring-2 ring-[#FF5A1F]/20"
                   : "border-transparent"
               }`}
             >
@@ -336,7 +336,7 @@ export default function Topbar({ onRefresh }) {
                 }}
                 onFocus={() => setIsSearchFocused(true)}
                 onKeyDown={handleKeyDown}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 text-slate-800"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 text-slate-100"
                 placeholder="Search transactions, reports, parties"
               />
               {searchQuery && (
@@ -352,7 +352,7 @@ export default function Topbar({ onRefresh }) {
 
             {/* Autocomplete Results Dropdown */}
             {isSearchFocused && searchQuery.trim() && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xl z-[100] p-1.5">
+              <div className="absolute left-0 right-0 top-full mt-1.5 max-h-96 overflow-y-auto rounded-xl border border-[#2B313F] bg-[#161922] text-slate-100 shadow-2xl z-[100] p-1.5">
                 {searchResults.length > 0 ? (
                   <div className="space-y-0.5">
                     {searchResults.map((result, idx) => {
@@ -424,7 +424,7 @@ export default function Topbar({ onRefresh }) {
           <button
             type="button"
             onClick={() => openTransaction("/sales/sale-invoices/new")}
-            className="hidden rounded-full bg-rose-600 hover:bg-rose-700 px-3.5 py-2 text-[13px] font-semibold text-white md:block transition cursor-pointer"
+            className="hidden rounded-full bg-[#FF5A1F] hover:bg-[#E84E0F] active:bg-[#D4430B] px-4 py-2 text-[13px] font-bold text-white md:block transition-all shadow-[0_3px_12px_rgba(255,90,31,0.35)] hover:shadow-[0_4px_16px_rgba(255,90,31,0.5)] hover:scale-[1.02] active:scale-95 cursor-pointer tracking-wide"
           >
             + Add Sale
           </button>
@@ -433,7 +433,7 @@ export default function Topbar({ onRefresh }) {
             onClick={() =>
               openTransaction("/purchase-expense/purchase-bills/new")
             }
-            className="hidden rounded-full bg-blue-600 hover:bg-blue-700 px-3.5 py-2 text-[13px] font-semibold text-white md:block transition cursor-pointer"
+            className="hidden rounded-full bg-[#161921] hover:bg-[#202530] border border-[#2F3646] hover:border-[#FF5A1F]/60 px-4 py-2 text-[13px] font-semibold text-white md:block transition-all shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer"
           >
             + Add Purchase
           </button>
@@ -446,7 +446,7 @@ export default function Topbar({ onRefresh }) {
             onClick={toggleTheme}
             title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle dark/light mode"
-            className="rounded-full bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
+            className="rounded-full bg-[#1A1E27] border border-[#2B313F] p-2 text-slate-300 hover:text-[#FF5A1F] hover:border-[#FF5A1F]/50 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
           >
             {isDark ? (
               <FiSun className="h-4 w-4 text-amber-500 transition-transform rotate-0 hover:rotate-45" />
@@ -459,7 +459,7 @@ export default function Topbar({ onRefresh }) {
             onClick={() => navigate("/company-profile")}
             title={companyProfile?.businessName || companyProfile?.companyName || "Company Profile"}
             aria-label="Company Profile"
-            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#1A1F71] text-white hover:bg-[#14185D] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
+            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#161921] border-2 border-[#FF5A1F] text-[#FF5A1F] hover:bg-[#202530] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs"
           >
             {companyProfile?.logo && !logoError ? (
               <img

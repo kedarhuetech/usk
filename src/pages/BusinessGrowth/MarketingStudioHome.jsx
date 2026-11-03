@@ -127,7 +127,7 @@ function StudioHeader({ searchQuery, onSearchChange }) {
               placeholder="Search templates, sections, tags"
             />
           </label>
-          <Button className="h-11 rounded-full bg-[#1A1F71] px-5 text-white hover:bg-[#14185D]">
+          <Button className="h-11 rounded-full bg-[#FF5A1F] px-5 text-white hover:bg-[#E84E0F] active:bg-[#D4430B] shadow-[0_3px_12px_rgba(255,90,31,0.35)] transition">
             <FiPlus className="h-4 w-4" />
             Create
           </Button>
@@ -304,11 +304,11 @@ function ImageToLayersBetaCard() {
           </div>
           <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={handleFileChange} className="hidden" />
           <div className="mt-3 flex flex-wrap gap-2.5">
-            <Button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full bg-white px-5 text-[#1A1F71] ring-1 ring-indigo-100 hover:bg-indigo-50">
+            <Button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full bg-[#1A1E27] border border-[#2B313F] px-5 text-slate-200 hover:border-[#FF5A1F] hover:text-white transition">
               <FiUpload className="h-4 w-4" />
               Upload Image
             </Button>
-            <Button type="button" onClick={handleConvert} disabled={!file || isProcessing} className="rounded-full bg-[#1A1F71] px-5 text-white hover:bg-[#14185D] disabled:opacity-50">
+            <Button type="button" onClick={handleConvert} disabled={!file || isProcessing} className="rounded-full bg-[#FF5A1F] px-5 text-white hover:bg-[#E84E0F] active:bg-[#D4430B] shadow-[0_3px_12px_rgba(255,90,31,0.35)] transition disabled:opacity-50">
               {isProcessing ? "Analyzing..." : "Convert to Layers"}
             </Button>
             {result && (

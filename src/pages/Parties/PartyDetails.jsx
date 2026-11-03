@@ -64,7 +64,7 @@ function PartyIllustration() {
           <div className="h-3 w-32 rounded bg-white/70" />
         </div>
       </div>
-      <div className="absolute bottom-6 right-2 flex h-24 w-24 items-center justify-center rounded-full border-8 border-amber-400 bg-white text-[#1A1F71] shadow-md">
+      <div className="absolute bottom-6 right-2 flex h-24 w-24 items-center justify-center rounded-full border-8 border-amber-400 bg-white text-[#FF5A1F] shadow-md">
         <FiUsers className="h-10 w-10" />
       </div>
       <div className="absolute bottom-8 left-40 flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 text-white shadow-md">
@@ -738,7 +738,7 @@ function PartyDetails() {
                       ? "bg-emerald-600 text-white shadow-xs"
                       : f.id === "payable"
                       ? "bg-rose-600 text-white shadow-xs"
-                      : "bg-[#1A1F71] text-white shadow-xs"
+                      : "bg-[#14171E] text-white shadow-xs ring-1 ring-[#FF5A1F]/50"
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                 }`}
               >
