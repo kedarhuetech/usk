@@ -4,8 +4,36 @@ import { getMetaConnection, getMetaPublicConnection } from "../services/metaConn
 import { publishMetaAdCampaign } from "../services/metaAdsService.js";
 import { normalizeMetaError } from "../services/metaOAuthService.js";
 import { fetchMetaAdsInsights, normalizeMetaInsightsError } from "../services/metaAdsInsightsService.js";
+import { fetchMetaAccountEligibility, fetchMetaCampaignInsights, fetchMetaCampaigns, updateMetaCampaignStatus } from "../services/metaAdsManagementService.js";
 
 const router = Router();
+
+function sendMetaManagementError(res, error, fallback) {
+  const normalized = normalizeMetaError(error, fallback);
+  const code = String(normalized.code);
+  const status = code === "META_NOT_CONNECTED" ? 401 : code.includes("PERMISSION") ? 403 : code.startsWith("META_") ? 400 : 502;
+  return res.status(status).json({ success: false, message: normalized.message, error: { code: normalized.code, subcode: normalized.subcode, fbtraceId: normalized.fbtraceId } });
+}
+
+router.get("/campaigns", async (req, res) => {
+  try { return res.json({ success: true, ...(await fetchMetaCampaigns({ connection: getMetaConnection(), after: req.query.after, limit: req.query.limit })) }); }
+  catch (error) { return sendMetaManagementError(res, error, "Unable to load Meta campaigns."); }
+});
+
+router.get("/account-eligibility", async (_req, res) => {
+  try { return res.json({ success: true, ...(await fetchMetaAccountEligibility({ connection: getMetaConnection() })) }); }
+  catch (error) { return sendMetaManagementError(res, error, "Unable to verify Meta Ad Account information."); }
+});
+
+router.get("/campaigns/:campaignId/insights", async (req, res) => {
+  try { return res.json({ success: true, ...(await fetchMetaCampaignInsights({ connection: getMetaConnection(), campaignId: req.params.campaignId, datePreset: req.query.datePreset })) }); }
+  catch (error) { return sendMetaManagementError(res, error, "Unable to load Meta campaign insights."); }
+});
+
+router.post("/campaigns/:campaignId/status", async (req, res) => {
+  try { return res.json({ success: true, ...(await updateMetaCampaignStatus({ connection: getMetaConnection(), campaignId: req.params.campaignId, status: req.body?.status })) }); }
+  catch (error) { return sendMetaManagementError(res, error, "Unable to update Meta campaign status."); }
+});
 
 router.get("/insights", async (req, res) => {
   res.set("Cache-Control", "no-store");

@@ -1,5 +1,35 @@
 import { businessGrowthApi } from "./apiClient.js";
 
+const BUSINESS_SCOPE = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
+const STORAGE_KEY = `usk.smartAds.v1:${BUSINESS_SCOPE}`;
+const LEGACY_MIGRATION_KEY = `${STORAGE_KEY}:legacyImported`;
+
+function readStore() {
+  if (typeof window === "undefined") return { campaigns: [], settings: {}, metrics: {} };
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { campaigns: [], settings: {}, metrics: {} };
+    const parsed = JSON.parse(raw);
+    return {
+      campaigns: Array.isArray(parsed.campaigns) ? parsed.campaigns : [],
+      settings: parsed.settings && typeof parsed.settings === "object" ? parsed.settings : {},
+      metrics: parsed.metrics && typeof parsed.metrics === "object" ? parsed.metrics : {},
+    };
+  } catch {
+    throw new Error("Smart Ads browser data could not be read. Its saved data has been left untouched; clear or restore browser storage before continuing.");
+  }
+}
+
+function writeStore(store) {
+  if (typeof window === "undefined") throw new Error("Smart Ads storage is unavailable in this environment.");
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  } catch (error) {
+    if (error?.name === "QuotaExceededError") throw new Error("Smart Ads could not save because browser storage is full. Remove unused drafts or free browser storage and try again.", { cause: error });
+    throw error;
+  }
+}
+
 // Creates id.
 function createId() {
   if (globalThis.crypto?.randomUUID) return `smart-ad-${globalThis.crypto.randomUUID()}`;
@@ -20,6 +50,7 @@ export function normalizeSmartAdsCampaign(campaign = {}) {
 
   return {
     id: campaign.id || createId(),
+    source: campaign.source || (campaign.meta?.campaignId ? "meta-linked" : "usv"),
     name: campaign.name || "Untitled Campaign",
     objective: campaign.objective || "whatsapp",
     creative: {
@@ -88,17 +119,75 @@ export function normalizeSmartAdsCampaign(campaign = {}) {
       steps: Array.isArray(campaign.meta?.steps) ? campaign.meta.steps : [],
     },
     createdAt: campaign.createdAt || now,
-    updatedAt: now,
+    wizardStep: Number.isInteger(campaign.wizardStep) ? Math.min(4, Math.max(0, campaign.wizardStep)) : 0,
+    selectedAssets: campaign.selectedAssets && typeof campaign.selectedAssets === "object" ? campaign.selectedAssets : {},
+    updatedAt: campaign.updatedAt || now,
   };
 }
 
-// Gets smart ads campaigns.
-export function getSmartAdsCampaigns() {
-  return businessGrowthApi.list("smart-ads").then((rows) => rows.map(normalizeSmartAdsCampaign));
+function upsertCampaign(campaign) {
+  const store = readStore();
+  const normalized = normalizeSmartAdsCampaign({ ...campaign, updatedAt: new Date().toISOString() });
+  const index = store.campaigns.findIndex((item) => item.id === normalized.id);
+  if (index < 0) store.campaigns.unshift(normalized);
+  else store.campaigns[index] = { ...store.campaigns[index], ...normalized, createdAt: store.campaigns[index].createdAt || normalized.createdAt };
+  writeStore(store);
+  return normalized;
 }
 
-// Saves smart ads campaign.
-export function saveSmartAdsCampaign(campaign) {
-  const normalizedCampaign = normalizeSmartAdsCampaign(campaign);
-  return businessGrowthApi.save("smart-ads", normalizedCampaign);
+// Smart Ads repository contract. Replace these implementations with API calls during MySQL migration.
+export async function getSmartAdsCampaigns() {
+  const store = readStore();
+  if (!store.campaigns.length && typeof window !== "undefined" && !window.localStorage.getItem(LEGACY_MIGRATION_KEY)) {
+    try {
+      const legacy = await businessGrowthApi.list("smart-ads");
+      store.campaigns = legacy.map((row) => normalizeSmartAdsCampaign(row));
+      writeStore(store);
+      window.localStorage.setItem(LEGACY_MIGRATION_KEY, new Date().toISOString());
+    } catch {
+      // Legacy API can be unavailable; drafts continue working locally.
+    }
+  }
+  return readStore().campaigns.map(normalizeSmartAdsCampaign);
 }
+
+export async function getSmartAdsCampaignById(id) {
+  return (await getSmartAdsCampaigns()).find((item) => item.id === id) || null;
+}
+
+export async function saveSmartAdsCampaign(campaign) {
+  return upsertCampaign(campaign);
+}
+
+export async function saveDraft(campaign) {
+  return upsertCampaign({ ...campaign, status: "draft" });
+}
+
+export async function updateDraft(id, patch) {
+  const existing = await getSmartAdsCampaignById(id);
+  if (!existing || existing.status !== "draft") return null;
+  return upsertCampaign({ ...existing, ...patch, id, status: "draft" });
+}
+
+export async function deleteSmartAdsCampaign(id) {
+  const store = readStore();
+  const before = store.campaigns.length;
+  store.campaigns = store.campaigns.filter((item) => item.id !== id);
+  if (before !== store.campaigns.length) writeStore(store);
+  return before !== store.campaigns.length;
+}
+
+export function getSmartAdsSettings() { return readStore().settings; }
+export function saveSmartAdsSettings(settings) {
+  const store = readStore();
+  store.settings = { ...store.settings, ...settings };
+  writeStore(store);
+  return store.settings;
+}
+export function saveSmartAdsMetricsSnapshot(id, snapshot) {
+  const store = readStore();
+  store.metrics[id] = { ...snapshot, fetchedAt: snapshot.fetchedAt || new Date().toISOString(), source: "meta" };
+  writeStore(store);
+  return store.metrics[id];
+}
+export function getSmartAdsMetricsSnapshot(id) { return readStore().metrics[id] || null; }

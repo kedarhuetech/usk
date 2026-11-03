@@ -1,7 +1,7 @@
 // Provides the business growth data application service.
 import { businessGrowthApi, API_BASE_URL } from "./apiClient.js";
 import { normalizeInventoryItem } from "./itemsStorage.js";
-import { normalizeSmartAdsCampaign } from "./smartAdsStorage.js";
+import { normalizeSmartAdsCampaign, getSmartAdsCampaigns, saveSmartAdsCampaign, deleteSmartAdsCampaign } from "./smartAdsStorage.js";
 
 const inlineAssetCaches = new Map();
 const inlineAssetCacheEntries = [];
@@ -73,9 +73,19 @@ export async function updateGrowthOrder(id, patch) {
   return current ? businessGrowthApi.save("orders", { ...current, ...patch, updatedAt: new Date().toISOString() }) : null;
 }
 // Loads growth campaigns.
-export async function loadGrowthCampaigns() { return (await businessGrowthApi.list("smart-ads")).map((campaign) => normalizeSmartAdsCampaign(normalizePersistedAssetUrls(campaign))); }
+export async function loadGrowthCampaigns() { return (await getSmartAdsCampaigns()).map((campaign) => normalizeSmartAdsCampaign(normalizePersistedAssetUrls(campaign))); }
 // Saves growth campaign.
-export async function saveGrowthCampaign(value) { return businessGrowthApi.save("smart-ads", await persistInlineImages(normalizeSmartAdsCampaign(value), "smart-ads", value.id || "new")); }
+export async function saveGrowthCampaign(value) {
+  const normalized = normalizeSmartAdsCampaign(value);
+  try {
+    const withStoredAssets = await persistInlineImages(normalized, "smart-ads", normalized.id);
+    return await saveSmartAdsCampaign(withStoredAssets);
+  } catch {
+    // A backend creative upload is an optimization for durable asset references; drafts remain local-first.
+    return saveSmartAdsCampaign(normalized);
+  }
+}
+export async function deleteGrowthCampaign(id) { return deleteSmartAdsCampaign(id); }
 // Saves growth design.
 export async function saveGrowthDesign(value) { return businessGrowthApi.save("designs", await persistInlineImages(value, "marketing-design", value.id)); }
 // Loads growth designs.
