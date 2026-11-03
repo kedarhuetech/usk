@@ -70,6 +70,51 @@ function createGaneshQuickPersonalizeConfig(canvas, headingDefault = "Ganesh Cha
 
 const templateRecords = [
   {
+    id: "blank-square",
+    title: "Blank Canvas",
+    category: "General",
+    templateType: "editable",
+    format: "square-post",
+    thumbnail: "blank-square.svg",
+    canvas: squareCanvas,
+    businessCategories: ["general", "clothes", "restaurant", "electrical", "services"],
+    discoveryTabs: ["for-you", "business", "product", "festivals"],
+    sections: ["quick-promotions"],
+    tags: ["blank", "custom", "creative", "square"],
+    brandBindings: ["brand.businessName", "brand.phone", "brand.logo"],
+    elementsFactory: (canvas) => [
+      {
+        ...baseElement,
+        id: "bg",
+        type: "rect",
+        x: 0,
+        y: 0,
+        width: canvas.width,
+        height: canvas.height,
+        fill: "#ffffff",
+        zIndex: 0,
+        name: "Background",
+      },
+      {
+        ...baseElement,
+        id: "title",
+        type: "text",
+        x: 100,
+        y: 100,
+        width: canvas.width - 200,
+        height: 120,
+        text: "Add Heading Here",
+        fontFamily: "Inter",
+        fontSize: 54,
+        fontWeight: 700,
+        fill: "#1e293b",
+        align: "center",
+        zIndex: 1,
+        name: "Headline",
+      },
+    ],
+  },
+  {
     id: "fashion-premium-sale-01",
     title: "Premium Fashion Sale",
     category: "Fashion",
@@ -251,7 +296,8 @@ const templateRecords = [
     id: "info-safety-01",
     title: "Helpful Safety Information Post",
     category: "Helpful",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createInfoSafetyElements,
     format: "square-post",
     thumbnail: "info-safety-01.svg",
     canvas: squareCanvas,
@@ -264,62 +310,26 @@ const templateRecords = [
   },
   {
     id: "quick-personalize-test-01",
-    title: "Quick Personalize Festival Poster",
+    title: "Ganesh Festive Celebration",
     category: "Festival",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createQuickPersonalizeTestElements,
     format: "square-post",
     thumbnail: "quick-personalize-test-01.svg",
     canvas: squareCanvas,
     businessCategories: ["general", "clothes", "restaurant", "services"],
     discoveryTabs: ["for-you", "festivals", "business"],
     sections: ["quick-promotions", "festival-offers", "greetings"],
-    tags: ["quick personalize", "flat", "festival", "poster", "business logo", "heading"],
+    tags: ["festival", "ganesh", "celebration", "poster", "business logo", "heading"],
     brandBindings: ["brand.logo", "brand.businessName"],
     eventIds: ["festive-sale-season"],
-    quickPersonalize: {
-      headingDefault: "Ganesh Chaturthi Special",
-      fields: {
-        logo: {
-          x: 78,
-          y: 76,
-          width: 132,
-          height: 132,
-          cornerRadius: 24,
-          borderColor: "#ffffff",
-          borderWidth: 5,
-          strokeWidth: 5,
-        },
-        businessName: {
-          x: 232,
-          y: 96,
-          width: 470,
-          height: 66,
-          fontFamily: "Inter",
-          fontSize: 38,
-          fontWeight: 900,
-          fill: "#ffffff",
-          align: "left",
-        },
-        heading: {
-          x: 120,
-          y: 744,
-          width: 840,
-          height: 130,
-          fontFamily: "Georgia",
-          fontSize: 68,
-          fontWeight: 700,
-          fill: "#ffffff",
-          align: "center",
-          lineHeight: 1.05,
-        },
-      },
-    },
   },
   {
     id: "festival-sept14-01",
     title: "Ganesh Chaturthi Orange Poster",
     category: "Festival",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createGaneshPosterOrangeElements,
     format: "portrait-post",
     thumbnail: ganeshPosterOrangeJoyful,
     canvas: ganeshPosterCanvas01,
@@ -330,13 +340,13 @@ const templateRecords = [
     brandBindings: ["brand.logo", "brand.businessName"],
     eventId: "ganesh-chaturthi",
     eventIds: ["ganesh-chaturthi"],
-    quickPersonalize: createGaneshQuickPersonalizeConfig(ganeshPosterCanvas01, "Ganesh Chaturthi Special"),
-  },
+      },
   {
     id: "festival-sept14-02",
     title: "Ganesh Chaturthi Red Minimal Poster",
     category: "Festival",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createGaneshPosterRedElements,
     format: "portrait-post",
     thumbnail: ganeshPosterRedMinimal,
     canvas: ganeshPosterCanvas02,
@@ -347,13 +357,13 @@ const templateRecords = [
     brandBindings: ["brand.logo", "brand.businessName"],
     eventId: "ganesh-chaturthi",
     eventIds: ["ganesh-chaturthi"],
-    quickPersonalize: createGaneshQuickPersonalizeConfig(ganeshPosterCanvas02, "Ganesh Chaturthi Special"),
-  },
+      },
   {
     id: "festival-sept14-03",
     title: "Ganesh Chaturthi Joyful Flyer",
     category: "Festival",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createGaneshPosterJoyfulElements,
     format: "portrait-post",
     thumbnail: ganeshPosterJoyfulFlyer,
     canvas: ganeshPosterCanvas03,
@@ -364,8 +374,7 @@ const templateRecords = [
     brandBindings: ["brand.logo", "brand.businessName"],
     eventId: "ganesh-chaturthi",
     eventIds: ["ganesh-chaturthi"],
-    quickPersonalize: createGaneshQuickPersonalizeConfig(ganeshPosterCanvas03, "Ganesh Chaturthi Special"),
-  },
+      },
   {
     id: "festival-ganesh-01",
     title: "Ganesh Festival Greeting",
@@ -386,7 +395,8 @@ const templateRecords = [
     id: "fashion-wedding-offer-01",
     title: "Bridal Lehenga Offer",
     category: "Fashion",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createFashionWeddingOfferElements,
     format: "landscape-post",
     thumbnail: "fashion-wedding-offer-01.svg",
     canvas: landscapeCanvas,
@@ -428,7 +438,8 @@ const templateRecords = [
     id: "festive-clothing-offer-01",
     title: "Festive Clothing Offer",
     category: "Fashion",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createFestiveClothingOfferElements,
     format: "landscape-post",
     thumbnail: "festive-clothing-offer-01.svg",
     canvas: landscapeCanvas,
@@ -457,7 +468,8 @@ const templateRecords = [
     id: "food-delivery-post-01",
     title: "Fast Delivery Food Promo",
     category: "Food",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createFoodDeliveryPostElements,
     format: "landscape-post",
     thumbnail: "food-delivery-post-01.svg",
     canvas: landscapeCanvas,
@@ -499,7 +511,8 @@ const templateRecords = [
     id: "home-maintenance-tip-01",
     title: "Home Maintenance Tips",
     category: "Helpful",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createHomeMaintenanceTipElements,
     format: "square-post",
     thumbnail: "home-maintenance-tip-01.svg",
     canvas: squareCanvas,
@@ -541,7 +554,8 @@ const templateRecords = [
     id: "independence-greeting-01",
     title: "Independence Day Greeting",
     category: "Festival",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createIndependenceGreetingElements,
     format: "square-post",
     thumbnail: "independence-greeting-01.svg",
     canvas: squareCanvas,
@@ -572,7 +586,8 @@ const templateRecords = [
     id: "rakhi-greeting-01",
     title: "Rakhi Greeting Post",
     category: "Festival",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createRakhiGreetingElements,
     format: "square-post",
     thumbnail: "rakhi-greeting-01.svg",
     canvas: squareCanvas,
@@ -601,7 +616,8 @@ const templateRecords = [
     id: "discount-banner-01",
     title: "Flat Discount Banner",
     category: "Product",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createDiscountBannerElements,
     format: "landscape-post",
     thumbnail: "discount-banner-01.svg",
     canvas: landscapeCanvas,
@@ -643,7 +659,8 @@ const templateRecords = [
     id: "clinic-awareness-01",
     title: "Care Reminder Awareness",
     category: "Helpful",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createClinicAwarenessElements,
     format: "square-post",
     thumbnail: "clinic-awareness-01.svg",
     canvas: squareCanvas,
@@ -658,7 +675,8 @@ const templateRecords = [
     id: "monsoon-seasonal-offer-01",
     title: "Monsoon Seasonal Deal",
     category: "Seasonal",
-    templateType: "flat",
+    templateType: "editable",
+    elementsFactory: createMonsoonSeasonalOfferElements,
     format: "square-post",
     thumbnail: "monsoon-seasonal-offer-01.svg",
     canvas: squareCanvas,
@@ -845,6 +863,655 @@ function createQuickPersonalizeOverlays(record) {
   ];
 }
 
+
+// Creates quick personalize test elements as fully layered editable elements.
+function createQuickPersonalizeTestElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  const headingText = record.quickPersonalize?.headingDefault || "Ganesh Chaturthi Special";
+
+  return [
+    createShapeElement("bg-card", "background", {
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fill: "#8A1538",
+      cornerRadius: 0,
+    }),
+    createShapeElement("inner-panel", "decorativePanel", {
+      x: 40,
+      y: 40,
+      width: width - 80,
+      height: height - 80,
+      cornerRadius: 42,
+      fill: "#A41D42",
+    }),
+    createShapeElement("sun-glow", "decorativeShape", {
+      x: 720,
+      y: 120,
+      width: 250,
+      height: 250,
+      shapeType: "circle",
+      fill: "#FDBA74",
+      opacity: 0.35,
+    }),
+    createShapeElement("sun-core", "decorativeShape", {
+      x: 770,
+      y: 170,
+      width: 150,
+      height: 150,
+      shapeType: "circle",
+      fill: "#FFE7B8",
+      opacity: 0.5,
+    }),
+    createTextElement("headline-line1", "headline", "Happy Ganesh", {
+      x: 120,
+      y: 350,
+      width: 720,
+      height: 96,
+      fontFamily: "Georgia",
+      fontSize: 92,
+      fontWeight: 700,
+      fill: "#FFF8ED",
+      align: "left",
+    }),
+    createTextElement("headline-line2", "headline", "Chaturthi", {
+      x: 120,
+      y: 450,
+      width: 720,
+      height: 96,
+      fontFamily: "Georgia",
+      fontSize: 92,
+      fontWeight: 700,
+      fill: "#FFF8ED",
+      align: "left",
+    }),
+    createTextElement("eyebrow-tag", "eyebrow", "SPECIAL FESTIVE CELEBRATION", {
+      x: 120,
+      y: 555,
+      width: 700,
+      height: 40,
+      fontFamily: "Inter",
+      fontSize: 26,
+      fontWeight: 800,
+      fill: "#FFD89A",
+      align: "left",
+    }),
+    createShapeElement("cta-pill", "ctaBackground", {
+      x: 118,
+      y: 620,
+      width: 290,
+      height: 72,
+      fill: "#FFF8ED",
+      cornerRadius: 999,
+    }),
+    createTextElement("cta-text", "cta", "Visit Us Today", {
+      x: 138,
+      y: 638,
+      width: 250,
+      height: 36,
+      fontFamily: "Inter",
+      fontSize: 28,
+      fontWeight: 900,
+      fill: "#8A1538",
+      align: "center",
+    }),
+    createShapeElement("banner-panel", "decorativePanel", {
+      x: 70,
+      y: 730,
+      width: width - 140,
+      height: 240,
+      fill: "#F97316",
+      cornerRadius: 32,
+    }),
+    createTextElement("quick-custom-heading", "customHeading", headingText, {
+      quickPersonalizeField: "heading",
+      x: 100,
+      y: 770,
+      width: width - 200,
+      height: 90,
+      fontFamily: "Georgia",
+      fontSize: 64,
+      fontWeight: 700,
+      fill: "#FFFFFF",
+      align: "center",
+    }),
+    createTextElement("footer-tagline", "description", "May Lord Ganesha bestow abundance and joy upon you", {
+      x: 100,
+      y: 890,
+      width: width - 200,
+      height: 34,
+      fontFamily: "Inter",
+      fontSize: 22,
+      fontWeight: 700,
+      fill: "#FFF8ED",
+      align: "center",
+      opacity: 0.85,
+    }),
+    createImageElement("quick-business-logo", "businessLogo", "", {
+      binding: "brand.logo",
+      quickPersonalizeField: "logo",
+      x: 78,
+      y: 76,
+      width: 132,
+      height: 132,
+      fit: "contain",
+      borderColor: "#ffffff",
+      borderWidth: 4,
+      strokeWidth: 4,
+      cornerRadius: 24,
+    }),
+    createTextElement("quick-business-name", "businessName", "Your Business Name", {
+      binding: "brand.businessName",
+      quickPersonalizeField: "businessName",
+      x: 232,
+      y: 96,
+      width: 500,
+      height: 66,
+      fontFamily: "Inter",
+      fontSize: 38,
+      fontWeight: 900,
+      fill: "#ffffff",
+      align: "left",
+    }),
+  ];
+}
+
+// Creates rich layered elements for flat posters so every element is selectable and editable.
+function createFlatPosterLayers(record, thumbnail) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  const isLandscape = width > height;
+  const logoSize = isLandscape ? 96 : 124;
+
+  const elements = [
+    createImageElement("poster-artwork-layer", "mainImage", thumbnail, {
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fit: "cover",
+      cornerRadius: 0,
+      locked: false,
+      editable: true,
+      role: "mainImage",
+    }),
+  ];
+
+  if (record.quickPersonalize) {
+    const fields = record.quickPersonalize.fields || {};
+    elements.push(
+      createImageElement("quick-business-logo", "businessLogo", "", {
+        binding: "brand.logo",
+        quickPersonalizeField: "logo",
+        x: Math.round(width * 0.07),
+        y: Math.round(height * 0.06),
+        width: Math.round(width * 0.15),
+        height: Math.round(width * 0.15),
+        fit: "contain",
+        borderWidth: 4,
+        strokeWidth: 4,
+        cornerRadius: 22,
+        ...(fields.logo || {}),
+      }),
+      createTextElement("quick-business-name", "businessName", "Your Business Name", {
+        binding: "brand.businessName",
+        quickPersonalizeField: "businessName",
+        x: Math.round(width * 0.25),
+        y: Math.round(height * 0.075),
+        width: Math.round(width * 0.5),
+        height: Math.round(height * 0.055),
+        fontSize: Math.round(width * 0.042),
+        fontWeight: 900,
+        fill: "#ffffff",
+        align: "left",
+        ...(fields.businessName || {}),
+      }),
+      createTextElement("quick-custom-heading", "customHeading", record.quickPersonalize.headingDefault || record.title, {
+        quickPersonalizeField: "heading",
+        x: Math.round(width * 0.1),
+        y: Math.round(height * 0.78),
+        width: Math.round(width * 0.8),
+        height: Math.round(height * 0.11),
+        fontFamily: "Georgia",
+        fontSize: Math.round(width * 0.066),
+        fontWeight: 700,
+        fill: "#ffffff",
+        align: "center",
+        lineHeight: 1.05,
+        ...(fields.heading || {}),
+      }),
+    );
+  } else {
+    elements.push(
+      createImageElement("brand-logo-overlay", "businessLogo", "", {
+        binding: "brand.logo",
+        x: isLandscape ? width - 150 : width - 170,
+        y: 44,
+        width: logoSize,
+        height: logoSize,
+        borderWidth: 4,
+        strokeWidth: 4,
+        cornerRadius: 20,
+      }),
+      createTextElement("brand-name-overlay", "businessName", "Your Business Name", {
+        binding: "brand.businessName",
+        x: 64,
+        y: height - (isLandscape ? 110 : 130),
+        width: isLandscape ? 560 : 700,
+        height: 48,
+        fontSize: isLandscape ? 26 : 32,
+        fontWeight: 800,
+        fill: "#ffffff",
+        align: "left",
+      }),
+      createTextElement("brand-phone-overlay", "businessPhone", "+91 90000 00000", {
+        binding: "brand.phone",
+        x: 64,
+        y: height - (isLandscape ? 62 : 76),
+        width: 380,
+        height: 36,
+        fontSize: isLandscape ? 18 : 22,
+        fontWeight: 700,
+        fill: "#ffffff",
+        align: "left",
+      }),
+    );
+
+    if (record.brandBindings && record.brandBindings.includes("brand.website")) {
+      elements.push(
+        createTextElement("brand-website-overlay", "businessWebsite", "www.mycompany.com", {
+          binding: "brand.website",
+          x: isLandscape ? width - 420 : 64,
+          y: height - (isLandscape ? 62 : 40),
+          width: 380,
+          height: 32,
+          fontSize: isLandscape ? 18 : 20,
+          fontWeight: 600,
+          fill: "#ffffff",
+          align: isLandscape ? "right" : "left",
+        }),
+      );
+    }
+  }
+
+  return elements;
+}
+
+
+// 1. Fashion Wedding Offer (Bridal Lehenga)
+function createFashionWeddingOfferElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", {
+      x: 0,
+      y: 0,
+      width,
+      height,
+      fill: "#fff1f2",
+      cornerRadius: 0,
+    }),
+    createShapeElement("side-accent-panel", "decorativePanel", {
+      x: 36,
+      y: 36,
+      width: Math.round(width * 0.42),
+      height: height - 72,
+      fill: "#ffe4e6",
+      cornerRadius: 32,
+    }),
+    createShapeElement("lehenga-skirt", "decorativeShape", {
+      x: Math.round(width * 0.62),
+      y: Math.round(height * 0.28),
+      width: Math.round(width * 0.28),
+      height: Math.round(height * 0.58),
+      fill: "#be123c",
+      cornerRadius: 24,
+    }),
+    createShapeElement("lehenga-blouse", "decorativeShape", {
+      x: Math.round(width * 0.68),
+      y: Math.round(height * 0.12),
+      width: Math.round(width * 0.16),
+      height: Math.round(height * 0.14),
+      fill: "#9f1239",
+      cornerRadius: 16,
+    }),
+    createTextElement("headline", "headline", "Bridal Lehenga", {
+      x: 72,
+      y: 90,
+      width: Math.round(width * 0.48),
+      height: 80,
+      fontFamily: "Georgia",
+      fontSize: 66,
+      fontWeight: 700,
+      fill: "#be123c",
+      align: "left",
+    }),
+    createTextElement("subheadline", "subheadline", "Exclusive Wedding Special Collection", {
+      x: 74,
+      y: 185,
+      width: Math.round(width * 0.46),
+      height: 48,
+      fontFamily: "Inter",
+      fontSize: 26,
+      fontWeight: 700,
+      fill: "#881337",
+      align: "left",
+    }),
+    createShapeElement("discount-badge", "decorativeBadge", {
+      x: 74,
+      y: 260,
+      width: 240,
+      height: 54,
+      fill: "#be123c",
+      cornerRadius: 999,
+    }),
+    createTextElement("discount-text", "offer", "FLAT 40% OFF", {
+      x: 88,
+      y: 272,
+      width: 212,
+      height: 30,
+      fontFamily: "Inter",
+      fontSize: 22,
+      fontWeight: 900,
+      fill: "#ffffff",
+      align: "center",
+    }),
+    createShapeElement("cta-pill", "ctaBackground", {
+      x: 74,
+      y: 340,
+      width: 270,
+      height: 62,
+      fill: "#881337",
+      cornerRadius: 999,
+    }),
+    createTextElement("cta", "cta", "Book Bridal Fitting", {
+      x: 94,
+      y: 355,
+      width: 230,
+      height: 32,
+      fontFamily: "Inter",
+      fontSize: 22,
+      fontWeight: 800,
+      fill: "#ffffff",
+      align: "center",
+    }),
+    createImageElement("business-logo", "businessLogo", "", {
+      binding: "brand.logo",
+      x: 74,
+      y: height - 130,
+      width: 68,
+      height: 68,
+      fit: "contain",
+      borderColor: "#be123c",
+      borderWidth: 2,
+      strokeWidth: 2,
+      cornerRadius: 16,
+    }),
+    createTextElement("business-name", "businessName", "Your Bridal Boutique", {
+      binding: "brand.businessName",
+      x: 156,
+      y: height - 124,
+      width: 360,
+      height: 32,
+      fontSize: 24,
+      fontWeight: 900,
+      fill: "#be123c",
+      align: "left",
+    }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", {
+      binding: "brand.phone",
+      x: 156,
+      y: height - 88,
+      width: 300,
+      height: 26,
+      fontSize: 18,
+      fontWeight: 700,
+      fill: "#881337",
+      align: "left",
+    }),
+  ];
+}
+
+// 2. Festive Clothing Offer
+function createFestiveClothingOfferElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#fff7ed", cornerRadius: 0 }),
+    createShapeElement("accent-panel", "decorativePanel", { x: 40, y: 40, width: Math.round(width * 0.44), height: height - 80, fill: "#ffedd5", cornerRadius: 36 }),
+    createShapeElement("decorative-arch", "decorativeShape", { x: Math.round(width * 0.58), y: 60, width: Math.round(width * 0.36), height: height - 120, fill: "#ea580c", cornerRadius: 48 }),
+    createShapeElement("inner-arch", "decorativeShape", { x: Math.round(width * 0.62), y: 90, width: Math.round(width * 0.28), height: height - 180, fill: "#fed7aa", cornerRadius: 36 }),
+    createTextElement("headline", "headline", "Festive Styles", { x: 72, y: 100, width: Math.round(width * 0.42), height: 80, fontFamily: "Georgia", fontSize: 66, fontWeight: 700, fill: "#c2410c", align: "left" }),
+    createTextElement("subheadline", "subheadline", "Designer Ethnic & Festive Wear", { x: 74, y: 190, width: Math.round(width * 0.42), height: 44, fontSize: 28, fontWeight: 800, fill: "#9a3412", align: "left" }),
+    createShapeElement("discount-pill", "decorativeBadge", { x: 74, y: 260, width: 260, height: 50, fill: "#c2410c", cornerRadius: 999 }),
+    createTextElement("discount-text", "offer", "BUY 1 GET 1 FREE", { x: 90, y: 272, width: 228, height: 28, fontSize: 20, fontWeight: 900, fill: "#ffffff", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 74, y: 340, width: 270, height: 60, fill: "#ea580c", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Explore Festive Range", { x: 90, y: 355, width: 238, height: 30, fontSize: 20, fontWeight: 800, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 74, y: height - 130, width: 68, height: 68, fit: "contain", borderColor: "#c2410c", borderWidth: 2, strokeWidth: 2, cornerRadius: 16 }),
+    createTextElement("business-name", "businessName", "Your Festive Store", { binding: "brand.businessName", x: 156, y: height - 124, width: 340, height: 32, fontSize: 24, fontWeight: 900, fill: "#7c2d12", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 156, y: height - 88, width: 300, height: 26, fontSize: 18, fontWeight: 700, fill: "#9a3412", align: "left" }),
+  ];
+}
+
+// 3. Food Delivery Post
+function createFoodDeliveryPostElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#fffbeb", cornerRadius: 0 }),
+    createShapeElement("accent-box", "decorativePanel", { x: 40, y: 40, width: Math.round(width * 0.52), height: height - 80, fill: "#fef3c7", cornerRadius: 36 }),
+    createShapeElement("plate-circle", "decorativeShape", { x: Math.round(width * 0.65), y: Math.round(height * 0.18), width: Math.round(height * 0.64), height: Math.round(height * 0.64), shapeType: "circle", fill: "#f59e0b", cornerRadius: 999 }),
+    createShapeElement("inner-plate", "decorativeShape", { x: Math.round(width * 0.69), y: Math.round(height * 0.25), width: Math.round(height * 0.5), height: Math.round(height * 0.5), shapeType: "circle", fill: "#fbbf24", cornerRadius: 999 }),
+    createTextElement("headline", "headline", "Fast Delivery", { x: 72, y: 90, width: Math.round(width * 0.48), height: 80, fontFamily: "Georgia", fontSize: 68, fontWeight: 700, fill: "#b45309", align: "left" }),
+    createTextElement("subheadline", "subheadline", "Hot & Delicious Meals Delivered to You", { x: 74, y: 180, width: Math.round(width * 0.46), height: 44, fontSize: 26, fontWeight: 800, fill: "#78350f", align: "left" }),
+    createShapeElement("delivery-pill", "decorativeBadge", { x: 74, y: 250, width: 280, height: 50, fill: "#b45309", cornerRadius: 999 }),
+    createTextElement("delivery-text", "offer", "30 MINS OR FREE", { x: 90, y: 262, width: 248, height: 28, fontSize: 20, fontWeight: 900, fill: "#ffffff", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 74, y: 326, width: 240, height: 58, fill: "#d97706", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Order Now", { x: 90, y: 340, width: 208, height: 30, fontSize: 22, fontWeight: 900, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 74, y: height - 130, width: 68, height: 68, fit: "contain", borderColor: "#b45309", borderWidth: 2, strokeWidth: 2, cornerRadius: 16 }),
+    createTextElement("business-name", "businessName", "Your Kitchen Express", { binding: "brand.businessName", x: 156, y: height - 124, width: 340, height: 32, fontSize: 24, fontWeight: 900, fill: "#78350f", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 156, y: height - 88, width: 300, height: 26, fontSize: 18, fontWeight: 700, fill: "#b45309", align: "left" }),
+  ];
+}
+
+// 4. Info Safety
+function createInfoSafetyElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#f0fdf4", cornerRadius: 0 }),
+    createShapeElement("main-card", "decorativePanel", { x: 50, y: 50, width: width - 100, height: height - 100, fill: "#ffffff", cornerRadius: 40 }),
+    createShapeElement("header-banner", "decorativePanel", { x: 50, y: 50, width: width - 100, height: 180, fill: "#15803d", cornerRadius: 40 }),
+    createTextElement("eyebrow", "eyebrow", "HELPFUL ADVICE", { x: 90, y: 80, width: width - 180, height: 30, fontSize: 20, fontWeight: 900, fill: "#bbf7d0", align: "left" }),
+    createTextElement("headline", "headline", "Essential Safety Tips", { x: 90, y: 120, width: width - 180, height: 72, fontFamily: "Georgia", fontSize: 64, fontWeight: 700, fill: "#ffffff", align: "left" }),
+    createTextElement("tip-1", "description", "1. Regularly check all wire insulation and appliances.", { x: 90, y: 280, width: width - 180, height: 48, fontSize: 28, fontWeight: 700, fill: "#166534", align: "left" }),
+    createTextElement("tip-2", "description", "2. Never overload electrical sockets or use broken switches.", { x: 90, y: 360, width: width - 180, height: 48, fontSize: 28, fontWeight: 700, fill: "#166534", align: "left" }),
+    createTextElement("tip-3", "description", "3. Always call certified experts for electrical installations.", { x: 90, y: 440, width: width - 180, height: 48, fontSize: 28, fontWeight: 700, fill: "#166534", align: "left" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 90, y: 540, width: 280, height: 64, fill: "#15803d", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Schedule an Inspection", { x: 110, y: 556, width: 240, height: 32, fontSize: 20, fontWeight: 800, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 90, y: height - 190, width: 84, height: 84, fit: "contain", borderColor: "#15803d", borderWidth: 2, strokeWidth: 2, cornerRadius: 20 }),
+    createTextElement("business-name", "businessName", "Your Service Experts", { binding: "brand.businessName", x: 196, y: height - 180, width: 480, height: 36, fontSize: 28, fontWeight: 900, fill: "#14532d", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 196, y: height - 136, width: 340, height: 28, fontSize: 20, fontWeight: 700, fill: "#166534", align: "left" }),
+  ];
+}
+
+// 5. Home Maintenance Tips
+function createHomeMaintenanceTipElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#f8fafc", cornerRadius: 0 }),
+    createShapeElement("main-panel", "decorativePanel", { x: 60, y: 60, width: width - 120, height: height - 120, fill: "#ffffff", cornerRadius: 40 }),
+    createTextElement("eyebrow", "eyebrow", "HOME CARE GUIDE", { x: 100, y: 110, width: width - 200, height: 30, fontSize: 20, fontWeight: 900, fill: "#0284c7", align: "left" }),
+    createTextElement("headline", "headline", "Home Maintenance Tips", { x: 100, y: 150, width: width - 200, height: 74, fontFamily: "Georgia", fontSize: 62, fontWeight: 700, fill: "#0f172a", align: "left" }),
+    createTextElement("subheadline", "subheadline", "Simple routine checks that keep your home secure and efficient.", { x: 100, y: 240, width: width - 200, height: 50, fontSize: 24, fontWeight: 600, fill: "#475569", align: "left" }),
+    createTextElement("tip-1", "description", "• Check water valves and seals to prevent dampness.", { x: 100, y: 320, width: width - 200, height: 40, fontSize: 26, fontWeight: 700, fill: "#334155", align: "left" }),
+    createTextElement("tip-2", "description", "• Clean appliance filters and ventilation fans monthly.", { x: 100, y: 380, width: width - 200, height: 40, fontSize: 26, fontWeight: 700, fill: "#334155", align: "left" }),
+    createTextElement("tip-3", "description", "• Ensure emergency breaker switches are easily reachable.", { x: 100, y: 440, width: width - 200, height: 40, fontSize: 26, fontWeight: 700, fill: "#334155", align: "left" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 100, y: 530, width: 280, height: 60, fill: "#0284c7", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Book Home Maintenance", { x: 120, y: 545, width: 240, height: 30, fontSize: 20, fontWeight: 800, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 100, y: height - 190, width: 80, height: 80, fit: "contain", borderColor: "#0284c7", borderWidth: 2, strokeWidth: 2, cornerRadius: 18 }),
+    createTextElement("business-name", "businessName", "Your Home Services", { binding: "brand.businessName", x: 200, y: height - 180, width: 480, height: 34, fontSize: 26, fontWeight: 900, fill: "#0f172a", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 200, y: height - 140, width: 320, height: 26, fontSize: 20, fontWeight: 700, fill: "#0284c7", align: "left" }),
+  ];
+}
+
+// 6. Independence Greeting
+function createIndependenceGreetingElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#ffffff", cornerRadius: 0 }),
+    createShapeElement("saffron-band", "decorativePanel", { x: 0, y: 0, width, height: 180, fill: "#FF9933", cornerRadius: 0 }),
+    createShapeElement("green-band", "decorativePanel", { x: 0, y: height - 180, width, height: 180, fill: "#138808", cornerRadius: 0 }),
+    createShapeElement("chakra-circle", "decorativeShape", { x: Math.round(width / 2 - 80), y: Math.round(height * 0.32), width: 160, height: 160, shapeType: "circle", fill: "#000080", opacity: 0.15, cornerRadius: 999 }),
+    createTextElement("eyebrow", "eyebrow", "CELEBRATING 78 YEARS OF FREEDOM", { x: 80, y: 220, width: width - 160, height: 36, fontSize: 24, fontWeight: 900, fill: "#FF9933", align: "center" }),
+    createTextElement("headline", "headline", "Happy Independence Day", { x: 60, y: 480, width: width - 120, height: 86, fontFamily: "Georgia", fontSize: 68, fontWeight: 700, fill: "#000080", align: "center" }),
+    createTextElement("subheadline", "subheadline", "Honoring the spirit of unity, pride and progress for our great nation.", { x: 100, y: 580, width: width - 200, height: 50, fontSize: 26, fontWeight: 700, fill: "#334155", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: Math.round(width / 2 - 130), y: 660, width: 260, height: 58, fill: "#000080", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Vande Mataram 🇮🇳", { x: Math.round(width / 2 - 120), y: 675, width: 240, height: 28, fontSize: 20, fontWeight: 900, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: Math.round(width / 2 - 40), y: height - 160, width: 80, height: 80, fit: "contain", borderColor: "#ffffff", borderWidth: 2, strokeWidth: 2, cornerRadius: 20 }),
+    createTextElement("business-name", "businessName", "Your Company Name", { binding: "brand.businessName", x: 80, y: height - 70, width: width - 160, height: 34, fontSize: 24, fontWeight: 900, fill: "#ffffff", align: "center" }),
+  ];
+}
+
+// 7. Rakhi Greeting Post
+function createRakhiGreetingElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#fdf2f8", cornerRadius: 0 }),
+    createShapeElement("outer-ring", "decorativeShape", { x: Math.round(width / 2 - 180), y: 160, width: 360, height: 360, shapeType: "circle", fill: "#f472b6", opacity: 0.35, cornerRadius: 999 }),
+    createShapeElement("inner-ring", "decorativeShape", { x: Math.round(width / 2 - 120), y: 220, width: 240, height: 240, shapeType: "circle", fill: "#fb7185", opacity: 0.5, cornerRadius: 999 }),
+    createTextElement("eyebrow", "eyebrow", "FESTIVAL OF SACRED BOND", { x: 80, y: 90, width: width - 160, height: 32, fontSize: 22, fontWeight: 900, fill: "#db2777", align: "center" }),
+    createTextElement("headline", "headline", "Happy Raksha Bandhan", { x: 60, y: 550, width: width - 120, height: 86, fontFamily: "Georgia", fontSize: 72, fontWeight: 700, fill: "#9d174d", align: "center" }),
+    createTextElement("subheadline", "subheadline", "May this joyous festival bring love, protection, and sweet blessings.", { x: 100, y: 650, width: width - 200, height: 50, fontSize: 26, fontWeight: 700, fill: "#be185d", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: Math.round(width / 2 - 140), y: 730, width: 280, height: 60, fill: "#db2777", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Explore Rakhi Gifts", { x: Math.round(width / 2 - 130), y: 745, width: 260, height: 30, fontSize: 20, fontWeight: 800, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: Math.round(width / 2 - 40), y: height - 190, width: 80, height: 80, fit: "contain", borderColor: "#db2777", borderWidth: 2, strokeWidth: 2, cornerRadius: 20 }),
+    createTextElement("business-name", "businessName", "Your Business Name", { binding: "brand.businessName", x: 80, y: height - 95, width: width - 160, height: 32, fontSize: 24, fontWeight: 900, fill: "#831843", align: "center" }),
+  ];
+}
+
+// 8. Flat Discount Banner
+function createDiscountBannerElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#0f172a", cornerRadius: 0 }),
+    createShapeElement("glow-panel", "decorativePanel", { x: 40, y: 40, width: width - 80, height: height - 80, fill: "#1e293b", cornerRadius: 36 }),
+    createShapeElement("badge-card", "decorativeBadge", { x: Math.round(width * 0.65), y: 80, width: Math.round(width * 0.28), height: height - 160, fill: "#f59e0b", cornerRadius: 32 }),
+    createTextElement("badge-big", "offer", "50%\nOFF", { x: Math.round(width * 0.65), y: Math.round(height * 0.32), width: Math.round(width * 0.28), height: 160, fontFamily: "Inter", fontSize: 68, fontWeight: 900, fill: "#0f172a", align: "center", lineHeight: 1 }),
+    createTextElement("eyebrow", "eyebrow", "FLASH SALE THIS WEEKEND", { x: 80, y: 90, width: Math.round(width * 0.55), height: 30, fontSize: 22, fontWeight: 900, fill: "#f59e0b", align: "left" }),
+    createTextElement("headline", "headline", "Mega Discount Sale", { x: 80, y: 130, width: Math.round(width * 0.55), height: 80, fontFamily: "Georgia", fontSize: 68, fontWeight: 700, fill: "#ffffff", align: "left" }),
+    createTextElement("subheadline", "subheadline", "Huge price drops across popular items. Limited time only.", { x: 82, y: 225, width: Math.round(width * 0.52), height: 44, fontSize: 26, fontWeight: 600, fill: "#94a3b8", align: "left" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 82, y: 300, width: 260, height: 60, fill: "#f59e0b", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Claim Your Offer", { x: 100, y: 315, width: 224, height: 30, fontSize: 22, fontWeight: 900, fill: "#0f172a", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 82, y: height - 140, width: 68, height: 68, fit: "contain", borderColor: "#ffffff", borderWidth: 2, strokeWidth: 2, cornerRadius: 16 }),
+    createTextElement("business-name", "businessName", "Your Retail Brand", { binding: "brand.businessName", x: 165, y: height - 132, width: 340, height: 32, fontSize: 24, fontWeight: 900, fill: "#ffffff", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 165, y: height - 96, width: 300, height: 26, fontSize: 18, fontWeight: 700, fill: "#cbd5e1", align: "left" }),
+  ];
+}
+
+// 9. Clinic Awareness
+function createClinicAwarenessElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#f0f9ff", cornerRadius: 0 }),
+    createShapeElement("card-panel", "decorativePanel", { x: 60, y: 60, width: width - 120, height: height - 120, fill: "#ffffff", cornerRadius: 40 }),
+    createTextElement("eyebrow", "eyebrow", "HEALTH & WELLNESS AWARENESS", { x: 100, y: 110, width: width - 200, height: 30, fontSize: 20, fontWeight: 900, fill: "#0284c7", align: "left" }),
+    createTextElement("headline", "headline", "Take Care of Your Health", { x: 100, y: 150, width: width - 200, height: 74, fontFamily: "Georgia", fontSize: 62, fontWeight: 700, fill: "#0369a1", align: "left" }),
+    createTextElement("subheadline", "subheadline", "Regular preventive check-ups help catch concerns early and protect your family.", { x: 100, y: 240, width: width - 200, height: 50, fontSize: 24, fontWeight: 600, fill: "#475569", align: "left" }),
+    createTextElement("tip-1", "description", "✓ Annual health screenings & blood work", { x: 100, y: 320, width: width - 200, height: 40, fontSize: 26, fontWeight: 700, fill: "#075985", align: "left" }),
+    createTextElement("tip-2", "description", "✓ Stay hydrated and maintain daily physical activity", { x: 100, y: 380, width: width - 200, height: 40, fontSize: 26, fontWeight: 700, fill: "#075985", align: "left" }),
+    createTextElement("tip-3", "description", "✓ Consult a doctor immediately if you notice unusual fatigue", { x: 100, y: 440, width: width - 200, height: 40, fontSize: 26, fontWeight: 700, fill: "#075985", align: "left" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 100, y: 530, width: 280, height: 60, fill: "#0284c7", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Book a Consultation", { x: 120, y: 545, width: 240, height: 30, fontSize: 20, fontWeight: 800, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 100, y: height - 190, width: 80, height: 80, fit: "contain", borderColor: "#0284c7", borderWidth: 2, strokeWidth: 2, cornerRadius: 18 }),
+    createTextElement("business-name", "businessName", "Your Family Clinic", { binding: "brand.businessName", x: 200, y: height - 180, width: 480, height: 34, fontSize: 26, fontWeight: 900, fill: "#0c4a6e", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 200, y: height - 140, width: 320, height: 26, fontSize: 20, fontWeight: 700, fill: "#0284c7", align: "left" }),
+  ];
+}
+
+// 10. Monsoon Seasonal Deal
+function createMonsoonSeasonalOfferElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#ecfeff", cornerRadius: 0 }),
+    createShapeElement("card-panel", "decorativePanel", { x: 60, y: 60, width: width - 120, height: height - 120, fill: "#ffffff", cornerRadius: 40 }),
+    createShapeElement("rain-circle-1", "decorativeShape", { x: width - 280, y: 90, width: 180, height: 180, shapeType: "circle", fill: "#06b6d4", opacity: 0.25, cornerRadius: 999 }),
+    createShapeElement("rain-circle-2", "decorativeShape", { x: width - 200, y: 170, width: 120, height: 120, shapeType: "circle", fill: "#0891b2", opacity: 0.35, cornerRadius: 999 }),
+    createTextElement("eyebrow", "eyebrow", "MONSOON SPECIAL CAMPAIGN", { x: 100, y: 110, width: width - 360, height: 30, fontSize: 20, fontWeight: 900, fill: "#0891b2", align: "left" }),
+    createTextElement("headline", "headline", "Monsoon Deals\n& Warm Delights", { x: 100, y: 150, width: width - 200, height: 130, fontFamily: "Georgia", fontSize: 62, fontWeight: 700, fill: "#0e7490", align: "left", lineHeight: 1.05 }),
+    createTextElement("subheadline", "subheadline", "Special rainy season discounts on apparel, cozy comfort items, and delicious treats.", { x: 100, y: 300, width: width - 200, height: 50, fontSize: 24, fontWeight: 600, fill: "#155e75", align: "left" }),
+    createShapeElement("discount-pill", "decorativeBadge", { x: 100, y: 380, width: 260, height: 50, fill: "#0891b2", cornerRadius: 999 }),
+    createTextElement("discount-text", "offer", "UP TO 35% OFF", { x: 115, y: 392, width: 230, height: 26, fontSize: 20, fontWeight: 900, fill: "#ffffff", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: 100, y: 460, width: 260, height: 60, fill: "#0e7490", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Shop Monsoon Deals", { x: 120, y: 475, width: 220, height: 30, fontSize: 20, fontWeight: 800, fill: "#ffffff", align: "center" }),
+    createImageElement("business-logo", "businessLogo", "", { binding: "brand.logo", x: 100, y: height - 190, width: 80, height: 80, fit: "contain", borderColor: "#0891b2", borderWidth: 2, strokeWidth: 2, cornerRadius: 18 }),
+    createTextElement("business-name", "businessName", "Your Store Name", { binding: "brand.businessName", x: 200, y: height - 180, width: 480, height: 34, fontSize: 26, fontWeight: 900, fill: "#164e63", align: "left" }),
+    createTextElement("business-phone", "businessPhone", "+91 90000 00000", { binding: "brand.phone", x: 200, y: height - 140, width: 320, height: 26, fontSize: 20, fontWeight: 700, fill: "#0e7490", align: "left" }),
+  ];
+}
+
+// 11. Ganesh Poster Orange
+function createGaneshPosterOrangeElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#c2410c", cornerRadius: 0 }),
+    createShapeElement("accent-panel", "decorativePanel", { x: 40, y: 40, width: width - 80, height: height - 80, fill: "#ea580c", cornerRadius: 40 }),
+    createShapeElement("sun-glow", "decorativeShape", { x: Math.round(width / 2 - 180), y: 160, width: 360, height: 360, shapeType: "circle", fill: "#fed7aa", opacity: 0.35, cornerRadius: 999 }),
+    createTextElement("eyebrow", "eyebrow", "SHREE GANESHAY NAMAH", { x: 60, y: 100, width: width - 120, height: 32, fontSize: 24, fontWeight: 900, fill: "#ffedd5", align: "center" }),
+    createTextElement("headline", "headline", "Happy Ganesh\nChaturthi", { x: 50, y: 550, width: width - 100, height: 150, fontFamily: "Georgia", fontSize: 68, fontWeight: 700, fill: "#ffffff", align: "center", lineHeight: 1.05 }),
+    createTextElement("subheadline", "subheadline", "May Lord Ganesha remove all obstacles and bestow happiness & prosperity on you.", { x: 80, y: 720, width: width - 160, height: 60, fontSize: 26, fontWeight: 700, fill: "#ffedd5", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: Math.round(width / 2 - 140), y: 810, width: 280, height: 60, fill: "#ffffff", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Festive Greetings", { x: Math.round(width / 2 - 130), y: 825, width: 260, height: 30, fontSize: 22, fontWeight: 900, fill: "#c2410c", align: "center" }),
+    createImageElement("quick-business-logo", "businessLogo", "", { binding: "brand.logo", x: Math.round(width / 2 - 45), y: height - 210, width: 90, height: 90, fit: "contain", borderColor: "#ffffff", borderWidth: 2, strokeWidth: 2, cornerRadius: 22 }),
+    createTextElement("quick-business-name", "businessName", "Your Business Name", { binding: "brand.businessName", x: 60, y: height - 100, width: width - 120, height: 34, fontSize: 26, fontWeight: 900, fill: "#ffffff", align: "center" }),
+  ];
+}
+
+// 12. Ganesh Poster Red
+function createGaneshPosterRedElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#881337", cornerRadius: 0 }),
+    createShapeElement("gold-frame", "decorativePanel", { x: 40, y: 40, width: width - 80, height: height - 80, fill: "#9f1239", cornerRadius: 40 }),
+    createShapeElement("circle-accent", "decorativeShape", { x: Math.round(width / 2 - 160), y: 180, width: 320, height: 320, shapeType: "circle", fill: "#fef08a", opacity: 0.25, cornerRadius: 999 }),
+    createTextElement("eyebrow", "eyebrow", "FESTIVE BLESSINGS", { x: 60, y: 100, width: width - 120, height: 32, fontSize: 24, fontWeight: 900, fill: "#fef08a", align: "center" }),
+    createTextElement("headline", "headline", "Ganesh Chaturthi\nSpecial", { x: 50, y: 550, width: width - 100, height: 150, fontFamily: "Georgia", fontSize: 68, fontWeight: 700, fill: "#fef08a", align: "center", lineHeight: 1.05 }),
+    createTextElement("subheadline", "subheadline", "Wishing you and your family abundant happiness, wisdom and good fortune.", { x: 80, y: 720, width: width - 160, height: 60, fontSize: 26, fontWeight: 700, fill: "#ffffff", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: Math.round(width / 2 - 140), y: 810, width: 280, height: 60, fill: "#fef08a", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Jai Ganesh 🕉️", { x: Math.round(width / 2 - 130), y: 825, width: 260, height: 30, fontSize: 22, fontWeight: 900, fill: "#881337", align: "center" }),
+    createImageElement("quick-business-logo", "businessLogo", "", { binding: "brand.logo", x: Math.round(width / 2 - 45), y: height - 210, width: 90, height: 90, fit: "contain", borderColor: "#fef08a", borderWidth: 2, strokeWidth: 2, cornerRadius: 22 }),
+    createTextElement("quick-business-name", "businessName", "Your Business Name", { binding: "brand.businessName", x: 60, y: height - 100, width: width - 120, height: 34, fontSize: 26, fontWeight: 900, fill: "#ffffff", align: "center" }),
+  ];
+}
+
+// 13. Ganesh Poster Joyful
+function createGaneshPosterJoyfulElements(record) {
+  const width = record.canvas.width;
+  const height = record.canvas.height;
+  return [
+    createShapeElement("bg-card", "background", { x: 0, y: 0, width, height, fill: "#b45309", cornerRadius: 0 }),
+    createShapeElement("accent-panel", "decorativePanel", { x: 40, y: 40, width: width - 80, height: height - 80, fill: "#d97706", cornerRadius: 40 }),
+    createShapeElement("sun-circle", "decorativeShape", { x: Math.round(width / 2 - 180), y: 170, width: 360, height: 360, shapeType: "circle", fill: "#fef3c7", opacity: 0.35, cornerRadius: 999 }),
+    createTextElement("eyebrow", "eyebrow", "AUSPICIOUS MOMENT", { x: 60, y: 100, width: width - 120, height: 32, fontSize: 24, fontWeight: 900, fill: "#fef3c7", align: "center" }),
+    createTextElement("headline", "headline", "Joyful Ganesh\nChaturthi", { x: 50, y: 550, width: width - 100, height: 150, fontFamily: "Georgia", fontSize: 68, fontWeight: 700, fill: "#ffffff", align: "center", lineHeight: 1.05 }),
+    createTextElement("subheadline", "subheadline", "Sending heartfelt festive greetings to you and your loved ones.", { x: 80, y: 720, width: width - 160, height: 60, fontSize: 26, fontWeight: 700, fill: "#fef3c7", align: "center" }),
+    createShapeElement("cta-pill", "ctaBackground", { x: Math.round(width / 2 - 140), y: 810, width: 280, height: 60, fill: "#fef3c7", cornerRadius: 999 }),
+    createTextElement("cta", "cta", "Celebrate Together", { x: Math.round(width / 2 - 130), y: 825, width: 260, height: 30, fontSize: 22, fontWeight: 900, fill: "#b45309", align: "center" }),
+    createImageElement("quick-business-logo", "businessLogo", "", { binding: "brand.logo", x: Math.round(width / 2 - 45), y: height - 210, width: 90, height: 90, fit: "contain", borderColor: "#ffffff", borderWidth: 2, strokeWidth: 2, cornerRadius: 22 }),
+    createTextElement("quick-business-name", "businessName", "Your Business Name", { binding: "brand.businessName", x: 60, y: height - 100, width: width - 120, height: 34, fontSize: 26, fontWeight: 900, fill: "#ffffff", align: "center" }),
+  ];
+}
+
 // Creates editable elements.
 function createEditableElements(record) {
   const width = record.canvas.width;
@@ -871,8 +1538,7 @@ function createEditableElements(record) {
       strokeWidth: 0,
       borderWidth: 0,
       cornerRadius: 42,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     },
     createTextElement("headline", "headline", record.title.replace(/(Creative|Promotion|Post)$/i, "").trim(), {
       x: panelX + 48,
@@ -959,8 +1625,7 @@ function createFashionPremiumSaleElements(record) {
       strokeWidth: 0,
       borderWidth: 0,
       cornerRadius: 0,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     },
     createImageElement("fashion-hero-image", "mainImage", mainImage, {
       x: 474,
@@ -986,8 +1651,7 @@ function createFashionPremiumSaleElements(record) {
       strokeWidth: 0,
       borderWidth: 0,
       cornerRadius: 0,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     },
     {
       ...baseElement,
@@ -1004,8 +1668,7 @@ function createFashionPremiumSaleElements(record) {
       strokeWidth: 0,
       borderWidth: 0,
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     },
     createImageElement("business-logo", "businessLogo", "", {
       binding: "brand.logo",
@@ -1081,8 +1744,7 @@ function createFashionPremiumSaleElements(record) {
       strokeWidth: 5,
       borderWidth: 5,
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     },
     createTextElement("sale-badge-copy", "decorativeText", "LIMITED\nTIME", {
       x: 112,
@@ -1095,8 +1757,7 @@ function createFashionPremiumSaleElements(record) {
       lineHeight: 1,
       fill: "#fff8ef",
       align: "center",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     {
       ...baseElement,
@@ -1113,8 +1774,7 @@ function createFashionPremiumSaleElements(record) {
       strokeWidth: 0,
       borderWidth: 0,
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     },
     createTextElement("cta", "cta", "Shop the Collection", {
       x: 118,
@@ -1167,8 +1827,7 @@ function createRestaurantFoodOfferElements(record) {
       strokeWidth: 4,
       borderWidth: 4,
       cornerRadius: 44,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createShapeElement("menu-card", "decorativePanel", {
       x: 92,
@@ -1178,8 +1837,7 @@ function createRestaurantFoodOfferElements(record) {
       fill: "#fff6e8",
       opacity: 0.96,
       cornerRadius: 36,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createImageElement("business-logo", "businessLogo", "", {
       binding: "brand.logo",
@@ -1244,8 +1902,7 @@ function createRestaurantFoodOfferElements(record) {
       fill: "#b8461c",
       styleBindings: { fill: "brand.accentColor" },
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("cta", "cta", "Order Now", {
       x: 150,
@@ -1266,8 +1923,7 @@ function createRestaurantFoodOfferElements(record) {
       styleBindings: { fill: "brand.accentColor" },
       shapeType: "circle",
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("offer-badge-text", "decorativeText", "SAVE\n25%", {
       x: 804,
@@ -1279,8 +1935,7 @@ function createRestaurantFoodOfferElements(record) {
       fill: "#fff6e8",
       align: "center",
       lineHeight: 0.95,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
   ];
 }
@@ -1307,8 +1962,7 @@ function createFestivalGreetingCelebrationElements(record) {
       height: 1080,
       fill: "#2b1232",
       opacity: 0.42,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createShapeElement("brand-footer-card", "decorativePanel", {
       x: 118,
@@ -1318,8 +1972,7 @@ function createFestivalGreetingCelebrationElements(record) {
       fill: "#fff7e8",
       opacity: 0.92,
       cornerRadius: 38,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("headline", "headline", "Celebrate", {
       x: 190,
@@ -1361,8 +2014,7 @@ function createFestivalGreetingCelebrationElements(record) {
       fill: "#f97316",
       styleBindings: { fill: "brand.accentColor" },
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("cta", "cta", "Festive Greetings", {
       x: 448,
@@ -1422,8 +2074,7 @@ function createServiceBusinessPromoElements(record) {
       width: 1080,
       height: 1080,
       fill: "#eaf3f6",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createImageElement("service-hero-image", "mainImage", mainImage, {
       x: 70,
@@ -1445,8 +2096,7 @@ function createServiceBusinessPromoElements(record) {
       height: 108,
       fill: "#ffffff",
       cornerRadius: 28,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createImageElement("business-logo", "businessLogo", "", {
       binding: "brand.logo",
@@ -1522,8 +2172,7 @@ function createServiceBusinessPromoElements(record) {
       fill: "#1f6f63",
       styleBindings: { fill: "brand.primaryColor" },
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("cta", "cta", "Book a Visit", {
       x: 632,
@@ -1560,8 +2209,7 @@ function createProductLaunchNewArrivalElements(record) {
       width: 1080,
       height: 1080,
       fill: "#f6efe6",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createShapeElement("hero-circle-bg", "decorativeShape", {
       x: 440,
@@ -1572,8 +2220,7 @@ function createProductLaunchNewArrivalElements(record) {
       opacity: 0.64,
       shapeType: "circle",
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createImageElement("product-hero-image", "mainImage", mainImage, {
       x: 440,
@@ -1597,8 +2244,7 @@ function createProductLaunchNewArrivalElements(record) {
       fontWeight: 900,
       fill: "#2c221a",
       align: "left",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("headline", "headline", "Glow Serum", {
       x: 90,
@@ -1629,8 +2275,7 @@ function createProductLaunchNewArrivalElements(record) {
       fill: "#2c221a",
       styleBindings: { fill: "brand.accentColor" },
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("cta", "cta", "Explore Now", {
       x: 112,
@@ -1690,8 +2335,7 @@ function createCustomerReviewTrustElements(record) {
       width: 1080,
       height: 1080,
       fill: "#e8eef8",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createShapeElement("review-card", "decorativePanel", {
       x: 80,
@@ -1700,8 +2344,7 @@ function createCustomerReviewTrustElements(record) {
       height: 852,
       fill: "#ffffff",
       cornerRadius: 48,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createImageElement("customer-photo", "mainImage", mainImage, {
       x: 650,
@@ -1755,8 +2398,7 @@ function createCustomerReviewTrustElements(record) {
       fontSize: 126,
       fontWeight: 700,
       fill: "#1a1f71",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("headline", "headline", "Loved the service,\nquality and care.", {
       x: 126,
@@ -1798,8 +2440,7 @@ function createCustomerReviewTrustElements(record) {
       fill: "#1a1f71",
       styleBindings: { fill: "brand.primaryColor" },
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("cta", "cta", "Share Your Feedback", {
       x: 152,
@@ -1847,8 +2488,7 @@ function createBusinessDiscountOfferElements(record) {
       height: 1080,
       fill: "#0b1220",
       opacity: 0.82,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createShapeElement("outline-frame", "decorativeFrame", {
       x: 86,
@@ -1861,8 +2501,7 @@ function createBusinessDiscountOfferElements(record) {
       borderWidth: 4,
       opacity: 0.5,
       cornerRadius: 52,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("eyebrow", "eyebrow", "LIMITED OFFER", {
       x: 126,
@@ -1873,8 +2512,7 @@ function createBusinessDiscountOfferElements(record) {
       fontWeight: 900,
       fill: "#ffffff",
       align: "left",
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("headline", "headline", "Save Big\nThis Week", {
       x: 126,
@@ -1896,8 +2534,7 @@ function createBusinessDiscountOfferElements(record) {
       fill: "#f97316",
       styleBindings: { fill: "brand.accentColor" },
       cornerRadius: 28,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("subheadline", "offer", "30% OFF", {
       x: 148,
@@ -1926,8 +2563,7 @@ function createBusinessDiscountOfferElements(record) {
       height: 70,
       fill: "#ffffff",
       cornerRadius: 999,
-      locked: true,
-      editable: false,
+      locked: false, editable: true,
     }),
     createTextElement("cta", "cta", "Claim Offer", {
       x: 150,
@@ -1997,9 +2633,9 @@ function createTemplate(record) {
     title: record.title,
     name: record.title,
     category: record.category,
-    type: record.templateType,
-    templateType: record.templateType,
-    editMode: isQuickPersonalize ? "quick-personalize" : record.templateType === "flat" ? "overlay-ready" : "quick-customize",
+    type: "editable",
+    templateType: "editable",
+    editMode: "quick-customize",
     format: record.format,
     width: record.canvas.width,
     height: record.canvas.height,
@@ -2021,23 +2657,58 @@ function createTemplate(record) {
     editableConfig: {
       supportsBrandBindings: record.brandBindings.length > 0,
       supportsUserOverlays: true,
-      supportsElementEditing: record.templateType === "editable" || isQuickPersonalize,
-      supportsPosterEditing: record.templateType !== "flat",
+      supportsElementEditing: true,
+      supportsPosterEditing: true,
     },
     eventId: record.eventId,
     eventIds: record.eventIds || [],
   };
 
+  const backgroundColor =
+    record.category === "Festival"
+      ? "#7c2d12"
+      : record.category === "Food"
+      ? "#fff7ed"
+      : record.category === "Fashion"
+      ? "#faf5ef"
+      : "#eff6ff";
+
+  if (record.id === "quick-personalize-test-01") {
+    return {
+      ...common,
+      background: {
+        type: "shape",
+        fill: "#8A1538",
+        locked: false,
+        editable: true,
+      },
+      elements: createQuickPersonalizeTestElements(record),
+    };
+  }
+
+  if (record.elementsFactory) {
+    return {
+      ...common,
+      background: {
+        type: "shape",
+        fill: backgroundColor,
+        locked: false,
+        editable: true,
+      },
+      elements: record.elementsFactory(record),
+    };
+  }
+
   if (record.templateType === "flat") {
     return {
       ...common,
       background: {
-        type: "image",
-        src: thumbnail,
-        locked: true,
-        editable: false,
+        type: "shape",
+        fill: backgroundColor,
+        locked: false,
+        editable: true,
       },
-      elements: isQuickPersonalize ? createQuickPersonalizeOverlays(record) : createFlatBrandOverlays(record),
+      elements: createFlatPosterLayers(record, thumbnail),
     };
   }
 
@@ -2045,11 +2716,11 @@ function createTemplate(record) {
     ...common,
     background: {
       type: "shape",
-      fill: record.category === "Festival" ? "#fff7ed" : record.category === "Food" ? "#fff7ed" : "#eff6ff",
-      locked: true,
-      editable: false,
+      fill: backgroundColor,
+      locked: false,
+      editable: true,
     },
-    elements: record.elementsFactory ? record.elementsFactory(record) : createEditableElements(record),
+    elements: createEditableElements(record),
   };
 }
 
