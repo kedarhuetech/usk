@@ -37,13 +37,20 @@ import {
   FiTrash2,
   FiType,
   FiUpload,
+  FiEye,
 } from "react-icons/fi";
 import { useNavigate, useParams } from "react-router-dom";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { defaultBrandKit, getTemplateById } from "../../constants/marketingStudioData";
 import { getSessionDesignById, saveSessionDesign } from "../../services/marketingStudio/sessionDesignService";
-import { STOCK_MEDIA_PAGE_SIZE, STOCK_MEDIA_PROVIDERS, getStockMediaProviderStatus, searchImages } from "../../services/marketingStudio/stockMediaService";
+import {
+  STOCK_MEDIA_PAGE_SIZE,
+  STOCK_MEDIA_PROVIDERS,
+  fetchStockMediaProviderStatuses,
+  getStockMediaProviderStatus,
+  searchImages,
+} from "../../services/marketingStudio/stockMediaService";
 import { getCode128Bars } from "../../utils/barcode";
 
 const MIN_ELEMENT_SIZE = 24;
@@ -2376,6 +2383,14 @@ function LibraryToolPanel({
   const [stockProvider, setStockProvider] = useState("pexels");
   const [stockQuery, setStockQuery] = useState(DEFAULT_STOCK_QUERY);
   const [backgroundQuery, setBackgroundQuery] = useState(DEFAULT_BACKGROUND_QUERY);
+  const [previewAsset, setPreviewAsset] = useState(null);
+  const [, setProviderStatusVersion] = useState(0);
+
+  useEffect(() => {
+    fetchStockMediaProviderStatuses().then(() => {
+      setProviderStatusVersion((v) => v + 1);
+    });
+  }, []);
   const [stickerQuery, setStickerQuery] = useState("");
   const [stockResults, setStockResults] = useState([]);
   const [backgroundResults, setBackgroundResults] = useState([]);
@@ -2469,8 +2484,19 @@ function LibraryToolPanel({
     return (
       <article
         key={item.id}
-        className="group overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.02] transition duration-150 hover:-translate-y-0.5 hover:border-[#27308F]/35 hover:shadow-md hover:shadow-slate-950/[0.06]"
+        className="group relative overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm shadow-slate-950/[0.02] transition duration-150 hover:-translate-y-0.5 hover:border-[#27308F]/35 hover:shadow-md hover:shadow-slate-950/[0.06]"
       >
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setPreviewAsset(item);
+          }}
+          className="absolute right-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded bg-slate-900/75 text-white opacity-0 transition duration-150 hover:bg-slate-950 group-hover:opacity-100"
+          title="Preview image"
+        >
+          <FiEye className="h-3.5 w-3.5" />
+        </button>
         <button
           type="button"
           onClick={() => onUseStockImage(item, isBackgrounds ? "background" : "insert")}
@@ -2678,6 +2704,69 @@ function LibraryToolPanel({
           {!STICKER_LIBRARY.some((sticker) => `${sticker.label} ${sticker.id}`.toLowerCase().includes(stickerQuery.trim().toLowerCase())) && (
             <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs font-medium text-slate-500">No stickers match that search.</p>
           )}
+        </div>
+      )}
+
+      {previewAsset && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs"
+        >
+          <div className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="truncate text-xs font-bold text-slate-800">
+                {previewAsset.alt || "Image Preview"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPreviewAsset(null)}
+                className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-1 items-center justify-center overflow-auto bg-slate-900/5 p-4">
+              <img
+                src={previewAsset.previewUrl || previewAsset.fullUrl || previewAsset.thumbnailUrl}
+                alt={previewAsset.alt || "Preview"}
+                className="max-h-[50vh] w-auto max-w-full rounded-lg object-contain shadow-md"
+              />
+            </div>
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
+              <div className="mb-3 flex items-center justify-between text-xs text-slate-600">
+                <span className="max-w-[260px] truncate font-medium">
+                  {previewAsset.attribution || previewAsset.author || previewAsset.source}
+                </span>
+                <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-700">
+                  {previewAsset.provider || previewAsset.source}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUseStockImage(previewAsset, "insert");
+                    setPreviewAsset(null);
+                  }}
+                  className={`${EDITOR_UI.primaryButton} h-8 flex-1 text-xs font-semibold`}
+                >
+                  Add to Design
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUseStockImage(previewAsset, "background");
+                    setPreviewAsset(null);
+                  }}
+                  className={`${EDITOR_UI.secondaryButton} h-8 flex-1 text-xs font-semibold`}
+                >
+                  Use as Background
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </section>

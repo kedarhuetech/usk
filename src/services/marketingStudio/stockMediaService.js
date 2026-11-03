@@ -1,3 +1,6 @@
+// Manages stock media searching and provider integrations through the USV backend.
+import { API_BASE_URL, apiRequest } from "../apiClient";
+
 // Creates svg data url.
 const createSvgDataUrl = (svg) => `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 
@@ -100,250 +103,107 @@ const DEMO_MEDIA = [
 
 export const STOCK_MEDIA_PAGE_SIZE = 24;
 
-const PEXELS_API_KEY = import.meta.env.VITE_PEXELS_API_KEY || "";
-const PIXABAY_API_KEY = import.meta.env.VITE_PIXABAY_API_KEY || "";
-const UNSPLASH_ACCESS_KEY = import.meta.env.VITE_UNSPLASH_ACCESS_KEY || "";
-
 export const STOCK_MEDIA_PROVIDERS = [
   {
     id: "pexels",
     label: "Pexels",
-    envName: "VITE_PEXELS_API_KEY",
-    configured: Boolean(PEXELS_API_KEY),
+    envName: "PEXELS_API_KEY",
+    configured: true,
   },
   {
     id: "pixabay",
     label: "Pixabay",
-    envName: "VITE_PIXABAY_API_KEY",
-    configured: Boolean(PIXABAY_API_KEY),
+    envName: "PIXABAY_API_KEY",
+    configured: true,
   },
   {
     id: "unsplash",
     label: "Unsplash",
-    envName: "VITE_UNSPLASH_ACCESS_KEY",
-    configured: Boolean(UNSPLASH_ACCESS_KEY),
+    envName: "UNSPLASH_ACCESS_KEY",
+    configured: true,
   },
 ];
 
-// Returns the provider settings.
-function getProviderConfig(provider = "pexels") {
-  return STOCK_MEDIA_PROVIDERS.find((item) => item.id === provider) || STOCK_MEDIA_PROVIDERS[0];
+// Resolves relative API image URLs (e.g. proxy URLs) into full URLs if API_BASE_URL is set.
+export function resolveApiImageUrl(url) {
+  if (!url) return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) {
+    return url;
+  }
+  const cleanUrl = url.startsWith("/") ? url : `/${url}`;
+  return `${API_BASE_URL}${cleanUrl}`;
 }
 
-// Gets stock media provider status.
+// In-memory status cache populated by backend status checks.
+const providerStatusCache = {
+  pexels: {
+    provider: "pexels",
+    label: "Pexels",
+    live: true,
+    message: "Live Pexels stock photos via USV backend.",
+  },
+  pixabay: {
+    provider: "pixabay",
+    label: "Pixabay",
+    live: true,
+    message: "Live Pixabay stock photos via USV backend.",
+  },
+  unsplash: {
+    provider: "unsplash",
+    label: "Unsplash",
+    live: true,
+    message: "Live Unsplash stock photos via USV backend.",
+  },
+};
+
+// Fetches live provider status from backend without exposing secret credentials.
+export async function fetchStockMediaProviderStatuses() {
+  try {
+    const data = await apiRequest("/marketing-studio/stock-media/status");
+    if (data?.providers && Array.isArray(data.providers)) {
+      data.providers.forEach((item) => {
+        providerStatusCache[item.id] = {
+          provider: item.id,
+          label: item.label,
+          live: Boolean(item.configured),
+          message: item.configured
+            ? `Live ${item.label} search is configured.`
+            : `${item.label} is not configured on backend. Set ${item.envName} in server/.env`,
+          requiredEnv: item.envName ? [item.envName] : [],
+        };
+      });
+    }
+  } catch {
+    // If backend is momentarily unreachable, retain default optimistic status
+  }
+  return providerStatusCache;
+}
+
+// Gets stock media provider status from cache.
 export function getStockMediaProviderStatus(provider = "pexels") {
-  const providerConfig = getProviderConfig(provider);
+  const cached = providerStatusCache[provider];
+  if (cached) return cached;
 
-  if (providerConfig.configured) {
-    return {
-      provider: providerConfig.id,
-      label: providerConfig.label,
-      live: true,
-      message: `Live ${providerConfig.label} search is configured.`,
-    };
-  }
-
+  const found = STOCK_MEDIA_PROVIDERS.find((item) => item.id === provider);
   return {
-    provider: providerConfig.id,
-    label: providerConfig.label,
-    live: false,
-    message: `${providerConfig.label} is not configured.`,
-    requiredEnv: [providerConfig.envName],
-  };
-}
-
-// Makes the pexels photo value consistent.
-function normalizePexelsPhoto(photo) {
-  return {
-    id: `pexels-${photo.id}`,
-    provider: "pexels",
-    providerAssetId: String(photo.id),
-    thumbnailUrl: photo.src?.tiny || photo.src?.small || photo.src?.medium,
-    previewUrl: photo.src?.medium || photo.src?.large,
-    fullUrl: photo.src?.large2x || photo.src?.large || photo.src?.original || photo.src?.medium,
-    width: photo.width,
-    height: photo.height,
-    alt: photo.alt || "Pexels stock image",
-    author: photo.photographer || "Pexels photographer",
-    creator: photo.photographer || "Pexels photographer",
-    source: "pexels",
-    sourceUrl: photo.url || "",
-    photographerUrl: photo.photographer_url || "",
-    attribution: photo.photographer ? `${photo.photographer} on Pexels` : "Pexels",
-  };
-}
-
-// Makes the pixabay image value consistent.
-function normalizePixabayImage(image) {
-  return {
-    id: `pixabay-${image.id}`,
-    provider: "pixabay",
-    providerAssetId: String(image.id),
-    thumbnailUrl: image.previewURL || image.webformatURL || image.largeImageURL,
-    previewUrl: image.webformatURL || image.largeImageURL || image.previewURL,
-    fullUrl: image.largeImageURL || image.fullHDURL || image.webformatURL || image.previewURL,
-    width: image.imageWidth || image.webformatWidth || 0,
-    height: image.imageHeight || image.webformatHeight || 0,
-    alt: image.tags || "Pixabay stock image",
-    author: image.user || "Pixabay creator",
-    creator: image.user || "Pixabay creator",
-    source: "pixabay",
-    sourceUrl: image.pageURL || "",
-    photographerUrl: image.user_id ? `https://pixabay.com/users/${image.user}-${image.user_id}/` : "",
-    attribution: image.user ? `${image.user} on Pixabay` : "Pixabay",
-  };
-}
-
-// Makes the unsplash photo value consistent.
-function normalizeUnsplashPhoto(photo) {
-  return {
-    id: `unsplash-${photo.id}`,
-    provider: "unsplash",
-    providerAssetId: String(photo.id),
-    thumbnailUrl: photo.urls?.thumb || photo.urls?.small || photo.urls?.regular,
-    previewUrl: photo.urls?.small || photo.urls?.regular || photo.urls?.thumb,
-    fullUrl: photo.urls?.regular || photo.urls?.full || photo.urls?.small || photo.urls?.raw,
-    width: photo.width,
-    height: photo.height,
-    alt: photo.alt_description || photo.description || "Unsplash stock image",
-    author: photo.user?.name || "Unsplash photographer",
-    creator: photo.user?.name || "Unsplash photographer",
-    source: "unsplash",
-    sourceUrl: photo.links?.html || "",
-    photographerUrl: photo.user?.links?.html || "",
-    downloadUrl: photo.links?.download_location || photo.links?.download || "",
-    attribution: photo.user?.name ? `${photo.user.name} on Unsplash` : "Unsplash",
-    attributionUrl: photo.user?.links?.html || "",
-  };
-}
-
-// Creates provider error.
-function createProviderError(providerLabel, response) {
-  if (response.status === 401 || response.status === 403) {
-    return `${providerLabel} rejected the request. Check the configured API key.`;
-  }
-
-  if (response.status === 429) {
-    return `${providerLabel} rate limit reached. Try again later.`;
-  }
-
-  return `${providerLabel} stock image search failed. Try again.`;
-}
-
-// Creates search response.
-function createSearchResponse({ results, page, perPage, totalResults, hasMore, provider }) {
-  return {
-    results,
-    page,
-    perPage,
-    totalResults,
-    hasMore,
     provider,
+    label: found?.label || provider,
+    live: true,
+    message: `Live ${found?.label || provider} stock media ready.`,
   };
 }
 
-// Searches pexels.
-async function searchPexels(query, options = {}) {
-  const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
-  const page = options.page || 1;
-  const params = new URLSearchParams({
-    query,
-    per_page: String(perPage),
-    page: String(page),
-    orientation: options.orientation || "square",
-  });
-
-  const response = await fetch(`https://api.pexels.com/v1/search?${params.toString()}`, {
-    headers: {
-      Authorization: PEXELS_API_KEY,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(createProviderError("Pexels", response));
-  }
-
-  const payload = await response.json();
-  const results = (payload.photos || []).map(normalizePexelsPhoto);
-
-  return createSearchResponse({
-    results,
-    page: payload.page || page,
-    perPage: payload.per_page || perPage,
-    totalResults: payload.total_results || results.length,
-    hasMore: Boolean(payload.next_page) || page * perPage < (payload.total_results || 0),
-    provider: "pexels",
-  });
+// Normalizes backend asset URLs to ensure proxy endpoints have API_BASE_URL attached.
+function normalizeAssetUrls(asset) {
+  return {
+    ...asset,
+    thumbnailUrl: resolveApiImageUrl(asset.thumbnailUrl),
+    previewUrl: resolveApiImageUrl(asset.previewUrl),
+    fullUrl: resolveApiImageUrl(asset.fullUrl),
+  };
 }
 
-// Searches pixabay.
-async function searchPixabay(query, options = {}) {
-  const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
-  const page = options.page || 1;
-  const params = new URLSearchParams({
-    key: PIXABAY_API_KEY,
-    q: query,
-    image_type: "photo",
-    safesearch: "true",
-    per_page: String(perPage),
-    page: String(page),
-    orientation: options.orientation === "landscape" ? "horizontal" : "all",
-  });
-
-  const response = await fetch(`https://pixabay.com/api/?${params.toString()}`);
-
-  if (!response.ok) {
-    throw new Error(createProviderError("Pixabay", response));
-  }
-
-  const payload = await response.json();
-  const results = (payload.hits || []).map(normalizePixabayImage);
-
-  return createSearchResponse({
-    results,
-    page,
-    perPage,
-    totalResults: payload.totalHits || results.length,
-    hasMore: page * perPage < (payload.totalHits || 0),
-    provider: "pixabay",
-  });
-}
-
-// Searches unsplash.
-async function searchUnsplash(query, options = {}) {
-  const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
-  const page = options.page || 1;
-  const params = new URLSearchParams({
-    query,
-    per_page: String(perPage),
-    page: String(page),
-    orientation: options.orientation === "landscape" ? "landscape" : "squarish",
-  });
-
-  const response = await fetch(`https://api.unsplash.com/search/photos?${params.toString()}`, {
-    headers: {
-      Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}`,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(createProviderError("Unsplash", response));
-  }
-
-  const payload = await response.json();
-  const results = (payload.results || []).map(normalizeUnsplashPhoto);
-
-  return createSearchResponse({
-    results,
-    page,
-    perPage,
-    totalResults: payload.total || results.length,
-    hasMore: page < (payload.total_pages || 0),
-    provider: "unsplash",
-  });
-}
-
-// Searches demo media.
+// Searches demo media when explicitly selected or fallback needed.
 function searchDemoMedia(query, options = {}) {
   const perPage = options.perPage || STOCK_MEDIA_PAGE_SIZE;
   const page = options.page || 1;
@@ -360,38 +220,48 @@ function searchDemoMedia(query, options = {}) {
   const start = (page - 1) * perPage;
   const pageResults = results.slice(start, start + perPage);
 
-  return createSearchResponse({
+  return {
     results: pageResults,
     page,
     perPage,
     totalResults: results.length,
     hasMore: start + pageResults.length < results.length,
     provider: "demo",
-  });
+  };
 }
 
-// Searches images.
+// Searches stock media images via backend API proxy.
 export async function searchImages(query, options = {}) {
   const provider = options.provider || "pexels";
-  const providerStatus = getStockMediaProviderStatus(provider);
-  const safeQuery = String(query || "").trim();
-  const queryText = safeQuery || "business";
 
-  if (!providerStatus.live) {
-    throw new Error(providerStatus.message);
+  if (provider === "demo") {
+    return searchDemoMedia(String(query || ""), options);
   }
 
-  if (providerStatus.provider === "pexels") {
-    return searchPexels(queryText, options);
-  }
+  const queryParams = new URLSearchParams({
+    provider,
+    query: String(query || "").trim(),
+    page: String(options.page || 1),
+    perPage: String(options.perPage || STOCK_MEDIA_PAGE_SIZE),
+    orientation: options.orientation || "square",
+    category: options.category || "stock",
+  });
 
-  if (providerStatus.provider === "pixabay") {
-    return searchPixabay(queryText, options);
-  }
+  try {
+    const payload = await apiRequest(`/marketing-studio/stock-media?${queryParams.toString()}`);
+    const rawResults = payload.results || [];
+    const results = rawResults.map(normalizeAssetUrls);
 
-  if (providerStatus.provider === "unsplash") {
-    return searchUnsplash(queryText, options);
+    return {
+      results,
+      page: Number(payload.page) || options.page || 1,
+      perPage: Number(payload.perPage) || options.perPage || STOCK_MEDIA_PAGE_SIZE,
+      totalResults: Number(payload.totalResults) || results.length,
+      hasMore: Boolean(payload.hasMore),
+      provider: payload.provider || provider,
+    };
+  } catch (error) {
+    // If backend returns a clear error message, throw it for display in the UI
+    throw new Error(error.message || `Unable to fetch images from ${provider}.`, { cause: error });
   }
-
-  return searchDemoMedia(safeQuery, options);
 }

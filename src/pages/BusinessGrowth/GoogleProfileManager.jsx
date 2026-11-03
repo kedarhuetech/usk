@@ -51,37 +51,10 @@ const metricIcons = {
 const defaultDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // Renders the state switch interface.
-function StateSwitch({ status, setStatus }) {
-  const states = [
-    "disconnected",
-    "unverified",
-    "connected",
-    "loading",
-    "empty",
-    "error",
-  ];
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-1 text-xs">
-      {states.map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => setStatus(item)}
-          className={`rounded-md px-2.5 py-1.5 font-semibold capitalize ${
-            status === item
-              ? "bg-blue-600 text-white"
-              : "text-slate-500 hover:bg-slate-100"
-          }`}
-        >
-          {item}
-        </button>
-      ))}
-    </div>
-  );
-}
 
-// Renders the page header interface.
-function PageHeader({ status, setStatus, connected, onRefresh, onDisconnect }) {
+
+
+function PageHeader({ connected, onRefresh, onDisconnect }) {
   return (
     <header className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -100,18 +73,7 @@ function PageHeader({ status, setStatus, connected, onRefresh, onDisconnect }) {
           place.
         </p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <StateSwitch status={status} setStatus={setStatus} />
-        {connected && onDisconnect && (
-          <button
-            type="button"
-            onClick={onDisconnect}
-            className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100"
-            title="Disconnect Google Account"
-          >
-            Disconnect
-          </button>
-        )}
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={onRefresh}
@@ -208,13 +170,7 @@ function DisconnectedState({ setStatus }) {
                 Switch Account
               </Button>
             </div>
-            <button
-              type="button"
-              onClick={() => setStatus("connected")}
-              className="mt-5 text-xs font-semibold text-slate-500 hover:text-slate-700"
-            >
-              View demo verified dashboard
-            </button>
+           
           </div>
           <div className="border-t border-slate-200 bg-gradient-to-br from-blue-50 via-white to-emerald-50 p-6 lg:border-l lg:border-t-0">
             <div className="rounded-2xl border border-white/70 bg-white/80 p-4 shadow-sm">
@@ -1272,8 +1228,6 @@ function GoogleProfileManager() {
   return (
     <div className="min-h-full bg-slate-100">
       <PageHeader
-        status={status}
-        setStatus={setStatus}
         connected={connected}
         onRefresh={verifyAndLoadData}
         onDisconnect={handleDisconnect}
