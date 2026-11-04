@@ -39,17 +39,22 @@ export async function connectWhatsAppTestMode() {
 
 // This helper handles whats app embedded signup logic.
 export async function completeWhatsAppEmbeddedSignup(payload) {
+  const enrichedPayload = {
+    ...payload,
+    redirectUri: typeof window !== "undefined" ? window.location.origin : "",
+  };
   const response = await fetch(`${API_BASE_URL}/api/auth/whatsapp/embedded-signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(enrichedPayload),
   });
   return readJsonResponse(response, "Unable to complete WhatsApp Embedded Signup.");
 }
 
 // Gets whats app assets.
 export async function getWhatsAppAssets({ businessId, wabaId } = {}) {
-  const url = new URL(`${API_BASE_URL}/api/whatsapp-business/assets`);
+  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5000";
+  const url = new URL(`${API_BASE_URL}/api/whatsapp-business/assets`, origin);
   if (businessId) url.searchParams.set("businessId", businessId);
   if (wabaId) url.searchParams.set("wabaId", wabaId);
   const response = await fetch(url.toString());
