@@ -20,15 +20,16 @@ import {
 import Button from "../../components/Common/Button";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import Card from "../../components/Common/Card";
-import { loadSalesInvoices } from "../../services/businessRecords";
-import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { loadSalesInvoices, saveBusinessSaleInvoice } from "../../services/businessRecords";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
+import { getPaymentIns, readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
-const SALE_INVOICE_UI_KEY = "ledgerly:saleInvoiceUiActions.v1";
+const SALE_INVOICE_UI_KEY = transactionStorageKeys.saleInvoiceUi;
 
 // Reads sale invoice ui.
 function readSaleInvoiceUi() {
-  try { const value = JSON.parse(window.localStorage.getItem(SALE_INVOICE_UI_KEY) || "{}"); return value && typeof value === "object" ? value : {}; }
+  try { const value = readTransactionValue(SALE_INVOICE_UI_KEY, {}); return value && typeof value === "object" ? value : {}; }
   catch { return {}; }
 }
 
@@ -101,16 +102,16 @@ function invoiceUser(invoice) {
 
 // This helper handles received logic.
 function invoiceReceived(invoice) {
-  return calculateInvoiceSettlement(invoice, { kind: "sale" }).paid;
+  return calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() }).paid;
 }
 
 // This helper handles balance logic.
 function invoiceBalance(invoice) {
-  return calculateInvoiceSettlement(invoice, { kind: "sale" }).outstanding;
+  return calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() }).outstanding;
 }
 
 function invoiceStatus(invoice) {
-  return calculateInvoiceSettlement(invoice, { kind: "sale" }).status;
+  return calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() }).paymentStatus;
 }
 
 // Downloads csv.
@@ -350,7 +351,7 @@ function SaleInvoices() {
   // Saves invoice ui.
   const saveInvoiceUi = (update) => setInvoiceUi((current) => {
     const next = update(current);
-    window.localStorage.setItem(SALE_INVOICE_UI_KEY, JSON.stringify(next));
+    writeTransactionValue(SALE_INVOICE_UI_KEY, next);
     notifyBusinessDataChanged();
     return next;
   });
@@ -364,7 +365,7 @@ function SaleInvoices() {
       navigate("/sales/sale-invoices/new", { state: { from: pathname, editInvoice: invoice } }); return;
     }
     if (action === "Share") { shareInvoice(invoice); return; }
-    if (action === "Cancel Invoice" && !window.confirm("Cancel this invoice in this browser? Its saved invoice will remain unchanged.")) return;
+    if (action === "Cancel Invoice" && !window.confirm("Cancel this invoice? Recorded payments will be preserved.")) return;
     if (action === "Delete" && !window.confirm("Hide this invoice from the Sale Invoices list in this browser? Its saved invoice will remain unchanged.")) return;
     if (action === "Repeat Invoice") {
       navigate("/sales/sale-invoices/new", {
@@ -387,7 +388,16 @@ function SaleInvoices() {
       });
       return;
     }
-    if (action === "Cancel Invoice") saveInvoiceUi((current) => ({ ...current, cancelled: { ...(current.cancelled || {}), [invoice.id]: true }, history: recordInvoiceHistory(current, invoice, action) }));
+    if (action === "Cancel Invoice") {
+      const cancelledInvoice = { ...invoice, invoiceStatus: "Cancelled", cancelled: true, status: "Cancelled" };
+      saveBusinessSaleInvoice(cancelledInvoice).then(() => {
+        saveInvoiceUi((current) => {
+          const cancelled = { ...(current.cancelled || {}) };
+          delete cancelled[invoice.id];
+          return { ...current, cancelled, history: recordInvoiceHistory(current, invoice, action) };
+        });
+      }).catch((error) => window.alert(error.message || "Could not cancel this invoice."));
+    }
     else if (action === "Delete") saveInvoiceUi((current) => ({ ...current, deleted: [...new Set([...(current.deleted || []), invoice.id])], history: recordInvoiceHistory(current, invoice, action) }));
     else if (action === "Duplicate") {
       const duplicate = { ...invoice, id: `local-copy-${Date.now()}`, localOnly: true, createdAt: new Date().toISOString(), form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` } };
@@ -432,7 +442,7 @@ function SaleInvoices() {
           const amount = invoiceAmount(invoice); const balance = invoiceBalance(invoice); const cancelled = Boolean(invoice.cancelled || invoice.status === "Cancelled");
           const paymentType = invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit");
           const status = invoiceStatus(invoice);
-          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoice.form?.invoiceNumber || invoice.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{invoice.form?.customer || "Cash Sale"}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${cancelled ? "text-slate-400" : invoice.isReturn ? "text-amber-600" : status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{cancelled ? "Cancelled" : invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
+          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoice.form?.invoiceNumber || invoice.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{invoice.form?.customer || "Cash Sale"}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
         })}</tbody></table></div> : <EmptyState onAddSale={openAddSale} />}
       </Card>
       {activeDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveDialog(null); }}><section className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{activeDialog.type === "edit" ? "View / Edit Invoice" : activeDialog.type}</h2><p className="mt-1 text-sm text-slate-500">Invoice {activeDialog.invoice.form?.invoiceNumber || activeDialog.invoice.invoiceNumber || "—"} · {activeDialog.invoice.form?.customer || "Cash Sale"}</p></div><button type="button" aria-label="Close" onClick={() => setActiveDialog(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header>

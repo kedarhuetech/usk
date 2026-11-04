@@ -8,13 +8,11 @@ import {
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
 import { calculatePartyBalances } from "../../services/partyBalances";
+import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
-    try {
-      const val = JSON.parse(window.localStorage.getItem(key) || "[]");
-      if (Array.isArray(val)) return val;
-    } catch {}
+    try { return readTransactionCollection(key); } catch {}
   }
   return [];
 }
@@ -59,13 +57,13 @@ export default function AllPartiesReport() {
 
   // Raw data from storage
   const storedParties = useMemo(() => getParties(), [refreshTrigger]);
-  const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
+  const sales = useMemo(() => readLocal(transactionStorageKeys.sales), [refreshTrigger]);
   const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
-  const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
-  const paymentIns = useMemo(() => readLocal("ledgerly:paymentIns.v1"), [refreshTrigger]);
-  const paymentOuts = useMemo(() => readLocal("ledgerly:paymentOuts.v1"), [refreshTrigger]);
+  const purchases = useMemo(() => readLocal(transactionStorageKeys.purchases), [refreshTrigger]);
+  const paymentIns = useMemo(() => readLocal(transactionStorageKeys.paymentIns), [refreshTrigger]);
+  const paymentOuts = useMemo(() => readLocal(transactionStorageKeys.paymentOuts), [refreshTrigger]);
   const debitNotes = useMemo(() => readLocal("ledgerly:purchaseReturns.v1"), [refreshTrigger]);
-  const saleUi = useMemo(() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } }, [refreshTrigger]);
+  const saleUi = useMemo(() => { try { return readTransactionValue(transactionStorageKeys.saleInvoiceUi, {}); } catch { return {}; } }, [refreshTrigger]);
 
   // Balance calculation shared with the Parties page and dashboard.
   const consolidatedParties = useMemo(() => {

@@ -13,6 +13,7 @@ import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties } from "../../services/partiesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
+import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import {
   loadSalesInvoices,
   loadPurchaseBills,
@@ -26,9 +27,8 @@ import {
 } from "../../utils/billWiseProfit";
 
 function readSaleInvoiceUi() {
-  if (typeof window === "undefined" || !window.localStorage) return {};
   try {
-    const value = JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}");
+    const value = readTransactionValue(transactionStorageKeys.saleInvoiceUi, {});
     return value && typeof value === "object" ? value : {};
   } catch {
     return {};
@@ -38,7 +38,7 @@ function readSaleInvoiceUi() {
 function readLocal(...keys) {
   for (const key of keys) {
     try {
-      const val = JSON.parse(window.localStorage.getItem(key) || "[]");
+      const val = readTransactionCollection(key);
       if (Array.isArray(val) && val.length > 0) return val;
     } catch {
       // Ignore corrupted local storage items

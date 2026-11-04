@@ -2,8 +2,9 @@ import { applySaleInvoiceStockUpdate, inventoryItemsStorageKey } from "./itemsSt
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { recordAuditTrail } from "./auditTrailStorage.js";
+import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
 
-const SALE_INVOICES_KEY = "ledgerly:saleInvoices.v1";
+const SALE_INVOICES_KEY = transactionStorageKeys.sales;
 
 // This helper handles parse logic.
 // Checks whether use storage.
@@ -13,23 +14,14 @@ function canUseStorage() {
 
 // Reads invoices.
 function readInvoices() {
-  if (!canUseStorage()) return [];
-  const raw = window.localStorage.getItem(SALE_INVOICES_KEY);
-  if (raw === null) return [];
-  let value;
-  try {
-    value = JSON.parse(raw);
-  } catch (error) {
-    throw new Error("Saved sale invoices are corrupted; no invoice was changed.", { cause: error });
-  }
-  if (!Array.isArray(value)) throw new Error("Saved sale invoices must be a list; no invoice was changed.");
-  return value;
+  try { return readTransactionCollection(SALE_INVOICES_KEY); }
+  catch (error) { throw new Error(`${error.message}; no invoice was changed.`, { cause: error }); }
 }
 
 // Writes invoices.
 function writeInvoices(invoices) {
   if (!canUseStorage()) throw new Error("Browser storage is unavailable; the invoice was not saved.");
-  window.localStorage.setItem(SALE_INVOICES_KEY, JSON.stringify(invoices));
+  writeTransactionCollection(SALE_INVOICES_KEY, invoices);
 }
 
 // Makes the invoice value consistent.
@@ -138,6 +130,13 @@ export function deleteSaleInvoice(invoiceId) {
     details: `Invoice ID ${invoiceId}`,
     user: "User",
   });
+}
+
+export function setSaleInvoiceLifecycle(invoiceId, invoiceStatus) {
+  if (!["Draft", "Active", "Cancelled"].includes(invoiceStatus)) throw new Error("Invalid invoice status.");
+  const invoice = readInvoices().find((entry) => String(entry.id || entry.invoiceId) === String(invoiceId));
+  if (!invoice) throw new Error("Sale invoice not found.");
+  return saveSaleInvoice({ ...invoice, invoiceStatus, cancelled: invoiceStatus === "Cancelled", status: invoiceStatus, updatedAt: new Date().toISOString() });
 }
 
 export const saleInvoicesStorageKey = SALE_INVOICES_KEY;

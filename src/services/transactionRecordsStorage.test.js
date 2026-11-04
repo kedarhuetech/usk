@@ -36,6 +36,41 @@ test("special transaction rows classify party transfers and fixed asset directio
   assert.deepEqual(rows.map((row) => row.type).sort(), ["Party to Party (Paid)", "Party to Party (Received)", "Purchase FA", "Sale FA"].sort());
 });
 
+test("cancelled invoices retain their separately calculated payment status in unified transactions", () => {
+  setup({
+    saleInvoices: [{ id: "sale-cancelled", cancelled: true, invoiceStatus: "Cancelled", totals: { finalTotal: 100, received: 0 } }],
+    paymentIns: [{ id: "receipt-linked", linkedInvoiceId: "sale-cancelled", amount: 40 }],
+  });
+  const invoice = getAllLocalTransactions().find((row) => row.id === "sale-cancelled");
+  assert.equal(invoice.invoiceStatus, "Cancelled");
+  assert.equal(invoice.paymentStatus, "Partially Paid");
+  assert.equal(invoice.status, "Partially Paid");
+  assert.equal(invoice.received, 40);
+  assert.equal(invoice.balance, 0);
+  assert.equal(invoice.type, "Sale (Cancelled)");
+});
+
+test("transaction payment status labels stay consistent for active and cancelled invoices after reload", () => {
+  setup({ saleInvoices: [
+    { id: "active-paid", totals: { finalTotal: 100, received: 100 } },
+    { id: "active-unpaid", totals: { finalTotal: 100, received: 0 } },
+    { id: "active-partial", totals: { finalTotal: 100, received: 30 } },
+    { id: "cancelled-paid", cancelled: true, totals: { finalTotal: 100, received: 100 } },
+    { id: "cancelled-unpaid", cancelled: true, totals: { finalTotal: 100, received: 0 } },
+  ] });
+  const first = getAllLocalTransactions();
+  const refreshed = getAllLocalTransactions();
+  for (const [id, expected] of [
+    ["active-paid", "Paid"], ["active-unpaid", "Unpaid"], ["active-partial", "Partially Paid"],
+    ["cancelled-paid", "Paid"], ["cancelled-unpaid", "Unpaid"],
+  ]) {
+    assert.equal(first.find((row) => row.id === id).status, expected);
+    assert.equal(refreshed.find((row) => row.id === id).status, expected);
+  }
+  assert.equal(refreshed.find((row) => row.id === "cancelled-paid").invoiceStatus, "Cancelled");
+  assert.equal(refreshed.find((row) => row.id === "cancelled-unpaid").invoiceStatus, "Cancelled");
+});
+
 test("corrupt transaction storage reports the exact source key", () => {
   setup();
   window.localStorage.getItem = (key) => key === "ledgerly:paymentIns.v1" ? "{" : null;
