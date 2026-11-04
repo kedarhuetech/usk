@@ -4,15 +4,15 @@ import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter,
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
+import { getPaymentIns, savePaymentIns } from "../../services/transactionRepository.js";
 
-const STORAGE_KEY = "ledgerly:paymentIns.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const blankPayment = () => ({ id: crypto.randomUUID(), type: "Cash", amount: "", reference: "", chequeDate: "" });
 
 function readPayments() {
-  try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); return Array.isArray(value) ? value : []; }
+  try { return getPaymentIns(); }
   catch { return []; }
 }
 
@@ -61,7 +61,7 @@ export default function PaymentIn() {
   const amountTotal = visible.reduce((total, entry) => total + Number(entry.amount || 0), 0);
   const receivedTotal = visible.reduce((total, entry) => total + Number(entry.received ?? entry.amount ?? 0), 0);
 
-  const persist = (next) => { setRecords(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
+  const persist = (next) => { setRecords(next); savePaymentIns(next); };
   const newReceipt = () => setEditor({ mode: "new", entry: { number: String(records.length + 1), date: today(), payments: [blankPayment()], description: "", partyId: "", partyName: "", received: "" } });
   const saveReceipt = () => {
     const entry = editor.entry;

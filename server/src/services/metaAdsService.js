@@ -4,7 +4,7 @@ import { getMetaOAuthConfig } from "../config/metaOAuth.js";
 import { buildMetaReadiness } from "./metaConnectionStore.js";
 import { graphGet, graphPost, normalizeMetaError } from "./metaOAuthService.js";
 
-const SAFE_STATUS = "PAUSED";
+const DEFAULT_PUBLISH_STATUS = "ACTIVE";
 const MIN_START_BUFFER_MS = 10 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
@@ -45,6 +45,15 @@ function classifyMetaPublishError(error = {}) {
   const code = String(error.code || "");
   const subcode = String(error.subcode || "");
   const text = [error.type, error.userTitle, error.userMessage, error.message].filter(Boolean).join(" ").toLowerCase();
+
+  if (code === "100" && subcode === "1885183") {
+    return {
+      category: "app_mode",
+      title: "Meta App in Development Mode",
+      message: "Meta App is in Development Mode. To publish new ad creatives, switch your app to Live mode in developers.facebook.com, or specify an existing Page post ID (objectStoryId).",
+      description: "Meta blocks apps in Development Mode from creating new inline ad creative posts. Either toggle your app to Live mode in the Meta Developer Dashboard (under Basic Settings) or select an existing post from your Facebook Page to promote.",
+    };
+  }
 
   if (code === "100" && subcode === "1359188") {
     return {
@@ -152,21 +161,32 @@ function normalizeUrl(value = "") {
   }
 }
 
+// Resolves object story ID for referencing an existing Page post.
+function resolveObjectStoryId(pageId = "", candidate = "") {
+  const trimmed = String(candidate || "").trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("_")) return trimmed;
+  return pageId ? `${pageId}_${trimmed}` : trimmed;
+}
+
 // This helper handles objective logic.
 function metaObjective(goal) {
   if (goal === "reach") return "OUTCOME_AWARENESS";
+  if (goal === "whatsapp") return "OUTCOME_ENGAGEMENT";
   return "OUTCOME_TRAFFIC";
 }
 
 // This helper handles optimization goal logic.
 function metaOptimizationGoal(goal) {
   if (goal === "reach") return "REACH";
+  if (goal === "whatsapp") return "CONVERSATIONS";
   return "LINK_CLICKS";
 }
 
 // This helper handles cta type logic.
 function metaCtaType(cta = "") {
   const normalized = String(cta).toLowerCase();
+  if (normalized.includes("whatsapp")) return "WHATSAPP_MESSAGE";
   if (normalized.includes("shop")) return "SHOP_NOW";
   if (normalized.includes("learn")) return "LEARN_MORE";
   return "CONTACT_US";
@@ -529,37 +549,62 @@ function buildTargeting({ campaign, geoLocations }) {
 }
 
 // Creates campaign.
-async function createCampaign({ accessToken, adAccountId, campaign }) {
+async function createCampaign({ accessToken, adAccountId, campaign, status = DEFAULT_PUBLISH_STATUS }) {
   return graphPost(`/${adAccountPath(adAccountId)}/campaigns`, accessToken, {
     name: campaign.name,
     objective: metaObjective(campaign.objective),
     is_adset_budget_sharing_enabled: false,
-    status: SAFE_STATUS,
+    status,
     special_ad_categories: [],
   });
 }
 
 // Creates ad set.
-async function createAdSet({ adAccountId, accessToken, campaign, metaCampaignId, adAccount, geoLocations, schedule }) {
+async function createAdSet({ adAccountId, accessToken, campaign, metaCampaignId, adAccount, geoLocations, schedule, status = DEFAULT_PUBLISH_STATUS, pageId = "" }) {
   const targeting = buildTargeting({ campaign, geoLocations });
+  const isReach = campaign.objective === "reach";
+  const isWhatsApp = campaign.objective === "whatsapp" || campaign.goal === "whatsapp";
 
-  return graphPost(`/${adAccountPath(adAccountId)}/adsets`, accessToken, {
+  const adSetPayload = {
     name: `${campaign.name} Ad Set`,
     campaign_id: metaCampaignId,
     daily_budget: dailyBudgetToMinorUnits(campaign.budget?.dailyBudget, adAccount?.currency),
     billing_event: "IMPRESSIONS",
     optimization_goal: metaOptimizationGoal(campaign.objective),
-    ...(campaign.objective === "reach" ? {} : { destination_type: "WEBSITE" }),
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
     targeting,
     start_time: schedule.startTime,
     end_time: schedule.endTime,
-    status: SAFE_STATUS,
-  });
+    status,
+  };
+
+  if (!isReach) {
+    if (isWhatsApp) {
+      adSetPayload.destination_type = "WHATSAPP";
+      if (pageId) {
+        adSetPayload.promoted_object = {
+          page_id: pageId,
+          ...(campaign.ad?.whatsappNumber ? { whatsapp_phone_number: campaign.ad.whatsappNumber } : {}),
+        };
+      }
+    } else {
+      adSetPayload.destination_type = "WEBSITE";
+    }
+  }
+
+  return graphPost(`/${adAccountPath(adAccountId)}/adsets`, accessToken, adSetPayload);
 }
 
 // Creates image ad creative.
-async function createImageAdCreative({ accessToken, adAccountId, campaign, pageId, instagramAccountId, imageHash, link }) {
+async function createImageAdCreative({ accessToken, adAccountId, campaign, pageId, instagramAccountId, imageHash, link, existingPostId = "" }) {
+  const objectStoryId = resolveObjectStoryId(pageId, existingPostId || campaign.creative?.objectStoryId || campaign.creative?.postId);
+  if (objectStoryId) {
+    return graphPost(`/${adAccountPath(adAccountId)}/adcreatives`, accessToken, {
+      name: `${campaign.name} Creative`,
+      object_story_id: objectStoryId,
+    });
+  }
+
   const objectStorySpec = {
     page_id: pageId,
     ...(instagramAccountId ? { instagram_actor_id: instagramAccountId } : {}),
@@ -582,7 +627,15 @@ async function createImageAdCreative({ accessToken, adAccountId, campaign, pageI
 }
 
 // Creates video ad creative.
-async function createVideoAdCreative({ accessToken, adAccountId, campaign, pageId, instagramAccountId, videoId, thumbnailImageHash, thumbnailSource, thumbnailUrl, link }) {
+async function createVideoAdCreative({ accessToken, adAccountId, campaign, pageId, instagramAccountId, videoId, thumbnailImageHash, thumbnailSource, thumbnailUrl, link, existingPostId = "" }) {
+  const objectStoryId = resolveObjectStoryId(pageId, existingPostId || campaign.creative?.objectStoryId || campaign.creative?.postId);
+  if (objectStoryId) {
+    return graphPost(`/${adAccountPath(adAccountId)}/adcreatives`, accessToken, {
+      name: `${campaign.name} Video Creative`,
+      object_story_id: objectStoryId,
+    });
+  }
+
   if (!thumbnailImageHash) {
     throw createPublishError("Meta video creative requires a thumbnail image hash.", "META_VIDEO_THUMBNAIL_REQUIRED");
   }
@@ -617,12 +670,12 @@ async function createVideoAdCreative({ accessToken, adAccountId, campaign, pageI
 }
 
 // Creates ad.
-async function createAd({ accessToken, adAccountId, campaign, metaAdSetId, metaCreativeId }) {
+async function createAd({ accessToken, adAccountId, campaign, metaAdSetId, metaCreativeId, status = DEFAULT_PUBLISH_STATUS }) {
   return graphPost(`/${adAccountPath(adAccountId)}/ads`, accessToken, {
     name: `${campaign.name} Ad`,
     adset_id: metaAdSetId,
     creative: { creative_id: metaCreativeId },
-    status: SAFE_STATUS,
+    status,
   });
 }
 
@@ -649,13 +702,23 @@ export async function publishMetaAdCampaign({ accessToken, connection, campaign 
   const selectedAdAccount = (assets.adAccounts || []).find((account) => account.id === selection.adAccountId);
   // Handles page.
   const selectedPage = (assets.pages || []).find((page) => page.id === selection.pageId);
-  const destinationUrl = normalizeUrl(campaign.ad?.website);
+  const isWhatsApp = campaign.objective === "whatsapp" || campaign.goal === "whatsapp";
+  const rawWebsite = campaign.ad?.website || "";
+  let destinationUrl = normalizeUrl(rawWebsite);
+  if (isWhatsApp && !destinationUrl) {
+    const phone = String(campaign.ad?.phone || campaign.ad?.whatsappNumber || "").replace(/[^0-9]/g, "");
+    destinationUrl = phone ? `https://wa.me/${phone}` : `https://facebook.com/${selectedPage?.id || ""}`;
+  }
+
   const mediaType = campaign.creative?.mediaType === "video" ? "video" : "image";
   const existingVideoId = mediaType === "video" ? cleanMetaId(campaign.creative?.existingVideoId || campaign.meta?.videoId) : "";
+  const existingPostId = campaign.creative?.objectStoryId || campaign.creative?.postId || "";
+  const objectStoryId = resolveObjectStoryId(selectedPage?.id, existingPostId);
+  const targetStatus = String(campaign.publishStatus || DEFAULT_PUBLISH_STATUS).toUpperCase() === "PAUSED" ? "PAUSED" : DEFAULT_PUBLISH_STATUS;
   let videoFile = null;
   const result = {
     status: "failed",
-    safeStatus: SAFE_STATUS,
+    publishStatus: targetStatus,
     ids: {
       metaCampaignId: null,
       metaAdSetId: null,
@@ -676,8 +739,10 @@ export async function publishMetaAdCampaign({ accessToken, connection, campaign 
   }
   if (!selectedPage?.id) throw createPublishError("Select a real Facebook Page before publishing.", "META_PAGE_REQUIRED");
   if (!selectedAdAccount?.id) throw createPublishError("Select a real Meta Ad Account before publishing.", "META_AD_ACCOUNT_REQUIRED");
-  if (!destinationUrl) throw createPublishError("Enter a real public HTTP/HTTPS website URL before publishing. WhatsApp destination publishing is not enabled yet.", "META_DESTINATION_REQUIRED");
-  if (mediaType === "video" && !existingVideoId) videoFile = videoFromDataUrl(campaign.creative);
+  if (!destinationUrl && !isWhatsApp) {
+    throw createPublishError("Enter a real public HTTP/HTTPS website URL before publishing.", "META_DESTINATION_REQUIRED");
+  }
+  if (mediaType === "video" && !existingVideoId && !objectStoryId) videoFile = videoFromDataUrl(campaign.creative);
   if (campaign.audience?.interests?.length) {
     result.warnings.push("Custom interest names were not sent to Meta because targeting IDs are required.");
   }
@@ -686,18 +751,40 @@ export async function publishMetaAdCampaign({ accessToken, connection, campaign 
   const schedule = buildMetaSchedule(campaign);
 
   const metaCampaign = await runPublishStep(result, "campaign", () =>
-    createCampaign({ accessToken, adAccountId: selectedAdAccount.id, campaign }),
+    createCampaign({ accessToken, adAccountId: selectedAdAccount.id, campaign, status: targetStatus }),
   );
   result.ids.metaCampaignId = metaCampaign.id;
 
   const metaAdSet = await runPublishStep(result, "adSet", () =>
-    createAdSet({ accessToken, adAccountId: selectedAdAccount.id, campaign, metaCampaignId: metaCampaign.id, adAccount: selectedAdAccount, geoLocations, schedule }),
+    createAdSet({
+      accessToken,
+      adAccountId: selectedAdAccount.id,
+      campaign,
+      metaCampaignId: metaCampaign.id,
+      adAccount: selectedAdAccount,
+      geoLocations,
+      schedule,
+      status: targetStatus,
+      pageId: selectedPage.id,
+    }),
   );
   result.ids.metaAdSetId = metaAdSet.id;
 
   let metaCreative;
 
-  if (mediaType === "video") {
+  if (objectStoryId) {
+    metaCreative = await runPublishStep(result, "creative", () =>
+      createImageAdCreative({
+        accessToken,
+        adAccountId: selectedAdAccount.id,
+        campaign,
+        pageId: selectedPage.id,
+        instagramAccountId: selection.instagramAccountId,
+        link: destinationUrl,
+        existingPostId: objectStoryId,
+      }),
+    );
+  } else if (mediaType === "video") {
     const metaVideo = existingVideoId
       ? await runPublishStep(result, "video_reuse", async () => ({ id: existingVideoId }))
       : await runPublishStep(result, "video_upload", async () => {
@@ -753,7 +840,7 @@ export async function publishMetaAdCampaign({ accessToken, connection, campaign 
   result.ids.metaCreativeId = metaCreative.id;
 
   const metaAd = await runPublishStep(result, "ad", () =>
-    createAd({ accessToken, adAccountId: selectedAdAccount.id, campaign, metaAdSetId: metaAdSet.id, metaCreativeId: metaCreative.id }),
+    createAd({ accessToken, adAccountId: selectedAdAccount.id, campaign, metaAdSetId: metaAdSet.id, metaCreativeId: metaCreative.id, status: targetStatus }),
   );
   result.ids.metaAdId = metaAd.id;
   result.status = "published";

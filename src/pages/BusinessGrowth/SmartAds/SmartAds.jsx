@@ -286,6 +286,8 @@ function createEmptyForm() {
     videoHeight: 0,
     videoNeedsReselect: false,
     existingVideoId: "",
+    objectStoryId: "",
+    postId: "",
     templateId: "",
     sessionDesignId: "",
     gender: "All",
@@ -328,6 +330,8 @@ function formFromCampaign(campaign) {
     videoHeight: campaign.creative?.videoHeight || 0,
     videoNeedsReselect: campaign.creative?.mediaType === "video",
     existingVideoId: campaign.meta?.videoId || campaign.creative?.existingVideoId || "",
+    objectStoryId: campaign.creative?.objectStoryId || campaign.creative?.postId || "",
+    postId: campaign.creative?.postId || campaign.creative?.objectStoryId || "",
     templateId: campaign.creative?.templateId || "",
     sessionDesignId: campaign.creative?.sessionDesignId || "",
     gender: campaign.audience?.gender || "All",
@@ -372,6 +376,8 @@ function campaignFromForm(form, status, inventoryItems, templateOptions, session
       videoHeight: form.mediaType === "video" ? Number(form.videoHeight) || 0 : 0,
       videoNeedsReselect: form.mediaType === "video" && !form.videoDataUrl,
       existingVideoId: form.mediaType === "video" ? form.existingVideoId || "" : "",
+      objectStoryId: form.objectStoryId || form.postId || undefined,
+      postId: form.postId || form.objectStoryId || undefined,
       templateId: form.mediaType === "image" && form.creativeSource === "marketing-studio" && selectedTemplate ? selectedTemplate.id : null,
       sessionDesignId: form.mediaType === "image" && form.creativeSource === "marketing-studio" && selectedSessionDesign ? selectedSessionDesign.id : null,
       itemId: form.goal === "product" || (form.mediaType === "image" && form.creativeSource === "item-image") ? selectedItem?.id || null : null,
@@ -427,7 +433,7 @@ function campaignWithPublishResult(campaign, publish, status, message = "") {
       thumbnailImageHash: ids.metaVideoThumbnailImageHash || null,
       creativeId: ids.metaCreativeId || null,
       adId: ids.metaAdId || null,
-      publishStatus: publish?.safeStatus || "PAUSED",
+      publishStatus: publish?.publishStatus || publish?.safeStatus || "ACTIVE",
       lastError: message,
       createdAt: new Date().toISOString(),
       steps: publish?.steps || [],
@@ -1380,8 +1386,8 @@ function SmartAds() {
       setError(metaReadiness.blockingReason || "Complete Meta setup before publishing this campaign.");
       return;
     }
-    if (!hasPublishableDestination(form.website)) {
-      setError("Enter a real public HTTP/HTTPS website URL before publishing. WhatsApp destination publishing is not enabled yet.");
+    if (form.goal !== "whatsapp" && !hasPublishableDestination(form.website)) {
+      setError("Enter a real public HTTP/HTTPS website URL before publishing.");
       return;
     }
 
@@ -1412,10 +1418,10 @@ function SmartAds() {
             : {}),
         },
       });
-      const saved = await saveGrowthCampaign(campaignWithPublishResult(baseCampaign, response.publish, "paused"));
+      const saved = await saveGrowthCampaign(campaignWithPublishResult(baseCampaign, response.publish, "active"));
       setCampaigns(await loadGrowthCampaigns());
       setForm(formFromCampaign(saved));
-      setToast("Campaign created in Meta as paused. Use Publish on its campaign card when you are ready to activate it.");
+      setToast("Campaign published directly to Meta! It is now in Meta ad review.");
       refreshMetaCampaigns();
       setView("dashboard");
       setStep(0);

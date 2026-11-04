@@ -15,21 +15,19 @@ import { getPurchaseBills } from "../../services/purchaseBillsStorage.js";
 import { getParties } from "../../services/partiesStorage.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { calculateGSTR3BData } from "../../services/gstr3bService.js";
+import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(key) {
-  if (typeof window === "undefined" || !window.localStorage) return [];
   try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : [];
+    return readTransactionCollection(key);
   } catch {
     return [];
   }
 }
 
 function readSaleUiActions() {
-  if (typeof window === "undefined" || !window.localStorage) return {};
   try {
-    return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}");
+    return readTransactionValue(transactionStorageKeys.saleInvoiceUi, {});
   } catch {
     return {};
   }

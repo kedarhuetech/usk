@@ -2,23 +2,14 @@ import { getPurchaseBills, purchaseBillsStorageKey } from "./purchaseBillsStorag
 import { getSaleInvoices, saleInvoicesStorageKey } from "./salesStorage.js";
 import { getParties, partiesStorageKey } from "./partiesStorage.js";
 import { calculatePartyBalances } from "./partyBalances.js";
+import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "./transactionRepository.js";
 
-export const saleInvoiceUiStorageKey = "ledgerly:saleInvoiceUiActions.v1";
-
-function readStoredJson(key, fallback) {
-  if (typeof window === "undefined" || !window.localStorage) return fallback;
-  const raw = window.localStorage.getItem(key);
-  if (raw === null) return fallback;
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`Could not read ${key} from browser storage: ${error.message}`, { cause: error });
-  }
-}
+export const saleInvoiceUiStorageKey = transactionStorageKeys.saleInvoiceUi;
 
 function readCollection(key) {
-  const value = readStoredJson(key, []);
-  if (!Array.isArray(value)) throw new Error(`Expected ${key} to contain a JSON array.`);
+  let value;
+  try { value = readTransactionCollection(key); }
+  catch (error) { throw new Error(`Could not read ${key} from browser storage: ${error.message}`, { cause: error }); }
   if (value.some((record) => !record || typeof record !== "object" || Array.isArray(record))) {
     throw new Error(`Found an invalid transaction record in ${key}.`);
   }
@@ -48,7 +39,7 @@ function uniqueRecords(records) {
 }
 
 function readSaleUiState() {
-  const state = readStoredJson(saleInvoiceUiStorageKey, {});
+  const state = readTransactionValue(saleInvoiceUiStorageKey, {});
   if (!state || typeof state !== "object" || Array.isArray(state)) {
     throw new Error(`Expected ${saleInvoiceUiStorageKey} to contain a JSON object.`);
   }
@@ -101,8 +92,8 @@ export async function loadLocalDashboardSummary() {
     purchases: getPurchaseBills(),
     parties: getParties(),
     saleUi,
-    paymentIns: readCollection("ledgerly:paymentIns.v1"),
-    paymentOuts: readCollection("ledgerly:paymentOuts.v1"),
+    paymentIns: readCollection(transactionStorageKeys.paymentIns),
+    paymentOuts: readCollection(transactionStorageKeys.paymentOuts),
     creditNotes: readCollection("ledgerly:saleReturns.v1"),
     debitNotes: readCollection("ledgerly:purchaseReturns.v1"),
   });
