@@ -5,6 +5,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { units, taxModes, taxOptions, discountTypes } from "../../constants/itemsData";
 import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 const fields = [
   { key: "itemName", label: "Item Name", type: "text" },
@@ -52,6 +53,8 @@ function changedItem(item, key, value) {
 
 // Renders the update items in bulk interface.
 function UpdateItemsInBulk() {
+  const appSettings = useAppSettings();
+  const enableItemCategory = appSettings.enableItemCategory ?? true;
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [query, setQuery] = useState("");
@@ -75,13 +78,14 @@ function UpdateItemsInBulk() {
     const needle = query.trim().toLowerCase();
     return items.filter((item) => {
       const matchesQuery = !needle || `${item.itemName || item.name || ""} ${item.itemCode || item.code || ""}`.toLowerCase().includes(needle);
-      const matchesCategory = category === "All categories" || item.category === category;
+      const matchesCategory = !enableItemCategory || category === "All categories" || item.category === category;
       const matchesType = type === "All types" || (item.type || "product") === type;
       return matchesQuery && matchesCategory && matchesType;
     });
   }, [items, query, category, type]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
-  const selectedFieldDefinition = fields.find((field) => field.key === selectedField);
+  const activeFields = useMemo(() => fields.filter((f) => enableItemCategory || f.key !== "category"), [enableItemCategory]);
+  const selectedFieldDefinition = activeFields.find((field) => field.key === selectedField);
 
   // Toggles item.
   const toggleItem = (id) => setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -138,11 +142,11 @@ function UpdateItemsInBulk() {
           <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 p-4">
               <label className="flex min-w-56 flex-1 items-center gap-2 rounded-md border border-slate-300 bg-white px-3"><FiSearch className="text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search item name or code" className="h-10 w-full outline-none" /></label>
-              <select value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option>All categories</option>{categories.slice(1).map((value) => <option key={value}>{value}</option>)}</select>
+              {enableItemCategory && <select value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option>All categories</option>{categories.slice(1).map((value) => <option key={value}>{value}</option>)}</select>}
               <select value={type} onChange={(event) => setType(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option>All types</option><option value="product">Products</option><option value="service">Services</option></select>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm"><label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={visibleItems.length > 0 && visibleItems.every((item) => selectedIds.includes(item.id))} onChange={toggleVisible} />Select visible ({visibleItems.length})</label><span className="text-slate-500">{selectedIds.length} selected</span></div>
-            {loading ? <p className="p-8 text-center text-sm text-slate-500">Loading items...</p> : <div className="max-h-[28rem] overflow-auto"><table className="min-w-full text-left text-sm"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="w-12 px-4 py-3"></th><th className="px-4 py-3">Item</th><th className="px-4 py-3">Code</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Type</th></tr></thead><tbody>{visibleItems.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-4 py-3"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleItem(item.id)} aria-label={`Select ${item.itemName || item.name}`} /></td><td className="px-4 py-3 font-semibold text-slate-800">{item.itemName || item.name || "-"}</td><td className="px-4 py-3 text-slate-600">{item.itemCode || item.code || "-"}</td><td className="px-4 py-3 text-slate-600">{item.category || "-"}</td><td className="px-4 py-3 text-slate-600">{item.type || "product"}</td></tr>)}</tbody></table>{!visibleItems.length && <p className="p-8 text-center text-sm text-slate-500">No items match the current search and filters.</p>}</div>}
+            {loading ? <p className="p-8 text-center text-sm text-slate-500">Loading items...</p> : <div className="max-h-[28rem] overflow-auto"><table className="min-w-full text-left text-sm"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="w-12 px-4 py-3"></th><th className="px-4 py-3">Item</th><th className="px-4 py-3">Code</th>{enableItemCategory && <th className="px-4 py-3">Category</th>}<th className="px-4 py-3">Type</th></tr></thead><tbody>{visibleItems.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-4 py-3"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleItem(item.id)} aria-label={`Select ${item.itemName || item.name}`} /></td><td className="px-4 py-3 font-semibold text-slate-800">{item.itemName || item.name || "-"}</td><td className="px-4 py-3 text-slate-600">{item.itemCode || item.code || "-"}</td>{enableItemCategory && <td className="px-4 py-3 text-slate-600">{item.category || "-"}</td>}<td className="px-4 py-3 text-slate-600">{item.type || "product"}</td></tr>)}</tbody></table>{!visibleItems.length && <p className="p-8 text-center text-sm text-slate-500">No items match the current search and filters.</p>}</div>}
             <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 p-4"><label className="min-w-64 flex-1 text-sm font-semibold text-slate-700">Field to update<select value={selectedField} onChange={(event) => chooseField(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Choose a supported field</option>{fields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label>{selectedFieldDefinition && <label className="min-w-64 flex-1 text-sm font-semibold text-slate-700">New value{selectedFieldDefinition.type === "select" ? <select value={fieldValues[selectedField] || ""} onChange={(event) => setFieldValues((current) => ({ ...current, [selectedField]: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Choose value</option>{selectedFieldDefinition.options.map((option) => <option key={option}>{option}</option>)}</select> : <input type={selectedFieldDefinition.type} value={fieldValues[selectedField] || ""} onChange={(event) => setFieldValues((current) => ({ ...current, [selectedField]: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 font-normal" />}</label>}<Button onClick={continueToPreview} disabled={!selectedIds.length || !selectedField} className="bg-emerald-600 text-white hover:bg-emerald-700">Review Changes</Button></div>
           </Card>
         ) : (

@@ -11,6 +11,7 @@ import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -71,6 +72,7 @@ const defaultTo = () => {
 };
 
 export default function PartyReportByItem() {
+  const { enableItemCategory } = useAppSettings();
   const navigate = useNavigate();
 
   // Filters
@@ -205,7 +207,7 @@ export default function PartyReportByItem() {
       const rows = Array.isArray(s.rows) && s.rows.length > 0 ? s.rows : [];
       if (rows.length === 0) {
         // Fallback for invoice without granular rows
-        if (selectedItem === "All Items" && selectedCategory === "All Categories") {
+        if (selectedItem === "All Items" && (!enableItemCategory || selectedCategory === "All Categories")) {
           const totalAmt = Number(s.totals?.finalTotal ?? s.totals?.grandTotal ?? s.total ?? 0);
           stats.saleAmount += totalAmt;
           stats.saleQty += 1;
@@ -217,7 +219,7 @@ export default function PartyReportByItem() {
             return;
           }
           const itemCat = r.category || itemCategoryMap.get(itemName.toLowerCase()) || "";
-          if (selectedCategory !== "All Categories" && itemCat.toLowerCase() !== selectedCategory.toLowerCase()) {
+          if (enableItemCategory && selectedCategory !== "All Categories" && itemCat.toLowerCase() !== selectedCategory.toLowerCase()) {
             return;
           }
 
@@ -282,7 +284,7 @@ export default function PartyReportByItem() {
         const itemName = String(row.item || "").trim();
         if (selectedItem !== "All Items" && itemName.toLowerCase() !== selectedItem.toLowerCase()) return;
         const category = row.category || itemCategoryMap.get(itemName.toLowerCase()) || "";
-        if (selectedCategory !== "All Categories" && category.toLowerCase() !== selectedCategory.toLowerCase()) return;
+        if (enableItemCategory && selectedCategory !== "All Categories" && category.toLowerCase() !== selectedCategory.toLowerCase()) return;
         const stats = getPartyObj(partyName);
         stats.saleQty -= Number(row.qty || 0);
         stats.saleAmount -= calculateSaleReturnRow(row).amount;
@@ -448,20 +450,22 @@ export default function PartyReportByItem() {
         {/* Second Row of Filters: All Categories & All Items */}
         <div className="flex flex-wrap items-center gap-3 pt-1">
           {/* Categories Dropdown */}
-          <div className="relative min-w-[190px]">
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400 focus:border-sky-500"
-            >
-              {categoriesList.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-            <FiChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
-          </div>
+          {enableItemCategory && (
+            <div className="relative min-w-[190px]">
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400 focus:border-sky-500"
+              >
+                {categoriesList.map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
+                ))}
+              </select>
+              <FiChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
+            </div>
+          )}
 
           {/* Items Dropdown */}
           <div className="relative min-w-[190px]">

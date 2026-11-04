@@ -200,16 +200,18 @@ export default function Topbar({ onRefresh }) {
       items.forEach((item) => {
         const name = item.itemName || item.name || "";
         const code = item.itemCode || item.code || "";
-        if (
-          name.toLowerCase().includes(query) ||
-          code.toLowerCase().includes(query)
-        ) {
+        const barcode = item.barcode || item.barCode || "";
+        const matchName = name.toLowerCase().includes(query);
+        const matchCode = code.toLowerCase().includes(query);
+        const matchBarcode = (settings.enableBarcodeScanning ?? true) && barcode.toLowerCase().includes(query);
+        if (matchName || matchCode || matchBarcode) {
           results.push({
             type: "Item",
             icon: FiPackage,
             title: name,
-            subtitle: `Code: ${code || "N/A"} · Sale Price: ₹${item.salePrice || item.price || 0}`,
+            subtitle: `${code ? `Code: ${code} · ` : ""}${barcode && (settings.enableBarcodeScanning ?? true) ? `Barcode: ${barcode} · ` : ""}Sale Price: ₹${item.salePrice || item.price || 0}`,
             path: "/items",
+            state: { itemId: item.id },
           });
         }
       });
@@ -282,7 +284,11 @@ export default function Topbar({ onRefresh }) {
   const handleSelectResult = (result) => {
     setIsSearchFocused(false);
     setSearchQuery("");
-    navigate(result.path);
+    if (result.state) {
+      navigate(result.path, { state: result.state });
+    } else {
+      navigate(result.path);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -322,7 +328,7 @@ export default function Topbar({ onRefresh }) {
             <div
               className={`flex h-9 items-center gap-2 rounded-lg bg-[#1A1E27] px-3 border border-[#2B313F] transition ${
                 isSearchFocused
-                  ? "border-[#FF5A1F] bg-white shadow-xs ring-2 ring-[#FF5A1F]/20"
+                  ? "border-[#FF5A1F] bg-[#1A1E27] shadow-xs ring-2 ring-[#FF5A1F]/20"
                   : "border-transparent"
               }`}
             >
@@ -336,14 +342,14 @@ export default function Topbar({ onRefresh }) {
                 }}
                 onFocus={() => setIsSearchFocused(true)}
                 onKeyDown={handleKeyDown}
-                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 text-slate-100"
-                placeholder="Search transactions, reports, parties"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 text-white"
+                placeholder={settings.enableBarcodeScanning ? "Search transactions, items, barcode, parties" : "Search transactions, reports, parties"}
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery("")}
-                  className="text-slate-400 hover:text-slate-600 p-0.5"
+                  className="text-slate-400 hover:text-white p-0.5"
                 >
                   <FiX className="h-3.5 w-3.5" />
                 </button>
@@ -358,30 +364,30 @@ export default function Topbar({ onRefresh }) {
                     {searchResults.map((result, idx) => {
                       const IconComponent = result.icon;
                       const badgeColors = {
-                        Page: "bg-blue-100 text-blue-700",
-                        Menu: "bg-indigo-100 text-indigo-700",
-                        Party: "bg-emerald-100 text-emerald-700",
-                        Item: "bg-amber-100 text-amber-800",
-                        Sale: "bg-rose-100 text-rose-700",
-                        Purchase: "bg-teal-100 text-teal-800",
-                        Report: "bg-purple-100 text-purple-700",
+                        Page: "bg-blue-900/40 text-blue-300 border border-blue-700/50",
+                        Menu: "bg-indigo-900/40 text-indigo-300 border border-indigo-700/50",
+                        Party: "bg-emerald-900/40 text-emerald-300 border border-emerald-700/50",
+                        Item: "bg-amber-900/40 text-amber-300 border border-amber-700/50",
+                        Sale: "bg-rose-900/40 text-rose-300 border border-rose-700/50",
+                        Purchase: "bg-teal-900/40 text-teal-300 border border-teal-700/50",
+                        Report: "bg-purple-900/40 text-purple-300 border border-purple-700/50",
                       };
                       return (
                         <button
                           key={idx}
                           type="button"
                           onClick={() => handleSelectResult(result)}
-                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-slate-50 transition cursor-pointer group"
+                          className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left hover:bg-[#202532] transition cursor-pointer group"
                         >
                           <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#252B37] text-slate-300 group-hover:bg-[#FF5A1F]/20 group-hover:text-[#FF5A1F]">
                               <IconComponent className="h-4 w-4" />
                             </span>
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-semibold text-slate-800 group-hover:text-blue-600">
+                              <p className="truncate text-xs font-semibold text-white group-hover:text-[#FF5A1F]">
                                 {result.title}
                               </p>
-                              <p className="truncate text-[11px] text-slate-400">
+                              <p className="truncate text-[11px] text-slate-400 group-hover:text-slate-300">
                                 {result.subtitle}
                               </p>
                             </div>
@@ -390,25 +396,25 @@ export default function Topbar({ onRefresh }) {
                             <span
                               className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
                                 badgeColors[result.type] ||
-                                "bg-slate-100 text-slate-600"
+                                "bg-slate-800 text-slate-300"
                               }`}
                             >
                               {result.type}
                             </span>
-                            <FiArrowRight className="h-3.5 w-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition" />
+                            <FiArrowRight className="h-3.5 w-3.5 text-slate-400 opacity-0 group-hover:opacity-100 transition" />
                           </div>
                         </button>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="px-4 py-6 text-center text-xs text-slate-500">
-                    <p className="font-medium text-slate-600">
+                  <div className="px-4 py-6 text-center text-xs text-slate-400">
+                    <p className="font-medium text-slate-200">
                       No matching records found
                     </p>
                     <p className="text-[11px] text-slate-400 mt-1">
                       No transactions, parties, items, or reports match "
-                      <span className="font-semibold text-slate-600">
+                      <span className="font-semibold text-white">
                         {searchQuery}
                       </span>
                       "

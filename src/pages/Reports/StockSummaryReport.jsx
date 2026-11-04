@@ -8,6 +8,7 @@ import {
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 /* ── helpers ── */
 function readLocal(...keys) {
@@ -54,6 +55,7 @@ const fmtMoney = (n) =>
 const fmtQty = (n) => Number(n || 0).toLocaleString("en-IN");
 
 export default function StockSummaryReport() {
+  const { enableItemCategory } = useAppSettings();
   const [categoryFilter, setCategoryFilter] = useState("All Categories");
   const [useDateFilter, setUseDateFilter] = useState(false);
   const [dateFilter, setDateFilter] = useState(isoToday());
@@ -162,7 +164,7 @@ export default function StockSummaryReport() {
     return inventoryItems
       .filter((item) => item.type !== "service")
       .filter((item) =>
-        categoryFilter === "All Categories" || item.category === categoryFilter
+        !enableItemCategory || categoryFilter === "All Categories" || item.category === categoryFilter
       )
       .map((item) => {
         const name = (item.itemName || item.name || "").trim();
@@ -234,23 +236,25 @@ export default function StockSummaryReport() {
         {/* Left filters */}
         <div className="flex flex-wrap items-center gap-4">
           {/* FILTERS label + Category dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-500 uppercase tracking-wider text-[11px]">
-              FILTERS
-            </span>
-            <div className="relative">
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="appearance-none rounded border border-slate-300 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400 focus:border-sky-500 min-w-[140px]"
-              >
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-              <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
+          {enableItemCategory && (
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-slate-500 uppercase tracking-wider text-[11px]">
+                FILTERS
+              </span>
+              <div className="relative">
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="appearance-none rounded border border-slate-300 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400 focus:border-sky-500 min-w-[140px]"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+                <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Date Filter checkbox */}
           <label className="flex items-center gap-2 cursor-pointer select-none">

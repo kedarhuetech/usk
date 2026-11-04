@@ -8,6 +8,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 const requiredColumns = ["itemname"];
 const maxRows = 500;
@@ -226,6 +227,9 @@ function emptyBarcodeReview(barcode) {
 
 // Renders the import items interface.
 function ImportItems() {
+  const appSettings = useAppSettings();
+  const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
+  const enableItemCategory = appSettings.enableItemCategory ?? true;
   const fileInput = useRef(null);
   const [rows, setRows] = useState([]);
   const [fileError, setFileError] = useState("");
@@ -601,13 +605,14 @@ function ImportItems() {
         </header>
         <Card className="p-5">
           <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-800">
-            Upload an Excel workbook or CSV with these columns: <strong>Item Name</strong>, Item Code, Type, Category, Unit, Sale Price, Purchase Price, Quantity.
+            Upload an Excel workbook or CSV with these columns: <strong>Item Name</strong>, Item Code, Type{enableItemCategory ? ", Category" : ""}, Unit, Sale Price, Purchase Price, Quantity.
           </div>
           <input ref={fileInput} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={selectFile} />
           <Button onClick={() => fileInput.current?.click()} className="mt-5 bg-[#1A1F71] text-white hover:bg-[#14185D]"><FiUpload /> Choose Excel or CSV</Button>
           {fileError && <p role="alert" className="mt-4 flex gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><FiAlertCircle />{fileError}</p>}
           {message && <p role="status" className="mt-4 flex gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><FiCheckCircle />{message}</p>}
         </Card>
+        {enableBarcodeScanning && (<>
         <Card className="p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -656,6 +661,7 @@ function ImportItems() {
             </Card>
           </div>
         )}
+      </>)}
         {rows.length > 0 && (
           <Card className="overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4">

@@ -35,6 +35,7 @@ import {
 } from "../../services/posBillState.js";
 import { calculatePosBill } from "../../services/posBillCalculations.js";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
+import { useAppSettings } from "../../hooks/useAppSettings.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 
 const STORAGE = {
@@ -555,12 +556,14 @@ export default function PointOfSale() {
     if (!query) return products.slice(0, 10);
 
     return products
-      .filter((product) =>
-        [product.name, product.code, product.barcode, product.id, product.category]
-          .some((val) => String(val || "").toLowerCase().includes(query))
-      )
+      .filter((product) => {
+        const matchFields = [product.name, product.code, product.id];
+        if (enableBarcodeScanning) matchFields.push(product.barcode);
+        if (enableItemCategory) matchFields.push(product.category);
+        return matchFields.some((val) => String(val || "").toLowerCase().includes(query));
+      })
       .slice(0, 12);
-  }, [products, search]);
+  }, [products, search, enableBarcodeScanning, enableItemCategory]);
 
   // Filter customers for dropdown
   const filteredCustomers = useMemo(() => {
@@ -1117,8 +1120,11 @@ export default function PointOfSale() {
                   if (event.key === "Enter") {
                     event.preventDefault();
                     const query = search.trim().toLowerCase();
-                    const exactMatch = products.find((product) => [product.code, product.barcode]
-                      .some((value) => String(value || "").trim().toLowerCase() === query));
+                    const exactMatch = products.find((product) => {
+                      const fields = [product.code];
+                      if (enableBarcodeScanning) fields.push(product.barcode);
+                      return fields.some((value) => String(value || "").trim().toLowerCase() === query);
+                    });
                     if (exactMatch || filteredProducts[0]) {
                       addProduct(exactMatch || filteredProducts[0]);
                     } else if (search.trim()) {
@@ -1139,7 +1145,7 @@ export default function PointOfSale() {
                     addProduct(filteredProducts[0]);
                   }
                 }}
-                placeholder="Search item name or code, or scan barcode..."
+                placeholder={enableBarcodeScanning ? "Search item name or code, or scan barcode..." : "Search item name or code..."}
                 className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:font-medium placeholder:text-slate-400 sm:text-lg"
               />
               {search && (
@@ -1174,6 +1180,8 @@ export default function PointOfSale() {
                       <span className="text-xs text-slate-500">
                         {product.code} · {product.unit} · GST {product.taxRate}%
                         {product.type !== "service" ? ` · Stock: ${product.stock}` : ""}
+                        {enableItemCategory && product.category ? ` · ${product.category}` : ""}
+                        {enableBarcodeScanning && product.barcode ? ` · Barcode: ${product.barcode}` : ""}
                       </span>
                     </div>
                     <span className="font-bold text-slate-900">₹{money(product.price)}</span>
@@ -2513,7 +2521,7 @@ export default function PointOfSale() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Item Code / Barcode
+                      {enableBarcodeScanning ? "Item Code / Barcode" : "Item Code"}
                     </label>
                     <input
                       type="text"

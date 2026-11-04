@@ -3,6 +3,7 @@ import { FiChevronDown, FiPrinter } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -21,6 +22,7 @@ const fmtMoney = (n) =>
   })}`;
 
 export default function LowStockSummaryReport() {
+  const { enableItemCategory } = useAppSettings();
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [selectedRow, setSelectedRow] = useState(0);
@@ -86,7 +88,9 @@ export default function LowStockSummaryReport() {
       .filter((item) => item.type !== "service")
       .filter(
         (item) =>
-          selectedCategory === "All Categories" || item.category === selectedCategory
+          !enableItemCategory ||
+          selectedCategory === "All Categories" ||
+          item.category === selectedCategory
       )
       .map((item) => {
         const name = (item.itemName || item.name || "").trim();
@@ -130,23 +134,25 @@ export default function LowStockSummaryReport() {
       {/* ── Filters Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
         <div className="flex flex-wrap items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold uppercase tracking-wider text-[11px] text-slate-500">
-              FILTERS
-            </span>
-            <div className="relative">
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="appearance-none rounded border border-slate-300 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400 focus:border-sky-500 min-w-[140px]"
-              >
-                {categories.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
+          {enableItemCategory && (
+            <div className="flex items-center gap-2">
+              <span className="font-semibold uppercase tracking-wider text-[11px] text-slate-500">
+                FILTERS
+              </span>
+              <div className="relative">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="appearance-none rounded border border-slate-300 bg-white py-1.5 pl-3 pr-7 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400 focus:border-sky-500 min-w-[140px]"
+                >
+                  {categories.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <FiChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
+              </div>
             </div>
-          </div>
+          )}
 
           <label className="flex items-center gap-2 cursor-pointer select-none">
             <input

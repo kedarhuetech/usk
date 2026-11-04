@@ -6,6 +6,7 @@ import {
   sidebarNavigation,
 } from "../Sidebar/SidebarData";
 import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
+import { getInventoryItems } from "../../services/itemsStorage";
 
 export default function HorizontalNavbar() {
   const navigate = useNavigate();
@@ -116,9 +117,43 @@ export default function HorizontalNavbar() {
     [filteredNavigation]
   );
 
-  const filteredItems = searchableItems.filter((item) =>
-    item.label.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    const navMatches = searchableItems.filter((item) =>
+      item.label.toLowerCase().includes(q)
+    );
+
+    let itemMatches = [];
+    try {
+      const items = getInventoryItems();
+      items.forEach((item) => {
+        const name = String(item.itemName || item.name || "");
+        const code = String(item.itemCode || item.code || "");
+        const barcode = String(item.barcode || item.barCode || "");
+        const matchName = name.toLowerCase().includes(q);
+        const matchCode = code.toLowerCase().includes(q);
+        const matchBarcode = (settings.enableBarcodeScanning ?? true) && barcode.toLowerCase().includes(q);
+        if (matchName || matchCode || matchBarcode) {
+          const detailParts = [];
+          if (code) detailParts.push(`Code: ${code}`);
+          if (barcode && (settings.enableBarcodeScanning ?? true)) detailParts.push(`Barcode: ${barcode}`);
+          if (item.category && (settings.enableItemCategory ?? true)) detailParts.push(`Category: ${item.category}`);
+          itemMatches.push({
+            id: `item-${item.id}`,
+            label: name,
+            parentLabel: detailParts.join(" · ") || "Inventory Item",
+            path: "/items",
+            state: { itemId: item.id },
+            isItem: true,
+          });
+        }
+      });
+    } catch {}
+
+    return [...navMatches, ...itemMatches.slice(0, 10)];
+  }, [searchableItems, query, settings.enableBarcodeScanning, settings.enableItemCategory]);
 
   return (
     <>
@@ -264,7 +299,7 @@ export default function HorizontalNavbar() {
                 ref={searchInputRef}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search menus, features, transactions..."
+                placeholder={settings.enableBarcodeScanning ? "Search menus, items, or scan barcode..." : "Search menus, features, transactions..."}
                 className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
               />
               <button
@@ -288,14 +323,26 @@ export default function HorizontalNavbar() {
                     type="button"
                     onClick={() => {
                       setSearchOpen(false);
-                      navigate(item.path);
+                      setQuery("");
+                      if (item.state) {
+                        navigate(item.path, { state: item.state });
+                      } else {
+                        navigate(item.path);
+                      }
                     }}
                     className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition cursor-pointer"
                   >
-                    <span className="font-medium">{item.label}</span>
-                    {item.parentLabel && (
-                      <span className="text-[10px] text-slate-400">
-                        {item.parentLabel}
+                    <div className="min-w-0 flex-1">
+                      <span className="font-semibold text-slate-800">{item.label}</span>
+                      {item.parentLabel && (
+                        <span className="block truncate text-[11px] text-slate-500">
+                          {item.parentLabel}
+                        </span>
+                      )}
+                    </div>
+                    {item.isItem && (
+                      <span className="shrink-0 ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                        Item
                       </span>
                     )}
                   </button>
