@@ -6,12 +6,14 @@ import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 const fieldDefinitions = [
   ["itemName", "Item Name"],
   ["itemCode", "Item Code"],
   ["description", "Description"],
   ["category", "Category"],
+  ["barcode", "Barcode"],
   ["hsn", "HSN"],
   ["salePrice", "Sale Price"],
   ["purchasePrice", "Purchase Price"],
@@ -33,10 +35,13 @@ const valueFor = (item, key) => {
 const dateStamp = () => new Date().toISOString().slice(0, 10);
 
 // Exports rows.
-function exportRows(items) {
-  const activeFields = fieldDefinitions.filter(([key]) => (
-    key === "itemName" || items.some((item) => String(valueFor(item, key)).trim())
-  ));
+function exportRows(items, options = {}) {
+  const { enableItemCategory = true, enableBarcodeScanning = true } = options;
+  const activeFields = fieldDefinitions.filter(([key]) => {
+    if (key === "category" && !enableItemCategory) return false;
+    if (key === "barcode" && !enableBarcodeScanning) return false;
+    return key === "itemName" || items.some((item) => String(valueFor(item, key)).trim());
+  });
   return {
     headers: activeFields.map(([, label]) => label),
     rows: items.map((item) => activeFields.map(([key]) => String(valueFor(item, key) ?? ""))),
@@ -44,8 +49,8 @@ function exportRows(items) {
 }
 
 // Downloads pdf.
-function downloadPdf(items) {
-  const { headers, rows } = exportRows(items);
+function downloadPdf(items, options = {}) {
+  const { headers, rows } = exportRows(items, options);
   const document = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   const margin = 28;
   const pageWidth = document.internal.pageSize.getWidth();
@@ -88,6 +93,7 @@ function downloadPdf(items) {
 
 // Renders the export items interface.
 function ExportItems() {
+  const { enableItemCategory, enableBarcodeScanning } = useAppSettings();
   const [items, setItems] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [query, setQuery] = useState("");
@@ -104,8 +110,11 @@ function ExportItems() {
   const filteredItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return items.filter((item) => {
-      const searchable = [item.itemName, item.itemCode, item.description, item.category].map((value) => String(value || "").toLowerCase()).join(" ");
-      return (!normalizedQuery || searchable.includes(normalizedQuery)) && (!category || item.category === category);
+      const searchFields = [item.itemName, item.itemCode, item.description];
+      if (enableItemCategory) searchFields.push(item.category);
+      if (enableBarcodeScanning) searchFields.push(item.barcode);
+      const searchable = searchFields.map((value) => String(value || "").toLowerCase()).join(" ");
+      return (!normalizedQuery || searchable.includes(normalizedQuery)) && (!enableItemCategory || !category || item.category === category);
     });
   }, [items, query, category]);
   const selectedItems = useMemo(() => {
@@ -140,7 +149,7 @@ function ExportItems() {
       setStatus({ type: "error", message: "There are no items matching the current selection." });
       return;
     }
-    const { headers, rows } = exportRows(selectedItems);
+    const { headers, rows } = exportRows(selectedItems, { enableItemCategory, enableBarcodeScanning });
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     worksheet["!cols"] = headers.map((header, index) => ({
@@ -157,7 +166,7 @@ function ExportItems() {
       setStatus({ type: "error", message: "There are no items matching the current selection." });
       return;
     }
-    downloadPdf(selectedItems);
+    downloadPdf(selectedItems, { enableItemCategory, enableBarcodeScanning });
     setStatus({ type: "success", message: `${selectedItems.length} item${selectedItems.length === 1 ? "" : "s"} exported to PDF.` });
   };
 
@@ -172,12 +181,14 @@ function ExportItems() {
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex min-w-64 flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3">
               <FiSearch className="text-slate-400" />
-              <input aria-label="Search items" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, code, category..." className="h-10 w-full outline-none" />
+              <input aria-label="Search items" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={enableItemCategory ? "Search name, code, category..." : "Search name, code..."} className="h-10 w-full outline-none" />
             </label>
-            <select aria-label="Filter by category" value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm">
-              <option value="">All categories</option>
-              {categories.map((value) => <option key={value}>{value}</option>)}
-            </select>
+            {enableItemCategory && (
+              <select aria-label="Filter by category" value={category} onChange={(event) => setCategory(event.target.value)} className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm">
+                <option value="">All categories</option>
+                {categories.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            )}
             <Button onClick={exportExcel} disabled={loading || !filteredItems.length} className="bg-[#1A1F71] text-white hover:bg-[#14185D]"><FiDownload /> Export Excel</Button>
             <Button onClick={exportPdf} disabled={loading || !filteredItems.length} className="border border-slate-300 text-slate-700 hover:bg-white"><FiFileText /> Export PDF</Button>
           </div>
@@ -194,8 +205,8 @@ function ExportItems() {
           {loading ? <p className="p-5 text-sm text-slate-500">Loading saved items...</p> : !filteredItems.length ? <p className="p-5 text-sm text-slate-500">No saved items match the current filters.</p> : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-5 py-3">Select</th><th className="px-5 py-3">Item Name</th><th className="px-5 py-3">Item Code</th><th className="px-5 py-3">Category</th><th className="px-5 py-3">Sale Price</th><th className="px-5 py-3">Current Stock</th></tr></thead>
-                <tbody>{filteredItems.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-5 py-3"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)} className="accent-blue-600" /></td><td className="px-5 py-3 font-medium text-slate-800">{item.itemName || "Unnamed item"}</td><td className="px-5 py-3 text-slate-600">{item.itemCode || "-"}</td><td className="px-5 py-3 text-slate-600">{item.category || "-"}</td><td className="px-5 py-3 text-slate-600">{item.salePrice || "-"}</td><td className="px-5 py-3 text-slate-600">{valueFor(item, "stock") || "-"}</td></tr>)}</tbody>
+                <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-5 py-3">Select</th><th className="px-5 py-3">Item Name</th><th className="px-5 py-3">Item Code</th>{enableItemCategory && <th className="px-5 py-3">Category</th>}{enableBarcodeScanning && <th className="px-5 py-3">Barcode</th>}<th className="px-5 py-3">Sale Price</th><th className="px-5 py-3">Current Stock</th></tr></thead>
+                <tbody>{filteredItems.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-5 py-3"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleItem(item.id)} className="accent-blue-600" /></td><td className="px-5 py-3 font-medium text-slate-800">{item.itemName || "Unnamed item"}</td><td className="px-5 py-3 text-slate-600">{item.itemCode || "-"}</td>{enableItemCategory && <td className="px-5 py-3 text-slate-600">{item.category || "-"}</td>}{enableBarcodeScanning && <td className="px-5 py-3 text-slate-600">{item.barcode || "-"}</td>}<td className="px-5 py-3 text-slate-600">{item.salePrice || "-"}</td><td className="px-5 py-3 text-slate-600">{valueFor(item, "stock") || "-"}</td></tr>)}</tbody>
               </table>
             </div>
           )}

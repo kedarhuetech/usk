@@ -24,6 +24,7 @@ import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOve
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
 import { deleteAllInventoryItems, previewDeleteAllInventoryItems } from "../../services/inventoryItemBulkDelete";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 const tabs = [
   { id: "product", label: "PRODUCTS" },
@@ -333,6 +334,11 @@ function AdjustmentModal({ item, onClose, onSave }) {
 
 // Renders the items dashboard interface.
 function ItemsDashboard() {
+  const appSettings = useAppSettings();
+  const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
+  const enableItemCategory = appSettings.enableItemCategory ?? true;
+  const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
+  const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
   const navigate = useNavigate();
   const location = useLocation();
   const [activeTab, setActiveTab] = useState("product");
@@ -340,7 +346,7 @@ function ItemsDashboard() {
   const [sales, setSales] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [selectedId, setSelectedId] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(true);
   const [search, setSearch] = useState("");
   const [transactionSearch, setTransactionSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -366,9 +372,10 @@ function ItemsDashboard() {
       setItemModal({ mode: "create", initialItem: { type: "product" } });
     } else if (location.state?.itemId) {
       setSelectedId(location.state.itemId);
-      if (location.state?.openEditItem) {
-        const target = location.state.item || items.find((it) => it.id === location.state.itemId);
-        if (target) setItemModal({ mode: "edit", initialItem: target });
+      const target = items.find((it) => it.id === location.state.itemId);
+      if (target?.type) setActiveTab(target.type);
+      if (location.state?.openEditItem && target) {
+        setItemModal({ mode: "edit", initialItem: target });
       }
     } else if (location.state?.openEditItem) {
       const target = location.state.item || (selectedId ? items.find((it) => it.id === selectedId) : items[0]);
@@ -450,20 +457,25 @@ function ItemsDashboard() {
     const unique = new Map();
     items.filter((item) => {
       if (item.type !== activeTab || activeTab === "units") return false;
-      if (category !== "All categories" && item.category !== category) return false;
+      if (enableItemCategory && category !== "All categories" && item.category !== category) return false;
       if (lowStockOnly && activeTab === "product" && quantity(item) > Number(item.minimumStock || 0)) return false;
-      return String(item.itemName || "").toLowerCase().includes(search.trim().toLowerCase());
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      const matchName = String(item.itemName || "").toLowerCase().includes(q);
+      const matchCode = String(item.itemCode || "").toLowerCase().includes(q);
+      const matchBarcode = enableBarcodeScanning && String(item.barcode || "").toLowerCase().includes(q);
+      return matchName || matchCode || matchBarcode;
     }).forEach((item) => {
       const code = String(item.itemCode || "").trim().toLowerCase();
       const fallbackName = `${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}|${String(item.category || "").trim().toLowerCase()}`;
-      const key = code ? `code:${code}` : `name:${fallbackName}`;
+      const key = item.id || (code ? `code:${code}` : `name:${fallbackName}`);
       const existing = unique.get(key);
       const itemUpdated = new Date(item.updatedAt || item.createdAt || 0).getTime();
       const existingUpdated = existing ? new Date(existing.updatedAt || existing.createdAt || 0).getTime() : -1;
       if (!existing || itemUpdated > existingUpdated) unique.set(key, item);
     });
     return [...unique.values()].sort((a, b) => String(a.itemName || "").localeCompare(String(b.itemName || "")));
-  }, [items, activeTab, category, lowStockOnly, search]);
+  }, [items, activeTab, category, lowStockOnly, search, enableBarcodeScanning, enableItemCategory]);
   const selectedItem = filteredItems.find((item) => item.id === selectedId) || filteredItems[0] || null;
   const allTransactions = useMemo(() => transactionRows(selectedItem, sales, purchases), [selectedItem, sales, purchases]);
   const filteredTransactions = allTransactions.filter((row) => `${row.type} ${row.invoice} ${row.name} ${row.quantity} ${row.unit}`.toLowerCase().includes(transactionSearch.trim().toLowerCase()));
@@ -667,8 +679,26 @@ function ItemsDashboard() {
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" aria-label="Choose item CSV file" onChange={(event) => importItemsCsv(event.target.files?.[0])} />
           <Card className="flex min-h-[420px] flex-col overflow-visible shadow-sm">
             <div className="relative flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
-              <button type="button" aria-label={searchOpen ? "Close item search" : "Search items"} onClick={() => { setSearchOpen((open) => !open); if (searchOpen) setSearch(""); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200"><FiSearch className="h-5 w-5" /></button>
-              {searchOpen && <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${activeTab}s`} aria-label={`Search ${activeTab}s`} className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-sm outline-none focus:border-blue-500" />}
+              <div className="flex h-11 min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 shadow-xs focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
+                <FiSearch className="h-4 w-4 shrink-0 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={enableBarcodeScanning ? "Search name, code, barcode..." : `Search ${activeTab}s`}
+                  aria-label={`Search ${activeTab}s`}
+                  className="h-full w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    aria-label="Clear search"
+                  >
+                    <FiX className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
               <div ref={menuRef} className="relative ml-auto flex h-11 overflow-visible rounded-md bg-amber-500 text-white shadow-sm">
                 <button type="button" onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="flex items-center gap-2 px-3 text-sm font-bold hover:bg-amber-600"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</button>
                 <button type="button" aria-label="Choose item type" onClick={() => setRowMenu((current) => current === "create-menu" ? "" : "create-menu")} className="grid w-10 place-items-center border-l border-amber-600/50 hover:bg-amber-600"><FiChevronDown /></button>
@@ -681,10 +711,10 @@ function ItemsDashboard() {
               <button type="button" onClick={openDeleteAll} disabled={deleteAllLoading} className="h-10 w-full basis-full rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{deleteAllLoading ? "Checking…" : "Delete All Items"}</button>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold uppercase text-slate-500"><span>Item</span><span>{activeTab === "product" ? "Quantity" : "Unit"}</span><button type="button" aria-label="Filter items" onClick={() => setFiltersOpen((open) => !open)} className={`grid h-7 w-7 place-items-center rounded ${filtersOpen ? "bg-blue-100 text-blue-700" : "hover:bg-slate-200"}`}><FiFilter /></button></div>
-            {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3"><label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" />Low stock only</label>}</div>}
+            {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3">{enableItemCategory && <label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>}{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" />Low stock only</label>}</div>}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {filteredItems.map((item) => <div key={item.id} data-item-row-actions className={`group relative grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto_28px] items-center gap-2 px-3 ${selectedItem?.id === item.id ? "bg-sky-100" : "bg-white hover:bg-slate-50"}`}>
-                <button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 py-2 text-left"><span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span>{item.itemCode && <span className="block truncate text-xs text-slate-400">{item.itemCode}</span>}</button>
+                <button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 py-2 text-left"><span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span><span className="block truncate text-xs text-slate-400">{item.itemCode || ""}{enableItemCategory && item.category && <span className="ml-2 font-medium text-slate-500">[{item.category}]</span>}</span></button>
                 <span className={`whitespace-nowrap text-sm font-medium ${activeTab === "product" && quantity(item) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{activeTab === "product" ? `${quantity(item)}${item.unit ? ` ${item.unit}` : ""}` : item.unit || "-"}</span>
                 <button type="button" aria-label={`Actions for ${item.itemName}`} onClick={() => setRowMenu((current) => current === item.id ? "" : item.id)} className="grid h-8 w-6 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"><FiMoreVertical /></button>
                 {rowMenu === item.id && <div className="absolute right-2 top-9 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" onClick={() => { setSelectedId(item.id); setItemModal({ mode: "edit", initialItem: item }); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View / Edit</button><button type="button" onClick={() => { if (!window.confirm(`Permanently delete ${item.itemName} and matching local copies?`)) return; deleteInventoryItem(item); const remaining = items.filter((entry) => !sameInventoryItemIdentity(entry, item)); const csvItems = readCsvImportedItems().filter((entry) => !sameInventoryItemIdentity(entry, item)); window.localStorage.setItem(ITEM_CSV_IMPORTS_KEY, JSON.stringify(csvItems)); setItems(remaining); if (remaining.some((entry) => entry.id === selectedId) === false) setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || ""); setRowMenu(""); setNotice(`${item.itemName} and matching copies deleted from local storage.`); }} className="w-full rounded px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">Delete</button>{activeTab === "product" && <button type="button" onClick={() => { setAdjustItem(item); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Adjust Stock</button>}</div>}
@@ -697,7 +727,68 @@ function ItemsDashboard() {
             <Card className="shrink-0 p-4 shadow-sm sm:p-5">
               {selectedItem ? <>
                 <div className="flex flex-wrap items-start justify-between gap-4"><div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-lg font-semibold uppercase text-slate-900">{selectedItem.itemName}</h1><button type="button" aria-label="Edit item" title="Edit item" onClick={() => setItemModal({ mode: "edit", initialItem: selectedItem })} className="rounded p-1 text-slate-600 hover:bg-slate-100"><FiArrowUpRight /></button></div>{activeTab === "product" && <Button onClick={() => setAdjustItem(selectedItem)} className="rounded-md bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"><FiSliders /> Adjust Item</Button>}</div>
-                <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2"><div className="space-y-3"><p className="text-slate-700">SALE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.salePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p><p className="text-slate-700">PURCHASE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.purchasePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p></div><div className="space-y-3 sm:text-right"><p className="text-slate-700">{activeTab === "product" ? "STOCK QUANTITY:" : "UNIT:"} <b className="font-medium text-emerald-600">{activeTab === "product" ? `${quantity(selectedItem)} ${selectedItem.unit || ""}` : selectedItem.unit || "-"}</b></p>{activeTab === "product" && <p className="text-slate-700">STOCK VALUE: <b className="font-medium text-emerald-600">{money(stockValue(selectedItem))}</b></p>}</div></div>
+                <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-slate-700">SALE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.salePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p>
+                    <p className="text-slate-700">PURCHASE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.purchasePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p>
+                    {enableItemCategory && selectedItem.category && (
+                      <p className="text-slate-700">CATEGORY: <b className="font-medium text-slate-800">{selectedItem.category}{selectedItem.subCategory ? ` › ${selectedItem.subCategory}` : ""}</b></p>
+                    )}
+                    {enableBarcodeScanning && (selectedItem.barcode || selectedItem.itemCode) && (
+                      <p className="text-slate-700">BARCODE: <b className="font-mono font-medium text-slate-800">{selectedItem.barcode || selectedItem.itemCode}</b></p>
+                    )}
+                  </div>
+                  <div className="space-y-2 sm:text-right">
+                    <p className="text-slate-700">{activeTab === "product" ? "STOCK QUANTITY:" : "UNIT:"} <b className="font-medium text-emerald-600">{activeTab === "product" ? `${quantity(selectedItem)} ${selectedItem.unit || ""}` : selectedItem.unit || "-"}</b></p>
+                    {activeTab === "product" && <p className="text-slate-700">STOCK VALUE: <b className="font-medium text-emerald-600">{money(stockValue(selectedItem))}</b></p>}
+                    {enableSerialTracking && selectedItem.serialNumbers?.length > 0 && (
+                      <p className="text-slate-700">TRACKED UNITS: <b className="font-medium text-purple-600">{selectedItem.serialNumbers.length} Serial{selectedItem.serialNumbers.length === 1 ? "" : "s"}</b></p>
+                    )}
+                  </div>
+                </div>
+
+                {enableBatchTracking && selectedItem.batches?.length > 0 && (
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Batches & Expiry Dates</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-600">
+                          <tr>
+                            <th className="px-2 py-1.5">Batch / Lot No.</th>
+                            <th className="px-2 py-1.5">Mfg. Date</th>
+                            <th className="px-2 py-1.5">Expiry Date</th>
+                            <th className="px-2 py-1.5">Remarks</th>
+                            <th className="px-2 py-1.5 text-right">Opening Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedItem.batches.map((b, idx) => (
+                            <tr key={b.id || idx} className="border-b border-slate-100">
+                              <td className="px-2 py-1.5 font-mono font-semibold text-slate-800">{b.batchNo || "-"}</td>
+                              <td className="px-2 py-1.5 text-slate-600">{b.mfgDate ? dateLabel(b.mfgDate) : "-"}</td>
+                              <td className="px-2 py-1.5 font-medium text-amber-700">{b.expDate ? dateLabel(b.expDate) : "-"}</td>
+                              <td className="px-2 py-1.5 text-slate-500">{b.remarks || "-"}</td>
+                              <td className="px-2 py-1.5 text-right font-semibold text-slate-800">{b.openingQty || "0"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {enableSerialTracking && selectedItem.serialNumbers?.length > 0 && (
+                  <div className="mt-4 border-t border-slate-100 pt-3">
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Tracked Serial / IMEI Numbers ({selectedItem.serialNumbers.length})</h3>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                      {selectedItem.serialNumbers.map((s, idx) => (
+                        <span key={idx} className="rounded border border-purple-200 bg-purple-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-purple-700">
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </> : <div className="flex min-h-[160px] items-center justify-center text-sm text-slate-500">Select an item to see its details.</div>}
             </Card>
 

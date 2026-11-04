@@ -11,6 +11,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getBarcodeBars } from "../../utils/barcode";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 const formats = [
   { id: "CODE128", label: "Code 128", hint: "Letters, numbers, and common symbols" },
@@ -84,6 +85,7 @@ function BarcodeLabel({ form, barcode }) {
 
 // Renders the barcode generator interface.
 function BarcodeGenerator() {
+  const { enableBarcodeScanning } = useAppSettings();
 
   const [inventory] = useState(() => {
     const items = getInventoryItems().filter(
@@ -206,6 +208,12 @@ function BarcodeGenerator() {
 
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
           <Card className="p-5">
+            {!enableBarcodeScanning && (
+              <div className="mb-4 flex items-start gap-3 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 border border-amber-200">
+                <FiAlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                <p>Barcode Scanning Support is currently disabled in Settings &rarr; Item Settings. You can still generate and print labels here, but barcode lookup and scanning in Item forms and Invoices is turned off.</p>
+              </div>
+            )}
             <div className="flex items-start gap-3 rounded-lg bg-blue-50 p-4 text-sm text-blue-800">
               <FiInfo className="mt-0.5 h-4 w-4 shrink-0" />
               <p>Code 128 is suitable for internal product codes. EAN-13 and UPC-A require numeric retail identifiers with valid check digits.</p>

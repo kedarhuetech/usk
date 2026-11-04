@@ -6,8 +6,9 @@ import Card from "../../components/Common/Card";
 import Input from "../../components/Common/Input";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
-import { defaultCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
+import { defaultCategories, defaultSubCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
 import { saveBusinessItem } from "../../services/businessRecords";
+import { useAppSettings } from "../../hooks/useAppSettings";
 
 // Renders the select field interface.
 function SelectField({ label, value, options, onChange, className = "" }) {
@@ -95,6 +96,75 @@ function CategoryPicker({ value, categories, onSelect, onAddNew }) {
   );
 }
 
+// Renders the subcategory picker interface.
+function SubCategoryPicker({ category, value, onSelect, onAddNew }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const availableSubCategories = defaultSubCategories[category] || ["Standard"];
+  const filtered = availableSubCategories.filter((sub) => sub.toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className={`flex h-11 w-full items-center justify-between rounded-md border bg-white px-3 text-left text-sm outline-none transition ${
+          open ? "border-blue-500 ring-2 ring-blue-100" : "border-slate-300 hover:border-blue-300"
+        }`}
+      >
+        <span className={value ? "text-slate-800" : "text-slate-400"}>{value || "Sub-Category"}</span>
+        <FiChevronDown className="h-4 w-4 text-slate-400" />
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-2 w-full rounded-lg border border-slate-200 bg-white p-3 shadow-xl">
+          <label className="mb-2 flex h-10 items-center gap-2 rounded-full border border-slate-200 px-3">
+            <FiSearch className="h-4 w-4 text-slate-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search Sub-Category"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery("")} className="text-slate-400">
+                <FiX />
+              </button>
+            )}
+          </label>
+
+          <div className="max-h-40 overflow-y-auto">
+            {filtered.map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => {
+                  onSelect(sub);
+                  setOpen(false);
+                }}
+                className="w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-blue-50"
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onAddNew();
+            }}
+            className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
+          >
+            <FiPlus /> Add New Sub-Category
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Renders the category modal interface.
 function CategoryModal({ onClose, onCreate }) {
   const [name, setName] = useState("");
@@ -112,6 +182,30 @@ function CategoryModal({ onClose, onCreate }) {
           <Input label="Enter Category Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g., Grocery" />
           <Button onClick={() => name.trim() && onCreate(name.trim())} className="mt-7 w-full bg-rose-600 text-white hover:bg-rose-700">
             Create
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Renders the subcategory modal interface.
+function SubCategoryModal({ category, onClose, onCreate }) {
+  const [name, setName] = useState("");
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+      <Card className="w-full max-w-sm overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-800">Add Sub-Category {category ? `(${category})` : ""}</h2>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <FiX />
+          </button>
+        </div>
+        <div className="p-5">
+          <Input label="Enter Sub-Category Name" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g., Organic" />
+          <Button onClick={() => name.trim() && onCreate(name.trim())} className="mt-7 w-full bg-blue-600 text-white hover:bg-blue-700">
+            Create Sub-Category
           </Button>
         </div>
       </Card>
@@ -205,7 +299,10 @@ function createEditableItemForm(initialItem) {
     itemName: initialItem.itemName || initialItem.serviceName || initialItem.name || "",
     hsn: initialItem.hsn || initialItem.sac || "",
     category: initialItem.category || "",
+    subCategory: initialItem.subCategory || initialItem.sub_category || "",
     itemCode: initialItem.itemCode || initialItem.serviceCode || initialItem.code || "",
+    barcode: initialItem.barcode || initialItem.barCode || initialItem.itemBarcode || initialItem.itemCode || "",
+    serialNumbers: Array.isArray(initialItem.serialNumbers) ? initialItem.serialNumbers : [],
     unit: initialItem.unit || "",
     baseUnit: initialItem.baseUnit || initialItem.unit || "",
     secondaryUnit: initialItem.secondaryUnit || "",
@@ -334,6 +431,175 @@ function BatchModal({ rows, setRows, onSave, onClose }) {
           >
             Save
           </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Renders the serial number / IMEI modal interface.
+function SerialModal({ serials, onSave, onClose }) {
+  const [text, setText] = useState((serials || []).join("\n"));
+  const [error, setError] = useState("");
+
+  const parsed = text
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const duplicates = parsed.filter((item, index) => parsed.indexOf(item) !== index);
+  const uniqueCount = new Set(parsed.map((s) => s.toLowerCase())).size;
+
+  const handleSave = () => {
+    if (duplicates.length > 0) {
+      setError(`Duplicate serial number found: "${duplicates[0]}". Each unit must have a unique serial/IMEI.`);
+      return;
+    }
+    const unique = [...new Set(parsed)];
+    onSave(unique);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+      <Card className="w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-800">Serial Numbers / IMEIs</h2>
+          <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <FiX />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-xs text-slate-500">
+            Enter or paste serial numbers / IMEIs (one per line or separated by commas). Each serial tracks an individual unit.
+          </p>
+          <textarea
+            rows={6}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value);
+              setError("");
+            }}
+            placeholder="e.g.&#10;SN-88001&#10;SN-88002&#10;SN-88003"
+            className="w-full rounded-md border border-slate-300 p-2.5 text-sm font-mono outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          />
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span className={duplicates.length ? "text-rose-600 font-bold" : "text-slate-600"}>
+              Total Units: {uniqueCount} {duplicates.length > 0 && `(${duplicates.length} duplicate${duplicates.length > 1 ? "s" : ""})`}
+            </span>
+          </div>
+          {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <Button onClick={onClose} className="bg-slate-100 text-slate-700 hover:bg-slate-200">Cancel</Button>
+          <Button onClick={handleSave} className="bg-blue-600 text-white hover:bg-blue-700">Save</Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// Renders the barcode camera scanner modal interface.
+function BarcodeScanModal({ onScan, onClose }) {
+  const [manualCode, setManualCode] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [scanStatus, setScanStatus] = useState("");
+  const videoRef = useRef(null);
+  const controlsRef = useRef(null);
+  const streamRef = useRef(null);
+
+  const stopCamera = () => {
+    controlsRef.current?.stop();
+    controlsRef.current = null;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraOpen(false);
+  };
+
+  const startCamera = async () => {
+    setCameraOpen(true);
+    setScanStatus("Requesting camera...");
+    try {
+      const { BrowserMultiFormatReader } = await import("@zxing/browser");
+      const reader = new BrowserMultiFormatReader();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setScanStatus("Scanning barcode...");
+        controlsRef.current = await reader.decodeFromVideoElement(videoRef.current, (result) => {
+          if (result) {
+            const text = result.getText();
+            stopCamera();
+            onScan(text);
+          }
+        });
+      }
+    } catch (err) {
+      setScanStatus(err.message || "Could not access camera.");
+    }
+  };
+
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+      <Card className="w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-800">Scan or Enter Barcode</h2>
+          <button type="button" onClick={() => { stopCamera(); onClose(); }} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <FiX />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          <p className="text-xs text-slate-500">
+            Scan using a USB barcode scanner, use your camera, or enter the code manually.
+          </p>
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && manualCode.trim()) {
+                  stopCamera();
+                  onScan(manualCode.trim());
+                }
+              }}
+              placeholder="Scan barcode or enter code"
+              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+            <Button
+              onClick={() => {
+                if (manualCode.trim()) {
+                  stopCamera();
+                  onScan(manualCode.trim());
+                }
+              }}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Apply
+            </Button>
+          </div>
+          {cameraOpen ? (
+            <div className="space-y-2">
+              <video ref={videoRef} className="h-44 w-full rounded-md bg-black object-cover" />
+              <p className="text-xs text-center text-slate-600 font-medium">{scanStatus}</p>
+              <Button onClick={stopCamera} className="w-full bg-slate-100 text-slate-700 hover:bg-slate-200">
+                Stop Camera
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={startCamera} className="w-full border border-slate-300 text-slate-700 hover:bg-slate-50">
+              <FiCamera className="mr-2 inline" /> Scan with Camera
+            </Button>
+          )}
         </div>
       </Card>
     </div>
@@ -469,14 +735,37 @@ function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleV
 }
 
 // Renders the stock tab interface.
-function StockTab({ form, setField, onBatch }) {
+function StockTab({ form, setField, onBatch, onSerial, enableBatchTracking, enableSerialTracking }) {
+  const serialCount = form.serialNumbers?.length || 0;
+
   return (
     <div className="grid max-w-5xl gap-5 lg:grid-cols-3">
       <div className="relative">
-        <Input value={form.openingQuantity} onChange={(event) => setField("openingQuantity", event.target.value)} placeholder="Opening Quantity" />
-        <button type="button" onClick={onBatch} className="absolute right-3 top-2 rounded-md bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600 hover:bg-blue-100">
-          Batch
-        </button>
+        <Input
+          value={form.openingQuantity}
+          onChange={(event) => setField("openingQuantity", event.target.value)}
+          placeholder="Opening Quantity"
+        />
+        <div className="absolute right-2 top-2 flex items-center gap-1.5">
+          {enableBatchTracking && (
+            <button
+              type="button"
+              onClick={onBatch}
+              className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-600 hover:bg-blue-100"
+            >
+              Batch
+            </button>
+          )}
+          {enableSerialTracking && (
+            <button
+              type="button"
+              onClick={onSerial}
+              className="rounded-md bg-purple-50 px-2.5 py-1 text-xs font-bold text-purple-600 hover:bg-purple-100"
+            >
+              {serialCount > 0 ? `${serialCount} Serials` : "Serial / IMEI"}
+            </button>
+          )}
+        </div>
       </div>
       <Input value={form.atPrice} onChange={(event) => setField("atPrice", event.target.value)} placeholder="At Price" />
       <DatePicker label="As Of Date" value={form.asOfDate} onChange={(value) => setField("asOfDate", value)} />
@@ -489,6 +778,12 @@ function StockTab({ form, setField, onBatch }) {
 
 // Renders the add item interface.
 function AddItem({ embedded = false, mode = "create", initialItem = null, onClose, onSave }) {
+  const appSettings = useAppSettings();
+  const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
+  const enableItemCategory = appSettings.enableItemCategory ?? true;
+  const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
+  const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
+
   const fileRef = useRef(null);
   const [form, setForm] = useState(() => createEditableItemForm(initialItem));
   const [categories, setCategories] = useState(() => (
@@ -499,8 +794,11 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   const [activeTab, setActiveTab] = useState("pricing");
   const [image, setImage] = useState(() => initialItem?.imageUrl || initialItem?.image || "");
   const [categoryModal, setCategoryModal] = useState(false);
+  const [subCategoryModal, setSubCategoryModal] = useState(false);
   const [unitModal, setUnitModal] = useState(false);
   const [batchModal, setBatchModal] = useState(false);
+  const [serialModal, setSerialModal] = useState(false);
+  const [barcodeModal, setBarcodeModal] = useState(false);
   const [wholesaleVisible, setWholesaleVisible] = useState(() => hasWholesale(initialItem));
   const [wholesale, setWholesale] = useState(() => createEditableWholesale(initialItem));
   const [batchRows, setBatchRows] = useState(() => createEditableBatchRows(initialItem));
@@ -518,6 +816,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
 
   const isProduct = form.type === "product";
   const isEditMode = mode === "edit";
+
   // Sets field.
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -539,14 +838,33 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
 
   // Saves item.
   const saveItem = async (resetAfterSave = false) => {
-    const savedBatchRows = getFilledBatchRows(batchRows);
-    const hasBatchStock = savedBatchRows.length > 0;
+    const savedBatchRows = enableBatchTracking ? getFilledBatchRows(batchRows) : (initialItem?.batches || form.batches || []);
+    const hasBatchStock = enableBatchTracking && savedBatchRows.length > 0;
     const batchTotal = getBatchTotal(savedBatchRows);
-    const openingQuantity = hasBatchStock ? String(batchTotal) : String(form.openingQuantity || "");
+
+    const serialsToSave = enableSerialTracking ? (form.serialNumbers || []) : (initialItem?.serialNumbers || form.serialNumbers || []);
+    const hasSerialStock = enableSerialTracking && serialsToSave.length > 0;
+
+    let openingQuantity = String(form.openingQuantity || "");
+    if (hasBatchStock) {
+      openingQuantity = String(batchTotal);
+    } else if (hasSerialStock && !form.openingQuantity) {
+      openingQuantity = String(serialsToSave.length);
+    }
+
+    // Preserve previously saved data if the setting is disabled
+    const category = enableItemCategory ? form.category : (initialItem?.category || form.category || "");
+    const subCategory = enableItemCategory ? form.subCategory : (initialItem?.subCategory || form.subCategory || "");
+    const barcode = enableBarcodeScanning ? (form.barcode || form.itemCode) : (initialItem?.barcode || form.barcode || form.itemCode || "");
+
     const itemPayload = {
       ...form,
       id: initialItem?.id || form.id,
       createdAt: initialItem?.createdAt || form.createdAt,
+      category,
+      subCategory,
+      barcode,
+      serialNumbers: serialsToSave,
       openingQuantity,
       stock: openingQuantity,
       serviceName: form.type === "service" ? form.itemName : "",
@@ -562,9 +880,9 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     };
     try {
       const savedItem = await (onSave ? onSave(itemPayload) : saveBusinessItem(itemPayload));
-      setSaveStatus(`${savedItem?.itemName || itemPayload.itemName || "Item"} saved to MySQL.`);
+      setSaveStatus(`${savedItem?.itemName || itemPayload.itemName || "Item"} saved.`);
     } catch (error) {
-      setSaveStatus(error.message || "Could not save item to MySQL.");
+      setSaveStatus(error.message || "Could not save item.");
       return;
     }
     if (resetAfterSave && !isEditMode) {
@@ -619,17 +937,68 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
               >
                 {form.unit || "Select Unit"}
               </button>
-              <CategoryPicker value={form.category} categories={categories} onSelect={(value) => setField("category", value)} onAddNew={() => setCategoryModal(true)} />
+
+              {/* Category & Sub-Category (Visible only when enableItemCategory is enabled) */}
+              {enableItemCategory && (
+                <>
+                  <CategoryPicker
+                    value={form.category}
+                    categories={categories}
+                    onSelect={(value) => setField("category", value)}
+                    onAddNew={() => setCategoryModal(true)}
+                  />
+                  <SubCategoryPicker
+                    category={form.category}
+                    value={form.subCategory}
+                    onSelect={(value) => setField("subCategory", value)}
+                    onAddNew={() => setSubCategoryModal(true)}
+                  />
+                </>
+              )}
+
+              {/* Item Code & Barcode */}
               <div className="relative">
-                <Input value={form.itemCode} onChange={(event) => setField("itemCode", event.target.value)} placeholder={isProduct ? "Item Code" : "Service Code"} />
+                <Input
+                  value={form.itemCode}
+                  onChange={(event) => {
+                    setField("itemCode", event.target.value);
+                    if (!form.barcode || form.barcode === form.itemCode) {
+                      setField("barcode", event.target.value);
+                    }
+                  }}
+                  placeholder={isProduct ? "Item Code" : "Service Code"}
+                />
                 <button
                   type="button"
-                  onClick={() => setField("itemCode", `ITM-${Date.now().toString().slice(-4)}`)}
+                  onClick={() => {
+                    const code = `ITM-${Date.now().toString().slice(-4)}`;
+                    setField("itemCode", code);
+                    if (!form.barcode) setField("barcode", code);
+                  }}
                   className="absolute right-3 top-2 rounded-full bg-blue-50 px-4 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-100"
                 >
                   Assign Code
                 </button>
               </div>
+
+              {/* Barcode field & scanner (Visible only when enableBarcodeScanning is enabled) */}
+              {enableBarcodeScanning && (
+                <div className="relative">
+                  <Input
+                    value={form.barcode}
+                    onChange={(event) => setField("barcode", event.target.value)}
+                    placeholder="Barcode / Scan"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setBarcodeModal(true)}
+                    className="absolute right-2 top-2 flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-200"
+                    title="Scan with Camera or USB scanner"
+                  >
+                    <FiCamera className="h-3.5 w-3.5 text-blue-600" /> Scan
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>
@@ -679,7 +1048,16 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
                 setWholesale={setWholesale}
               />
             )}
-            {activeTab === "stock" && isProduct && <StockTab form={form} setField={setField} onBatch={() => setBatchModal(true)} />}
+            {activeTab === "stock" && isProduct && (
+              <StockTab
+                form={form}
+                setField={setField}
+                onBatch={() => setBatchModal(true)}
+                onSerial={() => setSerialModal(true)}
+                enableBatchTracking={enableBatchTracking}
+                enableSerialTracking={enableSerialTracking}
+              />
+            )}
           </div>
         </div>
 
@@ -701,6 +1079,16 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
           }}
         />
       )}
+      {subCategoryModal && (
+        <SubCategoryModal
+          category={form.category}
+          onClose={() => setSubCategoryModal(false)}
+          onCreate={(name) => {
+            setField("subCategory", name);
+            setSubCategoryModal(false);
+          }}
+        />
+      )}
       {unitModal && <UnitModal form={form} setField={setField} onClose={() => setUnitModal(false)} />}
       {batchModal && (
         <BatchModal
@@ -708,6 +1096,28 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
           setRows={setBatchRows}
           onSave={(total) => setField("openingQuantity", String(total))}
           onClose={() => setBatchModal(false)}
+        />
+      )}
+      {serialModal && (
+        <SerialModal
+          serials={form.serialNumbers}
+          onSave={(uniqueSerials) => {
+            setField("serialNumbers", uniqueSerials);
+            if (uniqueSerials.length > 0) {
+              setField("openingQuantity", String(uniqueSerials.length));
+            }
+          }}
+          onClose={() => setSerialModal(false)}
+        />
+      )}
+      {barcodeModal && (
+        <BarcodeScanModal
+          onScan={(code) => {
+            setField("barcode", code);
+            if (!form.itemCode) setField("itemCode", code);
+            setBarcodeModal(false);
+          }}
+          onClose={() => setBarcodeModal(false)}
         />
       )}
     </div>

@@ -131,6 +131,9 @@ function createRow() {
     cessPercent: "",
     cessAmount: "",
     sourceItemId: "",
+    batchNo: "",
+    expDate: "",
+    serialNumbers: [],
   };
 }
 
@@ -220,8 +223,15 @@ function saleItemFromInventory(item = {}) {
     stock: item.openingQuantity || item.stock || "0",
     unit: item.unit || item.baseUnit || "",
     price: item.salePrice || item.price || "",
+    purchasePrice: item.purchasePrice || "",
     priceMode: item.saleTaxMode || "Without Tax",
     taxRate: item.taxRate === "None" ? "NONE" : item.taxRate || "NONE",
+    code: item.itemCode || item.code || "",
+    barcode: item.barcode || item.barCode || item.itemBarcode || item.itemCode || "",
+    category: item.category || "",
+    subCategory: item.subCategory || "",
+    batches: item.batches || [],
+    serialNumbers: item.serialNumbers || [],
   };
 }
 
@@ -551,11 +561,117 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
 }
 
 // Renders the item picker interface.
-function ItemPicker({ value, items, onSelect, onChange, onAddItem }) {
+// Renders row serial modal for unit tracking in transactions
+function RowSerialModal({ row, item, onSave, onClose }) {
+  const [text, setText] = useState((row.serialNumbers || []).join("\n"));
+  const [error, setError] = useState("");
+
+  const parsed = text
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const duplicates = parsed.filter((s, idx) => parsed.indexOf(s) !== idx);
+  const maxQty = Math.max(Number(row.qty || 0), 0);
+
+  const handleSave = () => {
+    if (duplicates.length > 0) {
+      setError(`Duplicate serial number found: "${duplicates[0]}". Each unit must be unique.`);
+      return;
+    }
+    const unique = [...new Set(parsed)];
+    onSave(unique);
+    onClose();
+  };
+
+  const handlePickAvailable = (serial) => {
+    if (parsed.includes(serial)) {
+      setText(parsed.filter((s) => s !== serial).join("\n"));
+    } else {
+      setText([...parsed, serial].join("\n"));
+    }
+  };
+
+  const availableSerials = item?.serialNumbers || [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+      <Card className="w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Assign Serials / IMEIs</h2>
+            <p className="text-xs text-slate-500">{row.item || "Selected Item"} {maxQty > 0 ? `· Qty: ${maxQty}` : ""}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100">
+            <FiX />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          {availableSerials.length > 0 && (
+            <div>
+              <p className="mb-1 text-xs font-semibold text-slate-600">Available item serials (click to select):</p>
+              <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto rounded border border-slate-200 bg-slate-50 p-2">
+                {availableSerials.map((s) => {
+                  const selected = parsed.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => handlePickAvailable(s)}
+                      className={`rounded px-2 py-0.5 font-mono text-xs font-medium transition ${
+                        selected
+                          ? "bg-purple-600 text-white"
+                          : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {selected ? `✓ ${s}` : s}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Enter serials/IMEIs (one per line or comma-separated):</p>
+            <textarea
+              rows={4}
+              value={text}
+              onChange={(e) => { setText(e.target.value); setError(""); }}
+              placeholder="e.g.\nSN001\nSN002"
+              className="w-full rounded-md border border-slate-300 p-2 text-xs font-mono outline-none focus:border-blue-500"
+            />
+          </div>
+          <div className="flex justify-between text-xs font-semibold">
+            <span className={maxQty > 0 && parsed.length === maxQty ? "text-emerald-600" : "text-slate-600"}>
+              Assigned: {parsed.length}{maxQty > 0 ? ` / ${maxQty} units` : ""}
+            </span>
+            {duplicates.length > 0 && <span className="text-rose-600">Duplicate detected!</span>}
+          </div>
+          {error && <p className="text-xs font-semibold text-rose-600">{error}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
+          <Button onClick={onClose} className="bg-slate-100 text-slate-700 hover:bg-slate-200">Cancel</Button>
+          <Button onClick={handleSave} className="bg-blue-600 text-white hover:bg-blue-700">Apply Serials</Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings = {} }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const rootRef = useRef(null);
-  const filtered = items.filter((item) => item.name.toLowerCase().includes((query || value).toLowerCase()));
+  const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
+  const enableItemCategory = appSettings.enableItemCategory ?? true;
+  const q = (query || value).toLowerCase().trim();
+  const filtered = items.filter((item) => {
+    if (!q) return true;
+    const matchName = item.name.toLowerCase().includes(q);
+    const matchCode = (item.code || "").toLowerCase().includes(q);
+    const matchBarcode = enableBarcodeScanning && (item.barcode || "").toLowerCase().includes(q);
+    return matchName || matchCode || matchBarcode;
+  });
   useDismiss(open, rootRef, () => setOpen(false));
 
   return (
@@ -569,18 +685,30 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem }) {
           setOpen(true);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Enter") setOpen(false);
+          if (event.key === "Enter") {
+            const exactMatch = items.find((i) =>
+              (enableBarcodeScanning && i.barcode && i.barcode.toLowerCase() === value.trim().toLowerCase())
+              || (i.code && i.code.toLowerCase() === value.trim().toLowerCase())
+              || (i.name.toLowerCase() === value.trim().toLowerCase())
+            );
+            if (exactMatch) {
+              onSelect(exactMatch);
+              setOpen(false);
+              return;
+            }
+            setOpen(false);
+          }
           if (event.key === "Escape") setOpen(false);
         }}
         className="h-8 w-full rounded-md border border-transparent bg-transparent px-2 text-[13px] outline-none focus:border-blue-400 focus:bg-white"
       />
       {open && (
-        <div className="absolute left-0 top-9 z-40 w-[min(440px,calc(100vw-2rem))] rounded-lg border border-slate-200 bg-white p-2.5 shadow-xl">
+        <div className="absolute left-0 top-9 z-40 w-[min(480px,calc(100vw-2rem))] rounded-lg border border-slate-200 bg-white p-2.5 shadow-xl">
           <label className="flex h-8 items-center gap-2 rounded-full border border-slate-200 px-3">
             <FiSearch className="h-4 w-4 text-slate-400" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Item" className="w-full bg-transparent text-[13px] outline-none" autoFocus />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search item, code, or barcode" className="w-full bg-transparent text-[13px] outline-none" autoFocus />
           </label>
-          <div className="mt-2 max-h-28 overflow-y-auto">
+          <div className="mt-2 max-h-36 overflow-y-auto">
             {filtered.length ? (
               filtered.map((item) => (
                 <button
@@ -592,7 +720,15 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem }) {
                   }}
                   className="grid w-full grid-cols-[1fr_76px_58px] gap-2 rounded-md px-3 py-1.5 text-left text-[13px] hover:bg-blue-50"
                 >
-                  <span>{item.name}</span>
+                  <span className="truncate">
+                    <span className="font-medium text-slate-800">{item.name}</span>
+                    {enableItemCategory && item.category && (
+                      <span className="ml-1 text-xs text-slate-400 font-normal">({item.category})</span>
+                    )}
+                    {enableBarcodeScanning && item.barcode && (
+                      <span className="ml-1 font-mono text-[11px] text-slate-500 font-normal">[{item.barcode}]</span>
+                    )}
+                  </span>
                   <span className="text-slate-500">{item.price || "0"}</span>
                   <span className="text-right font-semibold text-slate-700">{item.stock}</span>
                 </button>
@@ -623,7 +759,12 @@ function CellInput({ error, className = "", ...props }) {
 }
 
 // Renders the invoice table interface.
-function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {} }) {
+function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {}, isPurchase = false }) {
+  const [serialModalRow, setSerialModalRow] = useState(null);
+  const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
+  const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
+  const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
+
   // Updates row.
   const updateRow = (id, field, value) => {
     setRows((current) =>
@@ -662,10 +803,12 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
               hsn: item.hsn || item.sac || row.hsn || "",
               cessPercent: item.cessPercent || item.cess || row.cessPercent || "",
               unit: item.unit || row.unit,
-              price: item.price || row.price,
+              price: (isPurchase && item.purchasePrice) ? item.purchasePrice : (item.price || row.price),
               priceMode: item.priceMode || row.priceMode,
               taxRate: item.taxRate || row.taxRate,
               sourceItemId: item.id || "",
+              batchNo: (row.batchNo || (item.batches?.[0]?.batchNo || "")),
+              expDate: (row.expDate || (item.batches?.[0]?.expDate || "")),
             })
           : row
       )
@@ -681,13 +824,54 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
 
   return (
     <section className="overflow-x-auto overflow-y-visible border-y border-slate-200 bg-white">
+      {enableBarcodeScanning && (
+        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs">
+          <span className="font-bold uppercase tracking-wider text-slate-500">Scan Barcode:</span>
+          <input
+            type="text"
+            placeholder="Scan or enter barcode / item code..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.target.value.trim()) {
+                const val = e.target.value.trim().toLowerCase();
+                const found = items.find(
+                  (it) =>
+                    (it.barcode && it.barcode.toLowerCase() === val) ||
+                    (it.code && it.code.toLowerCase() === val) ||
+                    (it.name.toLowerCase() === val)
+                );
+                if (found) {
+                  const emptyIdx = rows.findIndex((r) => !r.item.trim());
+                  if (emptyIdx >= 0) {
+                    applyItem(rows[emptyIdx].id, found);
+                  } else {
+                    const newRow = createRow();
+                    setRows((curr) => [...curr, newRow]);
+                    setTimeout(() => applyItem(newRow.id, found), 0);
+                  }
+                  e.target.value = "";
+                }
+              }
+            }}
+            className="h-7 w-72 rounded border border-slate-300 bg-white px-2.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+          />
+        </div>
+      )}
       <table className="w-full min-w-[1080px] border-collapse text-[13px] xl:min-w-0">
         <thead>
           <tr className="bg-white text-left text-xs font-bold uppercase text-slate-700">
             <th rowSpan="2" className="w-10 border-r border-slate-200 px-2 py-1.5 text-center">#</th>
-            <th rowSpan="2" className="w-[25%] min-w-[220px] border-r border-slate-200 px-2 py-1.5">Item</th>
+            <th rowSpan="2" className="w-[25%] min-w-[200px] border-r border-slate-200 px-2 py-1.5">Item</th>
             {appSettings.enableHsnSacCode !== false && (
               <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5 text-center">HSN/SAC</th>
+            )}
+            {enableBatchTracking && (
+              <>
+                <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5 text-center">Batch No</th>
+                <th rowSpan="2" className="w-28 border-r border-slate-200 px-2 py-1.5 text-center">Exp. Date</th>
+              </>
+            )}
+            {enableSerialTracking && (
+              <th rowSpan="2" className="w-28 border-r border-slate-200 px-2 py-1.5 text-center">Serial/IMEI</th>
             )}
             <th rowSpan="2" className="w-16 border-r border-slate-200 px-2 py-1.5">Qty</th>
             <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5">Unit</th>
@@ -731,11 +915,36 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                   </div>
                 </td>
                 <td className="border-r border-slate-200 p-1">
-                  <ItemPicker value={row.item} items={items} onChange={(value) => updateRow(row.id, "item", value)} onSelect={(item) => applyItem(row.id, item)} onAddItem={() => onAddItem(row.id)} />
+                  <ItemPicker value={row.item} items={items} onChange={(value) => updateRow(row.id, "item", value)} onSelect={(item) => applyItem(row.id, item)} onAddItem={() => onAddItem(row.id)} appSettings={appSettings} />
                 </td>
                 {appSettings.enableHsnSacCode !== false && (
                   <td className="border-r border-slate-200 p-1">
                     <CellInput value={row.hsn || ""} onChange={(event) => updateRow(row.id, "hsn", event.target.value)} placeholder="HSN" />
+                  </td>
+                )}
+                {enableBatchTracking && (
+                  <>
+                    <td className="border-r border-slate-200 p-1">
+                      <CellInput value={row.batchNo || ""} onChange={(event) => updateRow(row.id, "batchNo", event.target.value)} placeholder="Batch No" />
+                    </td>
+                    <td className="border-r border-slate-200 p-1">
+                      <CellInput type="date" value={row.expDate || ""} onChange={(event) => updateRow(row.id, "expDate", event.target.value)} />
+                    </td>
+                  </>
+                )}
+                {enableSerialTracking && (
+                  <td className="border-r border-slate-200 p-1 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setSerialModalRow(row)}
+                      className={`rounded px-2 py-1 text-xs font-semibold ${
+                        row.serialNumbers?.length
+                          ? "bg-purple-100 text-purple-800 font-mono"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {row.serialNumbers?.length ? `${row.serialNumbers.length} SN` : "+ Serials"}
+                    </button>
                   </td>
                 )}
                 <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.qty} value={row.qty} onChange={(event) => updateRow(row.id, "qty", event.target.value)} /></td>
@@ -771,6 +980,13 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
               </button>
             </td>
             {appSettings.enableHsnSacCode !== false && <td className="border-r border-slate-200" />}
+            {enableBatchTracking && (
+              <>
+                <td className="border-r border-slate-200" />
+                <td className="border-r border-slate-200" />
+              </>
+            )}
+            {enableSerialTracking && <td className="border-r border-slate-200" />}
             <td className="border-r border-slate-200 px-2 text-right">{totals.qty}</td>
             <td className="border-r border-slate-200" />
             <td className="border-r border-slate-200 text-right">Total</td>
@@ -789,6 +1005,17 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
           </tr>
         </tbody>
       </table>
+      {serialModalRow && (
+        <RowSerialModal
+          row={serialModalRow}
+          item={items.find((i) => i.id === serialModalRow.sourceItemId || i.name.toLowerCase() === serialModalRow.item.toLowerCase())}
+          onSave={(serials) => {
+            updateRow(serialModalRow.id, "serialNumbers", serials);
+            setSerialModalRow(null);
+          }}
+          onClose={() => setSerialModalRow(null)}
+        />
+      )}
     </section>
   );
 }
@@ -1618,7 +1845,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
       <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={!isPurchase ? () => setSettingsOpen(true) : undefined} onClose={() => closeTab(activeTab)} />
       <CustomerDetails appSettings={appSettings} saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
-      <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} appSettings={appSettings} />
+      <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} appSettings={appSettings} isPurchase={isPurchase} />
 
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">
         <AddOns form={form} setField={setField} files={files} setFiles={setFiles} templates={termsTemplates} setTemplates={setTermsTemplates} showPayment={hasValidInvoiceItem} />
@@ -1635,7 +1862,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
               <span className="px-4 py-2">Share</span>
               <span className="grid w-10 place-items-center border-l border-blue-200"><FiChevronDown /></span>
             </button>
-            {shareOpen && <ShareMenu actions={isPurchase ? purchaseShareActions : shareActions} onAction={handleShareAction} />}
+            {shareOpen && <ShareMenu actions={isPurchase ? (appSettings.enableBarcodeScanning !== false ? purchaseShareActions : purchaseShareActions.filter(a => a !== "Save & Generate Barcode")) : shareActions} onAction={handleShareAction} />}
           </div>
           <Button onClick={saveSale} className="rounded-md bg-blue-600 px-10 py-2 text-[13px] text-white shadow-md hover:bg-blue-700"><FiSave /> {editInvoice ? "Update Sale" : "Save"}</Button>
         </div>

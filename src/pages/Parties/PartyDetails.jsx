@@ -1,14 +1,14 @@
 // Implements the party details page.
 import { useEffect, useMemo, useState } from "react";
-import { FiDownload, FiFileText, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiSettings, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiDownload, FiFileText, FiFilter, FiPlus, FiPrinter, FiSearch, FiSettings, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { deleteParty, getPartyDeletionBlockReason, getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
-import { deleteSaleInvoice, getSaleInvoices, saveSaleInvoice } from "../../services/salesStorage";
-import { getPurchaseBills, replacePurchaseBills, savePurchaseBill } from "../../services/purchaseBillsStorage";
+import { getSaleInvoices } from "../../services/salesStorage";
+import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { calculateInvoiceSettlement, calculatePartyBalances, transactionMatchesParty } from "../../services/partyBalances";
@@ -460,8 +460,6 @@ function PartyDetails() {
   const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [], paymentsOut: [], creditNotes: [], debitNotes: [] });
   const [selectedPartyId, setSelectedPartyId] = useState("cash-sale");
   const [search, setSearch] = useState("");
-  const [openTransactionMenu, setOpenTransactionMenu] = useState("");
-  const [transactionMenuPosition, setTransactionMenuPosition] = useState({ top: 0, left: 0 });
   const [statementOpen, setStatementOpen] = useState(false);
   const [printStatementOnOpen, setPrintStatementOnOpen] = useState(false);
   const [transactionSearchOpen, setTransactionSearchOpen] = useState(false);
@@ -544,84 +542,6 @@ function PartyDetails() {
     setParties((current) => current.filter((party) => String(party.id) !== String(selectedParty.id)));
     setSelectedPartyId("cash-sale");
     setLoadError("");
-  };
-
-  // Refreshes local invoices.
-  const refreshLocalInvoices = () => setInvoices(getSaleInvoices());
-  // Handles actions.
-  const transactionActions = (invoice, type = "sale") => {
-    const key = invoice?.id || `opening-${selectedParty?.id}`;
-    // Handles result.
-    const preview = (printAfterOpen = false, targetInvoice = invoice) => navigate("/sales/sale-invoices/preview", { state: { invoice: targetInvoice, printAfterOpen } });
-    // Handles action.
-    const handleAction = (action) => {
-      setOpenTransactionMenu("");
-      if (action === "View/Edit") {
-        if (invoice && type === "sale") navigate("/sales/sale-invoices/new", { state: { from: location.pathname, editInvoice: invoice } });
-        else if (invoice && type === "purchase") navigate("/purchase-expense/purchase-bills/new", { state: { from: location.pathname, localOnlyPurchase: true, editPurchase: invoice } });
-      } else if (action === "Open PDF") {
-        if (invoice && type === "sale") preview();
-        else openStatementDocument(false);
-      } else if (action === "Preview") {
-        if (invoice && type === "sale") preview();
-        else {
-          setPrintStatementOnOpen(false);
-          setStatementOpen(true);
-        }
-      } else if (action === "Print") {
-        if (invoice && type === "sale") preview(true);
-        else {
-          setPrintStatementOnOpen(true);
-          setStatementOpen(true);
-        }
-      } else if (action === "Delete") {
-        if (type === "opening") {
-          const saved = savePartyLocally({ ...selectedParty, openingBalance: "0", openingBalanceType: "to-receive" });
-          setParties((current) => current.map((party) => party.id === saved.id ? saved : party));
-        } else if (type === "purchase" && invoice) {
-          if (window.confirm("Delete this purchase transaction from this browser?")) {
-            const next = purchases.filter((bill) => String(bill.id) !== String(invoice.id));
-            replacePurchaseBills(next);
-            setPurchases(next);
-          }
-        } else if (window.confirm("Delete this sale transaction from this browser?")) {
-          deleteSaleInvoice(invoice.id);
-          refreshLocalInvoices();
-        }
-      } else if (action === "Duplicate" && invoice) {
-        if (type === "purchase") {
-          const number = `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY`;
-          const duplicate = savePurchaseBill({ ...invoice, id: crypto.randomUUID(), invoiceId: undefined, form: { ...invoice.form, invoiceNumber: number }, createdAt: new Date().toISOString() });
-          setPurchases(getPurchaseBills());
-          navigate("/purchase-expense/purchase-bills/new", { state: { from: location.pathname, localOnlyPurchase: true, editPurchase: duplicate } });
-        } else {
-          const duplicate = saveSaleInvoice({ ...invoice, id: crypto.randomUUID(), invoiceId: undefined, invoiceNumber: `${invoice.invoiceNumber || "1"}-COPY`, form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` }, createdAt: new Date().toISOString(), stockAdjustedAt: invoice.stockAdjustedAt || new Date().toISOString() });
-          refreshLocalInvoices();
-          preview(false, duplicate);
-        }
-      } else if (action === "View History") {
-        const date = invoice?.updatedAt || invoice?.createdAt || selectedParty?.updatedAt;
-        window.alert(date ? `Saved locally on ${new Date(date).toLocaleString()}.` : "No transaction history is available yet.");
-      }
-    };
-    return (
-      <div className="relative">
-        <button type="button" aria-label="Transaction actions" onClick={(event) => {
-          if (openTransactionMenu === key) {
-            setOpenTransactionMenu("");
-            return;
-          }
-          const rect = event.currentTarget.getBoundingClientRect();
-          const menuHeight = 330;
-          const top = rect.bottom + menuHeight + 8 <= window.innerHeight
-            ? rect.bottom + 4
-            : Math.max(8, rect.top - menuHeight - 4);
-          setTransactionMenuPosition({ top, left: Math.max(8, rect.right - 220) });
-          setOpenTransactionMenu(key);
-        }} className="rounded p-1 text-slate-500 hover:bg-slate-100"><FiMoreVertical /></button>
-        {openTransactionMenu === key && createPortal(<div className="fixed z-[100] max-h-[min(330px,calc(100vh-16px))] w-[220px] overflow-y-auto rounded-xl bg-white py-2 shadow-xl ring-1 ring-black/10" style={{ top: transactionMenuPosition.top, left: transactionMenuPosition.left }}>{["View/Edit", ...(type === "opening" ? [] : ["Delete", "Duplicate"]), "Open PDF", "Preview", "Print", ...(type === "opening" ? ["Delete"] : []), "View History"].map((action) => <button key={action} type="button" onClick={() => handleAction(action)} className="block w-full px-5 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50">{action}</button>)}</div>, document.body)}
-      </div>
-    );
   };
 
   const partyBalanceResult = useMemo(() => calculatePartyBalances({
@@ -715,7 +635,7 @@ function PartyDetails() {
     <div className="flex h-full min-h-[calc(100vh-7.5rem)] flex-col bg-slate-200">
       <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-700">Parties</h1>
-        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700"><FiPlus /> Add Party</Button><FiMoreVertical className="text-xl text-slate-500" /></div>
+        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700"><FiPlus /> Add Party</Button></div>
       </div>
       {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
       <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(300px,29%)_1fr]">
@@ -773,8 +693,8 @@ function PartyDetails() {
             <button type="button" aria-label="Preview or download PDF" title="Preview or download PDF" onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md text-rose-600 hover:bg-rose-50 cursor-pointer"><FiFileText className="text-2xl" /></button>
           </div></div>
           <div className="overflow-auto"><table className="w-full min-w-[690px] text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => <th key={label} className="border-b border-r border-slate-200 px-3 py-3 font-semibold">{label}{label && <FiFilter className="float-right mt-0.5 text-slate-400" />}</th>)}</tr></thead><tbody>
-            {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && <tr className="border-b border-slate-100 bg-sky-100 text-slate-800"><td className="px-3 py-4">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td className="px-3 py-4">—</td><td className="px-3 py-4">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-rose-500">Unpaid</td><td className="px-3 py-4">{transactionActions(null, "opening")}</td></tr>}
-            {visiblePartyTransactions.map((entry) => <tr key={entry.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">{entry.source}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{money(entry.total)}</td><td className="px-3 py-4 text-right">{(entry.source === "Payment-In" || entry.source === "Payment-Out") && !entry.balance ? "—" : money(entry.balance)}</td><td className={`px-3 py-4 ${entry.status === "Paid" || entry.status === "Used" ? "text-emerald-500" : entry.status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{entry.status}</td><td className="px-3 py-4">{entry.source === "Sale" ? transactionActions(entry.raw, "sale") : entry.source === "Purchase" ? transactionActions(entry.raw, "purchase") : <button type="button" title="View transaction" onClick={() => { setStatementOpen(true); setPrintStatementOnOpen(false); }} className="rounded p-1 text-slate-500 hover:bg-slate-100"><FiMoreVertical /></button>}</td></tr>)}
+            {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && <tr className="border-b border-slate-100 bg-sky-100 text-slate-800"><td className="px-3 py-4">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td className="px-3 py-4">—</td><td className="px-3 py-4">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-rose-500">Unpaid</td><td className="px-3 py-4">—</td></tr>}
+            {visiblePartyTransactions.map((entry) => <tr key={entry.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">{entry.source}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{money(entry.total)}</td><td className="px-3 py-4 text-right">{(entry.source === "Payment-In" || entry.source === "Payment-Out") && !entry.balance ? "—" : money(entry.balance)}</td><td className={`px-3 py-4 ${entry.status === "Paid" || entry.status === "Used" ? "text-emerald-500" : entry.status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{entry.status}</td><td className="px-3 py-4">—</td></tr>)}
             {!visiblePartyTransactions.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && <tr><td colSpan="7" className="h-48 text-center text-slate-400">{transactionSearch ? "No matching transactions" : "No transactions to show"}</td></tr>}
           </tbody></table></div>
         </section>

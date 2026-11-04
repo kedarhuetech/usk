@@ -63,7 +63,7 @@ function normalizeBatch(row = {}) {
     mfgDate: row.mfgDate || "",
     expDate: row.expDate || "",
     remarks: row.remarks || row.dosage || "",
-    openingQty: row.openingQty || "",
+    openingQty: row.openingQty || row.quantity || row.qty || "",
   };
 }
 
@@ -85,6 +85,24 @@ function batchOpeningTotal(batches = []) {
   return batches.reduce((total, row) => total + batchQuantity(row.openingQty), 0);
 }
 
+// Normalizes serial numbers array / string input into unique trimmed values
+function normalizeSerialNumbers(serials) {
+  if (!serials) return [];
+  const rawList = Array.isArray(serials)
+    ? serials
+    : String(serials).split(/[\n,]/);
+  const seen = new Set();
+  const cleaned = [];
+  for (const s of rawList) {
+    const trimmed = String(s || "").trim();
+    if (trimmed && !seen.has(trimmed.toLowerCase())) {
+      seen.add(trimmed.toLowerCase());
+      cleaned.push(trimmed);
+    }
+  }
+  return cleaned;
+}
+
 // Makes the inventory item value consistent.
 export function normalizeInventoryItem(itemForm = {}) {
   const type = itemType(itemForm);
@@ -93,6 +111,9 @@ export function normalizeInventoryItem(itemForm = {}) {
   const unit = itemForm.unit || itemForm.baseUnit || "";
   const imageUrl = itemForm.imageUrl || itemForm.image || "";
   const itemCode = itemForm.itemCode || itemForm.serviceCode || itemForm.code || "";
+  const barcode = itemForm.barcode || itemForm.barCode || itemForm.itemBarcode || itemCode || "";
+  const subCategory = itemForm.subCategory || itemForm.sub_category || "";
+  const serialNumbers = normalizeSerialNumbers(itemForm.serialNumbers);
   const hsn = itemForm.hsn || itemForm.sac || "";
   const wholesale = itemForm.wholesale || null;
   const batches = filledBatches(itemForm.batches || []);
@@ -106,7 +127,9 @@ export function normalizeInventoryItem(itemForm = {}) {
     ? String(itemForm.openingQuantity)
     : batches.length
       ? String(batchTotal)
-      : manualOpeningQuantity;
+      : serialNumbers.length
+        ? String(serialNumbers.length)
+        : manualOpeningQuantity;
   const discount = hasValue(itemForm.discount) ? itemForm.discount : itemForm.discountValue || "";
 
   return {
@@ -118,9 +141,12 @@ export function normalizeInventoryItem(itemForm = {}) {
     hsn,
     sac: type === "service" ? hsn : "",
     category: itemForm.category || "",
+    subCategory,
     itemCode,
     serviceCode: type === "service" ? itemCode : "",
     code: itemCode,
+    barcode,
+    serialNumbers,
     description: itemForm.description || "",
     unit,
     baseUnit: itemForm.baseUnit || "",
@@ -226,6 +252,9 @@ export function saveInventoryItem(itemForm) {
 
 // Deletes an inventory item from the active storage adapter.
 export function sameInventoryItemIdentity(left = {}, right = {}) {
+  const leftBarcode = String(left.barcode || "").trim().toLowerCase();
+  const rightBarcode = String(right.barcode || "").trim().toLowerCase();
+  if (leftBarcode && rightBarcode && leftBarcode === rightBarcode) return true;
   const leftCode = String(left.itemCode || left.code || left.serviceCode || "").trim().toLowerCase();
   const rightCode = String(right.itemCode || right.code || right.serviceCode || "").trim().toLowerCase();
   if (leftCode || rightCode) return Boolean(leftCode && rightCode && leftCode === rightCode);

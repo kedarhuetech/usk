@@ -22,12 +22,22 @@ export const taxModes = ["Without Tax", "With Tax"];
 export const discountTypes = ["Percentage", "Flat Amount"];
 export const defaultCategories = ["General", "Electronics", "Grocery", "Services"];
 
+export const defaultSubCategories = {
+  General: ["Standard", "Miscellaneous"],
+  Electronics: ["Mobile & Accessories", "Computers", "Home Appliances", "Audio"],
+  Grocery: ["Staples", "Snacks & Beverages", "Dairy", "Personal Care"],
+  Services: ["Consulting", "Maintenance", "Repair", "Installation"],
+};
+
 export const itemDefaults = {
   type: "product",
   itemName: "",
   hsn: "",
   category: "",
+  subCategory: "",
   itemCode: "",
+  barcode: "",
+  serialNumbers: [],
   unit: "",
   baseUnit: "",
   secondaryUnit: "",
