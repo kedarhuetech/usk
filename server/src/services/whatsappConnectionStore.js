@@ -1,5 +1,5 @@
 // Implements the backend whatsapp connection store service.
-const REQUIRED_WHATSAPP_PERMISSIONS = ["business_management", "whatsapp_business_management", "whatsapp_business_messaging"];
+const REQUIRED_WHATSAPP_PERMISSIONS = ["whatsapp_business_management", "whatsapp_business_messaging"];
 
 let whatsappConnection = {
   connected: false,
@@ -122,14 +122,29 @@ export function buildWhatsAppReadiness(connection = whatsappConnection) {
 
 // This helper handles connection logic.
 function publicConnection() {
+  const assets = whatsappConnection.assets || emptyAssets();
+  const selection = whatsappConnection.selection || emptySelection();
+  const firstApproved = (assets.templates || []).find((t) => t.status === "APPROVED");
+  const autoTemplateId = selection.templateId || (firstApproved ? firstApproved.id : "");
+  const autoWabaId = selection.wabaId || (assets.wabas?.length ? assets.wabas[0].id : "");
+  const autoPhoneId = selection.phoneNumberId || (assets.phoneNumbers?.length ? assets.phoneNumbers[0].id : "");
+
+  const effectiveSelection = {
+    businessId: selection.businessId || (assets.businesses?.length ? assets.businesses[0].id : ""),
+    wabaId: autoWabaId,
+    phoneNumberId: autoPhoneId,
+    templateId: autoTemplateId,
+  };
+
   return {
+    success: true,
     connected: whatsappConnection.connected,
     source: whatsappConnection.source,
     user: whatsappConnection.user,
     permissions: whatsappConnection.permissions,
     assets: whatsappConnection.assets,
-    selection: whatsappConnection.selection,
-    readiness: buildWhatsAppReadiness(whatsappConnection),
+    selection: effectiveSelection,
+    readiness: buildWhatsAppReadiness({ ...whatsappConnection, selection: effectiveSelection }),
     connectedAt: whatsappConnection.connectedAt,
     lastError: whatsappConnection.lastError,
     lastTestResult: whatsappConnection.lastTestResult,

@@ -2,8 +2,12 @@
 /* global process */
 import dotenv from "dotenv";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+dotenv.config({ path: path.resolve(process.cwd(), "server/.env"), quiet: true });
 dotenv.config({ path: path.resolve(process.cwd(), ".env"), quiet: true });
 
 export const pool = mysql.createPool({
