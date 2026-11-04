@@ -160,7 +160,8 @@ router.post("/whatsapp/embedded-signup", async (req, res) => {
   }
 
   try {
-    const tokenPayload = await exchangeWhatsAppEmbeddedSignupCode(code);
+    const redirectUri = String(req.body?.redirectUri || req.headers.origin || "").trim();
+    const tokenPayload = await exchangeWhatsAppEmbeddedSignupCode(code, redirectUri);
     const accessToken = tokenPayload.access_token;
     const signupAssets = req.body?.signup || {};
     const businessId = String(signupAssets.businessId || signupAssets.business_id || "").trim();

@@ -13,7 +13,7 @@ export const WHATSAPP_AUTH_SCOPES = [
 export function getWhatsAppOAuthConfig() {
   const metaConfig = getMetaOAuthConfig();
   const redirectUri = process.env.WHATSAPP_REDIRECT_URI || "";
-  const loginConfigId = process.env.WHATSAPP_LOGIN_CONFIG_ID || "";
+  const loginConfigId = process.env.WHATSAPP_LOGIN_CONFIG_ID || process.env.META_LOGIN_CONFIG_ID || metaConfig.loginConfigId || "";
   const testAccessToken = process.env.WHATSAPP_TEST_ACCESS_TOKEN || "";
   const testWabaId = process.env.WHATSAPP_TEST_WABA_ID || "";
   const testPhoneNumberId = process.env.WHATSAPP_TEST_PHONE_NUMBER_ID || "";
