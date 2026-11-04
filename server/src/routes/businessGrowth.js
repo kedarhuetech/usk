@@ -22,7 +22,10 @@ const resources = new Set([
 ]);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 }, fileFilter: (_req, file, done) => done(null, ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.mimetype)) });
 // This helper handles result logic.
-const fail = (res, error) => res.status(error.status || 500).json({ success: false, message: error.status ? error.message : "Business Growth request failed." });
+const fail = (res, error) => {
+  console.error("Business Growth error:", error);
+  return res.status(error.status || 500).json({ success: false, message: error.message || "Business Growth request failed." });
+};
 const validIsoDate = (value) => {
   const date = String(value || "");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;

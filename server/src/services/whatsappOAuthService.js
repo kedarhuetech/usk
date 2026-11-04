@@ -116,11 +116,12 @@ export function buildWhatsAppAuthorizationRequest(returnTo) {
     redirect_uri: config.redirectUri,
     state: stateRecord.state,
     response_type: "code",
-    scope: WHATSAPP_AUTH_SCOPES.join(","),
   });
 
   if (config.loginConfigId) {
     params.set("config_id", config.loginConfigId);
+  } else {
+    params.set("scope", WHATSAPP_AUTH_SCOPES.join(","));
   }
 
   return {

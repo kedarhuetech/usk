@@ -307,6 +307,7 @@ async function startWhatsAppEmbeddedSignup(embeddedSignup = {}) {
         override_default_response_type: true,
         extras: {
           setup: {},
+          sessionInfoVersion: "3",
         },
       },
     );
@@ -384,7 +385,7 @@ function selectedBusinessPhone(assets = emptyWhatsAppAssets(), selection = empty
 }
 
 // Renders the whats app connection unavailable interface.
-function WhatsAppConnectionUnavailable({ error, onRetry, loading }) {
+function WhatsAppConnectionUnavailable({ error, onRetry, onConnect, loading }) {
   return (
     <section className="grid min-h-[420px] place-items-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
       <div className="max-w-md">
@@ -395,10 +396,28 @@ function WhatsAppConnectionUnavailable({ error, onRetry, loading }) {
         <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
           {error || "We could not reach the backend connection status right now."}
         </p>
-        <button type="button" onClick={onRetry} disabled={loading} className="mt-5 inline-flex h-11 items-center gap-2 rounded-lg bg-[#1A1F71] px-5 text-sm font-black text-white hover:bg-[#14185a] disabled:bg-slate-300">
-          <FiRefreshCw />
-          Retry
-        </button>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          {onConnect && (
+            <button
+              type="button"
+              onClick={onConnect}
+              disabled={loading}
+              className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#25D366] px-5 text-sm font-black text-white hover:bg-[#20ba59] disabled:bg-slate-300 shadow-sm"
+            >
+              <FiZap />
+              Connect Real Business Number
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={loading}
+            className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-5 text-sm font-black text-slate-700 hover:bg-slate-50 disabled:bg-slate-300"
+          >
+            <FiRefreshCw />
+            Dismiss / Try Again
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -1445,6 +1464,12 @@ function WhatsAppBusinessPanel({
                   <FiRefreshCw />
                   Refresh
                 </button>
+                {usingTestMode && status.embeddedSignupConfigured && (
+                  <button type="button" onClick={onConnect} disabled={loading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1A1F71] px-4 text-sm font-bold text-white hover:bg-[#14185a] disabled:bg-slate-300 shadow-sm">
+                    <FiZap />
+                    Connect Real Business Number
+                  </button>
+                )}
                 <button type="button" onClick={usingTestMode ? onTestConnect : onConnect} disabled={loading || (!usingTestMode && !(status.embeddedSignupConfigured || status.oauthConfigured))} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:text-slate-300">
                   <FiZap />
                   {usingTestMode ? "Reload Test Setup" : "Reconnect"}
@@ -2475,6 +2500,11 @@ function WhatsAppMarketing() {
         return;
       }
 
+      if (status.oauthConfigured) {
+        startWhatsAppConnection();
+        return;
+      }
+
       if (status.embeddedSignupConfigured) {
         const signup = await startWhatsAppEmbeddedSignup(status.embeddedSignup);
         const connected = await completeWhatsAppEmbeddedSignup(signup);
@@ -2774,7 +2804,17 @@ function WhatsAppMarketing() {
         )}
 
         {!whatsappStatus.loading && connectionStatusUnavailable && (
-          <WhatsAppConnectionUnavailable error={whatsappError} onRetry={() => refreshWhatsAppConnection()} loading={whatsappLoading} />
+          <WhatsAppConnectionUnavailable
+            error={whatsappError}
+            onConnect={handleContinueWithMeta}
+            onRetry={() => {
+              setConnectionStatusUnavailable(false);
+              setWhatsAppError("");
+              setProductionConnectionError("");
+              refreshWhatsAppConnection();
+            }}
+            loading={whatsappLoading}
+          />
         )}
 
         {!whatsappStatus.loading && !connectionStatusUnavailable && configurationError && (
