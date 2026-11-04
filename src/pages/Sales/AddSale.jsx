@@ -3,12 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiCamera,
-  FiCheckCircle,
   FiChevronDown,
   FiChevronRight,
   FiFile,
   FiGrid,
-  FiMonitor,
   FiList,
   FiPlus,
   FiPrinter,
@@ -16,9 +14,7 @@ import {
   FiSearch,
   FiSettings,
   FiShare2,
-  FiSmartphone,
   FiTrash2,
-  FiUploadCloud,
   FiX,
 } from "react-icons/fi";
 import Button from "../../components/Common/Button";
@@ -50,6 +46,7 @@ import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorag
 import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
+import { readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 
@@ -398,10 +395,11 @@ function TransactionHeader({ title, saleType, setSaleType, showSaleType, onSetti
         )}
       </div>
       <div className="flex items-center gap-2 text-slate-500">
-        <FiGrid className="h-5 w-5" />
-        <button type="button" onClick={onSettings} className="rounded-full p-2 hover:bg-slate-100">
-          <FiSettings className="h-4 w-4" />
-        </button>
+        {onSettings && (
+          <button type="button" onClick={onSettings} className="rounded-full p-2 hover:bg-slate-100">
+            <FiSettings className="h-4 w-4" />
+          </button>
+        )}
         <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-slate-100" aria-label="Close sale">
           <FiX className="h-4 w-4" />
         </button>
@@ -1167,113 +1165,6 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
   );
 }
 
-// Renders the upload bill modal interface.
-function UploadBillModal({ selectedFile, setSelectedFile, onClose }) {
-  const fileRef = useRef(null);
-  const [mobileDemo, setMobileDemo] = useState(false);
-
-  useEffect(() => {
-    // Handles key down.
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  const benefits = {
-    desktop: ["Quick when file is already on device", "No pairing required", "Suitable for single uploads"],
-    mobile: ["Useful for phone or WhatsApp bills", "Simple mobile-to-desktop flow", "Suitable for multiple uploads"],
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onClick={onClose}>
-      <Card className="w-full max-w-4xl overflow-hidden shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <header className="flex justify-end border-b border-slate-200 px-4 py-3">
-          <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100"><FiX className="h-5 w-5" /></button>
-        </header>
-        <div className="grid md:grid-cols-2">
-          <section className="p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <FiMonitor className="h-8 w-8 text-slate-600" />
-              <h2 className="text-lg font-bold text-slate-800">Upload From Desktop</h2>
-            </div>
-            <p className="text-sm text-slate-500">Directly upload a bill file from your computer.</p>
-            <ul className="mt-6 space-y-3 text-sm text-slate-600">
-              {benefits.desktop.map((benefit) => (
-                <li key={benefit} className="flex items-center gap-2"><FiCheckCircle className="h-4 w-4 text-emerald-500" /> {benefit}</li>
-              ))}
-            </ul>
-            {selectedFile && <p className="mt-5 rounded-md bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-700">{selectedFile}</p>}
-            <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png" className="hidden" onChange={(event) => setSelectedFile(event.target.files?.[0]?.name || "")} />
-            <Button onClick={() => fileRef.current?.click()} className="mt-8 rounded-full border border-rose-500 bg-white px-5 py-2 text-[13px] text-rose-600 hover:bg-rose-50">
-              Upload From Desktop
-            </Button>
-          </section>
-          <section className="border-t border-slate-200 bg-blue-50/70 p-6 md:border-l md:border-t-0">
-            <div className="mb-4 flex items-center gap-3">
-              <FiSmartphone className="h-8 w-8 text-slate-600" />
-              <h2 className="text-lg font-bold text-slate-800">Import From Mobile</h2>
-            </div>
-            <p className="text-sm text-slate-500">Import a bill from your phone.</p>
-            <ul className="mt-6 space-y-3 text-sm text-slate-600">
-              {benefits.mobile.map((benefit) => (
-                <li key={benefit} className="flex items-center gap-2"><FiCheckCircle className="h-4 w-4 text-emerald-500" /> {benefit}</li>
-              ))}
-            </ul>
-            {mobileDemo && <div className="mt-5 grid h-24 w-24 place-items-center rounded-lg border border-dashed border-blue-300 bg-white text-center text-xs font-semibold text-blue-600">Demo QR</div>}
-            <Button onClick={() => setMobileDemo(true)} className="mt-8 rounded-full bg-rose-600 px-5 py-2 text-[13px] text-white hover:bg-rose-700">
-              Import From Mobile
-            </Button>
-          </section>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// Renders the upload attention modal interface.
-function UploadAttentionModal({ onClose }) {
-  const [dontShow, setDontShow] = useState(false);
-
-  useEffect(() => {
-    // Handles key down.
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  // Closes result.
-  const close = () => {
-    if (dontShow) localStorage.setItem("ledgerly:hidePurchaseUploadAttention", "true");
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/55 p-4" onClick={close}>
-      <Card className="w-full max-w-md overflow-hidden shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-800">Attention</h2>
-          <button type="button" onClick={close} className="rounded-md p-1 text-slate-500 hover:bg-slate-100"><FiX className="h-5 w-5" /></button>
-        </header>
-        <div className="space-y-4 p-5 text-sm text-slate-600">
-          <p>If you uploaded any bills, you'll find them on the Uploaded Bills screen.</p>
-          <p className="font-medium text-orange-500">We'll notify you once they're ready to use.</p>
-          <label className="flex items-center gap-2 text-slate-700">
-            <input type="checkbox" checked={dontShow} onChange={(event) => setDontShow(event.target.checked)} className="h-4 w-4 accent-blue-600" />
-            Don't show again
-          </label>
-        </div>
-        <footer className="flex justify-end px-5 pb-5">
-          <Button onClick={close} className="rounded-full bg-rose-600 px-5 py-2 text-[13px] text-white hover:bg-rose-700">Okay</Button>
-        </footer>
-      </Card>
-    </div>
-  );
-}
-
 // Renders the add sale interface.
 function AddSale({ mode = "sale", localOnly = false }) {
   const navigate = useNavigate();
@@ -1339,9 +1230,6 @@ function AddSale({ mode = "sale", localOnly = false }) {
     return () => window.removeEventListener(APP_SETTINGS_UPDATED_EVENT, handleUpdate);
   }, []);
   const [business, setBusiness] = useState(() => editInvoice?.business || initialBusiness);
-  const [uploadBillOpen, setUploadBillOpen] = useState(false);
-  const [uploadAttentionOpen, setUploadAttentionOpen] = useState(false);
-  const [uploadedBillFile, setUploadedBillFile] = useState("");
   const shareRef = useRef(null);
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
   const [form, setForm] = useState(() => ({
@@ -1521,12 +1409,6 @@ function AddSale({ mode = "sale", localOnly = false }) {
     setToast(`Ready for a fresh ${config.title.toLowerCase()}.`);
   };
 
-  // Closes upload bill.
-  const closeUploadBill = () => {
-    setUploadBillOpen(false);
-    if (!localStorage.getItem("ledgerly:hidePurchaseUploadAttention")) setUploadAttentionOpen(true);
-  };
-
   // Saves sale.
   const saveSale = async () => {
     if (!validate()) {
@@ -1597,19 +1479,19 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     if (editInvoice) {
       try {
-        const existingFields = { ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt };
+        const wasCancelled = Boolean(editInvoice.cancelled || editInvoice.isCancelled || editInvoice.invoiceStatus === "Cancelled");
+        const existingFields = { ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt, invoiceStatus: wasCancelled ? "Cancelled" : (editInvoice.invoiceStatus || "Active"), cancelled: wasCancelled, status: wasCancelled ? "Cancelled" : (editInvoice.status === "Draft" ? "Draft" : "Active") };
         const savedInvoice = isPurchase
           ? await saveBusinessPurchaseBill(existingFields)
           : await saveBusinessSaleInvoice(existingFields);
         if (!isPurchase) {
-          const key = "ledgerly:saleInvoiceUiActions.v1";
           try {
-            const current = JSON.parse(window.localStorage.getItem(key) || "{}");
-            if (current.edits?.[savedInvoice.id]) {
-              const edits = { ...current.edits };
-              delete edits[savedInvoice.id];
-              window.localStorage.setItem(key, JSON.stringify({ ...current, edits }));
-            }
+            const current = readTransactionValue(transactionStorageKeys.saleInvoiceUi, {});
+            const edits = { ...(current.edits || {}) };
+            const cancelled = { ...(current.cancelled || {}) };
+            delete edits[savedInvoice.id];
+            delete cancelled[savedInvoice.id];
+            writeTransactionValue(transactionStorageKeys.saleInvoiceUi, { ...current, edits, cancelled });
           } catch { /* The canonical invoice has already been saved. */ }
         }
         sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
@@ -1734,7 +1616,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
   return (
     <div className="min-h-full bg-slate-100">
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
-      <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
+      <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={!isPurchase ? () => setSettingsOpen(true) : undefined} onClose={() => closeTab(activeTab)} />
       <CustomerDetails appSettings={appSettings} saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
       <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} appSettings={appSettings} />
 
@@ -1747,11 +1629,6 @@ function AddSale({ mode = "sale", localOnly = false }) {
       </div>
 
       <footer className={`sticky bottom-0 z-20 flex gap-3 border-t border-slate-200 bg-white px-5 py-3 shadow-[0_-8px_24px_rgba(15,23,42,0.06)] ${isPurchase ? "justify-between" : "justify-end"}`}>
-        {isPurchase && (
-          <button type="button" onClick={() => setUploadBillOpen(true)} className="flex h-10 items-center gap-2 rounded-md border border-blue-300 px-4 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
-            <FiUploadCloud className="h-4 w-4" /> Upload Bill
-          </button>
-        )}
         <div className="flex gap-3">
           <div ref={shareRef} className="relative">
             <button type="button" onClick={() => setShareOpen((current) => !current)} className="flex h-10 overflow-hidden rounded-md border border-blue-300 text-[13px] font-bold text-blue-600">
@@ -1773,9 +1650,6 @@ function AddSale({ mode = "sale", localOnly = false }) {
       )}
 
       {businessMode && <BusinessModal mode={businessMode} business={business} setBusiness={setBusiness} onClose={() => setBusinessMode("")} />}
-
-      {uploadBillOpen && <UploadBillModal selectedFile={uploadedBillFile} setSelectedFile={setUploadedBillFile} onClose={closeUploadBill} />}
-      {uploadAttentionOpen && <UploadAttentionModal onClose={() => setUploadAttentionOpen(false)} />}
 
       {settingsOpen && (
         <SettingsDrawer settings={settings} setSettings={setSettings} billingType={billingType} setBillingType={setBillingType} onClose={() => setSettingsOpen(false)} />

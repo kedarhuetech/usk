@@ -16,13 +16,11 @@ import * as XLSX from "xlsx";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { transactionTypes } from "../../services/transactionRecordsStorage";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
+import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
-    try {
-      const val = JSON.parse(window.localStorage.getItem(key) || "[]");
-      if (Array.isArray(val)) return val;
-    } catch {}
+    try { return readTransactionCollection(key); } catch {}
   }
   return [];
 }
@@ -165,7 +163,7 @@ export default function AllTransactionsReport() {
           (item) => (item.id || item.invoiceId) !== (row.raw.id || row.raw.invoiceId)
         );
         try {
-          window.localStorage.setItem(row.storageKey, JSON.stringify(updated));
+          writeTransactionCollection(row.storageKey, updated);
           window.dispatchEvent(new Event("ledgerly:business-data-changed"));
           window.dispatchEvent(new Event("storage"));
         } catch {}
@@ -183,7 +181,7 @@ export default function AllTransactionsReport() {
           createdAt: new Date().toISOString(),
         };
         try {
-          window.localStorage.setItem(row.storageKey, JSON.stringify([copy, ...currentList]));
+          writeTransactionCollection(row.storageKey, [copy, ...currentList]);
           window.dispatchEvent(new Event("ledgerly:business-data-changed"));
           window.dispatchEvent(new Event("storage"));
         } catch {}
@@ -198,8 +196,8 @@ export default function AllTransactionsReport() {
   };
 
   // Load all recorded transactions across the application
-  const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
-  const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
+  const sales = useMemo(() => readLocal(transactionStorageKeys.sales), [refreshTrigger]);
+  const purchases = useMemo(() => readLocal(transactionStorageKeys.purchases), [refreshTrigger]);
   const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
   const purchaseReturns = useMemo(
     () => readLocal("ledgerly:purchaseReturns.v1", "ledgerly:purchaseReturnsDebitNotes.v1"),
@@ -207,8 +205,8 @@ export default function AllTransactionsReport() {
   );
   const estimates = useMemo(() => readLocal("ledgerly:estimateQuotations.v1"), [refreshTrigger]);
   const proformas = useMemo(() => readLocal("ledgerly:proformaInvoices.v1"), [refreshTrigger]);
-  const paymentIns = useMemo(() => readLocal("ledgerly:paymentIns.v1"), [refreshTrigger]);
-  const paymentOuts = useMemo(() => readLocal("ledgerly:paymentOuts.v1"), [refreshTrigger]);
+  const paymentIns = useMemo(() => readLocal(transactionStorageKeys.paymentIns), [refreshTrigger]);
+  const paymentOuts = useMemo(() => readLocal(transactionStorageKeys.paymentOuts), [refreshTrigger]);
   const expenses = useMemo(() => readLocal("ledgerly:expenses.v1"), [refreshTrigger]);
   const saleOrders = useMemo(() => readLocal("ledgerly:saleOrders.v1"), [refreshTrigger]);
   const purchaseOrders = useMemo(() => readLocal("ledgerly:purchaseOrders.v1"), [refreshTrigger]);
@@ -222,10 +220,10 @@ export default function AllTransactionsReport() {
   const allRecords = useMemo(() => {
     const list = [
       ...sales.map((r) => {
-        const settlement = calculateInvoiceSettlement(r, { kind: "sale" });
+        const settlement = calculateInvoiceSettlement(r, { kind: "sale", payments: paymentIns });
         const { total, paid: received, outstanding: balance } = settlement;
         const isCancelled = r.status === "Cancelled" || r.cancelled || r.isCancelled;
-        const status = isCancelled ? "Cancelled" : settlement.status === "Partially Paid" ? "Partial" : settlement.status;
+        const status = settlement.paymentStatus;
         return {
           id: r.id || `sale-${Math.random()}`,
           date: r.form?.invoiceDate || r.date || r.createdAt?.slice(0, 10) || "",
@@ -239,14 +237,14 @@ export default function AllTransactionsReport() {
           status,
           paymentType: r.form?.paymentType || r.paymentType || (r.saleType === "cash" ? "Cash" : "Credit"),
           raw: r,
-          storageKey: "ledgerly:saleInvoices.v1",
+          storageKey: transactionStorageKeys.sales,
         };
       }),
       ...purchases.map((r) => {
-        const settlement = calculateInvoiceSettlement(r, { kind: "purchase" });
+        const settlement = calculateInvoiceSettlement(r, { kind: "purchase", payments: paymentOuts });
         const { total, paid: received, outstanding: balance } = settlement;
         const isCancelled = r.status === "Cancelled" || r.cancelled;
-        const status = isCancelled ? "Cancelled" : settlement.status === "Partially Paid" ? "Partial" : settlement.status;
+        const status = settlement.paymentStatus;
         return {
           id: r.id || `purch-${Math.random()}`,
           date: r.form?.invoiceDate || r.date || r.createdAt?.slice(0, 10) || "",
@@ -260,7 +258,7 @@ export default function AllTransactionsReport() {
           status,
           paymentType: r.form?.paymentType || r.paymentType || "Cash",
           raw: r,
-          storageKey: "ledgerly:purchaseBills.v1",
+          storageKey: transactionStorageKeys.purchases,
         };
       }),
       ...paymentIns.map((r) => {
@@ -278,7 +276,7 @@ export default function AllTransactionsReport() {
           status: "Unused",
           paymentType: r.paymentType || "Cash",
           raw: r,
-          storageKey: "ledgerly:paymentIns.v1",
+          storageKey: transactionStorageKeys.paymentIns,
         };
       }),
       ...paymentOuts.map((r) => {
@@ -296,7 +294,7 @@ export default function AllTransactionsReport() {
           status: "Paid",
           paymentType: r.paymentType || "Cash",
           raw: r,
-          storageKey: "ledgerly:paymentOuts.v1",
+          storageKey: transactionStorageKeys.paymentOuts,
         };
       }),
       ...expenses.map((r) => {

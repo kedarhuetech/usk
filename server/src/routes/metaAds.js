@@ -67,7 +67,7 @@ router.post("/publish", async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Meta campaign created in paused state.",
+      message: "Meta campaign published successfully and submitted for ad review.",
       publish,
     });
   } catch (error) {

@@ -7,7 +7,8 @@ const recordId = (record) => String(record?.id || record?.invoiceId || "");
 const partyId = (record) => String(record?.partyId || record?.form?.partyId || record?.customerId || record?.supplierId || "");
 const partyName = (record) => String(record?.partyName || record?.customerName || record?.customer || record?.supplier || record?.party || record?.form?.customer || record?.form?.party || "").trim();
 const normalizedName = (value) => String(value || "").trim().toLocaleLowerCase();
-const isVoided = (record) => Boolean(record?.cancelled || record?.isCancelled || record?.deleted || record?.isDeleted || record?.isReturn || ["cancelled", "canceled", "void", "deleted"].includes(String(record?.status || "").trim().toLowerCase()));
+const isInvoiceCancelled = (record) => Boolean(record?.cancelled || record?.isCancelled || record?.invoiceStatus === "Cancelled" || String(record?.status || "").trim().toLowerCase() === "cancelled");
+const isVoided = (record) => Boolean(record?.deleted || record?.isDeleted || record?.isReturn || ["canceled", "void", "deleted"].includes(String(record?.status || "").trim().toLowerCase()));
 const uniqueRecords = (records = []) => {
   const map = new Map();
   records.forEach((record, index) => {
@@ -55,7 +56,7 @@ function allocationFor(payment, invoice) {
 function uniquePayments(payments = []) {
   const seen = new Set();
   return payments.filter((payment, index) => {
-    if (isVoided(payment)) return false;
+    if (isVoided(payment) || isInvoiceCancelled(payment)) return false;
     const id = recordId(payment) || `${payment.number || "payment"}:${payment.date || payment.createdAt || index}`;
     if (seen.has(id)) return false;
     seen.add(id);
@@ -65,7 +66,7 @@ function uniquePayments(payments = []) {
 
 export function calculateInvoiceSettlement(invoice, { kind = "sale", payments = [], adjustments = [] } = {}) {
   const total = invoiceTotal(invoice);
-  if (isVoided(invoice)) return { total, paid: 0, appliedPayments: 0, adjustments: 0, outstanding: 0, status: "Cancelled" };
+  const invoiceStatus = isInvoiceCancelled(invoice) ? "Cancelled" : invoice?.invoiceStatus || (invoice?.status === "Draft" ? "Draft" : "Active");
   const invoiceKey = recordId(invoice);
   const linkedAmount = uniquePayments(payments).reduce((sum, payment) => sum + allocationFor(payment, invoice), 0);
   const recordedPaid = explicitPaid(invoice, kind);
@@ -74,14 +75,15 @@ export function calculateInvoiceSettlement(invoice, { kind = "sale", payments = 
   const noteField = kind === "sale" ? invoice?.creditNoteAppliedAmount : invoice?.debitNoteAppliedAmount ?? invoice?.purchaseReturnAppliedAmount;
   const invoiceRefs = new Set([invoiceKey, invoice?.invoiceId, invoice?.form?.invoiceNumber, invoice?.invoiceNumber, invoice?.billNumber].filter(Boolean).map(String));
   const linkedAdjustments = adjustments.filter((entry) => {
-    if (isVoided(entry)) return false;
+    if (isVoided(entry) || isInvoiceCancelled(entry)) return false;
     const linked = [entry.invoiceId, entry.billId, entry.purchaseId, entry.linkedInvoiceId, entry.billNumber, entry.invoiceNumber].filter(Boolean).map(String);
     return linked.some((reference) => invoiceRefs.has(reference));
   }).reduce((sum, entry) => sum + amount(kind === "sale" ? entry.adjustedAmount : entry.adjustedAmount ?? entry.appliedAmount ?? entry.total ?? entry.amount), 0);
   const adjustment = Math.min(Math.max(amount(noteField), linkedAdjustments), Math.max(0, total - paid));
-  const outstanding = Math.max(0, total - paid - adjustment);
-  const status = rawPaid > total ? "Overpaid / Advance" : outstanding <= 0 && total > 0 ? "Paid" : paid > 0 ? "Partially Paid" : "Unpaid";
-  return { total, paid, appliedPayments: linkedAmount, adjustments: adjustment, outstanding, status, overpayment: Math.max(0, rawPaid - total) };
+  const outstanding = invoiceStatus === "Cancelled" ? 0 : Math.max(0, total - paid - adjustment);
+  const paymentStatus = rawPaid > total ? "Overpaid / Advance" : paid >= total && total > 0 ? "Paid" : paid > 0 ? "Partially Paid" : "Unpaid";
+  const status = invoiceStatus === "Cancelled" ? paymentStatus : rawPaid > total ? "Overpaid / Advance" : outstanding <= 0 && total > 0 ? "Paid" : paid > 0 ? "Partially Paid" : "Unpaid";
+  return { total, paid, appliedPayments: linkedAmount, adjustments: adjustment, outstanding, status, paymentStatus, invoiceStatus, overpayment: Math.max(0, rawPaid - total) };
 }
 
 function partyKey(record) {

@@ -66,6 +66,8 @@ export function normalizeSmartAdsCampaign(campaign = {}) {
       videoHeight: toNumber(campaign.creative?.videoHeight),
       videoNeedsReselect: Boolean(campaign.creative?.mediaType === "video" || campaign.creative?.videoName),
       existingVideoId: campaign.creative?.existingVideoId || campaign.meta?.videoId || campaign.meta?.metaVideoId || "",
+      objectStoryId: campaign.creative?.objectStoryId || campaign.creative?.postId || "",
+      postId: campaign.creative?.postId || campaign.creative?.objectStoryId || "",
       templateId: campaign.creative?.templateId || null,
       sessionDesignId: campaign.creative?.sessionDesignId || null,
       itemId: campaign.creative?.itemId || null,

@@ -1,19 +1,14 @@
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
 
-const PURCHASE_BILLS_KEY = "ledgerly:purchaseBills.v1";
+const PURCHASE_BILLS_KEY = transactionStorageKeys.purchases;
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
 function readBills() {
-  if (!canUseStorage()) return [];
-  try {
-    const value = JSON.parse(window.localStorage.getItem(PURCHASE_BILLS_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
+  return readTransactionCollection(PURCHASE_BILLS_KEY);
 }
 
 function normalizeBill(bill = {}) {
@@ -36,7 +31,7 @@ export function getPurchaseBills() {
 export function savePurchaseBill(value) {
   const bill = normalizeBill({ ...value, updatedAt: new Date().toISOString() });
   const next = [bill, ...readBills().filter((entry) => entry.id !== bill.id && entry.invoiceId !== bill.invoiceId)];
-  if (canUseStorage()) window.localStorage.setItem(PURCHASE_BILLS_KEY, JSON.stringify(next));
+  if (canUseStorage()) writeTransactionCollection(PURCHASE_BILLS_KEY, next);
   notifyBusinessDataChanged();
   return bill;
 }
@@ -44,7 +39,7 @@ export function savePurchaseBill(value) {
 export function replacePurchaseBills(bills) {
   if (!Array.isArray(bills)) throw new Error("Purchase bills must be an array.");
   if (!canUseStorage()) throw new Error("Browser local storage is unavailable.");
-  window.localStorage.setItem(PURCHASE_BILLS_KEY, JSON.stringify(bills));
+  writeTransactionCollection(PURCHASE_BILLS_KEY, bills);
   notifyBusinessDataChanged();
   return bills;
 }

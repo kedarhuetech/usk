@@ -18,6 +18,7 @@ import GSTR3BReport from "./GSTR3BReport";
 import BalanceSheetReport from "./BalanceSheetReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
+import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 import {
   FiBarChart2,
   FiPrinter,
@@ -190,8 +191,7 @@ const localList = (key) => readLocal(key);
 const readLocal = (...keys) => {
   for (const key of keys) {
     try {
-      const value = JSON.parse(window.localStorage.getItem(key) || "[]");
-      if (Array.isArray(value)) return value;
+      return readTransactionCollection(key);
     } catch {
       // Ignore malformed local data.
     }
@@ -288,14 +288,17 @@ function Reports({ defaultReport }) {
   const isPurchase = ["Purchase", "Purchase Bills"].includes(activeReport);
 
   const sales = useMemo(
-    () => readLocal("ledgerly:saleInvoices.v1"),
+    () => readLocal(transactionStorageKeys.sales),
     []
   );
 
   const purchases = useMemo(
-    () => readLocal("ledgerly:purchaseBills.v1"),
+    () => readLocal(transactionStorageKeys.purchases),
     []
   );
+
+  const paymentIns = useMemo(() => readLocal(transactionStorageKeys.paymentIns), []);
+  const paymentOuts = useMemo(() => readLocal(transactionStorageKeys.paymentOuts), []);
 
   const allLocalTransactions = useMemo(
     () => [
@@ -317,11 +320,11 @@ function Reports({ defaultReport }) {
         ...row,
         reportType: "Credit Note",
       })),
-      ...localList("ledgerly:paymentIns.v1").map((row) => ({
+      ...paymentIns.map((row) => ({
         ...row,
         reportType: "Payment-In",
       })),
-      ...localList("ledgerly:paymentOuts.v1").map((row) => ({
+      ...paymentOuts.map((row) => ({
         ...row,
         reportType: "Payment-Out",
       })),
@@ -338,7 +341,7 @@ function Reports({ defaultReport }) {
         reportType: "Estimate",
       })),
     ],
-    [sales, purchases]
+    [sales, purchases, paymentIns, paymentOuts]
   );
 
   const records = useMemo(() => {
@@ -605,9 +608,8 @@ function Reports({ defaultReport }) {
 
   const getStatus = (row, amount, received) => {
     if (["Sale", "Purchase"].includes(row.reportType)) {
-      const settlement = calculateInvoiceSettlement(row, { kind: row.reportType === "Purchase" ? "purchase" : "sale" });
-      if (settlement.status === "Partially Paid") return "Partial";
-      return settlement.status;
+      const settlement = calculateInvoiceSettlement(row, { kind: row.reportType === "Purchase" ? "purchase" : "sale", payments: row.reportType === "Purchase" ? paymentOuts : paymentIns });
+      return settlement.paymentStatus;
     }
     if (
       ["Cancelled", "Unused", "Unpaid", "Partial", "Paid"].includes(

@@ -1,3 +1,6 @@
+import { calculateInvoiceSettlement } from "./partyBalances.js";
+import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "./transactionRepository.js";
+
 const transactionTypes = [
   "All Transaction", "Sale", "Purchase", "Payment-In", "Payment-Out", "Credit Note", "Debit Note",
   "Sale Order", "Purchase Order", "Estimate", "Proforma Invoice", "Delivery Challan", "Expense",
@@ -7,14 +10,7 @@ const transactionTypes = [
 export { transactionTypes };
 
 function readList(key) {
-  if (typeof window === "undefined" || !window.localStorage) return [];
-  const raw = window.localStorage.getItem(key);
-  if (raw == null) return [];
-  let rows;
-  try { rows = JSON.parse(raw); }
-  catch (error) { throw new Error(`Saved transaction data (${key}) is corrupted: ${error.message}`, { cause: error }); }
-  if (!Array.isArray(rows)) throw new Error(`Saved transaction data (${key}) must be a list.`);
-  return rows;
+  return readTransactionCollection(key);
 }
 
 function toISODate(value) {
@@ -36,8 +32,7 @@ function toISODate(value) {
 export function getAllLocalTransactions() {
   let saleInvoiceUi = {};
   try {
-    const rawUi = window.localStorage?.getItem("ledgerly:saleInvoiceUiActions.v1");
-    if (rawUi) saleInvoiceUi = JSON.parse(rawUi) || {};
+    saleInvoiceUi = readTransactionValue(transactionStorageKeys.saleInvoiceUi, {}) || {};
   } catch {}
 
   const map = (key, type, convert = (record) => record) => readList(key).map((source, index) => {
@@ -54,6 +49,8 @@ export function getAllLocalTransactions() {
       received,
       balance: Number(record.balance ?? record.customerCreditAmount ?? Math.max(0, total - received - Number(record.adjustedAmount || 0))),
       status: record.status || (record.cancelled ? "Cancelled" : "Saved"),
+      invoiceStatus: record.invoiceStatus,
+      paymentStatus: record.paymentStatus,
       firm: record.firm || record.companyName || record.businessName || "",
       user: record.user || record.createdBy || "",
       sourceKey: key,
@@ -61,51 +58,55 @@ export function getAllLocalTransactions() {
     };
   });
 
-  const saleInvoices = map("ledgerly:saleInvoices.v1", "Sale", (record) => {
+  const paymentIns = readList(transactionStorageKeys.paymentIns);
+  const paymentOuts = readList(transactionStorageKeys.paymentOuts);
+  const saleInvoices = map(transactionStorageKeys.sales, "Sale", (record) => {
     const isCancelled = Boolean(
       record.cancelled || record.isCancelled || record.status === "Cancelled" || saleInvoiceUi.cancelled?.[record.id]
     );
     const total = Number(record.totals?.finalTotal ?? record.totals?.grandTotal ?? record.total ?? 0);
     const isCash = record.saleType === "cash" || record.form?.paymentType === "Cash";
     const received = Number(record.totals?.received ?? record.receivedAmount ?? (isCash ? total : 0));
-    const balance = isCancelled ? 0 : Math.max(0, total - received - Number(record.creditNoteAppliedAmount || 0));
-    const status = isCancelled
-      ? "Cancelled"
-      : record.status || (balance === 0 && total > 0 ? "Paid" : received > 0 ? "Partial" : "Unpaid");
+    const settlement = calculateInvoiceSettlement(record, { kind: "sale", payments: paymentIns });
+    const balance = isCancelled ? 0 : settlement.outstanding;
+    const status = settlement.paymentStatus;
     return {
       ...record,
       type: isCancelled ? "Sale (Cancelled)" : "Sale",
       number: record.form?.invoiceNumber || record.invoiceNumber || record.id || "—",
       party: record.form?.customer || record.customer || record.partyName || record.party || "Cash Sale",
       total,
-      received,
+      received: settlement.paid,
       balance,
       status,
+      invoiceStatus: isCancelled ? "Cancelled" : (record.invoiceStatus || "Active"),
+      paymentStatus: settlement.paymentStatus,
     };
   });
 
-  const purchaseBills = map("ledgerly:purchaseBills.v1", "Purchase", (record) => {
+  const purchaseBills = map(transactionStorageKeys.purchases, "Purchase", (record) => {
     const isCancelled = Boolean(record.cancelled || record.status === "Cancelled");
     const total = Number(record.totals?.finalTotal ?? record.totals?.grandTotal ?? record.totalAmount ?? record.total ?? 0);
     const isCash = record.form?.paymentType === "Cash" || record.paymentType === "Cash";
     const received = Number(record.totals?.received ?? record.paidAmount ?? (isCash ? total : 0));
-    const balance = isCancelled ? 0 : Math.max(0, total - received);
-    const status = isCancelled
-      ? "Cancelled"
-      : record.status || (balance === 0 && total > 0 ? "Paid" : received > 0 ? "Partial" : "Unpaid");
+    const settlement = calculateInvoiceSettlement(record, { kind: "purchase", payments: paymentOuts });
+    const balance = isCancelled ? 0 : settlement.outstanding;
+    const status = settlement.paymentStatus;
     return {
       ...record,
       type: "Purchase",
       number: record.form?.invoiceNumber || record.invoiceNumber || record.billNumber || record.number || "—",
       party: record.form?.customer || record.supplier || record.partyName || record.party || record.customer || "Cash Purchase",
       total,
-      received,
+      received: settlement.paid,
       balance,
       status,
+      invoiceStatus: isCancelled ? "Cancelled" : (record.invoiceStatus || "Active"),
+      paymentStatus: settlement.paymentStatus,
     };
   });
 
-  const paymentIns = map("ledgerly:paymentIns.v1", "Payment-In", (record) => {
+  const paymentInRows = map(transactionStorageKeys.paymentIns, "Payment-In", (record) => {
     const total = Number(record.amount ?? record.total ?? 0);
     return {
       ...record,
@@ -119,7 +120,7 @@ export function getAllLocalTransactions() {
     };
   });
 
-  const paymentOuts = map("ledgerly:paymentOuts.v1", "Payment-Out", (record) => {
+  const paymentOutRows = map(transactionStorageKeys.paymentOuts, "Payment-Out", (record) => {
     const total = Number(record.amount ?? record.total ?? 0);
     return {
       ...record,
@@ -352,8 +353,8 @@ export function getAllLocalTransactions() {
   const allRows = [
     ...saleInvoices,
     ...purchaseBills,
-    ...paymentIns,
-    ...paymentOuts,
+    ...paymentInRows,
+    ...paymentOutRows,
     ...creditNotes,
     ...debitNotes,
     ...saleOrders,
