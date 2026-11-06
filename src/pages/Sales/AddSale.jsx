@@ -50,6 +50,10 @@ import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/sale
 import { readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const termsAppliesTo = [
   "Sale Invoice",
@@ -1764,6 +1768,27 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
     setToast(config.saveMessage);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      const sendToParty = currentSettings.txnMsgSendToParty ?? true;
+      const isAutoEnabled = isPurchase ? currentSettings.txnMsgAutoPurchase : currentSettings.txnMsgAutoSales;
+      const targetPhone = (form.phone || savedInvoice.phone || savedInvoice.form?.phone || "").trim();
+      if (sendToParty && isAutoEnabled && targetPhone) {
+        const txnType = isPurchase ? "purchase" : "sales";
+        const msg = buildTransactionMessage({
+          type: txnType,
+          number: form.invoiceNumber || savedInvoice.invoiceNumber || savedInvoice.id,
+          amount: totals.finalTotal || totals.grandTotal || 0,
+          balance: totals.balance ?? Math.max(0, (totals.finalTotal || totals.grandTotal || 0) - (totals.received || 0)),
+          settings: currentSettings,
+        });
+        sendMetaWhatsAppMessage({ phone: targetPhone, message: msg }).catch(() => {});
+      }
+    } catch {
+      // Background dispatch errors do not block navigation
+    }
     if (!isPurchase) {
       if (getAppSettings().doNotShowInvoicePreview) {
         navigate("/sales/sale-invoices");

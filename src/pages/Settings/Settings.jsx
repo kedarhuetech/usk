@@ -49,6 +49,8 @@ import {
 import PrintTab from "./PrintTab";
 import TaxesTab from "./TaxesTab";
 import PartyTab from "./PartyTab";
+import TransactionMessageTab from "./TransactionMessageTab";
+import MultiCurrencyTab from "./MultiCurrencyTab";
 
 const TABS = [
   { id: "general", label: "GENERAL", icon: FiSliders },
@@ -290,7 +292,7 @@ function Settings() {
           {activeTab === "transaction" && <TransactionTab settings={settings} update={update} />}
           {activeTab === "print" && <PrintTab settings={settings} update={update} />}
           {activeTab === "taxes" && <TaxesTab settings={settings} update={update} />}
-          {activeTab === "messages" && <MessagesTab settings={settings} update={update} />}
+          {activeTab === "messages" && <TransactionMessageTab settings={settings} update={update} />}
           {activeTab === "party" && <PartyTab settings={settings} update={update} />}
           {activeTab === "item" && <ItemTab settings={settings} update={update} />}
           {activeTab === "service_reminders" && <ServiceRemindersTab settings={settings} update={update} />}
@@ -491,7 +493,7 @@ function Settings() {
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement("a");
                         a.href = url;
-                        a.download = `Vyapar_Snapshot_${snap.date.replace(/[^a-zA-Z0-9]/g, "_")}.json`;
+                        a.download = `USV_Snapshot_${snap.date.replace(/[^a-zA-Z0-9]/g, "_")}.json`;
                         a.click();
                         URL.revokeObjectURL(url);
                       }}
@@ -1145,7 +1147,7 @@ function GeneralTab({
           <div className="mt-3">
             <h4 className="text-xs font-semibold text-slate-700">Choose Your Screen Zoom/Scale</h4>
             <p className="mt-1 text-xs text-slate-500">
-              You can use this setting to resize the Vyapar screen, making it larger or smaller to fit your
+              You can use this setting to resize the USV screen, making it larger or smaller to fit your
               preferences.
             </p>
 
@@ -2423,7 +2425,7 @@ function TransactionTab({ settings, update, updateMultiple }) {
                     {/* Bill To */}
                     <div className="space-y-0.5">
                       <p className="font-bold text-slate-800">Bill To</p>
-                      <p className="font-semibold text-slate-900">Vyapar tech solutions (Sample Party Name)</p>
+                      <p className="font-semibold text-slate-900">USV Tech Solutions (Sample Party Name)</p>
                       <p className="text-slate-600">Sarjapur Road, Bangalore</p>
                       <p className="text-slate-600">Contact No. : +91-9333911911 +917795687633</p>
                       <p className="text-slate-600">State: 29-Karnataka</p>
@@ -2862,54 +2864,6 @@ function TransactionTab({ settings, update, updateMultiple }) {
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
-// TRANSACTION MESSAGE TAB
-// -------------------------------------------------------------
-function MessagesTab({ settings, update }) {
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Automated Customer Messaging</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.sendWhatsappOnSale ?? true}
-              onChange={(e) => update("sendWhatsappOnSale", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable WhatsApp Invoice Sharing
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.sendSmsOnSale || false}
-              onChange={(e) => update("sendSmsOnSale", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Send SMS Notification on Sale Invoice Creation
-          </label>
-
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <label className="block text-xs font-semibold text-slate-700">WhatsApp / SMS Template</label>
-            <p className="text-[11px] text-slate-400">
-              Use placeholders: {"{customer}"}, {"{amount}"}, {"{company}"}, {"{invoice}"}
-            </p>
-            <textarea
-              rows="3"
-              value={settings.saleMessageTemplate || ""}
-              onChange={(e) => update("saleMessageTemplate", e.target.value)}
-              className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-xs outline-none focus:border-blue-500"
-            />
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// -------------------------------------------------------------
 // ITEM TAB
 // -------------------------------------------------------------
 function ItemTab({ settings, update }) {
@@ -3078,46 +3032,7 @@ function AccountingTab({ settings, update }) {
   );
 }
 
-// -------------------------------------------------------------
-// MULTI CURRENCY TAB
-// -------------------------------------------------------------
-function MultiCurrencyTab({ settings, update }) {
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Multi-Currency Transactions</h3>
 
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.multiCurrencyEnabled || false}
-              onChange={(e) => update("multiCurrencyEnabled", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable Multi-Currency Invoicing
-          </label>
-
-          {settings.multiCurrencyEnabled && (
-            <div className="mt-4 max-w-xs">
-              <label className="block text-xs font-semibold text-slate-700">Base Book Currency</label>
-              <select
-                value={settings.baseCurrency || "INR"}
-                onChange={(e) => update("baseCurrency", e.target.value)}
-                className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
-              >
-                <option value="INR">INR - Indian Rupee (₹)</option>
-                <option value="USD">USD - US Dollar ($)</option>
-                <option value="EUR">EUR - Euro (€)</option>
-                <option value="GBP">GBP - British Pound (£)</option>
-              </select>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
 
 // Helper: Info Tooltip
 function InfoTooltip({ text }) {
