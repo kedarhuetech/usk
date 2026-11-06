@@ -469,7 +469,7 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             </div>
           )}
         </div>
-        {isCredit && (
+        {isCredit && appSettings?.enableShippingAddress !== false && (
           <div>
             <TextArea value={form.shippingAddress} onChange={(event) => setField("shippingAddress", event.target.value)} placeholder="Shipping Address" className="h-20 w-full sm:h-24 lg:h-20" />
             {form.shippingAddress && (

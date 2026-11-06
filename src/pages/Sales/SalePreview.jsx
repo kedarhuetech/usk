@@ -328,10 +328,13 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {data.billingAddress && <p className="text-slate-600 text-[11px]">{data.billingAddress}</p>}
           {data.phone && <p className="text-slate-600 text-[11px]">Contact No: {data.phone}</p>}
         </div>
-        <div>
-          <p className="font-bold uppercase tracking-wider text-xs" style={{ color: hex }}>Shipping To</p>
-          <p className="text-slate-600 text-[11px] mt-0.5">{data.shippingAddress || data.billingAddress}</p>
-        </div>
+        {/* Shipping Address - controlled by Party Setting printShippingAddress */}
+        {appSettings?.printShippingAddress !== false && (data.shippingAddress || data.billingAddress) && (
+          <div>
+            <p className="font-bold uppercase tracking-wider text-xs" style={{ color: hex }}>Shipping To</p>
+            <p className="text-slate-600 text-[11px] mt-0.5">{data.shippingAddress || data.billingAddress}</p>
+          </div>
+        )}
         <div className="text-left md:text-right">
           <p className="font-bold uppercase tracking-wider text-xs" style={{ color: hex }}>Invoice Details</p>
           <p className="text-slate-800 text-[11px] mt-0.5 font-semibold">Invoice No.: {data.invoiceNumber}</p>
