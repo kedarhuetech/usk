@@ -225,10 +225,54 @@ export const DEFAULT_SETTINGS = {
     { id: "tax-28-cess12", name: "GST @ 28% + Cess 12%", rate: 28, igst: 28, cgst: 14, sgst: 14, cess: 12, isDefault: false },
   ],
 
-  // Transaction Message
+  // Transaction Message (Matching Vyapar Desktop & Meta WhatsApp Cloud)
+  messageChannelType: "meta", // Meta WhatsApp Cloud API (no personal QR/login required)
   sendSmsOnSale: false,
   sendWhatsappOnSale: true,
-  saleMessageTemplate: "Dear {customer}, thank you for your order of {amount} with {company}. Invoice #{invoice}.",
+  saleMessageTemplate: "Thanks for your purchase with us!! Purchase Details:",
+
+  // Message Recipient Settings
+  txnMsgSendToParty: true,
+  txnMsgSendUpdateMessage: false,
+  txnMsgSendCopyToSelf: false,
+  txnMsgAutoShareVyaparNetwork: false,
+  txnMsgCredits: 100,
+
+  // Message Content
+  txnMsgIncludePartyBalance: false,
+  txnMsgIncludeWebInvoiceLink: true,
+  txnMsgIncludePaymentLink: false,
+
+  // Send Automatic Message for:
+  txnMsgAutoSales: true,
+  txnMsgAutoPurchase: true,
+  txnMsgAutoSalesReturn: true,
+  txnMsgAutoPurchaseReturn: true,
+  txnMsgAutoPaymentIn: true,
+  txnMsgAutoPaymentOut: true,
+  txnMsgAutoSaleOrder: true,
+  txnMsgAutoPurchaseOrder: false,
+  txnMsgAutoEstimate: false,
+  txnMsgAutoProformaInvoice: false,
+  txnMsgAutoDeliveryChallan: false,
+  txnMsgAutoCancelledInvoice: true,
+
+  // Transaction Message Custom Signatures & Headers
+  txnMsgSignature: "sai kirana",
+  txnMsgTemplates: {
+    sales: "Thanks for your purchase with us!! Purchase Details:",
+    purchase: "Purchase order confirmed with us. Details:",
+    salesReturn: "Sales return has been processed. Return Details:",
+    purchaseReturn: "Purchase return / debit note details:",
+    paymentIn: "Payment received with thanks. Receipt Details:",
+    paymentOut: "Payment made successfully. Payment Details:",
+    saleOrder: "Sale order confirmed. Order Details:",
+    purchaseOrder: "Purchase order placed. Order Details:",
+    estimate: "Here is your quotation / estimate details:",
+    proformaInvoice: "Proforma invoice details:",
+    deliveryChallan: "Goods dispatched under Delivery Challan:",
+    cancelledInvoice: "Invoice has been cancelled. Details:",
+  },
 
   // Party
   enablePartyGrouping: true,

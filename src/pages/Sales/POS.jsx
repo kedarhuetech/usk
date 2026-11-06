@@ -37,6 +37,10 @@ import { calculatePosBill } from "../../services/posBillCalculations.js";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const STORAGE = {
   draft: "pos_draft_v1",
@@ -925,6 +929,26 @@ export default function PointOfSale() {
       updateDraft({ savedAt: savedBill.savedAt, invoiceId: savedInvoice.id });
       setProducts(loadProducts());
       showToast(`Bill ${bill.invoiceNo} saved to local storage!`);
+
+      // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+      try {
+        const currentSettings = getAppSettings();
+        const sendToParty = currentSettings.txnMsgSendToParty ?? true;
+        const isAutoSales = currentSettings.txnMsgAutoSales ?? true;
+        const phone = (bill.customerPhone || "").trim();
+        if (sendToParty && isAutoSales && phone) {
+          const msg = buildTransactionMessage({
+            type: "sales",
+            number: bill.invoiceNo,
+            amount: invoiceTotal,
+            balance: bill.due ?? 0,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
+      } catch {
+        // Background dispatch does not interrupt POS checkout
+      }
     } catch (e) {
       showToast(`Could not save bill: ${e.message || "Local storage write failed."}`, "warning");
       saveBillLockRef.current = false;

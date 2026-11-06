@@ -49,6 +49,7 @@ import {
 import PrintTab from "./PrintTab";
 import TaxesTab from "./TaxesTab";
 import PartyTab from "./PartyTab";
+import TransactionMessageTab from "./TransactionMessageTab";
 
 const TABS = [
   { id: "general", label: "GENERAL", icon: FiSliders },
@@ -290,7 +291,7 @@ function Settings() {
           {activeTab === "transaction" && <TransactionTab settings={settings} update={update} />}
           {activeTab === "print" && <PrintTab settings={settings} update={update} />}
           {activeTab === "taxes" && <TaxesTab settings={settings} update={update} />}
-          {activeTab === "messages" && <MessagesTab settings={settings} update={update} />}
+          {activeTab === "messages" && <TransactionMessageTab settings={settings} update={update} />}
           {activeTab === "party" && <PartyTab settings={settings} update={update} />}
           {activeTab === "item" && <ItemTab settings={settings} update={update} />}
           {activeTab === "service_reminders" && <ServiceRemindersTab settings={settings} update={update} />}
@@ -2860,54 +2861,6 @@ function TransactionTab({ settings, update, updateMultiple }) {
 // -------------------------------------------------------------
 // TAXES & GST TAB (Delegated to TaxesTab.jsx)
 // -------------------------------------------------------------
-
-// -------------------------------------------------------------
-// TRANSACTION MESSAGE TAB
-// -------------------------------------------------------------
-function MessagesTab({ settings, update }) {
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Automated Customer Messaging</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.sendWhatsappOnSale ?? true}
-              onChange={(e) => update("sendWhatsappOnSale", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable WhatsApp Invoice Sharing
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.sendSmsOnSale || false}
-              onChange={(e) => update("sendSmsOnSale", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Send SMS Notification on Sale Invoice Creation
-          </label>
-
-          <div className="mt-4 border-t border-slate-100 pt-4">
-            <label className="block text-xs font-semibold text-slate-700">WhatsApp / SMS Template</label>
-            <p className="text-[11px] text-slate-400">
-              Use placeholders: {"{customer}"}, {"{amount}"}, {"{company}"}, {"{invoice}"}
-            </p>
-            <textarea
-              rows="3"
-              value={settings.saleMessageTemplate || ""}
-              onChange={(e) => update("saleMessageTemplate", e.target.value)}
-              className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-xs outline-none focus:border-blue-500"
-            />
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 // -------------------------------------------------------------
 // ITEM TAB

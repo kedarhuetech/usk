@@ -19,6 +19,10 @@ import {
   getAppSettings,
   saveAppSettings,
 } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 // Color palette for accent colors.
 export const colorOptions = [
@@ -1046,6 +1050,21 @@ function SalePreview() {
 
   const normalized = useMemo(() => normalizeInvoiceData(rawInvoice), [rawInvoice]);
 
+  const handleShareWhatsApp = () => {
+    if (!normalized) return;
+    const message = buildTransactionMessage({
+      type: "sales",
+      number: normalized.invoiceNumber,
+      amount: normalized.totalAmount,
+      balance: normalized.balanceAmount,
+      settings: appSettings,
+    });
+    sendMetaWhatsAppMessage({
+      phone: normalized.phone,
+      message,
+    });
+  };
+
   if (!normalized) {
     return (
       <div className="grid min-h-[80vh] place-items-center bg-slate-100 p-6">
@@ -1146,7 +1165,15 @@ function SalePreview() {
           <div>
             <h2 className="mb-3 font-bold text-slate-900">Share Invoice</h2>
             <div className="grid grid-cols-3 gap-2 text-center text-[13px]">
-              <button type="button" className="rounded-md p-2 hover:bg-slate-50"><FiMessageCircle className="mx-auto mb-2 h-5 w-5 text-green-500" />Whatsapp</button>
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="rounded-md p-2 hover:bg-slate-50 cursor-pointer"
+                title="Share Invoice via Meta WhatsApp"
+              >
+                <FiMessageCircle className="mx-auto mb-2 h-5 w-5 text-green-500" />
+                WhatsApp
+              </button>
               <button type="button" className="rounded-md p-2 hover:bg-slate-50"><FiMail className="mx-auto mb-2 h-5 w-5 text-red-500" />Gmail</button>
               <button type="button" className="rounded-md p-2 hover:bg-slate-50"><FiShare2 className="mx-auto mb-2 h-5 w-5 text-blue-500" />Message</button>
             </div>
