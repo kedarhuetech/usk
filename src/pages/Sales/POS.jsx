@@ -440,6 +440,7 @@ function printPosBill(draft, calculations) {
 }
 export default function PointOfSale() {
   const navigate = useNavigate();
+  const appSettings = useAppSettings();
   const [initialStorageError] = useState(validatePosStorage);
 
   const handleClosePOS = useCallback(() => {
@@ -455,17 +456,20 @@ export default function PointOfSale() {
     const inventory = getInventoryItems();
     return inventory.map((item) => ({
         id: item.id,
+        isActive: item.isActive !== false,
         code: item.itemCode || item.code || `ITM-${String(item.id || "").slice(-4)}`,
         name: item.itemName || item.name || "Item",
         price: Number(item.salePrice ?? item.price ?? 0),
-        taxRate: Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
+        taxRate: appSettings.enableGst === false ? 0 : Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
         unit: item.unit || item.baseUnit || "Pcs",
         stock: Number(item.stock ?? item.openingQuantity ?? 0),
+        discount: Number(item.discount || 0),
+        discountType: item.discountType || "Percentage",
         category: item.category || "",
         barcode: item.barcode || item.barCode || item.itemBarcode || "",
         type: item.type || item.itemType || "product",
       }));
-  }, []);
+  }, [appSettings.enableGst]);
 
   // Load customers from localStorage (getParties)
   const loadCustomers = useCallback(() => {
@@ -553,10 +557,11 @@ export default function PointOfSale() {
   // Filter products for search
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return products.slice(0, 10);
+    if (!query) return products.filter((product) => product.isActive !== false).slice(0, 10);
 
     return products
       .filter((product) => {
+        if (product.isActive === false) return false;
         const matchFields = [product.name, product.code, product.id];
         if (enableBarcodeScanning) matchFields.push(product.barcode);
         if (enableItemCategory) matchFields.push(product.category);
@@ -591,6 +596,10 @@ export default function PointOfSale() {
       showToast("Start a new bill before adding products.", "warning");
       return;
     }
+    if (product.isActive === false) {
+      showToast("This item is disabled and cannot be added to a new bill.", "warning");
+      return;
+    }
     const existing = draft.items.find((item) => item.productId === product.id);
     const requestedQuantity = Number(existing?.qty || 0) + 1;
     if (product.type !== "service" && requestedQuantity > Number(product.stock || 0)) {
@@ -598,11 +607,14 @@ export default function PointOfSale() {
       return;
     }
 
+    const itemDiscount = appSettings.enableItemDiscount === false ? 0 : String(product.discountType || "").toLowerCase().includes("flat")
+      ? Math.min(Number(product.price || 0), Number(product.discount || 0))
+      : Math.min(Number(product.price || 0), Number(product.price || 0) * Number(product.discount || 0) / 100);
     if (existing) {
       updateDraft((current) => ({
         ...current,
         items: current.items.map((item) => item.productId === product.id
-          ? { ...item, qty: Number(item.qty) + 1 }
+          ? { ...item, qty: Number(item.qty) + 1, discount: Number(item.discount || 0) + itemDiscount }
           : item),
       }));
     } else {
@@ -615,7 +627,7 @@ export default function PointOfSale() {
         unit: product.unit || "Pcs",
         price: Number(product.price) || 0,
         taxRate: Number(product.taxRate) || 0,
-        discount: 0,
+        discount: itemDiscount,
       };
       updateDraft((current) => ({ ...current, items: [...current.items, item] }));
       setSelectedId(item.lineId);
@@ -1121,6 +1133,7 @@ export default function PointOfSale() {
                     event.preventDefault();
                     const query = search.trim().toLowerCase();
                     const exactMatch = products.find((product) => {
+                      if (product.isActive === false) return false;
                       const fields = [product.code];
                       if (enableBarcodeScanning) fields.push(product.barcode);
                       return fields.some((value) => String(value || "").trim().toLowerCase() === query);
@@ -2450,7 +2463,7 @@ export default function PointOfSale() {
                     salePrice: Number(modal.price) || 0,
                     price: Number(modal.price) || 0,
                     unit: modal.unit || "Pcs",
-                    taxRate: `${Number(modal.taxRate) || 0}%`,
+                    taxRate: appSettings.enableGst === false ? "0%" : `${Number(modal.taxRate) || 0}%`,
                     stock: Number(modal.stock) || 0,
                   };
 

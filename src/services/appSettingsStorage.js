@@ -238,6 +238,8 @@ export const DEFAULT_SETTINGS = {
   // Item
   enableBarcodeScanning: true,
   enableItemCategory: true,
+  defaultItemUnit: "PCS",
+  enableItemDescription: true,
   enableBatchTracking: false,
   enableSerialTracking: false,
 

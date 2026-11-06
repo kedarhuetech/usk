@@ -134,6 +134,7 @@ export function normalizeInventoryItem(itemForm = {}) {
 
   return {
     id,
+    isActive: itemForm.isActive !== false,
     type,
     itemName,
     serviceName: type === "service" ? itemName : "",
@@ -232,6 +233,43 @@ export function getInventoryItemAvailability(item = {}) {
   };
 }
 
+// Batch quantities are stored on the existing item record. `openingQty` is retained
+// as the persisted quantity field for compatibility with existing item forms.
+export function applyBatchStockMovement(item, row, direction, { allowCreate = false } = {}) {
+  const quantity = Math.max(toNumber(row.qty ?? row.quantity), 0);
+  if (!quantity) return item;
+  const batchNo = String(row.batchNo || "").trim();
+  if (!batchNo) throw new Error(`Enter a batch number for ${row.item || item.itemName}.`);
+  const batches = (item.batches || []).map((batch) => ({ ...batch, openingQty: String(batch.openingQty ?? batch.quantity ?? 0) }));
+  const index = batches.findIndex((batch) => String(batch.batchNo || "").trim().toLowerCase() === batchNo.toLowerCase());
+  if (direction === "add" && index < 0 && allowCreate) {
+    batches.push({ id: crypto.randomUUID(), batchNo, manufacturer: row.manufacturer || "", mfgDate: row.mfgDate || "", expDate: row.expDate || "", remarks: "", openingQty: String(quantity) });
+  } else {
+    if (index < 0) throw new Error(`Batch ${batchNo} is not available for ${row.item || item.itemName}.`);
+    const batch = batches[index];
+    if (direction === "reduce" && row.expDate && batch.expDate && row.expDate !== batch.expDate) throw new Error(`Expiry date does not match batch ${batchNo}.`);
+    const current = Math.max(toNumber(batch.openingQty), 0);
+    if (direction === "reduce" && current < quantity) throw new Error(`Batch ${batchNo} has only ${current} in stock.`);
+    batches[index] = { ...batch, openingQty: String(direction === "add" ? current + quantity : current - quantity) };
+  }
+  const total = String(batches.reduce((sum, batch) => sum + Math.max(toNumber(batch.openingQty), 0), 0));
+  return { ...item, batches, openingQuantity: total, stock: total, updatedAt: new Date().toISOString() };
+}
+
+export function applyBatchRowsToInventory(rows = [], direction, { allowCreate = false } = {}) {
+  const items = readItems().map((item) => normalizeInventoryItem(item));
+  const nextItems = items.map((item) => {
+    const matchedRows = rows.filter((row) => saleRowItemId(row) === item.id || (!saleRowItemId(row) && normalizedName(row.item) === normalizedName(item.itemName)));
+    if (!matchedRows.length || itemType(item) === "service") return item;
+    const batchTotal = (item.batches || []).reduce((sum, batch) => sum + Math.max(toNumber(batch.openingQty ?? batch.quantity), 0), 0);
+    const aggregate = Math.max(toNumber(hasValue(item.openingQuantity) ? item.openingQuantity : item.stock), 0);
+    if (Math.abs(batchTotal - aggregate) > 1e-9) throw new Error(`Batch stock for ${item.itemName} does not reconcile with aggregate stock (${batchTotal} batch / ${aggregate} total). Review historical stock before moving this item.`);
+    return matchedRows.reduce((updated, row) => applyBatchStockMovement(updated, row, direction, { allowCreate }), item);
+  });
+  writeItems(nextItems);
+  return nextItems;
+}
+
 // Gets inventory items.
 export function getInventoryItems() {
   return readItems().map((item) => normalizeInventoryItem(item));
@@ -319,9 +357,15 @@ export function applySaleInvoiceStockUpdate(invoice = {}) {
   const nextItems = normalizedItems.map((item) => {
     if (itemType(item) === "service") return item;
 
-    const soldQuantity =
-      (quantityByItemId.get(item.id) || 0) +
-      (quantityByItemId.has(item.id) ? 0 : quantityByItemName.get(normalizedName(item.itemName)) || 0);
+    const matchingRows = saleRows.filter((row) => saleRowItemId(row) === item.id || (!saleRowItemId(row) && normalizedName(row.item) === normalizedName(item.itemName)));
+    const usesBatches = matchingRows.some((row) => String(row.batchNo || "").trim());
+    if (usesBatches) {
+      let updated = item;
+      matchingRows.forEach((row) => { updated = applyBatchStockMovement(updated, row, "reduce"); });
+      changed = true;
+      return updated;
+    }
+    const soldQuantity = (quantityByItemId.get(item.id) || 0) + (quantityByItemId.has(item.id) ? 0 : quantityByItemName.get(normalizedName(item.itemName)) || 0);
 
     if (!soldQuantity) return item;
 
@@ -337,6 +381,22 @@ export function applySaleInvoiceStockUpdate(invoice = {}) {
     };
   });
 
+  if (changed) writeItems(nextItems);
+  return nextItems;
+}
+
+export function applyPurchaseBatchStockUpdate(invoice = {}) {
+  const normalizedItems = readItems().map((item) => normalizeInventoryItem(item));
+  let changed = false;
+  const rows = (invoice.rows || []).filter((row) => row.item && saleRowQuantity(row) > 0 && String(row.batchNo || "").trim());
+  const nextItems = normalizedItems.map((item) => {
+    const matching = rows.filter((row) => saleRowItemId(row) === item.id || (!saleRowItemId(row) && normalizedName(row.item) === normalizedName(item.itemName)));
+    if (!matching.length) return item;
+    let updated = item;
+    matching.forEach((row) => { updated = applyBatchStockMovement(updated, row, "add", { allowCreate: true }); });
+    changed = true;
+    return updated;
+  });
   if (changed) writeItems(nextItems);
   return nextItems;
 }

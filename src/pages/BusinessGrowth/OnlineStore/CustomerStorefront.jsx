@@ -10,6 +10,7 @@ import {
   FiPhone,
   FiPlus,
   FiSearch,
+  FiShare2,
   FiShoppingCart,
   FiTrash2,
   FiX,
@@ -18,6 +19,12 @@ import { calculateInventoryItemPricing, getInventoryItemAvailability } from "../
 import { getOnlineStoreState } from "../../../services/onlineStoreStorage";
 import { saveOnlineStoreOrder } from "../../../services/onlineStoreOrdersStorage";
 import { loadGrowthItems } from "../../../services/businessGrowthData.js";
+import {
+  generateUpiUri,
+  generateUpiQrCode,
+  formatWhatsAppOrderMessage,
+  createWhatsAppShareUrl,
+} from "../../../services/onlineStorePaymentService";
 
 // Formats currency.
 function formatCurrency(value) {
@@ -206,6 +213,7 @@ function ProductDetailModal({ item, storeState, quantity, setQuantity, onAdd, on
 
 // Renders the cart panel interface.
 function CartPanel({
+
   open,
   storeState,
   cartLines,
@@ -214,6 +222,8 @@ function CartPanel({
   errors,
   orderError,
   isPlacingOrder,
+  transactionRef,
+  setTransactionRef,
   setCustomer,
   onClose,
   onQuantity,
@@ -226,6 +236,28 @@ function CartPanel({
   const remaining = Math.max(minimum - totals.subtotal, 0);
   const canPlaceOrder =
     storeState.acceptOnlineOrders && cartLines.length > 0 && remaining <= 0;
+
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (storeState.upiId && totals.total > 0) {
+      const uri = generateUpiUri({
+        upiId: storeState.upiId,
+        payeeName: storeState.businessName || storeState.storeName,
+        amount: totals.total,
+        note: `Order from ${storeState.storeName || "Store"}`,
+      });
+      generateUpiQrCode(uri).then((url) => {
+        if (active) setQrCodeDataUrl(url);
+      });
+    } else {
+      setQrCodeDataUrl("");
+    }
+    return () => {
+      active = false;
+    };
+  }, [storeState.upiId, storeState.businessName, storeState.storeName, totals.total]);
 
   return (
     <div
@@ -392,7 +424,52 @@ function CartPanel({
                 )}
               </label>
             ))}
-          </section>
+                    </section>
+
+          {storeState.upiId && (
+            <section className="mt-5 rounded-xl border border-blue-200 bg-blue-50/50 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-black text-slate-950">Pay via UPI QR</h3>
+                <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-bold text-blue-700">
+                  Manual Verification
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Scan with GPay, PhonePe, Paytm, or any UPI app.
+              </p>
+
+              {qrCodeDataUrl && (
+                <div className="mt-4 flex flex-col items-center">
+                  <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+                    <img src={qrCodeDataUrl} alt="UPI QR Code" className="h-44 w-44 object-contain" />
+                  </div>
+                  <div className="mt-2 text-center text-xs">
+                    <p className="font-bold text-slate-800">
+                      UPI ID: <span className="font-mono text-slate-950">{storeState.upiId}</span>
+                    </p>
+                    <p className="mt-0.5 font-black text-blue-700">
+                      Amount: {formatCurrency(totals.total)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <label className="mt-4 block">
+                <span className="mb-1 block text-xs font-bold text-slate-700">
+                  UPI Ref / UTR Number (Optional, 12 digits)
+                </span>
+                <input
+                  value={transactionRef}
+                  onChange={(e) => setTransactionRef(e.target.value)}
+                  placeholder="e.g. 4123XXXXXXXX"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 font-mono text-xs outline-none focus:border-blue-500"
+                />
+                <span className="mt-1 block text-[11px] text-slate-400">
+                  Entering your UTR helps the merchant verify payment faster.
+                </span>
+              </label>
+            </section>
+          )}
         </div>
 
         <footer className="border-t border-slate-200 p-5">
@@ -425,6 +502,12 @@ function CartPanel({
 
 // Renders the order success interface.
 function OrderSuccess({ order, storeState, onContinue }) {
+  const whatsAppMessage = formatWhatsAppOrderMessage({ order, storeState });
+  const whatsAppUrl = createWhatsAppShareUrl({
+    phoneNumber: storeState.contactNumber,
+    message: whatsAppMessage,
+  });
+
   return (
     <main className="grid min-h-screen place-items-center bg-slate-100 p-4">
       <section className="w-full max-w-lg rounded-2xl bg-white p-8 text-center shadow-sm">
@@ -432,12 +515,41 @@ function OrderSuccess({ order, storeState, onContinue }) {
           <FiCheck className="h-8 w-8" />
         </span>
         <h1 className="mt-5 text-2xl font-black text-slate-950">Order Placed Successfully</h1>
+        <p className="mt-1 text-sm text-slate-500">Thank you for your order!</p>
+
         <div className="mt-5 rounded-xl bg-slate-50 p-4 text-left text-sm text-slate-600">
           <p><b className="text-slate-950">Order ID:</b> {order.id}</p>
           <p className="mt-2"><b className="text-slate-950">Store:</b> {storeState.storeName}</p>
           <p className="mt-2"><b className="text-slate-950">Total:</b> {formatCurrency(order.total)}</p>
+          <p className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
+            <b className="text-slate-950">Payment Status:</b>
+            <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+              Pending Verification
+            </span>
+          </p>
+          {order.transactionRef && (
+            <p className="mt-1 text-xs text-slate-500">
+              <b>UPI Ref (UTR):</b> {order.transactionRef}
+            </p>
+          )}
         </div>
-        <button type="button" onClick={onContinue} className="mt-6 h-11 rounded-full bg-slate-950 px-6 text-sm font-black text-white hover:bg-slate-800">
+
+        {whatsAppUrl && (
+          <a
+            href={whatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 text-sm font-black text-white shadow-sm transition hover:bg-emerald-700"
+          >
+            <FiShare2 className="h-4 w-4" /> Share Order on WhatsApp
+          </a>
+        )}
+
+        <button
+          type="button"
+          onClick={onContinue}
+          className="mt-3 h-11 w-full rounded-full border border-slate-200 bg-white px-6 text-sm font-bold text-slate-700 hover:bg-slate-50"
+        >
           Continue Shopping
         </button>
       </section>
@@ -462,6 +574,7 @@ function CustomerStorefront() {
   const [loadError, setLoadError] = useState("");
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState("");
+  const [transactionRef, setTransactionRef] = useState("");
 
   const storeMatches = storeState.created && storeState.prototypeStoreId === storeId;
   const publishedItems = useMemo(() => {
@@ -646,9 +759,13 @@ function CustomerStorefront() {
           : "",
         total: totals.total,
         status: "new",
+        paymentMethod: "upi_manual",
+        paymentStatus: "pending_verification",
+        transactionRef: transactionRef.trim(),
       });
 
       persistCart([]);
+      setTransactionRef("");
       setCartOpen(false);
       setSuccessOrder(order);
     } catch (error) {
@@ -780,6 +897,8 @@ if (!storeMatches) return <StoreUnavailable />;
         totals={totals}
         customer={customer}
         errors={errors}
+        transactionRef={transactionRef}
+        setTransactionRef={setTransactionRef}
         setCustomer={setCustomer}
         onClose={() => setCartOpen(false)}
         onQuantity={updateCartQuantity}

@@ -16,6 +16,7 @@ import ItemDetailReport from "./ItemDetailReport";
 import BillWiseProfitReport from "./BillWiseProfitReport";
 import GSTR3BReport from "./GSTR3BReport";
 import BalanceSheetReport from "./BalanceSheetReport";
+import BatchExpiryReport from "./BatchExpiryReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -765,6 +766,8 @@ function Reports({ defaultReport }) {
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <SalePurchaseByPartyGroupReport />
         </div>
+      ) : activeReport === "Item Batch Report" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white"><BatchExpiryReport /></div>
       ) : activeReport === "Stock summary" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <StockSummaryReport />

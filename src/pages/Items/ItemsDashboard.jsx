@@ -18,7 +18,7 @@ import AddItem from "./AddItem";
 import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
-import { getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
+import { cancelInventoryAdjustment, getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
 import { getSaleReturns } from "../../services/saleReturnsStorage";
 import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOverridesStorageKey, deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
@@ -212,11 +212,11 @@ function transactionRows(item, sales, purchases) {
     unit: adjustment.unit || item.unit || "",
     price: "-",
     amount: "-",
-    status: "Completed",
+    status: adjustment.cancelled ? "Cancelled" : "Completed",
   }));
   const soldQuantity = saleRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
   const purchasedQuantity = purchaseRows.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-  const adjustedQuantity = adjustments.reduce((sum, row) => sum + (String(row.quantity).startsWith("−") ? -1 : 1) * Number(String(row.quantity).replace(/[−+]/g, "")), 0);
+  const adjustedQuantity = adjustments.filter((row) => !row.source.cancelled).reduce((sum, row) => sum + (String(row.quantity).startsWith("−") ? -1 : 1) * Number(String(row.quantity).replace(/[−+]/g, "")), 0);
   const originalOpeningQuantity = quantity(item) + soldQuantity - purchasedQuantity - adjustedQuantity;
   const openingStockRow = originalOpeningQuantity > 0 ? [{
     id: `${item.id}-opening-stock`,
@@ -302,12 +302,14 @@ function Modal({ title, children, onClose }) {
 }
 
 // Renders the adjustment modal interface.
-function AdjustmentModal({ item, onClose, onSave }) {
+function AdjustmentModal({ item, onClose, onSave, enableBatchTracking = false }) {
   const [direction, setDirection] = useState("add");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [batchNo, setBatchNo] = useState("");
+  const [expDate, setExpDate] = useState("");
   // Saves result.
   const save = async () => {
     const parsed = Number(amount);
@@ -315,7 +317,7 @@ function AdjustmentModal({ item, onClose, onSave }) {
     const next = quantity(item) + (direction === "add" ? parsed : -parsed);
     if (next < 0) { setError("Stock cannot be reduced below zero."); return; }
     setSaving(true);
-    try { await onSave(item, String(next), { direction, quantity: parsed, note: note.trim() }); onClose(); }
+    try { await onSave(item, String(next), { direction, quantity: parsed, note: note.trim(), batchNo, expDate }); onClose(); }
     catch (saveError) { setError(saveError.message || "Could not save the stock adjustment."); setSaving(false); }
   };
   return (
@@ -323,6 +325,8 @@ function AdjustmentModal({ item, onClose, onSave }) {
       <div className="space-y-4 p-5">
         <p className="text-sm text-slate-600">{item.itemName} · Current quantity <b>{quantity(item)} {item.unit}</b></p>
         <label className="block text-sm font-semibold text-slate-600">Adjustment type<select value={direction} onChange={(event) => setDirection(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal"><option value="add">Add stock</option><option value="reduce">Reduce stock</option></select></label>
+        {enableBatchTracking && <label className="block text-sm font-semibold text-slate-600">Batch<select value={batchNo} onChange={(event) => { const batch = item.batches?.find((entry) => entry.batchNo === event.target.value); setBatchNo(event.target.value); setExpDate(batch?.expDate || ""); }} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal"><option value="">{direction === "add" ? "Select or enter new batch" : "Select batch to reduce"}</option>{(item.batches || []).map((batch) => <option key={batch.id || batch.batchNo} value={batch.batchNo}>{batch.batchNo} · {batch.openingQty || 0}</option>)}</select>{direction === "add" && <input value={batchNo} onChange={(event) => setBatchNo(event.target.value)} placeholder="New batch number" className="mt-2 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" />}</label>}
+        {enableBatchTracking && direction === "add" && <label className="block text-sm font-semibold text-slate-600">Expiry date<input type="date" value={expDate} onChange={(event) => setExpDate(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" /></label>}
         <label className="block text-sm font-semibold text-slate-600">Quantity<input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^\d.]/g, ""))} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="Enter quantity" /></label>
         <label className="block text-sm font-semibold text-slate-600">Note <span className="font-normal text-slate-400">(optional)</span><input value={note} onChange={(event) => setNote(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="Reason for adjustment" /></label>
         {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
@@ -337,6 +341,7 @@ function ItemsDashboard() {
   const appSettings = useAppSettings();
   const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
   const enableItemCategory = appSettings.enableItemCategory ?? true;
+  const enableItemDescription = appSettings.enableItemDescription ?? true;
   const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
   const navigate = useNavigate();
@@ -464,7 +469,8 @@ function ItemsDashboard() {
       const matchName = String(item.itemName || "").toLowerCase().includes(q);
       const matchCode = String(item.itemCode || "").toLowerCase().includes(q);
       const matchBarcode = enableBarcodeScanning && String(item.barcode || "").toLowerCase().includes(q);
-      return matchName || matchCode || matchBarcode;
+      const matchDescription = String(item.description || "").toLowerCase().includes(q);
+      return matchName || matchCode || matchBarcode || matchDescription;
     }).forEach((item) => {
       const code = String(item.itemCode || "").trim().toLowerCase();
       const fallbackName = `${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}|${String(item.category || "").trim().toLowerCase()}`;
@@ -540,6 +546,13 @@ function ItemsDashboard() {
 
   // Saves adjustment.
   const saveAdjustment = async (item, nextQuantity, adjustment) => {
+    if (enableBatchTracking) {
+      saveInventoryAdjustment({ itemId: item.id, itemName: item.itemName, unit: item.unit || "", batchTracked: true, ...adjustment });
+      const updated = await saveBusinessItem(getInventoryItems().find((entry) => entry.id === item.id));
+      setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
+      setNotice("Batch stock adjustment saved.");
+      return;
+    }
     const updated = await saveBusinessItem({ ...item, openingQuantity: nextQuantity, stock: nextQuantity });
     saveInventoryAdjustment({ itemId: item.id, unit: item.unit || "", ...adjustment });
     setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
@@ -606,7 +619,7 @@ function ItemsDashboard() {
       const eligibleItems = selectedBulkItems.filter((item) => bulkAction === "inactive" ? item.isActive !== false : item.isActive === false);
       if (!eligibleItems.length) { setNotice(bulkAction === "active" ? "The selected items are already active." : "The selected items are already inactive."); setBulkAction(""); setSelectedBulkIds([]); return; }
       const label = bulkAction === "inactive" ? "inactive" : "active";
-      if (!window.confirm(`Mark ${eligibleItems.length} selected items as ${label}? This only changes this browser's Items screen.`)) { setBulkAction(""); setSelectedBulkIds([]); return; }
+      if (!window.confirm(`Mark ${eligibleItems.length} selected items as ${label}? Disabled items remain visible in Items but are unavailable for new purchase and sale selections.`)) { setBulkAction(""); setSelectedBulkIds([]); return; }
       const eligibleIds = new Set(eligibleItems.map((item) => item.id));
       applyBulkUpdate((item) => eligibleIds.has(item.id) ? ({ ...item, isActive: bulkAction === "active" }) : item, bulkAction === "inactive" ? "Bulk inactive" : "Bulk active");
       return;
@@ -729,6 +742,7 @@ function ItemsDashboard() {
                 <div className="flex flex-wrap items-start justify-between gap-4"><div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-lg font-semibold uppercase text-slate-900">{selectedItem.itemName}</h1><button type="button" aria-label="Edit item" title="Edit item" onClick={() => setItemModal({ mode: "edit", initialItem: selectedItem })} className="rounded p-1 text-slate-600 hover:bg-slate-100"><FiArrowUpRight /></button></div>{activeTab === "product" && <Button onClick={() => setAdjustItem(selectedItem)} className="rounded-md bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"><FiSliders /> Adjust Item</Button>}</div>
                 <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                   <div className="space-y-2">
+                    {enableItemDescription && selectedItem.description && <p className="text-slate-700">DESCRIPTION: <span className="font-normal text-slate-600">{selectedItem.description}</span></p>}
                     <p className="text-slate-700">SALE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.salePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p>
                     <p className="text-slate-700">PURCHASE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.purchasePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p>
                     {enableItemCategory && selectedItem.category && (
@@ -810,8 +824,16 @@ function ItemsDashboard() {
                     setNotice(action === "Delete" ? "Transaction hidden from the Items screen." : `${action} saved in this browser only.`);
                   };
                   const actions = row.type === "Sale" ? ["View/Edit", "Cancel Invoice", "Delete", "Open PDF", "Preview", "Print", "Convert To Return", "Payment History", "View History"] : ["View Details", "Delete", "Preview", "Print", "Payment History", "View History"];
-                  return <tr key={row.id} className="border-b border-slate-200/80 text-slate-900 hover:bg-slate-50 dark:border-[#252B37] dark:text-slate-100 dark:hover:bg-[#1A1E27]/50"><td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100"><span className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${row.type === "Sale" ? "bg-emerald-500" : row.type === "Purchase" ? "bg-blue-600" : "bg-rose-600"}`} />{row.type}</td><td className="px-3 py-3.5 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">{row.invoice}</td><td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">{row.name}</td><td className="whitespace-nowrap px-3 py-3.5 text-slate-700 dark:text-slate-300">{dateLabel(row.date)}</td><td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100">{row.quantity} {row.unit}</td><td className="whitespace-nowrap px-3 py-3.5 text-slate-800 dark:text-slate-200">{row.price === "-" ? "-" : money(row.price)}</td><td className="whitespace-nowrap px-3 py-3.5 font-bold text-slate-950 dark:text-slate-50">{row.amount === "-" ? "-" : money(row.amount)}</td><td className="px-3 py-3.5"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${row.status === "Unpaid" || row.status === "Overdue" ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"}`}>{row.status}</span></td><td className="px-3 py-3 text-slate-400"><div className="relative" data-item-transaction-actions><button type="button" aria-label={`Actions for ${row.type}`} onClick={() => setRowMenu((current) => current === `transaction-${row.id}` ? "" : `transaction-${row.id}`)} className="grid h-8 w-7 place-items-center rounded hover:bg-slate-100"><FiMoreVertical /></button>{rowMenu === `transaction-${row.id}` && <div className="absolute right-0 top-8 z-40 max-h-[min(440px,70vh)] w-52 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 text-slate-700 shadow-xl">{actions.map((action) => <button key={action} type="button" onClick={() => {
+                  const rowActions = row.source?.batchTracked ? (row.source.cancelled ? ["View Details"] : ["View Details", "Reverse Adjustment"]) : actions;
+                  return <tr key={row.id} className="border-b border-slate-200/80 text-slate-900 hover:bg-slate-50 dark:border-[#252B37] dark:text-slate-100 dark:hover:bg-[#1A1E27]/50"><td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100"><span className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${row.type === "Sale" ? "bg-emerald-500" : row.type === "Purchase" ? "bg-blue-600" : "bg-rose-600"}`} />{row.type}</td><td className="px-3 py-3.5 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">{row.invoice}</td><td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">{row.name}</td><td className="whitespace-nowrap px-3 py-3.5 text-slate-700 dark:text-slate-300">{dateLabel(row.date)}</td><td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100">{row.quantity} {row.unit}</td><td className="whitespace-nowrap px-3 py-3.5 text-slate-800 dark:text-slate-200">{row.price === "-" ? "-" : money(row.price)}</td><td className="whitespace-nowrap px-3 py-3.5 font-bold text-slate-950 dark:text-slate-50">{row.amount === "-" ? "-" : money(row.amount)}</td><td className="px-3 py-3.5"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${row.status === "Unpaid" || row.status === "Overdue" ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"}`}>{row.status}</span></td><td className="px-3 py-3 text-slate-400"><div className="relative" data-item-transaction-actions><button type="button" aria-label={`Actions for ${row.type}`} onClick={() => setRowMenu((current) => current === `transaction-${row.id}` ? "" : `transaction-${row.id}`)} className="grid h-8 w-7 place-items-center rounded hover:bg-slate-100"><FiMoreVertical /></button>{rowMenu === `transaction-${row.id}` && <div className="absolute right-0 top-8 z-40 max-h-[min(440px,70vh)] w-52 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 text-slate-700 shadow-xl">{rowActions.map((action) => <button key={action} type="button" onClick={() => {
                     setRowMenu("");
+                    if (action === "Reverse Adjustment") {
+                      try {
+                        cancelInventoryAdjustment(row.source.id);
+                        saveBusinessItem(getInventoryItems().find((entry) => entry.id === row.source.itemId)).then(() => { refresh(); setNotice("Batch adjustment reversed."); }).catch((error) => setNotice(error.message || "Could not sync the reversed adjustment."));
+                      } catch (error) { setNotice(error.message || "Could not reverse this batch adjustment."); }
+                      return;
+                    }
                     if (action === "Convert To Return") {
                       const invoiceToConvert = row.source || {
                         id: row.sourceId || `sale-${Date.now()}`,
@@ -883,7 +905,7 @@ function ItemsDashboard() {
       )}
 
       {itemModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setItemModal(null); }}><div className="w-full max-w-6xl" onMouseDown={(event) => event.stopPropagation()}><AddItem embedded mode={itemModal.mode} initialItem={itemModal.initialItem} onClose={() => setItemModal(null)} onSave={saveItem} /></div></div>}
-      {adjustItem && <AdjustmentModal item={adjustItem} onClose={() => setAdjustItem(null)} onSave={saveAdjustment} />}
+      {adjustItem && <AdjustmentModal item={adjustItem} onClose={() => setAdjustItem(null)} onSave={saveAdjustment} enableBatchTracking={enableBatchTracking} />}
       {transactionDetails && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransactionDetails(null); }}><section className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{transactionDetails.type} Details</h2><p className="mt-1 text-sm text-slate-500">{transactionDetails.invoice !== "-" ? `Invoice ${transactionDetails.invoice}` : transactionDetails.name}</p></div><button type="button" aria-label="Close transaction details" onClick={() => setTransactionDetails(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header><div className="max-h-[70vh] space-y-5 overflow-auto p-5"><div className="grid gap-4 sm:grid-cols-3">{[["Name", transactionDetails.name], ["Date", dateLabel(transactionDetails.date)], ["Status", transactionDetails.status], ["Quantity", `${transactionDetails.quantity} ${transactionDetails.unit}`], ["Price / Unit", transactionDetails.price === "-" ? "-" : money(transactionDetails.price)], ["Amount", transactionDetails.amount === "-" ? "-" : money(transactionDetails.amount)]].map(([label, value]) => <div key={label} className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 font-medium text-slate-800">{value || "-"}</p></div>)}</div>{transactionDetails.source?.rows?.length > 0 && <div className="overflow-x-auto"><h3 className="mb-2 font-semibold text-slate-800">Invoice items</h3><table className="w-full min-w-[560px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{["Item", "Quantity", "Unit", "Price", "Discount", "Tax", "Amount"].map((label) => <th key={label} className="px-3 py-2">{label}</th>)}</tr></thead><tbody>{transactionDetails.source.rows.filter((entry) => entry.item || entry.qty).map((entry, index) => <tr key={entry.id || index} className="border-b border-slate-100"><td className="px-3 py-2">{entry.item || "-"}</td><td className="px-3 py-2">{entry.calculated?.qty || entry.qty || "-"}</td><td className="px-3 py-2">{entry.unit || "-"}</td><td className="px-3 py-2">{money(entry.price)}</td><td className="px-3 py-2">{money(entry.calculated?.discount)}</td><td className="px-3 py-2">{money(entry.calculated?.tax)}</td><td className="px-3 py-2">{money(entry.calculated?.amount)}</td></tr>)}</tbody></table></div>}{transactionDetails.source?.note && <p className="text-sm text-slate-600">Note: {transactionDetails.source.note}</p>}</div><footer className="flex justify-end border-t border-slate-200 px-5 py-3"><Button onClick={() => setTransactionDetails(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}
       {transactionHistory && <Modal title="Transaction History" onClose={() => setTransactionHistory(null)}><div className="space-y-3 p-5 text-sm text-slate-700"><p><b>Type:</b> {transactionHistory.type}</p><p><b>Invoice:</b> {transactionHistory.invoice}</p><p><b>Recorded:</b> {dateLabel(transactionHistory.date)}</p><p><b>Status:</b> {transactionHistory.status}</p><p className="text-slate-500">Local changes made from this menu are stored in this browser. Source invoice records are unchanged.</p><div className="flex justify-end"><Button onClick={() => setTransactionHistory(null)} className="bg-slate-100 text-slate-700">Close</Button></div></div></Modal>}
       {deleteAllOpen && <Modal title="Delete All Items" onClose={() => { if (!deleteAllLoading) { setDeleteAllOpen(false); setDeleteAllError(""); } }}><div className="space-y-4 p-5"><p className="text-sm text-slate-700">This will permanently remove <b>{deleteAllCount?.local ?? 0} browser-local item records</b>.</p><div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This operation cannot be undone unless a backup exists. Historical invoices, purchase bills, payments, parties, reports and shared attachments will be preserved.</div><label className="block text-sm font-medium text-slate-700">Type <b>DELETE ALL ITEMS</b> to continue<input autoFocus value={deleteAllPhrase} onChange={(event) => setDeleteAllPhrase(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" /></label>{deleteAllError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{deleteAllError}</p>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button disabled={deleteAllLoading} onClick={() => setDeleteAllOpen(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button disabled={deleteAllPhrase !== "DELETE ALL ITEMS" || deleteAllLoading} onClick={confirmDeleteAll} className="bg-rose-600 text-white disabled:cursor-not-allowed disabled:opacity-50">{deleteAllLoading ? "Deleting…" : "Delete All Items"}</Button></div></div></Modal>}

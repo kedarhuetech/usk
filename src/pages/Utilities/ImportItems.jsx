@@ -9,8 +9,8 @@ import Card from "../../components/Common/Card";
 import { saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { rowsToItems } from "../../services/itemImportExport.js";
 
-const requiredColumns = ["itemname"];
 const maxRows = 500;
 const OPEN_FOOD_FACTS_URL = "https://world.openfoodfacts.org/api/v2/product";
 const UPCITEMDB_URL = "https://api.upcitemdb.com/prod/trial/lookup";
@@ -32,55 +32,6 @@ function createBarcodeReader() {
     delayBetweenScanAttempts: 100,
     delayBetweenScanSuccess: 250,
     tryPlayVideoTimeout: 2500,
-  });
-}
-
-// This helper handles to items logic.
-function rowsToItems(rows) {
-  const cleanedRows = rows.map((row) => row.map((value) => String(value ?? "").trim()));
-  const rowsWithValues = cleanedRows.filter((row) => row.some(Boolean));
-  if (rowsWithValues.length < 2) throw new Error("The file must include a header row and at least one item.");
-  // Normalizes result.
-  const normalize = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const headers = rowsWithValues[0].map(normalize);
-  // Handles result.
-  const column = (...names) => headers.findIndex((header) => names.includes(header));
-  const indexes = {
-    name: column("item", "itemname", "name", "product", "productname"),
-    code: column("itemcode", "code", "sku", "productcode"),
-    type: column("type", "itemtype"),
-    category: column("category", "itemcategory"),
-    unit: column("unit", "baseunit", "measurementunit"),
-    salePrice: column("saleprice", "sellingprice", "price", "rate"),
-    purchasePrice: column("purchaseprice", "costprice", "purchasecost"),
-    quantity: column("quantity", "openingquantity", "openingstock", "stock"),
-    hsn: column("hsn", "hsnsac", "sac"),
-    taxRate: column("taxrate", "tax"),
-    discount: column("discount", "discountvalue"),
-    description: column("description", "details", "itemdescription"),
-  };
-  if (requiredColumns.some((name) => !headers.includes(name)) || indexes.name < 0) {
-    throw new Error("The file must include an Item Name column.");
-  }
-  return rowsWithValues.slice(1).map((values, rowIndex) => {
-    // Gets result.
-    const get = (key) => indexes[key] < 0 ? "" : String(values[indexes[key]] || "").trim();
-    const type = get("type").toLowerCase() === "service" ? "service" : "product";
-    return {
-      rowNumber: rowIndex + 2,
-      itemName: get("name"),
-      itemCode: get("code"),
-      type,
-      category: get("category"),
-      unit: get("unit"),
-      salePrice: get("salePrice"),
-      purchasePrice: get("purchasePrice"),
-      openingQuantity: get("quantity"),
-      hsn: get("hsn"),
-      taxRate: get("taxRate"),
-      discount: get("discount"),
-      description: get("description"),
-    };
   });
 }
 
@@ -129,6 +80,8 @@ function validateRows(rows) {
     if (!row.itemName) errors.push("Item Name is required");
     if (row.salePrice && (!Number.isFinite(Number(row.salePrice)) || Number(row.salePrice) < 0)) errors.push("Sale Price must be a non-negative number");
     if (row.purchasePrice && (!Number.isFinite(Number(row.purchasePrice)) || Number(row.purchasePrice) < 0)) errors.push("Purchase Price must be a non-negative number");
+    if (row.discount && (!Number.isFinite(Number(row.discount)) || Number(row.discount) < 0)) errors.push("Discount must be a non-negative number");
+    if (row.discount && (!Number.isFinite(Number(row.discount)) || Number(row.discount) < 0)) errors.push("Discount must be a non-negative number");
     if (row.openingQuantity && (!Number.isFinite(Number(row.openingQuantity)) || Number(row.openingQuantity) < 0)) errors.push("Quantity must be a non-negative number");
     const key = row.itemCode
       ? `code:${row.itemCode.toLowerCase()}`

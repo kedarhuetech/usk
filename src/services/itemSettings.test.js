@@ -54,6 +54,8 @@ test("Item Settings Persistence & Default Values", () => {
   const defaults = getAppSettings();
   assert.equal(defaults.enableBarcodeScanning, true);
   assert.equal(defaults.enableItemCategory, true);
+  assert.equal(defaults.defaultItemUnit, "PCS");
+  assert.equal(defaults.enableItemDescription, true);
   assert.equal(defaults.enableBatchTracking, false);
   assert.equal(defaults.enableSerialTracking, false);
 
@@ -62,6 +64,11 @@ test("Item Settings Persistence & Default Values", () => {
     ...defaults,
     enableBatchTracking: true,
     enableSerialTracking: true,
+    defaultItemUnit: "KG",
+    enableItemDescription: false,
+    enableGst: false,
+    enableItemDiscount: false,
+    stopSaleOnNegativeStock: true,
   });
   assert.equal(updated.enableBatchTracking, true);
   assert.equal(updated.enableSerialTracking, true);
@@ -75,6 +82,11 @@ test("Item Settings Persistence & Default Values", () => {
   assert.equal(reloaded.enableSerialTracking, true);
   assert.equal(reloaded.enableBarcodeScanning, true);
   assert.equal(reloaded.enableItemCategory, true);
+  assert.equal(reloaded.defaultItemUnit, "KG");
+  assert.equal(reloaded.enableItemDescription, false);
+  assert.equal(reloaded.enableGst, false);
+  assert.equal(reloaded.enableItemDiscount, false);
+  assert.equal(reloaded.stopSaleOnNegativeStock, true);
 
   // 5. Raw localStorage validation
   const raw = JSON.parse(storage.getItem(APP_SETTINGS_KEY));
@@ -83,6 +95,7 @@ test("Item Settings Persistence & Default Values", () => {
 
   tearDownMockEnvironment();
 });
+
 
 test("Setting 1: Barcode Scanning Support - normalization, lookup, and data preservation", () => {
   const { storage } = setupMockEnvironment();
