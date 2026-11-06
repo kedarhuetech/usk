@@ -1,6 +1,6 @@
 // Provides the business growth data application service.
 import { businessGrowthApi, API_BASE_URL } from "./apiClient.js";
-import { normalizeInventoryItem } from "./itemsStorage.js";
+import { getInventoryItems, normalizeInventoryItem, sameInventoryItemIdentity, saveInventoryItem } from "./itemsStorage.js";
 import { normalizeSmartAdsCampaign, getSmartAdsCampaigns, saveSmartAdsCampaign, deleteSmartAdsCampaign } from "./smartAdsStorage.js";
 
 const inlineAssetCaches = new Map();
@@ -37,7 +37,31 @@ export function normalizePersistedAssetUrls(value) {
 }
 
 // Loads growth items.
-export async function loadGrowthItems() { return (await businessGrowthApi.list("items")).map((item) => normalizeInventoryItem(normalizePersistedAssetUrls(item))); }
+export async function loadGrowthItems() {
+  const localItems = getInventoryItems();
+  try {
+    const remoteList = await businessGrowthApi.list("items");
+    const remoteItems = (remoteList || []).map((item) => normalizeInventoryItem(normalizePersistedAssetUrls(item)));
+
+    const merged = [...localItems];
+    for (const remote of remoteItems) {
+      const matchIndex = merged.findIndex(
+        (local) => local.id === remote.id || sameInventoryItemIdentity(local, remote)
+      );
+      if (matchIndex === -1) {
+        saveInventoryItem(remote);
+        merged.push(remote);
+      } else if (!merged[matchIndex].imageUrl && remote.imageUrl) {
+        merged[matchIndex] = { ...merged[matchIndex], imageUrl: remote.imageUrl };
+        saveInventoryItem(merged[matchIndex]);
+      }
+    }
+    return merged;
+  } catch (error) {
+    console.warn("Could not load remote growth items, using local inventory items:", error);
+    return localItems;
+  }
+}
 // Persists inline images.
 export async function persistInlineImages(value, entityType, entityId, cache = getInlineAssetCache(entityType, entityId)) {
   if (typeof value === "string" && /^data:image\//i.test(value)) {
@@ -59,8 +83,18 @@ export async function persistInlineImages(value, entityType, entityId, cache = g
 
 // Saves growth item.
 export async function saveGrowthItem(value) {
-  const item = await persistInlineImages(normalizeInventoryItem(value), "inventory-item", value.id || "new");
-  return businessGrowthApi.save("items", item);
+  const normalized = normalizeInventoryItem(value);
+  // 1. Always save to local inventory storage so it immediately appears in the Items section
+  const localSaved = saveInventoryItem(normalized);
+
+  try {
+    const itemWithAssets = await persistInlineImages(localSaved, "inventory-item", localSaved.id || "new");
+    const remoteSaved = await businessGrowthApi.save("items", itemWithAssets);
+    return { ...localSaved, ...(remoteSaved || {}) };
+  } catch (error) {
+    console.warn("Could not save item to growth backend, preserved in local inventory:", error);
+    return localSaved;
+  }
 }
 // Loads growth orders.
 export async function loadGrowthOrders() { return businessGrowthApi.list("orders"); }

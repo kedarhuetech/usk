@@ -160,7 +160,7 @@ function printPosBill(draft, calculations) {
   const lines = calculations?.lines || [];
   const themeColor = settings.themeColor || "#881337";
 
-  let bodyHtml = "";
+  let bodyHtml;
 
   if (isThermal) {
     const totalQty = lines.reduce((s, l) => s + Number(l.qty || 0), 0);
@@ -440,7 +440,9 @@ function printPosBill(draft, calculations) {
 }
 export default function PointOfSale() {
   const navigate = useNavigate();
-  const appSettings = useAppSettings();
+  const appSettings = useAppSettings() || {};
+  const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
+  const enableItemCategory = appSettings.enableItemCategory ?? true;
   const [initialStorageError] = useState(validatePosStorage);
 
   const handleClosePOS = useCallback(() => {

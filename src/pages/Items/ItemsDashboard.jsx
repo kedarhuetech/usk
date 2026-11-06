@@ -442,9 +442,11 @@ function ItemsDashboard() {
     };
     window.addEventListener(businessDataChangedEvent, reloadLocalData);
     window.addEventListener("storage", reloadLocalData);
+    window.addEventListener("inventory-items-changed", reloadLocalData);
     return () => {
       window.removeEventListener(businessDataChangedEvent, reloadLocalData);
       window.removeEventListener("storage", reloadLocalData);
+      window.removeEventListener("inventory-items-changed", reloadLocalData);
     };
   }, []);
   useEffect(() => {
