@@ -148,9 +148,21 @@ function AddItemModal({ item, onClose, onItemSaved }) {
   const editMode = Boolean(item?.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onClick={onClose}>
-      <div className="w-full max-w-6xl" onClick={(event) => event.stopPropagation()}>
-        <AddItem key={item?.id || "new-item"} embedded mode={editMode ? "edit" : "create"} initialItem={item} onClose={onClose} onSave={onItemSaved} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-6xl" onMouseDown={(event) => event.stopPropagation()}>
+        <AddItem
+          key={item?.id || "new-item"}
+          embedded
+          mode={editMode ? "edit" : "create"}
+          initialItem={item}
+          onClose={onClose}
+          onSave={onItemSaved}
+        />
       </div>
     </div>
   );
@@ -237,7 +249,7 @@ function CompactOnlineItem({ item }) {
 }
 
 // Renders the store dashboard interface.
-function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onManageItems, onOrders, onEditDetails, onSettings, onCopyStoreLink, onShareStore, onRefresh }) {
+function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onManageItems, onOrders, onEditDetails, onSettings, onCopyStoreLink, onShareStore, onRefresh, onAddItem }) {
   const orderCounts = {
     new: orders.filter((order) => order.status === "new").length,
     accepted: orders.filter((order) => order.status === "accepted").length,
@@ -257,6 +269,9 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
         <button type="button" onClick={onRefresh} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
           <FiRefreshCw className="h-4 w-4" />
         </button>
+        <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+          <FiPlus className="h-4 w-4" /> Add Item
+        </Button>
         <Button onClick={onPreview} className="bg-[#1A1F71] text-white hover:bg-[#14185D]">
           <FiEye className="h-4 w-4" /> Preview Store
         </Button>
@@ -332,9 +347,19 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
         </Card>
 
         <Card className="p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-bold text-slate-900">Online item preview</h2>
-            <button type="button" onClick={onManageItems} className="text-sm font-semibold text-blue-600 hover:text-blue-700">Change selection</button>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-bold text-slate-900">Online item preview</h2>
+              <p className="text-xs text-slate-500">Items currently published in your customer storefront.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+                <FiPlus className="h-4 w-4" /> Add Item
+              </Button>
+              <Button onClick={onManageItems} className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
+                Manage Items
+              </Button>
+            </div>
           </div>
           {onlineItems.length ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -344,6 +369,15 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
             <div className="rounded-lg border border-dashed border-slate-200 p-8 text-center">
               <FiPackage className="mx-auto h-8 w-8 text-slate-300" />
               <p className="mt-3 text-sm font-semibold text-slate-600">No online items selected yet.</p>
+              <p className="mt-1 text-xs text-slate-400">Add an item to your inventory or select from existing items to sell online.</p>
+              <div className="mt-4 flex justify-center gap-2">
+                <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+                  <FiPlus className="h-4 w-4" /> Add Item
+                </Button>
+                <Button onClick={onManageItems} className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
+                  Select Existing Items
+                </Button>
+              </div>
             </div>
           )}
         </Card>
@@ -407,6 +441,9 @@ function StoreBuilder({ items, storeState, setStoreState, onAddItem, onEditItem,
   const [category, setCategory] = useState("All");
   const selectedIds = useMemo(() => storeState.selectedItemIds || [], [storeState.selectedItemIds]);
   const [draftSelectedIds, setDraftSelectedIds] = useState(selectedIds);
+  useEffect(() => {
+    setDraftSelectedIds(storeState.selectedItemIds || []);
+  }, [storeState.selectedItemIds]);
   const selectedItems = useMemo(() => items.filter((item) => draftSelectedIds.includes(item.id)), [draftSelectedIds, items]);
   const categories = useMemo(() => ["All", ...new Set(items.map((item) => item.category).filter(Boolean))], [items]);
   const filteredItems = useMemo(() => {
@@ -1246,15 +1283,18 @@ function OnlineStore() {
     // Refreshes when storage changes.
     const refreshWhenStorageChanges = (event) => {
       if (!event.key || event.key.includes("onlineStoreOrders")) refreshOrders();
+      if (!event.key || event.key.includes("inventoryItems") || event.key.includes("ledgerly:inventoryItems")) refreshItems();
     };
 
     window.addEventListener("focus", refreshOrders);
     window.addEventListener("storage", refreshWhenStorageChanges);
+    window.addEventListener("inventory-items-changed", refreshItems);
     document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       window.removeEventListener("focus", refreshOrders);
       window.removeEventListener("storage", refreshWhenStorageChanges);
+      window.removeEventListener("inventory-items-changed", refreshItems);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
@@ -1290,10 +1330,13 @@ function OnlineStore() {
 
   // Handles item saved.
   const handleItemSaved = async (itemForm) => {
+    const isNew = !itemForm.id && !editingItem?.id;
     const item = await saveGrowthItem(itemForm);
     await refreshItems();
-    if (!itemForm.id) {
-      const updated = await saveOnlineStoreState({ ...storeState, selectedItemIds: [...new Set([...(storeState.selectedItemIds || []), item.id])] }); setStoreState(updated);
+    if (isNew && item?.id) {
+      const nextSelected = [...new Set([...(storeState.selectedItemIds || []), item.id])];
+      const updated = await saveOnlineStoreState({ ...storeState, selectedItemIds: nextSelected });
+      setStoreState(updated);
     }
     closeItemEditor();
     return item;
@@ -1417,6 +1460,7 @@ function OnlineStore() {
         onCopyStoreLink={copyStoreLink}
         onShareStore={shareStore}
         onRefresh={refreshItems}
+        onAddItem={openNewItem}
       />
     );
   } else {

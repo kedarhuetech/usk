@@ -1,10 +1,11 @@
 // Implements the party details page.
 import { useEffect, useMemo, useState } from "react";
-import { FiDownload, FiFileText, FiFilter, FiPlus, FiPrinter, FiSearch, FiSettings, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import { FiCheck, FiChevronRight, FiDownload, FiFileText, FiFilter, FiPlus, FiPrinter, FiSearch, FiSettings, FiTrash2, FiUsers, FiX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
+import ImportPartiesModal from "./ImportPartiesModal";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { deleteParty, getPartyDeletionBlockReason, getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
@@ -465,6 +466,44 @@ function PartyDetails() {
   const [transactionSearchOpen, setTransactionSearchOpen] = useState(false);
   const [transactionSearch, setTransactionSearch] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [importPartiesOpen, setImportPartiesOpen] = useState(false);
+  const [importNotice, setImportNotice] = useState("");
+
+  const handleImportParties = (selectedContacts) => {
+    if (!selectedContacts?.length) return;
+    const existing = getParties();
+    let firstSavedId = null;
+
+    for (const c of selectedContacts) {
+      const match = existing.find(
+        (p) =>
+          String(p.partyName || "").trim().toLowerCase() === String(c.name || "").trim().toLowerCase() ||
+          (c.phone && String(p.phone || "").trim() === String(c.phone || "").trim())
+      );
+      if (match) {
+        if (!firstSavedId) firstSavedId = match.id;
+        continue;
+      }
+
+      const saved = savePartyLocally({
+        ...partyFormDefaults,
+        partyName: c.name,
+        phone: c.phone || "",
+        email: c.email || "",
+        billingAddress: c.address || "",
+        openingBalance: "0",
+        openingBalanceType: "to-receive",
+        gstType: "Unregistered/Consumer",
+      });
+      if (!firstSavedId) firstSavedId = saved.id;
+    }
+
+    const updated = getParties();
+    setParties(updated);
+    if (firstSavedId) setSelectedPartyId(firstSavedId);
+    setImportNotice(`Successfully imported ${selectedContacts.length} ${selectedContacts.length === 1 ? "party" : "parties"}!`);
+    setTimeout(() => setImportNotice(""), 3500);
+  };
 
   useEffect(() => {
     try {
@@ -681,7 +720,30 @@ function PartyDetails() {
               </div>
             )}
           </div>
-          
+
+          {/* Left down side UI for adding parties through contacts using phone number and gmail */}
+          <div className="border-t border-slate-200 p-2.5 bg-white">
+            <button
+              type="button"
+              onClick={() => setImportPartiesOpen(true)}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-[#ecfdf5] p-2.5 text-left transition hover:bg-emerald-100/90 active:scale-[0.99] cursor-pointer shadow-xs"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-100 text-emerald-700">
+                  <svg className="h-5 w-5 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M16 2v20M6 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+                    <circle cx="10" cy="10" r="2" />
+                    <path d="M7 16a3 3 0 0 1 6 0" />
+                  </svg>
+                </div>
+                <p className="text-xs leading-snug text-slate-700">
+                  Use contacts from your Phone or<br />
+                  Gmail to <span className="font-bold text-slate-900">quickly create parties.</span>
+                </p>
+              </div>
+              <FiChevronRight className="h-4 w-4 shrink-0 text-emerald-700" />
+            </button>
+          </div>
         </section>
         <section className="min-w-0 overflow-hidden rounded-md bg-white">
           <div className="flex min-h-[68px] items-center justify-between border-b border-slate-200 px-4 py-2"><div><h2 className="font-semibold text-slate-700">{cashSaleName} {selectedParty && <><button aria-label="Edit party" title="Edit party" onClick={() => { setPartyBeingEdited(selectedParty); setIsModalOpen(true); }} className="ml-2 text-blue-500">✎</button><button type="button" aria-label="Delete party" title="Delete party" onClick={removeParty} className="ml-3 text-rose-500 hover:text-rose-700"><FiTrash2 /></button></>}</h2>{selectedPartyBalance && <p className="mt-1 flex flex-wrap gap-x-4 text-xs">{selectedPartyBalance.receivable > 0 && <span className="text-emerald-700">To Receive {money(selectedPartyBalance.receivable)}</span>}{selectedPartyBalance.payable > 0 && <span className="text-rose-700">To Pay {money(selectedPartyBalance.payable)}</span>}{selectedPartyBalance.receivable === 0 && selectedPartyBalance.payable === 0 && selectedOpeningBalance > 0 && <span className="text-slate-500">Opening balance {money(selectedOpeningBalance)} {selectedBalanceType === "to-pay" ? "To Pay" : "To Receive"}</span>}</p>}</div><div className="flex gap-4 text-lg"><span className="text-amber-500">●</span><span className="text-green-500">●</span><span className="text-orange-400">◷</span></div></div>
@@ -908,6 +970,17 @@ function PartyDetails() {
         );
       })()}
       {isModalOpen && <AddPartyModal initialParty={partyBeingEdited} onClose={() => { setIsModalOpen(false); setPartyBeingEdited(null); }} onSave={saveParty} />}
+      <ImportPartiesModal
+        isOpen={importPartiesOpen}
+        onClose={() => setImportPartiesOpen(false)}
+        onImportParties={handleImportParties}
+      />
+      {importNotice && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl transition animate-in fade-in slide-in-from-bottom duration-200">
+          <FiCheck className="h-4 w-4" />
+          {importNotice}
+        </div>
+      )}
     </div>
   );
 }

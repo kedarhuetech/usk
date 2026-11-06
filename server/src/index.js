@@ -17,6 +17,7 @@ import whatsappAuthRoutes from "./routes/whatsappAuth.js";
 import whatsappBusinessRoutes from "./routes/whatsappBusiness.js";
 import whatsappWebhookRoutes from "./routes/whatsappWebhook.js";
 import businessGrowthRoutes from "./routes/businessGrowth.js";
+import partiesRoutes from "./routes/parties.js";
 import { pool } from "./db/mysql.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,7 @@ app.use("/api/meta-business", metaBusinessRoutes);
 app.use("/api/meta/ads", metaAdsRoutes);
 app.use("/api/whatsapp-business", whatsappBusinessRoutes);
 app.use("/api/whatsapp", whatsappWebhookRoutes);
+app.use("/api/parties", partiesRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {

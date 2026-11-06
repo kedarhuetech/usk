@@ -19,7 +19,12 @@ export async function loadBusinessItems() {
 
 // Saves business item.
 export async function saveBusinessItem(value) {
-  return saveInventoryItem(normalizeInventoryItem(value));
+  const normalized = normalizeInventoryItem(value);
+  const saved = saveInventoryItem(normalized);
+  try {
+    businessGrowthApi.save("items", saved).catch(() => {});
+  } catch {}
+  return saved;
 }
 
 // Loads business parties.

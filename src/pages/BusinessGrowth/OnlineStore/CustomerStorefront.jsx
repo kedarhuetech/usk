@@ -534,11 +534,13 @@ function CustomerStorefront() {
 
     window.addEventListener("focus", refreshSharedData);
     window.addEventListener("storage", refreshWhenStorageChanges);
+    window.addEventListener("inventory-items-changed", refreshSharedData);
     document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       window.removeEventListener("focus", refreshSharedData);
       window.removeEventListener("storage", refreshWhenStorageChanges);
+      window.removeEventListener("inventory-items-changed", refreshSharedData);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);

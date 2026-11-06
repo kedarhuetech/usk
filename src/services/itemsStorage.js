@@ -27,6 +27,9 @@ function readItems() {
 function writeItems(items) {
   if (!canUseStorage()) return;
   window.localStorage.setItem(INVENTORY_ITEMS_KEY, JSON.stringify(items));
+  try {
+    window.dispatchEvent(new CustomEvent("inventory-items-changed", { detail: items }));
+  } catch {}
 }
 
 // This helper handles number logic.
