@@ -22,3 +22,4 @@ export const STANDARD_CURRENCIES = [
   { code: "NPR", name: "Nepalese Rupee", symbol: "रू", flag: "🇳🇵", defaultRateToInr: 0.62 },
   { code: "LKR", name: "Sri Lankan Rupee", symbol: "Rs", flag: "🇱🇰", defaultRateToInr: 0.29 },
 ];
+
