@@ -1,6 +1,6 @@
 // Connects each application page to its route.
 import BusinessGrowthGuard from "./pages/BusinessGrowth/BusinessGrowthGuard";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import MainLayout from "./layouts/MainLayout";
 import Settings from "./pages/Settings/Settings";
 import FeatureRouteGuard from "./components/Navigation/FeatureRouteGuard";
@@ -83,11 +83,8 @@ function App() {
           <Route path="cash-bank/loan-accounts" element={<LoanAccounts />} />
           <Route path="items" element={<ItemsDashboard />} />
           <Route path="parties/party-details" element={<PartyDetails />} />
-          <Route
-            path="parties/whatsapp-connect"
-            element={<WhatsAppConnect />}
-          />
-          <Route path="parties/business-network" element={<VyaparNetwork />} />
+          <Route path="parties/whatsapp-connect" element={<Navigate to="/parties/party-details" replace />} />
+          <Route path="parties/business-network" element={<Navigate to="/parties/party-details" replace />} />
 
           {/* Protected Business Growth Section */}
           <Route element={<BusinessGrowthGuard />}>
@@ -168,6 +165,7 @@ function App() {
           <Route path="reports/stock-summary" element={<Reports defaultReport="Stock summary" />} />
           <Route path="reports/item-report-by-party" element={<Reports defaultReport="Item Report By Party" />} />
           <Route path="reports/item-wise-profit-and-loss" element={<Reports defaultReport="Item Wise Profit And Loss" />} />
+          <Route path="reports/item-category-wise-profit-and-loss" element={<Reports defaultReport="Item Category Wise Profit And Loss" />} />
             <Route path="reports/low-stock-summary" element={<Reports defaultReport="Low Stock Summary" />} />
             <Route path="reports/stock-detail" element={<Reports defaultReport="Stock Detail" />} />
             <Route path="reports/item-detail" element={<Reports defaultReport="Item Detail" />} />

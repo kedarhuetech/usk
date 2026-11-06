@@ -44,11 +44,6 @@ export const sidebarNavigation = [
         label: "Party Details",
         path: "/parties/party-details",
       },
-      {
-        id: "business-network",
-        label: "Business Network",
-        path: "/parties/business-network",
-      },
     ],
   },
   {

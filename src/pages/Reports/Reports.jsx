@@ -10,6 +10,7 @@ import SalePurchaseByPartyGroupReport from "./SalePurchaseByPartyGroupReport";
 import StockSummaryReport from "./StockSummaryReport";
 import ItemReportByParty from "./ItemReportByParty";
 import ItemWiseProfitAndLoss from "./ItemWiseProfitAndLoss";
+import ItemCategoryWiseProfitAndLoss from "./ItemCategoryWiseProfitAndLoss";
 import LowStockSummaryReport from "./LowStockSummaryReport";
 import StockDetailReport from "./StockDetailReport";
 import ItemDetailReport from "./ItemDetailReport";
@@ -217,6 +218,7 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("sale-purchase-by-party")) return "Sale Purchase By Party";
     if (location.pathname.includes("stock-summary")) return "Stock summary";
     if (location.pathname.includes("item-report-by-party")) return "Item Report By Party";
+    if (location.pathname.includes("item-category-wise-profit-and-loss")) return "Item Category Wise Profit And Loss";
     if (location.pathname.includes("item-wise-profit-and-loss")) return "Item Wise Profit And Loss";
     if (location.pathname.includes("low-stock-summary")) return "Low Stock Summary";
     if (location.pathname.includes("stock-detail")) return "Stock Detail";
@@ -255,6 +257,8 @@ function Reports({ defaultReport }) {
       setActiveReport("Stock summary");
     } else if (location.pathname.includes("item-report-by-party")) {
       setActiveReport("Item Report By Party");
+    } else if (location.pathname.includes("item-category-wise-profit-and-loss")) {
+      setActiveReport("Item Category Wise Profit And Loss");
     } else if (location.pathname.includes("item-wise-profit-and-loss")) {
       setActiveReport("Item Wise Profit And Loss");
     } else if (location.pathname.includes("low-stock-summary")) {
@@ -701,6 +705,8 @@ function Reports({ defaultReport }) {
                     navigate("/reports/stock-summary", { replace: true });
                   } else if (report === "Item Report By Party") {
                     navigate("/reports/item-report-by-party", { replace: true });
+                  } else if (report === "Item Category Wise Profit And Loss") {
+                    navigate("/reports/item-category-wise-profit-and-loss", { replace: true });
                   } else if (report === "Item Wise Profit And Loss") {
                     navigate("/reports/item-wise-profit-and-loss", { replace: true });
                   } else if (report === "Low Stock Summary") {
@@ -775,6 +781,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Item Report By Party" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <ItemReportByParty />
+        </div>
+      ) : activeReport === "Item Category Wise Profit And Loss" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <ItemCategoryWiseProfitAndLoss />
         </div>
       ) : activeReport === "Item Wise Profit And Loss" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
