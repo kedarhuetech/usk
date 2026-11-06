@@ -361,9 +361,13 @@ export function applyScreenZoom(zoomString) {
   }
 }
 
-export function formatCurrency(value) {
+export function formatCurrency(value, currencyCode = null) {
   const settings = getAppSettings();
-  const sym = settings.currencySymbol || "₹";
+  let sym = settings.baseCurrency?.symbol || settings.currencySymbol || "₹";
+  if (currencyCode && Array.isArray(settings.multiCurrencyList)) {
+    const found = settings.multiCurrencyList.find((c) => c.code === currencyCode);
+    if (found?.symbol) sym = found.symbol;
+  }
   const decimals = settings.amountDecimalPlaces ?? 2;
   const num = Number(value || 0);
   if (isNaN(num)) return `${sym} ${(0).toFixed(decimals)}`;
