@@ -1015,7 +1015,6 @@ export default function PointOfSale() {
     ["Change Unit", handleUnitClick],
     ["Additional Charges", handleAdditionalChargesClick],
     ["Bill Discount", handleBillDiscountClick],
-    ...(appSettings.enableLoyaltyPoints !== false ? [["Loyalty Points", handleLoyaltyClick]] : []),
     ["Remarks", handleRemarksClick],
   ];
 

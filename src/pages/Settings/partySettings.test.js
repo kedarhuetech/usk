@@ -39,9 +39,6 @@ test("Party settings exist with correct defaults matching Vyapar desktop", () =>
   assert.equal(settings.partyCustomFields[0].enabled, true);
   assert.equal(settings.partyCustomFields[0].name, "mrp");
   assert.equal(settings.partyCustomFields[0].showInPrint, true);
-
-  // Column 3: Loyalty Points
-  assert.equal(settings.enableLoyaltyPoints, true, "enableLoyaltyPoints default is true");
 });
 
 test("Party settings can be updated and retrieved reactively", () => {
@@ -52,7 +49,6 @@ test("Party settings can be updated and retrieved reactively", () => {
     managePartyStatus: true,
     paymentReminderDays: 7,
     paymentReminderAdditionalMessage: "Please pay before weekend.",
-    enableLoyaltyPoints: true,
   });
 
   const updated = getAppSettings();
@@ -63,7 +59,7 @@ test("Party settings can be updated and retrieved reactively", () => {
   assert.equal(updated.paymentReminderAdditionalMessage, "Please pay before weekend.");
 });
 
-test("Party storage supports group, status, shippingAddress, custom fields and loyaltyPoints", () => {
+test("Party storage supports group, status, shippingAddress, and custom fields", () => {
   const newParty = saveParty({
     partyName: "Omkar Provision Stores",
     phone: "9823098230",
@@ -72,7 +68,6 @@ test("Party storage supports group, status, shippingAddress, custom fields and l
     status: "active",
     billingAddress: "Shop 12, APMC Market",
     shippingAddress: "Warehouse 4, Hinjewadi Phase 1",
-    loyaltyPoints: 120,
     additionalFields: [
       { id: "field-1", fieldName: "mrp", value: "450", showInPrint: true, enabled: true },
       { id: "field-4", fieldName: "Delivery Date", value: "2026-11-15", showInPrint: true, enabled: true },
@@ -84,21 +79,18 @@ test("Party storage supports group, status, shippingAddress, custom fields and l
   assert.equal(newParty.group, "Retailers");
   assert.equal(newParty.status, "active");
   assert.equal(newParty.shippingAddress, "Warehouse 4, Hinjewadi Phase 1");
-  assert.equal(newParty.loyaltyPoints, 120);
   assert.equal(newParty.additionalFields.length, 2);
 
   // Test toggling status to inactive
   const inactiveParty = saveParty({
     ...newParty,
     status: "inactive",
-    loyaltyPoints: 150,
   });
   assert.equal(inactiveParty.status, "inactive");
-  assert.equal(inactiveParty.loyaltyPoints, 150);
 
   const parties = getParties();
   const fetched = parties.find((p) => p.id === newParty.id);
   assert.ok(fetched);
   assert.equal(fetched.status, "inactive");
-  assert.equal(fetched.loyaltyPoints, 150);
 });
+

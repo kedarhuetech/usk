@@ -594,10 +594,6 @@ function PartyDetails() {
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [reminderExtraMessage, setReminderExtraMessage] = useState("");
   const [reminderNotice, setReminderNotice] = useState("");
-  const [loyaltyModalOpen, setLoyaltyModalOpen] = useState(false);
-  const [loyaltyDelta, setLoyaltyDelta] = useState("");
-  const [loyaltyAction, setLoyaltyAction] = useState("add");
-  const [loyaltyNotice, setLoyaltyNotice] = useState("");
   const [balanceFilter, setBalanceFilter] = useState(() => {
     const params = new URLSearchParams(location.search);
     const f = params.get("filter") || location.state?.filter;
@@ -1124,22 +1120,6 @@ function PartyDetails() {
                   <FiBell className="h-3.5 w-3.5" /> Send Reminder
                 </button>
               )}
-
-              {/* Loyalty Points Pill Button */}
-              {selectedParty && (appSettings.enableLoyaltyPoints ?? true) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoyaltyDelta("");
-                    setLoyaltyModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-800 shadow-xs hover:bg-amber-100 transition cursor-pointer"
-                  title="Manage loyalty points"
-                >
-                  <FiStar className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
-                  <span>{selectedParty.loyaltyPoints || 0} pts</span>
-                </button>
-              )}
             </div>
           </div>
 
@@ -1637,133 +1617,6 @@ function PartyDetails() {
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 transition cursor-pointer"
                 >
                   <FiMessageSquare className="h-3.5 w-3.5" /> SEND VIA WHATSAPP
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ============================================================ */}
-      {/* MODAL: Loyalty Points */}
-      {/* ============================================================ */}
-      {loyaltyModalOpen && selectedParty && (() => {
-        const currentPoints = Number(selectedParty.loyaltyPoints || 0);
-
-        const handleApplyLoyaltyPoints = () => {
-          const delta = Math.floor(Number(loyaltyDelta) || 0);
-          if (delta <= 0) {
-            setLoyaltyNotice("Please enter a valid points amount.");
-            return;
-          }
-          let nextPoints = currentPoints;
-          if (loyaltyAction === "add") {
-            nextPoints += delta;
-          } else {
-            if (delta > currentPoints) {
-              setLoyaltyNotice(`Cannot redeem ${delta} points. Customer only has ${currentPoints} points.`);
-              return;
-            }
-            nextPoints = Math.max(0, currentPoints - delta);
-          }
-          saveParty({ ...selectedParty, loyaltyPoints: nextPoints });
-          setLoyaltyModalOpen(false);
-        };
-
-        return (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setLoyaltyModalOpen(false);
-            }}
-          >
-            <div
-              className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl transition animate-in fade-in zoom-in-95 duration-150"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                <div className="flex items-center gap-2">
-                  <FiStar className="h-5 w-5 text-amber-500 fill-amber-400" />
-                  <h3 className="text-base font-bold text-slate-800">Loyalty Points - {selectedParty.partyName}</h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLoyaltyModalOpen(false)}
-                  className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition cursor-pointer"
-                >
-                  <FiX className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-center">
-                  <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Current Balance</span>
-                  <p className="mt-1 text-3xl font-extrabold text-amber-900">{currentPoints} <span className="text-sm font-semibold text-amber-700">pts</span></p>
-                  <p className="text-xs text-amber-700 mt-0.5">Approx. ₹{currentPoints.toFixed(2)} redeemable value</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setLoyaltyAction("add")}
-                    className={`rounded-lg py-2.5 text-xs font-bold transition border cursor-pointer ${
-                      loyaltyAction === "add"
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    + Add / Reward Points
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setLoyaltyAction("redeem")}
-                    className={`rounded-lg py-2.5 text-xs font-bold transition border cursor-pointer ${
-                      loyaltyAction === "redeem"
-                        ? "bg-rose-600 text-white border-rose-600 shadow-xs"
-                        : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                    }`}
-                  >
-                    − Redeem Points
-                  </button>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Points Amount:
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={loyaltyDelta}
-                    onChange={(e) => {
-                      setLoyaltyDelta(e.target.value);
-                      setLoyaltyNotice("");
-                    }}
-                    placeholder="e.g. 50"
-                    className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-800 outline-none focus:border-amber-500"
-                    autoFocus
-                  />
-                </div>
-
-                {loyaltyNotice && (
-                  <p className="text-xs font-semibold text-rose-600">{loyaltyNotice}</p>
-                )}
-              </div>
-
-              <div className="flex items-center justify-end gap-3 border-t border-slate-100 px-6 py-4 bg-slate-50/50">
-                <button
-                  type="button"
-                  onClick={() => setLoyaltyModalOpen(false)}
-                  className="rounded-lg px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleApplyLoyaltyPoints}
-                  className="rounded-lg bg-amber-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-amber-700 active:scale-98 transition cursor-pointer"
-                >
-                  Save Points
                 </button>
               </div>
             </div>

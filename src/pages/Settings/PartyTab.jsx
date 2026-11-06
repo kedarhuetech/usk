@@ -42,11 +42,11 @@ export default function PartyTab({ settings, update }) {
 
   return (
     <div className="w-full rounded-2xl bg-white p-6 shadow-xs border border-slate-200/80">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* ============================================================ */}
         {/* COLUMN 1: Party Settings */}
         {/* ============================================================ */}
-        <div className="space-y-5 border-b pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6 border-slate-100">
+        <div className="space-y-5 border-b pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8 border-slate-100">
           <h2 className="text-base font-bold text-slate-800">Party Settings</h2>
 
           <div className="space-y-4">
@@ -187,7 +187,7 @@ export default function PartyTab({ settings, update }) {
         {/* ============================================================ */}
         {/* COLUMN 2: Additional Fields */}
         {/* ============================================================ */}
-        <div className="space-y-5 border-b pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-6 border-slate-100">
+        <div className="space-y-5">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-800">Additional fields</h2>
             <span
@@ -273,33 +273,6 @@ export default function PartyTab({ settings, update }) {
             })}
           </div>
         </div>
-
-        {/* ============================================================ */}
-        {/* COLUMN 3: Enable Loyalty Point */}
-        {/* ============================================================ */}
-        <div className="space-y-5">
-          <h2 className="text-base font-bold text-slate-800">Enable Loyalty Point</h2>
-
-          <div className="space-y-4">
-            <label className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium text-slate-700 hover:text-slate-900">
-              <div className="flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={settings.enableLoyaltyPoints ?? true}
-                  onChange={(e) => update("enableLoyaltyPoints", e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
-                />
-                <span>Enable Loyalty Point</span>
-              </div>
-              <span
-                className="grid h-4 w-4 place-items-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-400 hover:bg-slate-200 cursor-help"
-                title="Award loyalty points on purchases and allow customer redemption."
-              >
-                i
-              </span>
-            </label>
-          </div>
-        </div>
       </div>
 
       {/* ============================================================ */}
@@ -380,3 +353,4 @@ export default function PartyTab({ settings, update }) {
     </div>
   );
 }
+
