@@ -44,16 +44,6 @@ export const sidebarNavigation = [
         label: "Party Details",
         path: "/parties/party-details",
       },
-      {
-        id: "whatsapp-connect",
-        label: "WhatsApp Connect",
-        path: "/parties/whatsapp-connect",
-      },
-      {
-        id: "business-network",
-        label: "Business Network",
-        path: "/parties/business-network",
-      },
     ],
   },
   {
