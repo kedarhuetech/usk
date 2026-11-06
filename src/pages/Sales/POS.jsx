@@ -1507,7 +1507,14 @@ export default function PointOfSale() {
                       onClick={() => selectCustomer(customer)}
                       className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-blue-50 transition"
                     >
-                      <span className="block font-semibold text-slate-800">{customer.name}</span>
+                      <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+                        <span>{customer.name}</span>
+                        {(customer.status === "Inactive" || customer.isInactive) && (
+                          <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
+                            Inactive
+                          </span>
+                        )}
+                      </span>
                       <span className="text-xs text-slate-500">{customer.phone || "No phone number"}</span>
                     </button>
                   ))}

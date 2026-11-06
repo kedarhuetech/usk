@@ -6,6 +6,11 @@ import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
 import { businessDataApi } from "../../services/apiClient";
+import { getAppSettings } from "../../services/appSettingsStorage";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const KEY = "ledgerly:saleOrders.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -57,7 +62,28 @@ export default function SaleOrders() {
       saveParty({ partyName: value.customer.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-receive" });
     }
     const saved = { ...value, id: value.id || `sale-order-${Date.now()}`, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
-    persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]); setEditor(null);
+    persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if (currentSettings.txnMsgSendToParty && currentSettings.txnMsgAutoSaleOrder) {
+        const targetPhone = (value.phone || "").trim();
+        if (targetPhone) {
+          const msg = buildTransactionMessage({
+            type: "saleOrder",
+            number: saved.number,
+            amount: saved.amount,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone: targetPhone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+
+    setEditor(null);
   };
   const openSelector = (mode) => {
     setSelectedIds([]); setSelectorSearch(""); setSelectorParty(editor?.value.customer || ""); setSelectorPreset("This Month"); setSelectorFrom(localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1))); setSelectorTo(localDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0))); setSelector(mode);

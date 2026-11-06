@@ -147,6 +147,8 @@ export default function MultiCurrencyTab({ settings, update }) {
       update("baseCurrency", newBase);
       update("multiCurrencyBase", newBase);
       update("multiCurrencyEnabled", true);
+      update("currency", newBase.code);
+      update("currencySymbol", newBase.symbol);
 
       // Ensure base currency is first in list or updated
       const remaining = currencyList.filter((c) => !c.isBase && c.code !== newBase.code);
@@ -197,6 +199,8 @@ export default function MultiCurrencyTab({ settings, update }) {
         update("multiCurrencyBase", null);
         update("multiCurrencyEnabled", false);
         update("multiCurrencyList", []);
+        update("currency", "INR");
+        update("currencySymbol", "₹");
       }
       return;
     }
