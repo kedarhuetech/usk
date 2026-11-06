@@ -11,7 +11,14 @@ function normalizeStatus(status = "new") {
   if (value === "accepted") return "accepted";
   if (value === "rejected") return "rejected";
   return "new";
+}// Makes the payment status value consistent.
+function normalizePaymentStatus(status = "pending_verification") {
+  const value = String(status || "pending_verification").toLowerCase();
+  if (value === "paid") return "paid";
+  if (value === "rejected" || value === "failed") return "rejected";
+  return "pending_verification";
 }
+
 
 // Makes the order item value consistent.
 function normalizeOrderItem(item = {}, index = 0) {
@@ -60,6 +67,9 @@ function normalizeOrder(order = {}) {
     additionalChargeAmount: toNumber(order.additionalChargeAmount ?? additionalCharge),
     total,
     status: normalizeStatus(order.status),
+    paymentMethod: order.paymentMethod || "upi_manual", 
+    paymentStatus: normalizePaymentStatus(order.paymentStatus), 
+    transactionRef: String(order.transactionRef || order.utr || "").trim(),
     convertedToSale: Boolean(order.convertedToSale),
     saleId: order.saleId || order.invoiceId || "",
     invoiceId: order.invoiceId || order.saleId || "",
@@ -112,4 +122,21 @@ export async function markOnlineStoreOrderConverted(orderId, saleReference) {
       convertedAt: timestamp,
       updatedAt: timestamp,
     }));
+}
+
+// Updates online store order payment status.
+export async function updateOnlineStoreOrderPaymentStatus(orderId, paymentStatus) {
+  const timestamp = new Date().toISOString();
+  const orders = await getOnlineStoreOrders();
+  const order = orders.find((row) => row.id === orderId);
+  return order
+    ? businessGrowthApi.save(
+      "orders",
+      normalizeOrder({
+        ...order,
+        paymentStatus: normalizePaymentStatus(paymentStatus),
+        updatedAt: timestamp,
+      })
+    )
+    : null;
 }

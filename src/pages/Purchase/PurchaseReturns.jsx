@@ -13,6 +13,8 @@ import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
+import { moveBatchRows, reverseBatchMovement } from "../../services/batchInventoryService.js";
+import { useAppSettings } from "../../hooks/useAppSettings.js";
 
 const STORAGE_KEY = "ledgerly:purchaseReturns.v1";
 
@@ -42,6 +44,8 @@ const freshRow = () => ({
   price: "",
   discount: "",
   tax: "NONE",
+  sourceItemId: "",
+  batchNo: "",
 });
 
 function readReturns() {
@@ -65,6 +69,8 @@ export default function PurchaseReturns() {
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState("");
   const [openItemRow, setOpenItemRow] = useState("");
+  const appSettings = useAppSettings();
+  const batchTracking = Boolean(appSettings.enableBatchTracking);
 
   // Filter state matching screenshot
   const [datePreset, setDatePreset] = useState("This Month");
@@ -110,8 +116,37 @@ export default function PurchaseReturns() {
   );
 
   const persist = (next) => {
-    setRecords(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    const rollbackKeys = [STORAGE_KEY, "ledgerly:inventoryItems.v1", "ledgerly:batchMovements.v1"];
+    const before = Object.fromEntries(rollbackKeys.map((key) => [key, localStorage.getItem(key)]));
+    try {
+    const tracking = appSettings.enableBatchTracking;
+    let updated = next.map((record) => ({ ...record }));
+    if (tracking) {
+      for (const old of records.filter((entry) => entry.type === "Purchase Return")) {
+        const replacement = updated.find((entry) => entry.id === old.id);
+        const changed = !replacement || JSON.stringify(old.rows) !== JSON.stringify(replacement.rows);
+        if (!changed) continue;
+        if (!old.batchMovementId) throw new Error("This historical purchase return has no batch allocation and cannot be safely edited or deleted while tracking is enabled.");
+        reverseBatchMovement(old.batchMovementId, "purchase-return");
+        if (replacement) { replacement.batchMovementId = ""; replacement.batchStockAdjustedAt = ""; }
+      }
+      updated = updated.map((record) => {
+        const old = records.find((entry) => entry.id === record.id);
+        const changed = !old || JSON.stringify(old.rows) !== JSON.stringify(record.rows);
+        if (record.type !== "Purchase Return" || !changed) return record;
+        const rows = (record.rows || []).filter((row) => Number(row.qty) > 0);
+        if (rows.some((row) => !row.batchNo)) throw new Error("Select a batch for each purchase return item while batch tracking is enabled.");
+        const movementId = `${record.id}:${Date.now()}:${crypto.randomUUID()}`;
+        moveBatchRows(rows, "reduce", { referenceId: movementId, sourceType: "purchase-return" });
+        return { ...record, batchMovementId: movementId, batchStockAdjustedAt: new Date().toISOString() };
+      });
+    }
+    setRecords(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    } catch (error) {
+      for (const [key, value] of Object.entries(before)) { if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, value); }
+      throw error;
+    }
   };
 
   const startNew = () => {
@@ -175,12 +210,10 @@ export default function PurchaseReturns() {
       updatedAt: new Date().toISOString(),
     };
 
-    persist(
-      editor.mode === "edit"
-        ? records.map((r) => (r.id === saved.id ? saved : r))
-        : [saved, ...records]
-    );
-    setEditor(null);
+    try {
+      persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
+      setEditor(null);
+    } catch (error) { window.alert(error.message || "Could not save this purchase return."); }
   };
 
   const printRecord = (record) => {
@@ -529,7 +562,8 @@ export default function PurchaseReturns() {
                           onClick={() => {
                             setMenuId("");
                             if (window.confirm("Delete this debit note?")) {
-                              persist(records.filter((r) => r.id !== item.id));
+                              try { persist(records.filter((r) => r.id !== item.id)); }
+                              catch (error) { window.alert(error.message || "Could not delete this purchase return."); }
                             }
                           }}
                           className="block w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-left"
@@ -725,6 +759,7 @@ export default function PurchaseReturns() {
                     <tr>
                       <th className="p-2 text-left w-8">#</th>
                       <th className="p-2 text-left">Item</th>
+                      {batchTracking && <th className="p-2 text-left">Batch</th>}
                       <th className="p-2 text-center w-20">Qty</th>
                       <th className="p-2 text-center w-20">Unit</th>
                       <th className="p-2 text-right w-24">Price</th>
@@ -761,6 +796,7 @@ export default function PurchaseReturns() {
                                     key={it.id}
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => {
+                                      changeRow(row.id, "sourceItemId", it.id);
                                       changeRow(
                                         row.id,
                                         "item",
@@ -787,6 +823,7 @@ export default function PurchaseReturns() {
                             </div>
                           )}
                         </td>
+                        {batchTracking && <td className="p-2"><select value={row.batchNo || ""} onChange={(e) => changeRow(row.id, "batchNo", e.target.value)} className="w-full rounded border px-1 py-1 text-xs"><option value="">Select batch</option>{(items.find((item) => item.id === row.sourceItemId)?.batches || []).map((batch) => <option key={batch.id || batch.batchNo} value={batch.batchNo}>{batch.batchNo} · {batch.openingQty || 0}</option>)}</select></td>}
                         <td className="p-2">
                           <input
                             type="number"

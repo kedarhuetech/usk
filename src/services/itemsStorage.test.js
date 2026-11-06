@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deleteInventoryItem, inventoryItemsStorageKey } from "./itemsStorage.js";
+import { deleteInventoryItem, getInventoryItems, inventoryItemsStorageKey, saveInventoryItem } from "./itemsStorage.js";
 
 class MemoryStorage {
   values = new Map();
@@ -22,4 +22,19 @@ test("deleting an item clears duplicate local copies with the same SKU", () => {
   const remaining = JSON.parse(storage.getItem(inventoryItemsStorageKey));
   assert.deepEqual(remaining.map((item) => item.id), ["different"]);
   delete globalThis.window;
+});
+
+test("item active state persists through normalization and reload", () => {
+  const previousWindow = globalThis.window;
+  const storage = new MemoryStorage();
+  globalThis.window = { localStorage: storage };
+  try {
+    saveInventoryItem({ id: "inactive-item", itemName: "Inactive item", isActive: false, unit: "PCS", openingQuantity: "4" });
+    const [item] = getInventoryItems();
+    assert.equal(item.isActive, false);
+    assert.equal(item.openingQuantity, "4");
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });

@@ -21,6 +21,7 @@ function setup() {
     dispatchEvent: () => true,
   };
   globalThis.Event ||= class Event {};
+  window.localStorage.setItem("ledgerly:appSettings.v1", JSON.stringify({ enableGst: true, compositeScheme: false, additionalCessOnItem: false }));
   const invoice = {
     id: "invoice-1", transactionType: "sale", invoiceNumber: "S-1",
     form: { customer: "Asha" }, totals: { finalTotal: 47.2, received: 47.2 },

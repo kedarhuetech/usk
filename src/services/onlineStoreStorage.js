@@ -10,6 +10,7 @@ const defaultOnlineStoreState = {
   logoUrl: "",
   contactNumber: "",
   email: "",
+  upiId:"",
   address: "",
   description: "",
   acceptOnlineOrders: false,

@@ -286,8 +286,8 @@ function getBatchTotal(rows) {
 }
 
 // Creates editable item form.
-function createEditableItemForm(initialItem) {
-  if (!initialItem) return itemDefaults;
+function createEditableItemForm(initialItem, defaultUnit = "PCS") {
+  if (!initialItem) return { ...itemDefaults, unit: defaultUnit || itemDefaults.unit, baseUnit: defaultUnit || itemDefaults.baseUnit };
 
   const openingQuantity = hasValue(initialItem.openingQuantity) ? initialItem.openingQuantity : initialItem.stock || "";
 
@@ -303,8 +303,8 @@ function createEditableItemForm(initialItem) {
     itemCode: initialItem.itemCode || initialItem.serviceCode || initialItem.code || "",
     barcode: initialItem.barcode || initialItem.barCode || initialItem.itemBarcode || initialItem.itemCode || "",
     serialNumbers: Array.isArray(initialItem.serialNumbers) ? initialItem.serialNumbers : [],
-    unit: initialItem.unit || "",
-    baseUnit: initialItem.baseUnit || initialItem.unit || "",
+    unit: initialItem.unit || defaultUnit || "",
+    baseUnit: initialItem.baseUnit || initialItem.unit || defaultUnit || "",
     secondaryUnit: initialItem.secondaryUnit || "",
     salePrice: initialItem.salePrice || initialItem.price || "",
     saleTaxMode: initialItem.saleTaxMode || itemDefaults.saleTaxMode,
@@ -648,7 +648,8 @@ function DiscountGroup({ form, setField }) {
 }
 
 // Renders the taxes section interface.
-function TaxesSection({ form, setField, compact = false }) {
+function TaxesSection({ form, setField, compact = false, enabled = true }) {
+  if (!enabled) return null;
   return (
     <Card className={`p-5 ${compact ? "" : "min-h-32"}`}>
       <SelectField label="Tax Rate" value={form.taxRate} onChange={(value) => setField("taxRate", value)} options={taxOptions} className="max-w-xs" />
@@ -657,7 +658,7 @@ function TaxesSection({ form, setField, compact = false }) {
 }
 
 // Renders the pricing tab interface.
-function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleVisible, wholesale, setWholesale }) {
+function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleVisible, wholesale, setWholesale, enableItemDiscount, enableGst }) {
   return (
     <div className="space-y-4">
       <Card className="p-5">
@@ -672,7 +673,7 @@ function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleV
             selectValue={form.saleTaxMode}
             onSelectChange={(value) => setField("saleTaxMode", value)}
           />
-          <DiscountGroup form={form} setField={setField} />
+          {enableItemDiscount && <DiscountGroup form={form} setField={setField} />}
         </div>
 
         {!wholesaleVisible ? (
@@ -725,10 +726,10 @@ function PricingTab({ form, setField, isProduct, wholesaleVisible, setWholesaleV
               onSelectChange={(value) => setField("purchaseTaxMode", value)}
             />
           </Card>
-          <TaxesSection form={form} setField={setField} />
+          <TaxesSection form={form} setField={setField} enabled={enableGst} />
         </div>
       ) : (
-        <TaxesSection form={form} setField={setField} compact />
+        <TaxesSection form={form} setField={setField} compact enabled={enableGst} />
       )}
     </div>
   );
@@ -781,11 +782,14 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   const appSettings = useAppSettings();
   const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
   const enableItemCategory = appSettings.enableItemCategory ?? true;
+  const enableItemDescription = appSettings.enableItemDescription ?? true;
+  const enableItemDiscount = appSettings.enableItemDiscount ?? true;
+  const enableGst = appSettings.enableGst ?? true;
   const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
 
   const fileRef = useRef(null);
-  const [form, setForm] = useState(() => createEditableItemForm(initialItem));
+  const [form, setForm] = useState(() => createEditableItemForm(initialItem, appSettings.defaultItemUnit));
   const [categories, setCategories] = useState(() => (
     initialItem?.category && !defaultCategories.includes(initialItem.category)
       ? [...defaultCategories, initialItem.category]
@@ -806,13 +810,13 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
 
   useEffect(() => {
     if (initialItem) {
-      setForm(createEditableItemForm(initialItem));
+      setForm(createEditableItemForm(initialItem, appSettings.defaultItemUnit));
       setImage(initialItem.imageUrl || initialItem.image || "");
       setWholesaleVisible(hasWholesale(initialItem));
       setWholesale(createEditableWholesale(initialItem));
       setBatchRows(createEditableBatchRows(initialItem));
     }
-  }, [initialItem]);
+  }, [initialItem, appSettings.defaultItemUnit]);
 
   const isProduct = form.type === "product";
   const isEditMode = mode === "edit";
@@ -1046,6 +1050,8 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
                 setWholesaleVisible={setWholesaleVisible}
                 wholesale={wholesale}
                 setWholesale={setWholesale}
+                enableItemDiscount={enableItemDiscount}
+                enableGst={enableGst}
               />
             )}
             {activeTab === "stock" && isProduct && (
@@ -1059,6 +1065,12 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
               />
             )}
           </div>
+          {enableItemDescription && (
+            <label className="mt-5 block max-w-5xl text-xs font-semibold text-slate-600">
+              Item Description
+              <textarea value={form.description} onChange={(event) => setField("description", event.target.value)} rows={3} className="mt-1.5 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-500" placeholder="Description" />
+            </label>
+          )}
         </div>
 
         <footer className="flex justify-end gap-4 border-t border-slate-100 bg-white px-5 py-4">

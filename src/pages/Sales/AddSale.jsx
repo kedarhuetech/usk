@@ -44,6 +44,7 @@ import {
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
 import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
+import { localDateOnly } from "../../services/batchInventoryService.js";
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 import { readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -219,12 +220,14 @@ function orderAdditionalChargeNote(order) {
 function saleItemFromInventory(item = {}) {
   return {
     id: item.id,
+    isActive: item.isActive !== false,
     name: item.itemName || item.name || "Item",
     stock: item.openingQuantity || item.stock || "0",
     unit: item.unit || item.baseUnit || "",
     price: item.salePrice || item.price || "",
     purchasePrice: item.purchasePrice || "",
     priceMode: item.saleTaxMode || "Without Tax",
+    purchasePriceMode: item.purchaseTaxMode || "Without Tax",
     taxRate: item.taxRate === "None" ? "NONE" : item.taxRate || "NONE",
     code: item.itemCode || item.code || "",
     barcode: item.barcode || item.barCode || item.itemBarcode || item.itemCode || "",
@@ -232,6 +235,8 @@ function saleItemFromInventory(item = {}) {
     subCategory: item.subCategory || "",
     batches: item.batches || [],
     serialNumbers: item.serialNumbers || [],
+    discount: item.discount || "",
+    discountType: item.discountType || "Percentage",
   };
 }
 
@@ -666,6 +671,7 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings =
   const enableItemCategory = appSettings.enableItemCategory ?? true;
   const q = (query || value).toLowerCase().trim();
   const filtered = items.filter((item) => {
+    if (item.isActive === false) return false;
     if (!q) return true;
     const matchName = item.name.toLowerCase().includes(q);
     const matchCode = (item.code || "").toLowerCase().includes(q);
@@ -687,9 +693,9 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings =
         onKeyDown={(event) => {
           if (event.key === "Enter") {
             const exactMatch = items.find((i) =>
-              (enableBarcodeScanning && i.barcode && i.barcode.toLowerCase() === value.trim().toLowerCase())
+              i.isActive !== false && ((enableBarcodeScanning && i.barcode && i.barcode.toLowerCase() === value.trim().toLowerCase())
               || (i.code && i.code.toLowerCase() === value.trim().toLowerCase())
-              || (i.name.toLowerCase() === value.trim().toLowerCase())
+              || (i.name.toLowerCase() === value.trim().toLowerCase()))
             );
             if (exactMatch) {
               onSelect(exactMatch);
@@ -724,6 +730,9 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings =
                     <span className="font-medium text-slate-800">{item.name}</span>
                     {enableItemCategory && item.category && (
                       <span className="ml-1 text-xs text-slate-400 font-normal">({item.category})</span>
+                    )}
+                    {appSettings.enableItemDescription !== false && item.description && (
+                      <span className="ml-1 text-xs text-slate-500 font-normal">· {item.description}</span>
                     )}
                     {enableBarcodeScanning && item.barcode && (
                       <span className="ml-1 font-mono text-[11px] text-slate-500 font-normal">[{item.barcode}]</span>
@@ -804,7 +813,10 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
               cessPercent: item.cessPercent || item.cess || row.cessPercent || "",
               unit: item.unit || row.unit,
               price: (isPurchase && item.purchasePrice) ? item.purchasePrice : (item.price || row.price),
-              priceMode: item.priceMode || row.priceMode,
+              discountMode: !isPurchase && appSettings.enableItemDiscount !== false && String(item.discountType || "").toLowerCase().includes("flat") ? "amount" : "percent",
+              discountPercent: !isPurchase && appSettings.enableItemDiscount !== false && !String(item.discountType || "").toLowerCase().includes("flat") ? String(item.discount || "") : "",
+              discountAmount: !isPurchase && appSettings.enableItemDiscount !== false && String(item.discountType || "").toLowerCase().includes("flat") ? String(item.discount || "") : "",
+              priceMode: (isPurchase ? item.purchasePriceMode : item.priceMode) || row.priceMode,
               taxRate: item.taxRate || row.taxRate,
               sourceItemId: item.id || "",
               batchNo: (row.batchNo || (item.batches?.[0]?.batchNo || "")),
@@ -835,9 +847,9 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 const val = e.target.value.trim().toLowerCase();
                 const found = items.find(
                   (it) =>
-                    (it.barcode && it.barcode.toLowerCase() === val) ||
+                    it.isActive !== false && ((it.barcode && it.barcode.toLowerCase() === val) ||
                     (it.code && it.code.toLowerCase() === val) ||
-                    (it.name.toLowerCase() === val)
+                    (it.name.toLowerCase() === val))
                 );
                 if (found) {
                   const emptyIdx = rows.findIndex((r) => !r.item.trim());
@@ -925,7 +937,12 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 {enableBatchTracking && (
                   <>
                     <td className="border-r border-slate-200 p-1">
-                      <CellInput value={row.batchNo || ""} onChange={(event) => updateRow(row.id, "batchNo", event.target.value)} placeholder="Batch No" />
+                      {!isPurchase && row.sourceItemId && items.find((item) => item.id === row.sourceItemId)?.batches?.length ? (
+                        <select value={row.batchNo || ""} onChange={(event) => { const batch = items.find((item) => item.id === row.sourceItemId)?.batches?.find((entry) => entry.batchNo === event.target.value); setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, batchNo: batch?.batchNo || "", expDate: batch?.expDate || "" } : entry)); }} className="h-8 w-full rounded border border-slate-300 bg-white px-1 text-xs">
+                          <option value="">Select batch</option>
+                          {items.find((item) => item.id === row.sourceItemId).batches.map((batch) => <option key={batch.id || batch.batchNo} value={batch.batchNo} disabled={Number(batch.openingQty || 0) <= 0 || Boolean(batch.expDate && batch.expDate < localDateOnly())}>{batch.batchNo} · {batch.openingQty || 0} · exp {batch.expDate || "—"}</option>)}
+                        </select>
+                      ) : <CellInput value={row.batchNo || ""} onChange={(event) => updateRow(row.id, "batchNo", event.target.value)} placeholder="Batch No" />}
                     </td>
                     <td className="border-r border-slate-200 p-1">
                       <CellInput type="date" value={row.expDate || ""} onChange={(event) => updateRow(row.id, "expDate", event.target.value)} />

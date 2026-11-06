@@ -403,9 +403,8 @@ function ItemCard({ item, selected, onToggle, onEdit }) {
             <button
               type="button"
               onClick={() => onToggle(item.id)}
-              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border ${
-                selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-400 hover:bg-slate-50"
-              }`}
+              className={`grid h-8 w-8 shrink-0 place-items-center rounded-full border ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-400 hover:bg-slate-50"
+                }`}
               aria-label={selected ? "Remove from online store" : "Add to online store"}
             >
               {selected ? <FiCheck className="h-4 w-4" /> : <FiPlus className="h-4 w-4" />}
@@ -609,6 +608,7 @@ function StoreDetailsModal({ storeState, onClose, onSave }) {
     businessName: form.businessName,
     gstin: form.gstin,
     logoUrl: form.logoUrl,
+    upiId: form.upiId || "",
     contactNumber: form.contactNumber,
     email: form.email,
     address: form.address,
@@ -638,6 +638,7 @@ function StoreDetailsModal({ storeState, onClose, onSave }) {
                 ["gstin", "GSTIN"],
                 ["contactNumber", "Contact Number"],
                 ["email", "Email"],
+                ["upiId", "UPI ID/VPA (e.g. example@bank)"],
               ].map(([field, label]) => (
                 <label key={field} className="block">
                   <span className="mb-2 block text-sm font-semibold text-slate-600">{label}</span>
@@ -774,8 +775,32 @@ function OrderStatusBadge({ status }) {
   );
 }
 
+// This helper handles payment status label logic.
+function paymentStatusLabel(status = "pending_verification") {
+  const value = String(status || "pending_verification").toLowerCase();
+  if (value === "paid") return "Paid";
+  if (value === "rejected" || value === "failed") return "Rejected";
+  return "Pending Verification";
+}
+
+// This helper handles payment status class logic.
+function paymentStatusClass(status = "pending_verification") {
+  const value = String(status || "pending_verification").toLowerCase();
+  if (value === "paid") return "bg-emerald-50 text-emerald-700";
+  if (value === "rejected" || value === "failed") return "bg-rose-50 text-rose-700";
+  return "bg-amber-50 text-amber-700";
+}
+
+function OrderPaymentBadge({ status }) {
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${paymentStatusClass(status)}`}>
+      {paymentStatusLabel(status)}
+    </span>
+  );
+}
+
 // Renders the order details modal interface.
-function OrderDetailsModal({ order, onClose, onAccept, onReject, onConvert }) {
+function OrderDetailsModal({ order, onClose, onAccept, onReject, onConvert, onUpdatePaymentStatus }) {
   const canUpdate = order.status === "new";
   const canConvert = order.status === "accepted" && !order.convertedToSale;
 
@@ -824,6 +849,37 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onConvert }) {
                   <p className="rounded-lg bg-blue-50 px-3 py-2 font-semibold text-blue-700">
                     Converted to Sale Invoice: {order.invoiceNumber || order.saleId}
                   </p>
+                )}
+              </div>
+              <h3 className="mt-5 font-bold text-slate-900">Payment</h3>
+              <div className="mt-3 grid gap-2 text-sm text-slate-600">
+                <p><b className="text-slate-950">Method:</b> {order.paymentMethod === "upi_manual" ? "UPI (Manual)" : order.paymentMethod || "UPI"}</p>
+                <div className="flex items-center gap-2">
+                  <b className="text-slate-950">Payment Status:</b>
+                  <OrderPaymentBadge status={order.paymentStatus} />
+                </div>
+                {order.transactionRef ? (
+                  <p><b className="text-slate-950">UTR / Ref:</b> <span className="font-mono text-xs">{order.transactionRef}</span></p>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No UTR submitted by customer</p>
+                )}
+                {(!order.paymentStatus || order.paymentStatus === "pending_verification") && (
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onUpdatePaymentStatus?.(order.id, "paid")}
+                      className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700"
+                    >
+                      Confirm Payment
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdatePaymentStatus?.(order.id, "rejected")}
+                      className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100"
+                    >
+                      Reject Payment
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
@@ -880,7 +936,7 @@ function OrderDetailsModal({ order, onClose, onAccept, onReject, onConvert }) {
 }
 
 // Renders the online orders view interface.
-function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onReject, onConvert }) {
+function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onReject, onConvert, onUpdatePaymentStatus }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [activeOrderId, setActiveOrderId] = useState(null);
@@ -970,7 +1026,7 @@ function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onR
             <table className="min-w-[900px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-xs font-bold uppercase text-slate-500">
                 <tr>
-                  {["Order ID", "Customer", "Mobile", "Date/Time", "Total", "Status", ""].map((header) => (
+                  {["Order ID", "Customer", "Mobile", "Date/Time", "Total", "Payment", "Status", ""].map((header) => (
                     <th key={header} className="border-b border-slate-200 px-4 py-3">{header}</th>
                   ))}
                 </tr>
@@ -983,6 +1039,7 @@ function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onR
                     <td className="px-4 py-3 text-slate-600">{order.mobile || order.mobileNumber || "-"}</td>
                     <td className="px-4 py-3 text-slate-600">{formatDateTime(order.createdAt)}</td>
                     <td className="px-4 py-3 font-bold text-slate-900">{formatCurrency(order.total, "Rs 0")}</td>
+                    <td className="px-4 py-3"><OrderPaymentBadge status={order.paymentStatus} /></td>
                     <td className="px-4 py-3"><OrderStatusBadge status={order.status} /></td>
                     <td className="px-4 py-3 text-right">
                       <button type="button" onClick={() => setActiveOrderId(order.id)} className="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100">
@@ -1013,6 +1070,7 @@ function OnlineOrdersView({ orders, storeState, onBack, onRefresh, onAccept, onR
           onAccept={acceptOrder}
           onReject={rejectOrder}
           onConvert={onConvert}
+          onUpdatePaymentStatus={onUpdatePaymentStatus}
         />
       )}
     </div>
@@ -1149,9 +1207,8 @@ function StorefrontProductCard({ item, onView, onShare }) {
         <button
           type="button"
           disabled={addDisabled}
-          className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-bold ${
-            availability.inStock && !addDisabled ? "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50" : "bg-slate-200 text-white"
-          }`}
+          className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-full px-2 text-sm font-bold ${availability.inStock && !addDisabled ? "border border-blue-200 bg-white text-blue-700 hover:bg-blue-50" : "bg-slate-200 text-white"
+            }`}
         >
           <FiPlus className="h-4 w-4 shrink-0" />
           <span className="truncate">Add</span>
@@ -1406,6 +1463,12 @@ function OnlineStore() {
     await refreshOrders();
   };
 
+  // Updates order payment status.
+  const updateOrderPayment = async (orderId, paymentStatus) => {
+    await updateGrowthOrder(orderId, { paymentStatus });
+    await refreshOrders();
+  };
+
   // Converts order to sale.
   const convertOrderToSale = (order) => {
     if (order.status !== "accepted" || order.convertedToSale) return;
@@ -1433,6 +1496,7 @@ function OnlineStore() {
         onRefresh={refreshOrders}
         onAccept={(orderId) => updateOrderStatus(orderId, "accepted")}
         onReject={(orderId) => updateOrderStatus(orderId, "rejected")}
+        onUpdatePaymentStatus={updateOrderPayment}
         onConvert={convertOrderToSale}
       />
     );
