@@ -13,6 +13,11 @@ import { savePurchaseJobWork } from "../../services/purchaseJobWorkStorage";
 import { getAllLocalTransactions, transactionTypes } from "../../services/transactionRecordsStorage";
 import { ensureLocalTestData } from "../../services/localTransactionTestData";
 import { taxPercent } from "../../utils/saleInvoice";
+import { getAppSettings } from "../../services/appSettingsStorage";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -463,6 +468,27 @@ export default function SaleReturns() {
   const save = (value) => {
     const result = saveSaleReturn(value);
     setRecords((current) => value.id ? current.map((record) => record.id === result.id ? result : record) : [result, ...current]);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if (currentSettings.txnMsgSendToParty && currentSettings.txnMsgAutoSalesReturn) {
+        const targetPhone = (value.phone || value.customerPhone || "").trim();
+        if (targetPhone) {
+          const msg = buildTransactionMessage({
+            type: "salesReturn",
+            number: result.number || result.returnNumber || result.id,
+            amount: result.total || 0,
+            balance: result.customerCreditAmount || 0,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone: targetPhone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+
     setEditor(null);
   };
 

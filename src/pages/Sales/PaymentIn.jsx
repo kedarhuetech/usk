@@ -5,6 +5,11 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
 import { getPaymentIns, savePaymentIns } from "../../services/transactionRepository.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -71,6 +76,29 @@ export default function PaymentIn() {
     const now = new Date().toISOString();
     const saved = { ...entry, id: entry.id || `payment-in-${Date.now()}`, amount, received: amount, paymentType: [...new Set(entry.payments.map((payment) => payment.type))].join(", "), status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || "My Company", user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated receipt" : "Created receipt", at: now }] };
     persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if (currentSettings.txnMsgSendToParty && currentSettings.txnMsgAutoPaymentIn) {
+        const matching = parties.find(
+          (p) => p.id === entry.partyId || (p.partyName || p.name) === entry.partyName
+        );
+        const targetPhone = matching?.phone || entry.phone;
+        if (targetPhone) {
+          const msg = buildTransactionMessage({
+            type: "paymentIn",
+            number: saved.number,
+            amount: saved.amount,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone: targetPhone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+
     setEditor(null);
   };
   const toggleMenu = (entry, event) => {

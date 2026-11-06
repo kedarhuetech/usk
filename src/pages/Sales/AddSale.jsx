@@ -343,7 +343,14 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
               filtered.map((party) => (
                 <button key={party.id} type="button" onClick={() => { onSelect(party); setOpen(false); }} className="grid w-full grid-cols-[1fr_80px] gap-3 rounded-md px-3 py-1.5 text-left text-[13px] hover:bg-slate-50">
                   <span>
-                    <span className="block font-medium text-slate-800">{party.name}</span>
+                    <span className="flex items-center gap-1.5 font-medium text-slate-800">
+                      <span>{party.partyName || party.name}</span>
+                      {(party.status === "Inactive" || party.isInactive) && (
+                        <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
+                          Inactive
+                        </span>
+                      )}
+                    </span>
                     <span className="text-xs text-slate-400">{party.phone}</span>
                   </span>
                   <span className="text-right font-semibold text-slate-700">{party.balance}</span>
@@ -447,9 +454,15 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
               setField("partyBalance", "");
             }}
             onSelect={(party) => {
-              setField("customer", party.name);
-              setField("phone", party.phone);
-              setField("partyBalance", party.balance);
+              setField("customer", party.partyName || party.name || "");
+              setField("phone", party.phone || "");
+              setField("partyBalance", party.balance || "");
+              if (party.billingAddress || party.address) {
+                setField("billingAddress", party.billingAddress || party.address);
+              }
+              if (party.shippingAddress) {
+                setField("shippingAddress", party.shippingAddress);
+              }
             }}
           />
           {form.partyBalance !== "" && <span className="mt-1 block text-xs font-semibold text-emerald-600">BAL: {form.partyBalance}</span>}
@@ -473,7 +486,7 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             </div>
           )}
         </div>
-        {isCredit && appSettings?.enableShippingAddress !== false && (
+        {appSettings?.enableShippingAddress !== false && (
           <div>
             <TextArea value={form.shippingAddress} onChange={(event) => setField("shippingAddress", event.target.value)} placeholder="Shipping Address" className="h-20 w-full sm:h-24 lg:h-20" />
             {form.shippingAddress && (
