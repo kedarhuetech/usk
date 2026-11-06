@@ -1,6 +1,26 @@
 // Implements the party details page.
 import { useEffect, useMemo, useState } from "react";
-import { FiCheck, FiChevronRight, FiDownload, FiFileText, FiFilter, FiPlus, FiPrinter, FiSearch, FiSettings, FiTrash2, FiUsers, FiX } from "react-icons/fi";
+import {
+  FiAlertCircle,
+  FiBell,
+  FiCheck,
+  FiChevronDown,
+  FiChevronRight,
+  FiCopy,
+  FiDownload,
+  FiFileText,
+  FiFilter,
+  FiMail,
+  FiMessageSquare,
+  FiPlus,
+  FiPrinter,
+  FiSearch,
+  FiSettings,
+  FiStar,
+  FiTrash2,
+  FiUsers,
+  FiX,
+} from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Button from "../../components/Common/Button";
@@ -13,6 +33,7 @@ import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { calculateInvoiceSettlement, calculatePartyBalances, transactionMatchesParty } from "../../services/partyBalances";
+import useAppSettings from "../../hooks/useAppSettings";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -76,7 +97,7 @@ function PartyIllustration() {
 }
 
 // Renders the gst address tab interface.
-function GstAddressTab({ form, setField, showShipping, setShowShipping }) {
+function GstAddressTab({ form, setField, showShipping, setShowShipping, enableShippingAddress = true }) {
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       <div className="space-y-4">
@@ -85,31 +106,33 @@ function GstAddressTab({ form, setField, showShipping, setShowShipping }) {
         <Input label="Email" value={form.email} onChange={(event) => setField("email", event.target.value)} placeholder="Email ID" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className={`grid gap-6 ${enableShippingAddress ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
         <div>
           <TextareaField label="Billing Address" value={form.billingAddress} onChange={(value) => setField("billingAddress", value)} placeholder="Billing Address" />
           <button type="button" className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
             Show Detailed Address
           </button>
         </div>
-        <div>
-          {showShipping ? (
-            <>
-              <TextareaField label="Shipping Address" value={form.shippingAddress} onChange={(value) => setField("shippingAddress", value)} placeholder="Shipping Address" />
-              <button type="button" className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
-                Show Detailed Address
+        {enableShippingAddress && (
+          <div>
+            {showShipping ? (
+              <>
+                <TextareaField label="Shipping Address" value={form.shippingAddress} onChange={(value) => setField("shippingAddress", value)} placeholder="Shipping Address" />
+                <button type="button" className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
+                  Show Detailed Address
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowShipping(true)}
+                className="mt-8 flex h-28 w-full items-center justify-center gap-2 rounded-md border border-dashed border-blue-300 bg-blue-50/50 text-sm font-semibold text-blue-600 hover:bg-blue-50 cursor-pointer"
+              >
+                <FiPlus /> Add Shipping Address
               </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowShipping(true)}
-              className="mt-8 flex h-28 w-full items-center justify-center gap-2 rounded-md border border-dashed border-blue-300 bg-blue-50/50 text-sm font-semibold text-blue-600 hover:bg-blue-50"
-            >
-              <FiPlus /> Add New Address
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -153,46 +176,130 @@ function CreditBalanceTab({ form, setField }) {
   );
 }
 
-// Renders the additional fields tab interface.
-function AdditionalFieldsTab({ form, setAdditionalField }) {
+// Renders the additional fields tab interface using configured settings.
+function AdditionalFieldsTab({ form, setAdditionalField, customFieldSettings = [] }) {
+  const activeSettings = (customFieldSettings?.length === 4 ? customFieldSettings : [])
+    .filter((cf) => cf.enabled);
+
+  if (activeSettings.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center bg-slate-50/50">
+        <p className="text-sm font-medium text-slate-700">No additional party fields are currently enabled in Settings.</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Go to <span className="font-semibold text-blue-600">Settings &gt; PARTY &gt; Additional fields</span> to enable custom fields (e.g. MRP, Route, Delivery Zone).
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
-      {form.additionalFields.map((field, index) => (
-        <div key={field.id} className="grid gap-3 rounded-lg border border-slate-200 p-3 md:grid-cols-[40px_1fr_1fr_150px]">
-          <label className="flex items-center">
-            <input type="checkbox" checked={field.enabled} onChange={(event) => setAdditionalField(index, "enabled", event.target.checked)} className="h-4 w-4 accent-blue-600" />
-          </label>
-          <Input value={field.fieldName} onChange={(event) => setAdditionalField(index, "fieldName", event.target.value)} placeholder="Field Name" />
-          <Input type={field.type} value={field.value} onChange={(event) => setAdditionalField(index, "value", event.target.value)} placeholder="Value" />
-          <label className="flex items-center justify-between gap-3 text-sm font-medium text-slate-600">
-            Show In Print
-            <input type="checkbox" checked={field.showInPrint} onChange={(event) => setAdditionalField(index, "showInPrint", event.target.checked)} className="h-4 w-4 accent-blue-600" />
-          </label>
-        </div>
-      ))}
+    <div className="space-y-4">
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Active Additional Fields (Configured in Party Settings)
+      </p>
+      {activeSettings.map((setting) => {
+        const fieldItem = (form.additionalFields || []).find((f) => f.id === setting.id) || {
+          id: setting.id,
+          fieldName: setting.name || "",
+          value: "",
+          showInPrint: setting.showInPrint ?? true,
+          enabled: true,
+          type: setting.type || "text",
+        };
+        const labelText = setting.name || `Field (${setting.id})`;
+
+        return (
+          <div
+            key={setting.id}
+            className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3.5 sm:grid-cols-[180px_1fr_140px] items-center shadow-xs"
+          >
+            <div>
+              <span className="block text-xs font-bold text-slate-800">{labelText}</span>
+              <span className="text-[11px] text-slate-400">
+                {setting.type === "date" ? "Date (dd/mm/yy)" : "Text field"}
+              </span>
+            </div>
+
+            <div>
+              {setting.type === "date" ? (
+                <input
+                  type="date"
+                  value={fieldItem.value || ""}
+                  onChange={(e) => setAdditionalField(setting.id, "value", e.target.value, setting)}
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={fieldItem.value || ""}
+                  onChange={(e) => setAdditionalField(setting.id, "value", e.target.value, setting)}
+                  placeholder={`Enter ${labelText}`}
+                  className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                />
+              )}
+            </div>
+
+            <label className="flex items-center justify-end gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+              <span>Show In Print</span>
+              <input
+                type="checkbox"
+                checked={fieldItem.showInPrint ?? setting.showInPrint ?? true}
+                onChange={(e) => setAdditionalField(setting.id, "showInPrint", e.target.checked, setting)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+              />
+            </label>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // Renders the add party modal interface.
-function AddPartyModal({ onClose, onSave, initialParty = null }) {
+function AddPartyModal({ onClose, onSave, initialParty = null, appSettings = {} }) {
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [showShipping, setShowShipping] = useState(Boolean(initialParty?.shippingAddress));
-  const [form, setForm] = useState(() => initialParty ? { ...partyFormDefaults, ...initialParty } : partyFormDefaults);
+  const [form, setForm] = useState(() => ({
+    ...partyFormDefaults,
+    status: "active",
+    loyaltyPoints: 0,
+    ...(initialParty || {}),
+  }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   // Sets field.
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
-  // Sets additional field.
-  const setAdditionalField = (index, field, value) => {
-    setForm((current) => ({
-      ...current,
-      additionalFields: current.additionalFields.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, [field]: value } : item
-      ),
-    }));
+
+  // Sets additional field by setting ID.
+  const setAdditionalField = (fieldId, prop, value, settingMeta = null) => {
+    setForm((current) => {
+      const existing = current.additionalFields || [];
+      const idx = existing.findIndex((f) => f.id === fieldId);
+      if (idx >= 0) {
+        return {
+          ...current,
+          additionalFields: existing.map((f, i) => (i === idx ? { ...f, [prop]: value } : f)),
+        };
+      }
+      return {
+        ...current,
+        additionalFields: [
+          ...existing,
+          {
+            id: fieldId,
+            fieldName: settingMeta?.name || fieldId,
+            value: prop === "value" ? value : "",
+            showInPrint: prop === "showInPrint" ? value : (settingMeta?.showInPrint ?? true),
+            enabled: true,
+            type: settingMeta?.type || "text",
+            [prop]: value,
+          },
+        ],
+      };
+    });
   };
+
   // Saves result.
   const save = async (resetAfterSave = false) => {
     if (!form.partyName.trim()) {
@@ -202,9 +309,13 @@ function AddPartyModal({ onClose, onSave, initialParty = null }) {
     setSaving(true);
     setError("");
     try {
-      await onSave({ ...form, partyName: form.partyName.trim() });
+      await onSave({
+        ...form,
+        partyName: form.partyName.trim(),
+        status: form.status || "active",
+      });
       if (resetAfterSave) {
-        setForm(partyFormDefaults);
+        setForm({ ...partyFormDefaults, status: "active", loyaltyPoints: 0 });
         setShowShipping(false);
       } else {
         onClose();
@@ -220,21 +331,39 @@ function AddPartyModal({ onClose, onSave, initialParty = null }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
       <section className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
         <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-slate-800">{initialParty ? "Edit Party" : "Add Party"}</h2>
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-semibold text-slate-800">{initialParty ? "Edit Party" : "Add Party"}</h2>
+            {(appSettings.managePartyStatus ?? true) && (
+              <button
+                type="button"
+                onClick={() => setField("status", (form.status || "active") === "inactive" ? "active" : "inactive")}
+                className={`rounded-full px-3 py-1 text-xs font-bold transition cursor-pointer ${
+                  form.status === "inactive"
+                    ? "bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200"
+                    : "bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200"
+                }`}
+                title="Click to toggle Active / Inactive"
+              >
+                ● {form.status === "inactive" ? "Inactive" : "Active"}
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-4 text-slate-500">
             <FiSettings className="h-5 w-5" />
-            <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-slate-100">
+            <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-slate-100 cursor-pointer">
               <FiX className="h-6 w-6" />
             </button>
           </div>
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className={`grid gap-4 md:grid-cols-2 ${(appSettings.enablePartyGrouping ?? true) ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
             <Input label="Party Name *" value={form.partyName} onChange={(event) => setField("partyName", event.target.value)} placeholder="Party Name" />
             <Input label="GSTIN" value={form.gstin} onChange={(event) => setField("gstin", event.target.value)} placeholder="GSTIN" />
             <Input label="Phone Number" value={form.phone} onChange={(event) => setField("phone", event.target.value)} placeholder="Phone Number" />
-            <Input label="Party Group" value={form.group || ""} onChange={(event) => setField("group", event.target.value)} placeholder="e.g. General, Retailers, Wholesalers" />
+            {(appSettings.enablePartyGrouping ?? true) && (
+              <Input label="Party Group" value={form.group || ""} onChange={(event) => setField("group", event.target.value)} placeholder="e.g. General, Retailers, Wholesalers" />
+            )}
           </div>
 
           <div className="mt-8 border-b border-slate-200">
@@ -254,10 +383,22 @@ function AddPartyModal({ onClose, onSave, initialParty = null }) {
 
           <div className="mt-6">
             {activeTab === "GST & Address" && (
-              <GstAddressTab form={form} setField={setField} showShipping={showShipping} setShowShipping={setShowShipping} />
+              <GstAddressTab
+                form={form}
+                setField={setField}
+                showShipping={showShipping}
+                setShowShipping={setShowShipping}
+                enableShippingAddress={appSettings.enableShippingAddress ?? true}
+              />
             )}
             {activeTab === "Credit & Balance" && <CreditBalanceTab form={form} setField={setField} />}
-            {activeTab === "Additional Fields" && <AdditionalFieldsTab form={form} setAdditionalField={setAdditionalField} />}
+            {activeTab === "Additional Fields" && (
+              <AdditionalFieldsTab
+                form={form}
+                setAdditionalField={setAdditionalField}
+                customFieldSettings={appSettings.partyCustomFields}
+              />
+            )}
           </div>
         </div>
 
@@ -297,7 +438,7 @@ function formatDateDMY(dateStr) {
   return dateStr;
 }
 
-function buildStatementDocument(party, invoices, activity = []) {
+function buildStatementDocument(party, invoices, activity = [], settings = {}) {
   const company = getCompanyProfile();
   const companyName = company.businessName || company.companyName || "Company Name";
   const companyPhone = company.phoneNumber || company.phone || "";
@@ -335,6 +476,9 @@ function buildStatementDocument(party, invoices, activity = []) {
   const totalReceivable = rows.reduce((s, r) => s + r.receivableBalance, 0);
   const totalPayable = rows.reduce((s, r) => s + r.payableBalance, 0);
 
+  const printShipping = (settings?.printShippingAddress !== false) && party?.shippingAddress;
+  const printableFields = (party?.additionalFields || []).filter((f) => f.showInPrint && f.value);
+
   const tableRows = rows.map((r) => `
     <tr>
       <td>${escapeHtml(r.date)}</td>
@@ -360,9 +504,9 @@ function buildStatementDocument(party, invoices, activity = []) {
     .company-name { font-size: 22px; font-weight: 800; margin: 0; }
     .company-phone { font-size: 13px; color: #475569; margin: 4px 0 0; }
     .doc-title { text-align: center; text-decoration: underline; font-size: 26px; font-weight: 800; margin: 28px 0 20px; }
-    .party-info { margin-bottom: 16px; }
-    .party-name { font-size: 18px; font-weight: 700; margin: 0; }
-    .party-contact { font-size: 13px; color: #475569; margin: 4px 0 0; }
+    .party-info { margin-bottom: 16px; line-height: 1.5; }
+    .party-name { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+    .party-contact { font-size: 13px; color: #475569; margin: 2px 0; }
     table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 12px; }
     th { background: #cbd5e1; font-weight: 700; color: #0f172a; text-align: left; padding: 10px 8px; border-bottom: 2px solid #94a3b8; }
     td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; }
@@ -387,6 +531,9 @@ function buildStatementDocument(party, invoices, activity = []) {
   <div class="party-info">
     <div class="party-name">Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</div>
     ${party?.phone ? `<div class="party-contact">Contact No.: ${escapeHtml(party.phone)}</div>` : ""}
+    ${party?.billingAddress ? `<div class="party-contact">Billing Address: ${escapeHtml(party.billingAddress)}</div>` : ""}
+    ${printShipping ? `<div class="party-contact"><strong>Shipping Address:</strong> ${escapeHtml(party.shippingAddress)}</div>` : ""}
+    ${printableFields.map((f) => `<div class="party-contact"><strong>${escapeHtml(f.fieldName || f.name)}:</strong> ${escapeHtml(f.value)}</div>`).join("")}
   </div>
 
   <table>
@@ -430,6 +577,7 @@ function buildStatementDocument(party, invoices, activity = []) {
 function PartyDetails() {
   const navigate = useNavigate();
   const location = useLocation();
+  const appSettings = useAppSettings() || {};
 
   useEffect(() => {
     if (location.state?.openAddParty) {
@@ -441,6 +589,11 @@ function PartyDetails() {
   const [parties, setParties] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [purchases, setPurchases] = useState([]);
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [reminderModalOpen, setReminderModalOpen] = useState(false);
+  const [reminderExtraMessage, setReminderExtraMessage] = useState("");
+  const [reminderNotice, setReminderNotice] = useState("");
   const [balanceFilter, setBalanceFilter] = useState(() => {
     const params = new URLSearchParams(location.search);
     const f = params.get("filter") || location.state?.filter;
@@ -595,9 +748,31 @@ function PartyDetails() {
   }), [parties, invoices, purchases, partyActivity]);
   const getPartyBalanceInfo = (party) => partyBalanceResult.parties.find((entry) => String(entry.id) === String(party.id)) || { receivable: 0, payable: 0, customerAdvances: 0, supplierAdvances: 0, net: 0 };
 
+  const partyGroups = useMemo(() => {
+    const set = new Set();
+    parties.forEach((p) => {
+      const g = (p.group || "General").trim();
+      if (g) set.add(g);
+    });
+    return Array.from(set);
+  }, [parties]);
+
   const filteredParties = parties.filter((party) => {
     const matchesSearch = String(party.partyName || "").toLowerCase().includes(search.toLowerCase());
     if (!matchesSearch) return false;
+
+    // Party Grouping setting check
+    if ((appSettings.enablePartyGrouping ?? true) && groupFilter !== "all") {
+      const g = (party.group || "General").toLowerCase();
+      if (g !== groupFilter.toLowerCase()) return false;
+    }
+
+    // Party Status setting check
+    if ((appSettings.managePartyStatus ?? true) && statusFilter !== "all") {
+      const s = party.status || "active";
+      if (statusFilter === "active" && s === "inactive") return false;
+      if (statusFilter === "inactive" && s !== "inactive") return false;
+    }
 
     const info = getPartyBalanceInfo(party);
     if (balanceFilter === "receivable") return info.receivable > 0;
@@ -648,7 +823,7 @@ function PartyDetails() {
       return;
     }
     popup.document.open();
-    popup.document.write(buildStatementDocument(selectedParty, partyInvoices, partyTransactions));
+    popup.document.write(buildStatementDocument(selectedParty, partyInvoices, partyTransactions, appSettings));
     popup.document.close();
     if (printWhenReady) popup.addEventListener("load", () => popup.print(), { once: true });
   };
@@ -681,7 +856,7 @@ function PartyDetails() {
         <section className="flex min-h-[430px] flex-col overflow-hidden rounded-md bg-white">
           <div className="p-4 pb-2"><label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-slate-400"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Party Name" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" /></label></div>
           {/* Balance Filter Pills */}
-          <div className="flex items-center gap-1.5 px-4 pb-3">
+          <div className="flex items-center gap-1.5 px-4 pb-2.5">
             {[
               { id: "all", label: "All" },
               { id: "receivable", label: "To Receive" },
@@ -691,7 +866,7 @@ function PartyDetails() {
                 key={f.id}
                 type="button"
                 onClick={() => setBalanceFilter(f.id)}
-                className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-colors ${
+                className={`flex-1 rounded-md py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                   balanceFilter === f.id
                     ? f.id === "receivable"
                       ? "bg-emerald-600 text-white shadow-xs"
@@ -705,15 +880,123 @@ function PartyDetails() {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-[1fr_130px] border-y border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500"><span className="flex items-center justify-between">Party Name <FiFilter className="text-rose-500" /></span><span>Amount</span></div>
+
+          {/* Party Grouping Filter Dropdown */}
+          {(appSettings.enablePartyGrouping ?? true) && partyGroups.length > 0 && (
+            <div className="flex items-center gap-2 px-4 pb-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Group:</span>
+              <select
+                value={groupFilter}
+                onChange={(e) => setGroupFilter(e.target.value)}
+                className="h-7 flex-1 rounded border border-slate-200 bg-slate-50 px-2 text-xs font-semibold text-slate-700 outline-none focus:border-blue-500 cursor-pointer"
+              >
+                <option value="all">All Groups ({parties.length})</option>
+                {partyGroups.map((g) => {
+                  const count = parties.filter((p) => (p.group || "General").toLowerCase() === g.toLowerCase()).length;
+                  return (
+                    <option key={g} value={g}>{g} ({count})</option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
+          {/* Party Status Filter Pills */}
+          {(appSettings.managePartyStatus ?? true) && (
+            <div className="flex items-center gap-1.5 px-4 pb-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Status:</span>
+              {[
+                { id: "all", label: "All" },
+                { id: "active", label: "Active" },
+                { id: "inactive", label: "Inactive" },
+              ].map((sf) => (
+                <button
+                  key={sf.id}
+                  type="button"
+                  onClick={() => setStatusFilter(sf.id)}
+                  className={`rounded px-2.5 py-0.5 text-[10px] font-bold transition cursor-pointer ${
+                    statusFilter === sf.id
+                      ? sf.id === "inactive"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : sf.id === "active"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-slate-800 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  {sf.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="grid grid-cols-[1fr_130px] border-y border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+            <span className="flex items-center justify-between">Party Name <FiFilter className="text-rose-500" /></span>
+            <span>Amount</span>
+          </div>
+
           <div className="min-h-0 flex-1 overflow-auto">
-            {balanceFilter === "all" && (
-              <button onClick={() => setSelectedPartyId("cash-sale")} className={`grid w-full grid-cols-[1fr_130px] px-4 py-5 text-left text-sm ${selectedPartyId === "cash-sale" ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"}`}><span className="font-medium text-slate-800">Cash Sale</span><span className="text-right font-medium text-emerald-500">0.00</span></button>
+            {balanceFilter === "all" && statusFilter !== "inactive" && groupFilter === "all" && (
+              <button
+                onClick={() => setSelectedPartyId("cash-sale")}
+                className={`grid w-full grid-cols-[1fr_130px] px-4 py-4 text-left text-sm transition ${
+                  selectedPartyId === "cash-sale" ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"
+                }`}
+              >
+                <span className="font-medium text-slate-800">Cash Sale</span>
+                <span className="text-right font-medium text-emerald-500">0.00</span>
+              </button>
             )}
+
             {filteredParties.map((party) => {
               const info = getPartyBalanceInfo(party);
-              return <button key={party.id} onClick={() => setSelectedPartyId(party.id)} className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-4 text-left text-sm ${String(selectedPartyId) === String(party.id) ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"}`}><span className="truncate font-medium text-slate-800">{party.partyName}</span><span className="text-right">{info.receivable > 0 && <span className="block text-xs font-medium text-emerald-600">{info.receivable.toLocaleString("en-IN", { minimumFractionDigits: 2 })} To Receive</span>}{info.payable > 0 && <span className="block text-xs font-medium text-rose-600">{info.payable.toLocaleString("en-IN", { minimumFractionDigits: 2 })} To Pay</span>}{info.receivable <= 0 && info.payable <= 0 && <span className="text-xs text-slate-400">Settled</span>}</span></button>;
+              const isInactive = party.status === "inactive";
+              return (
+                <button
+                  key={party.id}
+                  onClick={() => setSelectedPartyId(party.id)}
+                  className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-3.5 text-left text-sm transition ${
+                    String(selectedPartyId) === String(party.id)
+                      ? "bg-sky-100 dark:bg-sky-950/40"
+                      : "hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`truncate font-medium ${isInactive ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                        {party.partyName}
+                      </span>
+                      {(appSettings.managePartyStatus ?? true) && isInactive && (
+                        <span className="shrink-0 rounded bg-rose-100 px-1.5 py-0.2 text-[9px] font-bold text-rose-700">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                    {(appSettings.enablePartyGrouping ?? true) && party.group && (
+                      <span className="mt-0.5 inline-block truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                        {party.group}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-right">
+                    {info.receivable > 0 && (
+                      <span className="block text-xs font-semibold text-emerald-600">
+                        {info.receivable.toLocaleString("en-IN", { minimumFractionDigits: 2 })} To Receive
+                      </span>
+                    )}
+                    {info.payable > 0 && (
+                      <span className="block text-xs font-semibold text-rose-600">
+                        {info.payable.toLocaleString("en-IN", { minimumFractionDigits: 2 })} To Pay
+                      </span>
+                    )}
+                    {info.receivable <= 0 && info.payable <= 0 && (
+                      <span className="text-xs text-slate-400">Settled</span>
+                    )}
+                  </span>
+                </button>
+              );
             })}
+
             {filteredParties.length === 0 && (
               <div className="py-12 text-center text-xs text-slate-400">
                 {balanceFilter === "receivable" ? "No receivable parties found" : balanceFilter === "payable" ? "No payable parties found" : "No parties found"}
@@ -745,20 +1028,224 @@ function PartyDetails() {
             </button>
           </div>
         </section>
-        <section className="min-w-0 overflow-hidden rounded-md bg-white">
-          <div className="flex min-h-[68px] items-center justify-between border-b border-slate-200 px-4 py-2"><div><h2 className="font-semibold text-slate-700">{cashSaleName} {selectedParty && <><button aria-label="Edit party" title="Edit party" onClick={() => { setPartyBeingEdited(selectedParty); setIsModalOpen(true); }} className="ml-2 text-blue-500">✎</button><button type="button" aria-label="Delete party" title="Delete party" onClick={removeParty} className="ml-3 text-rose-500 hover:text-rose-700"><FiTrash2 /></button></>}</h2>{selectedPartyBalance && <p className="mt-1 flex flex-wrap gap-x-4 text-xs">{selectedPartyBalance.receivable > 0 && <span className="text-emerald-700">To Receive {money(selectedPartyBalance.receivable)}</span>}{selectedPartyBalance.payable > 0 && <span className="text-rose-700">To Pay {money(selectedPartyBalance.payable)}</span>}{selectedPartyBalance.receivable === 0 && selectedPartyBalance.payable === 0 && selectedOpeningBalance > 0 && <span className="text-slate-500">Opening balance {money(selectedOpeningBalance)} {selectedBalanceType === "to-pay" ? "To Pay" : "To Receive"}</span>}</p>}</div><div className="flex gap-4 text-lg"><span className="text-amber-500">●</span><span className="text-green-500">●</span><span className="text-orange-400">◷</span></div></div>
-          <div className="flex min-h-[82px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3"><h2 className="font-semibold text-slate-700">Transactions</h2><div className="flex items-center gap-3 text-slate-500">
-            {transactionSearchOpen && <input autoFocus value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search transactions" className="h-10 w-48 rounded-md border border-slate-300 px-3 text-sm text-slate-700 outline-none focus:border-blue-500" />}
-            <button type="button" aria-label="Search transactions" title="Search transactions" onClick={() => { setTransactionSearchOpen((open) => !open); setTransactionSearch(""); }} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100"><FiSearch className="text-2xl" /></button>
-            <button type="button" aria-label="Print party statement" title="Print party statement" onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 cursor-pointer"><FiPrinter className="text-2xl" /></button>
-            <button type="button" aria-label="Download Excel transactions" title="Download Excel-compatible transactions" onClick={downloadExcel} className="grid h-11 w-11 place-items-center rounded-md text-emerald-600 hover:bg-emerald-50 cursor-pointer"><span className="rounded bg-emerald-600 px-1 py-0.5 text-[11px] font-bold text-white">XLS</span></button>
-            <button type="button" aria-label="Preview or download PDF" title="Preview or download PDF" onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }} className="grid h-11 w-11 place-items-center rounded-md text-rose-600 hover:bg-rose-50 cursor-pointer"><FiFileText className="text-2xl" /></button>
-          </div></div>
-          <div className="overflow-auto"><table className="w-full min-w-[690px] text-left text-sm"><thead className="bg-slate-50 text-slate-500"><tr>{["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => <th key={label} className="border-b border-r border-slate-200 px-3 py-3 font-semibold">{label}{label && <FiFilter className="float-right mt-0.5 text-slate-400" />}</th>)}</tr></thead><tbody>
-            {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && <tr className="border-b border-slate-100 bg-sky-100 text-slate-800"><td className="px-3 py-4">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td><td className="px-3 py-4">—</td><td className="px-3 py-4">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-right">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td><td className="px-3 py-4 text-rose-500">Unpaid</td><td className="px-3 py-4">—</td></tr>}
-            {visiblePartyTransactions.map((entry) => <tr key={entry.id} className="border-b border-slate-100 text-slate-800"><td className="px-3 py-4">{entry.source}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{money(entry.total)}</td><td className="px-3 py-4 text-right">{(entry.source === "Payment-In" || entry.source === "Payment-Out") && !entry.balance ? "—" : money(entry.balance)}</td><td className={`px-3 py-4 ${entry.status === "Paid" || entry.status === "Used" ? "text-emerald-500" : entry.status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{entry.status}</td><td className="px-3 py-4">—</td></tr>)}
-            {!visiblePartyTransactions.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && <tr><td colSpan="7" className="h-48 text-center text-slate-400">{transactionSearch ? "No matching transactions" : "No transactions to show"}</td></tr>}
-          </tbody></table></div>
+
+        {/* Right Section: Party Header & Transactions */}
+        <section className="min-w-0 overflow-hidden rounded-md bg-white flex flex-col">
+          {/* Header */}
+          <div className="flex min-h-[68px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 bg-white">
+            <div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h2 className="font-bold text-slate-800 text-lg">{cashSaleName}</h2>
+                {selectedParty && (appSettings.enablePartyGrouping ?? true) && selectedParty.group && (
+                  <span className="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700 border border-blue-200">
+                    {selectedParty.group}
+                  </span>
+                )}
+                {selectedParty && (appSettings.managePartyStatus ?? true) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextStatus = selectedParty.status === "inactive" ? "active" : "inactive";
+                      saveParty({ ...selectedParty, status: nextStatus });
+                    }}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border transition cursor-pointer ${
+                      selectedParty.status === "inactive"
+                        ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                    }`}
+                    title="Click to toggle Active / Inactive status"
+                  >
+                    ● {selectedParty.status === "inactive" ? "Inactive" : "Active"}
+                  </button>
+                )}
+                {selectedParty && (
+                  <>
+                    <button
+                      aria-label="Edit party"
+                      title="Edit party"
+                      onClick={() => {
+                        setPartyBeingEdited(selectedParty);
+                        setIsModalOpen(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-bold ml-1 cursor-pointer text-xs"
+                    >
+                      ✎ Edit
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete party"
+                      title="Delete party"
+                      onClick={removeParty}
+                      className="text-rose-500 hover:text-rose-700 ml-1 cursor-pointer"
+                    >
+                      <FiTrash2 className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {selectedPartyBalance && (
+                <p className="mt-1 flex flex-wrap gap-x-4 text-xs">
+                  {selectedPartyBalance.receivable > 0 && (
+                    <span className="font-semibold text-emerald-700">
+                      To Receive {money(selectedPartyBalance.receivable)}
+                    </span>
+                  )}
+                  {selectedPartyBalance.payable > 0 && (
+                    <span className="font-semibold text-rose-700">
+                      To Pay {money(selectedPartyBalance.payable)}
+                    </span>
+                  )}
+                  {selectedPartyBalance.receivable === 0 && selectedPartyBalance.payable === 0 && selectedOpeningBalance > 0 && (
+                    <span className="text-slate-500">
+                      Opening balance {money(selectedOpeningBalance)} {selectedBalanceType === "to-pay" ? "To Pay" : "To Receive"}
+                    </span>
+                  )}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Payment Reminder Action Button */}
+              {selectedParty && (appSettings.enablePaymentReminder ?? true) && (selectedPartyBalance?.receivable > 0 || (selectedBalanceType === "to-receive" && selectedOpeningBalance > 0)) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReminderExtraMessage(appSettings.paymentReminderAdditionalMessage || "");
+                    setReminderModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 active:scale-98 transition cursor-pointer"
+                  title="Send payment reminder to this party"
+                >
+                  <FiBell className="h-3.5 w-3.5" /> Send Reminder
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Party Metadata & Custom Fields Card */}
+          {selectedParty && (
+            <div className="border-b border-slate-200 bg-slate-50/70 px-4 py-2.5 text-xs text-slate-600">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                {selectedParty.phone && (
+                  <div><strong className="text-slate-700">Phone:</strong> {selectedParty.phone}</div>
+                )}
+                {selectedParty.email && (
+                  <div><strong className="text-slate-700">Email:</strong> {selectedParty.email}</div>
+                )}
+                {selectedParty.gstin && (
+                  <div><strong className="text-slate-700">GSTIN:</strong> {selectedParty.gstin}</div>
+                )}
+                {selectedParty.billingAddress && (
+                  <div className="truncate"><strong className="text-slate-700">Billing:</strong> {selectedParty.billingAddress}</div>
+                )}
+                {(appSettings.enableShippingAddress ?? true) && selectedParty.shippingAddress && (
+                  <div className="truncate text-blue-700"><strong className="text-blue-800">Shipping:</strong> {selectedParty.shippingAddress}</div>
+                )}
+                {(selectedParty.additionalFields || [])
+                  .filter((f) => f.value && f.enabled !== false)
+                  .map((f) => (
+                    <div key={f.id}><strong className="text-slate-700">{f.fieldName || f.name}:</strong> {f.value}</div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+            <h2 className="font-semibold text-slate-700">Transactions</h2>
+            <div className="flex items-center gap-3 text-slate-500">
+              {transactionSearchOpen && (
+                <input
+                  autoFocus
+                  value={transactionSearch}
+                  onChange={(event) => setTransactionSearch(event.target.value)}
+                  placeholder="Search transactions"
+                  className="h-9 w-48 rounded-md border border-slate-300 px-3 text-xs text-slate-700 outline-none focus:border-blue-500"
+                />
+              )}
+              <button
+                type="button"
+                aria-label="Search transactions"
+                title="Search transactions"
+                onClick={() => { setTransactionSearchOpen((open) => !open); setTransactionSearch(""); }}
+                className="grid h-9 w-9 place-items-center rounded-md hover:bg-slate-100 cursor-pointer"
+              >
+                <FiSearch className="text-lg" />
+              </button>
+              <button
+                type="button"
+                aria-label="Print party statement"
+                title="Print party statement"
+                onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }}
+                className="grid h-9 w-9 place-items-center rounded-md hover:bg-slate-100 cursor-pointer"
+              >
+                <FiPrinter className="text-lg" />
+              </button>
+              <button
+                type="button"
+                aria-label="Download Excel transactions"
+                title="Download Excel-compatible transactions"
+                onClick={downloadExcel}
+                className="grid h-9 w-9 place-items-center rounded-md text-emerald-600 hover:bg-emerald-50 cursor-pointer"
+              >
+                <span className="rounded bg-emerald-600 px-1 py-0.5 text-[10px] font-bold text-white">XLS</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Preview or download PDF"
+                title="Preview or download PDF"
+                onClick={() => { setPrintStatementOnOpen(false); setStatementOpen(true); }}
+                className="grid h-9 w-9 place-items-center rounded-md text-rose-600 hover:bg-rose-50 cursor-pointer"
+              >
+                <FiFileText className="text-lg" />
+              </button>
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="w-full min-w-[690px] text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500">
+                <tr>
+                  {["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => (
+                    <th key={label} className="border-b border-r border-slate-200 px-3 py-3 font-semibold text-xs">
+                      {label}{label && <FiFilter className="float-right mt-0.5 text-slate-400" />}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {selectedParty && openingBalance > 0 && `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase()) && (
+                  <tr className="border-b border-slate-100 bg-sky-100 text-slate-800">
+                    <td className="px-3 py-3.5 text-xs">{selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance</td>
+                    <td className="px-3 py-3.5 text-xs">—</td>
+                    <td className="px-3 py-3.5 text-xs">{selectedParty.asOfDate ? new Date(selectedParty.asOfDate).toLocaleDateString("en-GB") : "—"}</td>
+                    <td className="px-3 py-3.5 text-xs text-right font-medium">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-3.5 text-xs text-right font-medium">₹ {openingBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
+                    <td className="px-3 py-3.5 text-xs text-rose-500 font-semibold">Unpaid</td>
+                    <td className="px-3 py-3.5 text-xs">—</td>
+                  </tr>
+                )}
+                {visiblePartyTransactions.map((entry) => (
+                  <tr key={entry.id} className="border-b border-slate-100 text-slate-800 hover:bg-slate-50/50">
+                    <td className="px-3 py-3.5 text-xs font-medium">{entry.source}</td>
+                    <td className="px-3 py-3.5 text-xs">{entry.number}</td>
+                    <td className="px-3 py-3.5 text-xs text-slate-600">{entry.date ? new Date(entry.date).toLocaleDateString("en-GB") : "—"}</td>
+                    <td className="px-3 py-3.5 text-xs text-right font-semibold">{money(entry.total)}</td>
+                    <td className="px-3 py-3.5 text-xs text-right font-semibold">{(entry.source === "Payment-In" || entry.source === "Payment-Out") && !entry.balance ? "—" : money(entry.balance)}</td>
+                    <td className={`px-3 py-3.5 text-xs font-semibold ${entry.status === "Paid" || entry.status === "Used" ? "text-emerald-500" : entry.status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{entry.status}</td>
+                    <td className="px-3 py-3.5 text-xs">—</td>
+                  </tr>
+                ))}
+                {!visiblePartyTransactions.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && (
+                  <tr>
+                    <td colSpan="7" className="h-48 text-center text-xs text-slate-400">
+                      {transactionSearch ? "No matching transactions" : "No transactions to show"}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
       {statementOpen && (() => {
@@ -848,7 +1335,7 @@ function PartyDetails() {
                 </h1>
 
                 {/* Party Info */}
-                <div className="mb-4">
+                <div className="mb-4 space-y-1">
                   <h2 className="text-lg font-bold text-slate-900">
                     Party name: {selectedParty?.partyName || "Cash Sale"}
                   </h2>
@@ -857,6 +1344,23 @@ function PartyDetails() {
                       Contact No.: {selectedParty.phone}
                     </p>
                   )}
+                  {selectedParty?.billingAddress && (
+                    <p className="text-xs font-medium text-slate-600">
+                      Billing Address: {selectedParty.billingAddress}
+                    </p>
+                  )}
+                  {(appSettings.printShippingAddress !== false) && selectedParty?.shippingAddress && (
+                    <p className="text-xs font-semibold text-blue-700">
+                      Shipping Address: {selectedParty.shippingAddress}
+                    </p>
+                  )}
+                  {(selectedParty?.additionalFields || [])
+                    .filter((f) => f.showInPrint && f.value)
+                    .map((f) => (
+                      <p key={f.id} className="text-xs font-medium text-slate-700">
+                        <strong>{f.fieldName || f.name}:</strong> {f.value}
+                      </p>
+                    ))}
                 </div>
 
                 {/* Table */}
@@ -969,7 +1473,17 @@ function PartyDetails() {
           </div>
         );
       })()}
-      {isModalOpen && <AddPartyModal initialParty={partyBeingEdited} onClose={() => { setIsModalOpen(false); setPartyBeingEdited(null); }} onSave={saveParty} />}
+      {isModalOpen && (
+        <AddPartyModal
+          initialParty={partyBeingEdited}
+          onClose={() => {
+            setIsModalOpen(false);
+            setPartyBeingEdited(null);
+          }}
+          onSave={saveParty}
+          appSettings={appSettings}
+        />
+      )}
       <ImportPartiesModal
         isOpen={importPartiesOpen}
         onClose={() => setImportPartiesOpen(false)}
@@ -981,6 +1495,134 @@ function PartyDetails() {
           {importNotice}
         </div>
       )}
+
+      {/* ============================================================ */}
+      {/* MODAL: Send Payment Reminder (Screenshot 2) */}
+      {/* ============================================================ */}
+      {reminderModalOpen && selectedParty && (() => {
+        const company = getCompanyProfile();
+        const companyName = company.businessName || company.companyName || "Sai Kirana Stores";
+        const amount = selectedPartyBalance?.receivable > 0
+          ? selectedPartyBalance.receivable
+          : (selectedBalanceType === "to-receive" ? selectedOpeningBalance : 0);
+        const formattedAmount = money(amount);
+        const fullText = `Dear, ${selectedParty.partyName}\nYour payment of ${formattedAmount} is pending with ${companyName}\n${reminderExtraMessage ? reminderExtraMessage + "\n" : ""}If you have already made the payment, kindly ignore this message.`;
+
+        const handleSendWhatsApp = () => {
+          const rawPhone = (selectedParty.phone || "").replace(/[^0-9]/g, "");
+          if (!rawPhone) {
+            alert("This party has no phone number entered.");
+            return;
+          }
+          const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+          const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(fullText)}`;
+          window.open(url, "_blank");
+        };
+
+        const handleCopyMessage = async () => {
+          try {
+            await navigator.clipboard.writeText(fullText);
+            setReminderNotice("Reminder message copied to clipboard!");
+            setTimeout(() => setReminderNotice(""), 3000);
+          } catch {
+            setReminderNotice("Could not copy message automatically.");
+          }
+        };
+
+        const handleEmailReminder = () => {
+          const email = selectedParty.email || "";
+          const subject = encodeURIComponent(`Payment Reminder - ${companyName}`);
+          const body = encodeURIComponent(fullText);
+          window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setReminderModalOpen(false);
+            }}
+          >
+            <div
+              className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl transition animate-in fade-in zoom-in-95 duration-150"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                <h3 className="text-base font-bold text-slate-800">Add/Edit Reminder Message</h3>
+                <button
+                  type="button"
+                  onClick={() => setReminderModalOpen(false)}
+                  className="grid h-7 w-7 place-items-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition cursor-pointer"
+                >
+                  <FiX className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="px-6 py-5 space-y-3.5">
+                <div className="space-y-1 text-sm text-slate-800 font-medium">
+                  <p>Dear, <span className="font-bold text-blue-600">{selectedParty.partyName}</span></p>
+                  <p>Your payment of <span className="font-bold text-emerald-600">{formattedAmount}</span> is pending with <span className="font-bold text-slate-900">{companyName}</span></p>
+                </div>
+
+                <textarea
+                  rows={4}
+                  value={reminderExtraMessage}
+                  onChange={(e) => setReminderExtraMessage(e.target.value)}
+                  placeholder="Type additional message"
+                  className="w-full rounded-lg border border-slate-300 p-3 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200"
+                />
+
+                <p className="text-xs text-slate-500">
+                  If you have already made the payment, kindly ignore this message.
+                </p>
+
+                {reminderNotice && (
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 border border-emerald-200">
+                    <FiCheck className="h-4 w-4" />
+                    {reminderNotice}
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-slate-100 px-6 py-4 bg-slate-50/50">
+                <button
+                  type="button"
+                  onClick={() => setReminderModalOpen(false)}
+                  className="rounded-lg px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyMessage}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-98 transition cursor-pointer"
+                >
+                  <FiCopy className="h-3.5 w-3.5" /> COPY
+                </button>
+                {selectedParty.email && (
+                  <button
+                    type="button"
+                    onClick={handleEmailReminder}
+                    className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 shadow-xs hover:bg-slate-50 active:scale-98 transition cursor-pointer"
+                  >
+                    <FiMail className="h-3.5 w-3.5" /> EMAIL
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSendWhatsApp}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 transition cursor-pointer"
+                >
+                  <FiMessageSquare className="h-3.5 w-3.5" /> SEND VIA WHATSAPP
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

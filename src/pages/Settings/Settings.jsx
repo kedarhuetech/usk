@@ -48,6 +48,7 @@ import {
 } from "../../services/auditTrailStorage.js";
 import PrintTab from "./PrintTab";
 import TaxesTab from "./TaxesTab";
+import PartyTab from "./PartyTab";
 
 const TABS = [
   { id: "general", label: "GENERAL", icon: FiSliders },
@@ -2902,51 +2903,6 @@ function MessagesTab({ settings, update }) {
               className="mt-1.5 w-full rounded-md border border-slate-300 p-2.5 text-xs outline-none focus:border-blue-500"
             />
           </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-// -------------------------------------------------------------
-// PARTY TAB
-// -------------------------------------------------------------
-function PartyTab({ settings, update }) {
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Customer & Supplier Rules</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enablePartyGrouping ?? true}
-              onChange={(e) => update("enablePartyGrouping", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable Party Grouping (Retailer, Wholesaler, Distributor)
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableCreditLimitWarning ?? true}
-              onChange={(e) => update("enableCreditLimitWarning", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Warn when Customer Exceeds Allowed Credit Limit
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableLoyaltyPoints || false}
-              onChange={(e) => update("enableLoyaltyPoints", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Customer Loyalty & Reward Points Program
-          </label>
         </div>
       </section>
     </div>

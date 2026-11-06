@@ -232,8 +232,20 @@ export const DEFAULT_SETTINGS = {
 
   // Party
   enablePartyGrouping: true,
+  enableShippingAddress: true,
+  printShippingAddress: true,
+  managePartyStatus: true,
+  enablePaymentReminder: true,
+  paymentReminderDays: 1,
+  paymentReminderAdditionalMessage: "",
+  partyCustomFields: [
+    { id: "field-1", enabled: true, name: "mrp", showInPrint: true, type: "text" },
+    { id: "field-2", enabled: false, name: "", showInPrint: false, type: "text" },
+    { id: "field-3", enabled: false, name: "", showInPrint: false, type: "text" },
+    { id: "field-4", enabled: false, name: "", showInPrint: false, type: "date" },
+  ],
   enableCreditLimitWarning: true,
-  enableLoyaltyPoints: false,
+  enableLoyaltyPoints: true,
 
   // Item
   enableBarcodeScanning: true,
