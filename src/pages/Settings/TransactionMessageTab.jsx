@@ -191,7 +191,7 @@ export default function TransactionMessageTab({ settings, update }) {
                 </span>
               </label>
 
-              {/* Auto Share Invoices on Vyapar Network */}
+              {/* Auto Share Invoices on USV Network */}
               <label className="flex cursor-pointer items-center justify-between gap-2 hover:text-slate-900">
                 <div className="flex items-center gap-2">
                   <input
@@ -200,11 +200,11 @@ export default function TransactionMessageTab({ settings, update }) {
                     onChange={(e) => update("txnMsgAutoShareVyaparNetwork", e.target.checked)}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
                   />
-                  <span>Auto Share Invoices on Vyapar Network</span>
+                  <span>Auto Share Invoices on USV Network</span>
                 </div>
                 <span
                   className="grid h-3.5 w-3.5 place-items-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-400 cursor-help"
-                  title="Share invoices digitally across Vyapar and USK business network"
+                  title="Share invoices digitally across USV business network"
                 >
                   i
                 </span>
@@ -684,3 +684,4 @@ export default function TransactionMessageTab({ settings, update }) {
     </div>
   );
 }
+

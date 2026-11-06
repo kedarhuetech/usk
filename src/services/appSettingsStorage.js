@@ -309,7 +309,9 @@ export const DEFAULT_SETTINGS = {
 
   // Multi Currency
   multiCurrencyEnabled: false,
-  baseCurrency: "INR",
+  multiCurrencyGetLiveRate: false,
+  baseCurrency: null,
+  multiCurrencyList: [],
 };
 
 export function getAppSettings() {
