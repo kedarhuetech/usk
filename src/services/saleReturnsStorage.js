@@ -1,6 +1,9 @@
 import { calculateRow, toNumber } from "../utils/saleInvoice.js";
 import { inventoryItemsStorageKey } from "./itemsStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { applyBatchRowsToInventory } from "./itemsStorage.js";
+import { batchMovementStorageKey, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
+import { getAppSettings } from "./appSettingsStorage.js";
 
 export const saleReturnsStorageKey = "ledgerly:saleReturns.v1";
 const inventoryHistoryKey = "ledgerly:inventoryAdjustments.v1";
@@ -64,7 +67,7 @@ export function calculateSaleReturnRow(row) {
 
 export function saveSaleReturn(input) {
   if (!window.localStorage) throw new Error("Browser storage is unavailable.");
-  const keys = [saleReturnsStorageKey, invoicesKey, inventoryItemsStorageKey, inventoryHistoryKey, paymentsOutKey];
+  const keys = [saleReturnsStorageKey, invoicesKey, inventoryItemsStorageKey, inventoryHistoryKey, paymentsOutKey, batchMovementStorageKey];
   const before = Object.fromEntries(keys.map((key) => [key, window.localStorage.getItem(key)]));
   try {
     const records = readList(saleReturnsStorageKey);
@@ -170,9 +173,10 @@ export function saveSaleReturn(input) {
       ? { ...invoice, ...returnSummaryForInvoice(original.id, nextRecords), updatedAt: new Date().toISOString() }
       : invoice) : invoices;
     let nextInventory = inventory;
+    const batchMode = Boolean(getAppSettings().enableBatchTracking || existingRecord?.batchStockAdjustedAt);
     const history = readList(inventoryHistoryKey);
     const historyEntries = [];
-    if (["Credit Note", "Sale Return"].includes(input.type)) {
+    if (["Credit Note", "Sale Return"].includes(input.type) && !batchMode) {
       const qtyByItem = (rows, sign) => (rows || []).filter((row) => row.restockable)
         .forEach((row) => { const key = inventoryKey(row); if (key) qtyByItemMap.set(key, (qtyByItemMap.get(key) || 0) + sign * toNumber(row.qty)); });
       const qtyByItemMap = new Map();
@@ -187,6 +191,23 @@ export function saveSaleReturn(input) {
         historyEntries.push({ id: crypto.randomUUID(), itemId: item.id, itemName: item.itemName || item.name, type: "Sales Return", direction: delta > 0 ? "add" : "reduce", quantity: Math.abs(delta), note: `${delta > 0 ? "Credit Note" : "Credit Note edit"} ${saved.number}`, reference: saved.number, returnId: saved.id, createdAt: new Date().toISOString() });
         return { ...item, openingQuantity: quantity, stock: quantity, updatedAt: new Date().toISOString() };
       });
+    }
+    if (["Credit Note", "Sale Return"].includes(input.type) && batchMode) {
+      const oldRows = (existingRecord?.rows || []).filter((row) => row.restockable);
+      const newRows = (saved.rows || []).filter((row) => row.restockable);
+      if (oldRows.some((row) => Number(row.qty) > 0 && !row.batchNo) || newRows.some((row) => Number(row.qty) > 0 && !row.batchNo)) throw new Error("This return has no traceable batch allocation. Select a batch allocation before restocking while batch tracking is enabled.");
+      if (oldRows.length) {
+        if (existingRecord?.batchMovementId) reverseBatchMovement(existingRecord.batchMovementId, "sale-return");
+        else applyBatchRowsToInventory(oldRows, "reduce");
+        saved.batchMovementId = "";
+        saved.batchStockAdjustedAt = "";
+      }
+      if (newRows.length) {
+        saved.batchMovementId = `${saved.id}:${Date.now()}:${crypto.randomUUID()}`;
+        moveBatchRows(newRows, "add", { referenceId: saved.batchMovementId, sourceType: "sale-return" });
+        saved.batchStockAdjustedAt = new Date().toISOString();
+      }
+      nextInventory = inventory;
     }
     window.localStorage.setItem(saleReturnsStorageKey, JSON.stringify(nextRecords));
     if (original) window.localStorage.setItem(invoicesKey, JSON.stringify(nextInvoices));
@@ -208,14 +229,14 @@ export function saveSaleReturn(input) {
 }
 
 export function cancelSaleReturn(returnId) {
-  const keys = [saleReturnsStorageKey, invoicesKey, inventoryItemsStorageKey, inventoryHistoryKey];
+  const keys = [saleReturnsStorageKey, invoicesKey, inventoryItemsStorageKey, inventoryHistoryKey, batchMovementStorageKey];
   const before = Object.fromEntries(keys.map((key) => [key, window.localStorage.getItem(key)]));
   try {
     const records = readList(saleReturnsStorageKey);
     const invoices = readList(invoicesKey);
     const record = records.find((entry) => String(entry.id) === String(returnId));
     if (!record || !["Credit Note", "Sale Return"].includes(record.type)) throw new Error("Sales return was not found.");
-    if (record.cancelled) throw new Error("This Credit Note is already cancelled.");
+    if (record.cancelled) return record;
     if (toNumber(record.received) > 0) throw new Error("This Credit Note has a recorded refund. Reverse the refund before cancelling it.");
     const inventory = readList(inventoryItemsStorageKey);
     const history = readList(inventoryHistoryKey);
@@ -224,7 +245,14 @@ export function cancelSaleReturn(returnId) {
       const key = inventoryKey(row);
       if (key) returnQtyByItem.set(key, (returnQtyByItem.get(key) || 0) + toNumber(row.qty));
     });
-    const nextInventory = inventory.map((item) => {
+    const batchMode = Boolean(getAppSettings().enableBatchTracking || record.batchStockAdjustedAt);
+    const batchRows = (record.rows || []).filter((row) => row.restockable);
+    if (batchMode && batchRows.some((row) => Number(row.qty) > 0 && !row.batchNo)) throw new Error("This historical return has no batch allocation and cannot be safely cancelled while batch tracking is enabled.");
+    if (batchMode && batchRows.length) {
+      if (record.batchMovementId) reverseBatchMovement(record.batchMovementId, "sale-return");
+      else applyBatchRowsToInventory(batchRows, "reduce");
+    }
+    const nextInventory = batchMode ? inventory : inventory.map((item) => {
       const qty = returnQtyByItem.get(itemInventoryKey(item)) || 0;
       if (!qty) return item;
       const current = toNumber(item.openingQuantity != null && item.openingQuantity !== "" ? item.openingQuantity : item.stock);
@@ -241,7 +269,7 @@ export function cancelSaleReturn(returnId) {
         : invoice);
       window.localStorage.setItem(invoicesKey, JSON.stringify(nextInvoices));
     }
-    window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(nextInventory));
+    if (!batchMode) window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(nextInventory));
     if (returnQtyByItem.size) {
       const historyEntries = [...returnQtyByItem].flatMap(([key, quantity]) => {
         const item = inventory.find((entry) => itemInventoryKey(entry) === key);

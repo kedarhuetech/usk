@@ -4,6 +4,7 @@ import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./
 import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
 import { getParties, saveParty } from "./partiesStorage.js";
 import { savePurchaseBill } from "./purchaseBillsStorage.js";
+import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 
 // This helper handles id logic.
@@ -138,6 +139,7 @@ export async function saveBusinessPurchaseBill(value) {
     const items = await loadBusinessItems();
     const quantities = new Map();
     for (const row of bill.rows || []) {
+      if (getAppSettings().enableBatchTracking && String(row.batchNo || "").trim()) continue;
       const quantity = Math.max(Number(row.qty || 0), 0);
       if (!row.item || !quantity) continue;
       const item = items.find((candidate) =>
@@ -152,6 +154,10 @@ export async function saveBusinessPurchaseBill(value) {
         const current = Number(item.openingQuantity || item.stock || 0) || 0;
         await saveBusinessItem({ ...item, openingQuantity: String(current + added), stock: String(current + added) });
       }
+    }
+    if (getAppSettings().enableBatchTracking) {
+      const batchItemIds = new Set((bill.rows || []).filter((row) => String(row.batchNo || "").trim()).map((row) => row.sourceItemId).filter(Boolean));
+      for (const item of getInventoryItems()) if (batchItemIds.has(item.id)) await saveBusinessItem(item);
     }
   }
   return saved;

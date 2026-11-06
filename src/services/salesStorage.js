@@ -1,4 +1,5 @@
-import { applySaleInvoiceStockUpdate, inventoryItemsStorageKey } from "./itemsStorage.js";
+import { applySaleInvoiceStockUpdate, applyBatchRowsToInventory, inventoryItemsStorageKey } from "./itemsStorage.js";
+import { batchMovementStorageKey, localDateOnly, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { recordAuditTrail } from "./auditTrailStorage.js";
@@ -57,9 +58,23 @@ export function saveSaleInvoice(invoice) {
   if (!canUseStorage()) throw new Error("Browser storage is unavailable; the invoice was not saved.");
   const previousInvoices = window.localStorage.getItem(SALE_INVOICES_KEY);
   const previousItems = window.localStorage.getItem(inventoryItemsStorageKey);
+  const previousMovements = window.localStorage.getItem(batchMovementStorageKey);
   try {
   let normalized = normalizeInvoice({ ...invoice, updatedAt: new Date().toISOString() });
   const appSettings = getAppSettings();
+  if (normalized.transactionType === "sale" && appSettings.enableBatchTracking) {
+    const inventory = JSON.parse(window.localStorage.getItem(inventoryItemsStorageKey) || "[]");
+    normalized = { ...normalized, rows: (normalized.rows || []).map((row) => {
+      const item = inventory.find((entry) => entry.id === (row.sourceItemId || row.itemId) || String(entry.itemName || "").trim().toLowerCase() === String(row.item || "").trim().toLowerCase());
+      if (!item || item.type === "service" || !Number(row.qty ?? row.quantity)) return row;
+      if (!(item.batches || []).length) throw new Error(`Batch tracking is enabled, but ${item.itemName} has no batch stock. Add stock with a batch before selling.`);
+      const batch = (item.batches || []).find((entry) => String(entry.batchNo).toLowerCase() === String(row.batchNo || "").toLowerCase());
+      if (!batch) throw new Error(`Select a valid batch for ${item.itemName}.`);
+      const today = localDateOnly();
+      if (batch.expDate && batch.expDate < today) throw new Error(`Batch ${batch.batchNo} for ${item.itemName} has expired.`);
+      return { ...row, batchNo: batch.batchNo, expDate: batch.expDate || "" };
+    }) };
+  }
   const existing = readInvoices();
   const existingInvoice = existing.find((current) => current.id === normalized.id || current.invoiceId === normalized.invoiceId);
 
@@ -85,7 +100,24 @@ export function saveSaleInvoice(invoice) {
     !normalized.stockAdjustedAt &&
     !existingInvoice?.stockAdjustedAt;
 
-  if (shouldAdjustStock) {
+  const wasCancelled = Boolean(existingInvoice?.cancelled || existingInvoice?.invoiceStatus === "Cancelled" || existingInvoice?.status === "Cancelled");
+  const isCancelled = Boolean(normalized.cancelled || normalized.invoiceStatus === "Cancelled" || normalized.status === "Cancelled");
+  const batchMode = normalized.transactionType === "sale" && Boolean(appSettings.enableBatchTracking || existingInvoice?.batchStockAdjustedAt);
+  if (batchMode && existingInvoice && !wasCancelled && existingInvoice.batchStockAdjustedAt) {
+    const reversalRows = existingInvoice.batchAllocationRows || existingInvoice.rows || [];
+    if (reversalRows.some((row) => Number(row.qty ?? row.quantity) > 0 && !row.batchNo)) throw new Error("This historical sale has no batch allocation and cannot be safely edited while batch tracking is enabled.");
+    if (existingInvoice.batchMovementId) reverseBatchMovement(existingInvoice.batchMovementId, "sale");
+    else applyBatchRowsToInventory(reversalRows, "add", { allowCreate: false });
+  } else if (batchMode && existingInvoice && existingInvoice.stockAdjustedAt && !wasCancelled && !existingInvoice.batchStockAdjustedAt) {
+    throw new Error("This historical sale has no recorded batch allocation and cannot be safely edited while batch tracking is enabled.");
+  }
+  if (batchMode && !isCancelled && (!existingInvoice || wasCancelled || existingInvoice.batchStockAdjustedAt)) {
+    const batchMovementId = `${normalized.id}:${Date.now()}:${crypto.randomUUID()}`;
+    moveBatchRows(normalized.rows || [], "reduce", { referenceId: batchMovementId, sourceType: "sale" });
+    normalized = { ...normalized, batchMovementId, batchStockAdjustedAt: new Date().toISOString(), batchStockRestoredAt: "", batchAllocationRows: (normalized.rows || []).map((row) => ({ ...row })) };
+  } else if (batchMode && isCancelled && existingInvoice && !wasCancelled && existingInvoice.batchStockAdjustedAt) {
+    normalized = { ...normalized, batchStockRestoredAt: new Date().toISOString() };
+  } else if (!batchMode && shouldAdjustStock) {
     applySaleInvoiceStockUpdate(normalized);
     normalized = {
       ...normalized,
@@ -112,6 +144,8 @@ export function saveSaleInvoice(invoice) {
       else window.localStorage.setItem(SALE_INVOICES_KEY, previousInvoices);
       if (previousItems === null) window.localStorage.removeItem(inventoryItemsStorageKey);
       else window.localStorage.setItem(inventoryItemsStorageKey, previousItems);
+      if (previousMovements === null) window.localStorage.removeItem(batchMovementStorageKey);
+      else window.localStorage.setItem(batchMovementStorageKey, previousMovements);
     } catch (rollbackError) {
       throw new Error(`${error.message} Rollback could not fully restore local data: ${rollbackError.message}`, { cause: rollbackError });
     }
@@ -122,7 +156,22 @@ export function saveSaleInvoice(invoice) {
 // Deletes sale invoice.
 export function deleteSaleInvoice(invoiceId) {
   if (!canUseStorage()) return;
-  writeInvoices(readInvoices().filter((invoice) => invoice.id !== invoiceId && invoice.invoiceId !== invoiceId));
+  const beforeItems = window.localStorage.getItem(inventoryItemsStorageKey);
+  const beforeMovements = window.localStorage.getItem(batchMovementStorageKey);
+  const invoices = readInvoices();
+  const target = invoices.find((invoice) => invoice.id === invoiceId || invoice.invoiceId === invoiceId);
+  try {
+    if (getAppSettings().enableBatchTracking && target?.stockAdjustedAt && !target.batchStockAdjustedAt) throw new Error("This historical sale has no batch allocation. It cannot be safely deleted while batch tracking is enabled.");
+    if (target?.batchStockAdjustedAt && !target.batchStockRestoredAt) {
+      if (target.batchMovementId) reverseBatchMovement(target.batchMovementId, "sale");
+      else applyBatchRowsToInventory(target.batchAllocationRows || target.rows || [], "add");
+    }
+    writeInvoices(invoices.filter((invoice) => invoice.id !== invoiceId && invoice.invoiceId !== invoiceId));
+  } catch (error) {
+    if (beforeItems === null) window.localStorage.removeItem(inventoryItemsStorageKey); else window.localStorage.setItem(inventoryItemsStorageKey, beforeItems);
+    if (beforeMovements === null) window.localStorage.removeItem(batchMovementStorageKey); else window.localStorage.setItem(batchMovementStorageKey, beforeMovements);
+    throw error;
+  }
   notifyBusinessDataChanged();
   recordAuditTrail({
     action: "Sale Invoice Deleted",

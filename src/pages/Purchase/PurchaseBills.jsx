@@ -44,12 +44,12 @@ export default function PurchaseBills() {
   const total = visible.reduce((sum, bill) => sum + billTotal(bill), 0);
   const paid = visible.reduce((sum, bill) => sum + billPaid(bill), 0);
   const unpaid = Math.max(0, total - paid);
-  const refresh = (next) => { setRecords(next); replacePurchaseBills(next); };
+  const refresh = (next) => { replacePurchaseBills(next); setRecords(next); };
   const addPurchase = () => navigate("/purchase-expense/purchase-bills/new", { state: { from: "/purchase-expense/purchase-bills", localOnlyPurchase: true } });
   const remove = (bill) => {
     if (!window.confirm(`Delete purchase bill ${bill.form?.invoiceNumber || bill.invoiceNumber || ""}?`)) return;
-    refresh(records.filter((entry) => entry.id !== bill.id));
-    setMenuId("");
+    try { refresh(records.filter((entry) => entry.id !== bill.id)); setMenuId(""); }
+    catch (error) { window.alert(error.message || "Could not delete this purchase bill."); }
   };
   const duplicate = (bill) => {
     const copy = { ...bill, id: `purchase-${Date.now()}`, invoiceId: `purchase-${Date.now()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), form: { ...bill.form, invoiceNumber: String(records.length + 1) } };

@@ -7,46 +7,10 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
-
-const fieldDefinitions = [
-  ["itemName", "Item Name"],
-  ["itemCode", "Item Code"],
-  ["description", "Description"],
-  ["category", "Category"],
-  ["barcode", "Barcode"],
-  ["hsn", "HSN"],
-  ["salePrice", "Sale Price"],
-  ["purchasePrice", "Purchase Price"],
-  ["stock", "Current Stock"],
-  ["minimumStock", "Minimum Stock"],
-  ["location", "Item Location"],
-  ["taxRate", "Tax Rate"],
-  ["saleTaxMode", "Sale Tax Type"],
-  ["purchaseTaxMode", "Purchase Tax Type"],
-];
-
-// This helper handles for logic.
-const valueFor = (item, key) => {
-  if (key === "stock") return item.openingQuantity ?? item.stock ?? "";
-  return item[key] ?? "";
-};
+import { exportRows } from "../../services/itemImportExport.js";
 
 // This helper handles stamp logic.
 const dateStamp = () => new Date().toISOString().slice(0, 10);
-
-// Exports rows.
-function exportRows(items, options = {}) {
-  const { enableItemCategory = true, enableBarcodeScanning = true } = options;
-  const activeFields = fieldDefinitions.filter(([key]) => {
-    if (key === "category" && !enableItemCategory) return false;
-    if (key === "barcode" && !enableBarcodeScanning) return false;
-    return key === "itemName" || items.some((item) => String(valueFor(item, key)).trim());
-  });
-  return {
-    headers: activeFields.map(([, label]) => label),
-    rows: items.map((item) => activeFields.map(([key]) => String(valueFor(item, key) ?? ""))),
-  };
-}
 
 // Downloads pdf.
 function downloadPdf(items, options = {}) {
