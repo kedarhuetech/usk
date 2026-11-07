@@ -18,6 +18,7 @@ import BillWiseProfitReport from "./BillWiseProfitReport";
 import GSTR3BReport from "./GSTR3BReport";
 import BalanceSheetReport from "./BalanceSheetReport";
 import BatchExpiryReport from "./BatchExpiryReport";
+import LoanStatementReport from "./LoanStatementReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -223,6 +224,7 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("low-stock-summary")) return "Low Stock Summary";
     if (location.pathname.includes("stock-detail")) return "Stock Detail";
     if (location.pathname.includes("item-detail")) return "Item Detail";
+    if (location.pathname.includes("loan-statement")) return "Loan Statement";
     if (location.pathname.includes("balance-sheet")) return "Balance Sheet";
     return "Sale";
   };
@@ -267,6 +269,8 @@ function Reports({ defaultReport }) {
       setActiveReport("Stock Detail");
     } else if (location.pathname.includes("item-detail")) {
       setActiveReport("Item Detail");
+    } else if (location.pathname.includes("loan-statement")) {
+      setActiveReport("Loan Statement");
     }
   }, [defaultReport, location.pathname]);
   const [search, setSearch] = useState("");
@@ -715,6 +719,8 @@ function Reports({ defaultReport }) {
                     navigate("/reports/stock-detail", { replace: true });
                   } else if (report === "Item Detail") {
                     navigate("/reports/item-detail", { replace: true });
+                  } else if (report === "Loan Statement") {
+                    navigate("/reports/loan-statement", { replace: true });
                   } else {
                     navigate("/reports", { replace: true });
                   }
@@ -801,6 +807,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Item Detail" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <ItemDetailReport />
+        </div>
+      ) : activeReport === "Loan Statement" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <LoanStatementReport />
         </div>
       ) : (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">

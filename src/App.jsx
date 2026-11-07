@@ -169,6 +169,7 @@ function App() {
             <Route path="reports/low-stock-summary" element={<Reports defaultReport="Low Stock Summary" />} />
             <Route path="reports/stock-detail" element={<Reports defaultReport="Stock Detail" />} />
             <Route path="reports/item-detail" element={<Reports defaultReport="Item Detail" />} />
+            <Route path="reports/loan-statement" element={<Reports defaultReport="Loan Statement" />} />
           <Route path="*" element={<ComingSoon />} />
         </Route>
         </Routes>
