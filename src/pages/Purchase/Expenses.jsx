@@ -3,6 +3,10 @@ import { useLocation } from "react-router-dom";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter, FiSearch, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
+import {
+  buildUnifiedDocumentHtml,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
 const CATEGORIES_KEY = "ledgerly:expenseCategories.v1";
@@ -19,8 +23,60 @@ const blankEntry = (number) => ({ id: crypto.randomUUID(), number: String(number
 
 function ExpenseDocument({ entry, onClose }) {
   const amount = entry.rows.reduce((sum, row) => sum + rowAmount(row, entry.gst), 0);
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Expense ${entry.number}</title><style>body{font:15px Arial;color:#172033;margin:38px}header{text-align:center;border-bottom:1px solid #cbd5e1;padding-bottom:16px}section{display:flex;justify-content:space-between;margin:25px 0}table{width:100%;border-collapse:collapse}th{background:#eaf2fb;text-align:left}td,th{padding:10px;border:1px solid #dbe2ea}.total{text-align:right;font-weight:bold;font-size:19px;margin-top:20px}.actions{text-align:right;margin:20px}.actions button{padding:10px 18px;background:#1683ee;color:white;border:0;border-radius:6px}@media print{.actions{display:none}body{margin:15mm}}</style></head><body><header><h1>My Company</h1><div>Expense</div></header><section><div><b>Category:</b> ${entry.category || "—"}<br><b>Party:</b> ${entry.party || "—"}</div><div><b>Expense No.:</b> ${entry.number}<br><b>Date:</b> ${fmtDate(entry.date)}</div></section><table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Tax</th><th>Amount</th></tr></thead><tbody>${entry.rows.map(row => `<tr><td>${row.item || "—"}</td><td>${row.qty || 0}</td><td>${money(row.price)}</td><td>${entry.gst ? `${row.tax || 0}%` : "—"}</td><td>${money(rowAmount(row, entry.gst))}</td></tr>`).join("")}</tbody></table><p class="total">Total: ${money(amount)}</p><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div></body></html>`;
-  return <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}><div className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="flex items-center justify-between border-b px-6 py-4"><h2 className="text-xl font-semibold">Preview</h2><button onClick={onClose} aria-label="Close preview"><FiX className="h-6 w-6" /></button></div><iframe title="Expense preview" className="min-h-0 flex-1" srcDoc={html} /><div className="flex justify-end gap-3 border-t p-4"><Button onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(html); win.document.close(); } }} className="border border-rose-500 px-5 text-rose-600">Open PDF</Button><Button onClick={() => { const win = window.open("", "_blank"); if (win) { win.document.write(html); win.document.close(); win.print(); } }} className="border border-rose-500 px-5 text-rose-600">Print</Button><Button onClick={() => { const blob = new Blob([html], { type: "text/html" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `expense-${entry.number}.html`; a.click(); URL.revokeObjectURL(url); }} className="border border-rose-500 px-5 text-rose-600">Save</Button><Button onClick={onClose} className="rounded-full bg-rose-600 px-5 text-white">Close</Button></div></div></div>;
+  const rows = entry.rows.map((row) => ({
+    item: row.item || "Expense Item",
+    qty: row.qty || 1,
+    price: row.price || 0,
+    tax: entry.gst && row.tax ? `${row.tax}%` : "—",
+    amount: rowAmount(row, entry.gst),
+  }));
+
+  const html = buildUnifiedDocumentHtml({
+    title: "Expense Voucher",
+    documentNumber: entry.number,
+    date: fmtDate(entry.date),
+    status: entry.status || "Paid",
+    partyName: entry.party || entry.category || "General Expense",
+    columns: [
+      { key: "index", label: "#", align: "center", width: "40px" },
+      { key: "item", label: "Expense Item / Category", align: "left" },
+      { key: "qty", label: "Qty", align: "center", width: "60px" },
+      { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
+      { key: "tax", label: "Tax", align: "center", width: "70px" },
+      { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
+    ],
+    rows,
+    totals: {
+      subtotal: amount,
+      total: amount,
+      received: entry.status === "Paid" ? amount : 0,
+      balance: entry.status === "Paid" ? 0 : amount,
+    },
+    notes: entry.description ? `Category: ${entry.category || "—"} | ${entry.description}` : `Category: ${entry.category || "—"}`,
+  });
+
+  return (
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={onClose}>
+      <div className="flex h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <h2 className="text-xl font-semibold">Expense Preview</h2>
+          <button onClick={onClose} aria-label="Close preview"><FiX className="h-6 w-6" /></button>
+        </div>
+        <iframe title="Expense preview" className="min-h-0 flex-1 border-0" srcDoc={html} />
+        <div className="flex justify-end gap-3 border-t p-4 bg-slate-50">
+          <Button onClick={() => openPrintWindow(html, false)} className="border border-slate-300 bg-white text-slate-700 hover:bg-slate-100">
+            Open in New Window
+          </Button>
+          <Button onClick={() => openPrintWindow(html, true)} className="bg-blue-600 text-white hover:bg-blue-700">
+            Print / Save PDF
+          </Button>
+          <Button onClick={onClose} className="rounded-lg bg-slate-200 px-5 text-slate-700 hover:bg-slate-300">
+            Close
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Expenses() {

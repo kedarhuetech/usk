@@ -5,6 +5,10 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
+import {
+  buildUnifiedDocumentHtml,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const KEY = "ledgerly:purchaseOrders.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -64,9 +68,45 @@ export default function PurchaseOrders() {
     }
     if (name === "View History") window.alert((order.history || []).map((entry) => `${entry.action} — ${new Date(entry.at).toLocaleString()}`).join("\n") || "No history recorded yet.");
     if (["Preview", "Open PDF", "Print"].includes(name)) {
-      const popup = window.open("", "_blank"); if (!popup) return;
-      const safe = (text) => String(text || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
-      popup.document.write(`<html><head><title>Purchase Order ${safe(order.number)}</title><style>body{font:14px Arial;margin:36px;color:#24364b}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{border:1px solid #ccd3dc;padding:10px;text-align:left}th{background:#eef2f7}.total{text-align:right;margin-top:20px}@media print{button{display:none}}</style></head><body><h1>Purchase Order #${safe(order.number)}</h1><p>Supplier: ${safe(order.supplier)} &nbsp; Date: ${dateText(order.date)} &nbsp; Due: ${dateText(order.dueDate)}</p><table><tr><th>Item</th><th>Description</th><th>Qty</th><th>Unit</th><th>Price/Unit</th><th>Amount</th></tr>${(order.rows || []).map((row) => `<tr><td>${safe(row.item)}</td><td>${safe(row.description)}</td><td>${safe(row.qty)}</td><td>${safe(row.unit)}</td><td>${money(row.price)}</td><td>${money(lineTotal(row))}</td></tr>`).join("")}</table><h2 class="total">Total: ${money(orderAmount(order))}</h2><p>${safe(order.terms)}</p><button onclick="window.print()">Print / Save PDF</button>${name === "Print" ? "<script>window.print()</script>" : ""}</body></html>`); popup.document.close();
+      const rows = (order.rows || []).map((row) => ({
+        item: row.item || "Item",
+        description: row.description || "",
+        qty: `${row.qty || 1} ${row.unit || ""}`.trim(),
+        price: row.price || 0,
+        amount: lineTotal(row),
+      }));
+
+      const html = buildUnifiedDocumentHtml({
+        title: "Purchase Order",
+        documentNumber: order.number || "",
+        date: dateText(order.date),
+        dueDate: dateText(order.dueDate),
+        status: order.status || "Open",
+        partyName: order.supplier || "",
+        partyPhone: order.phone || "",
+        partyBillingAddress: order.billingAddress || "",
+        partyShippingAddress: order.shippingAddress || "",
+        columns: [
+          { key: "index", label: "#", align: "center", width: "40px" },
+          { key: "item", label: "Item Description", align: "left" },
+          { key: "description", label: "Details", align: "left" },
+          { key: "qty", label: "Qty", align: "center", width: "90px" },
+          { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
+          { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
+        ],
+        rows,
+        totals: {
+          subtotal: orderAmount(order),
+          total: orderAmount(order),
+          received: 0,
+          balance: orderAmount(order),
+        },
+        terms: order.terms || "",
+        notes: order.description || "",
+        autoPrint: name === "Print",
+      });
+
+      openPrintWindow(html, name === "Print");
     }
   };
 
