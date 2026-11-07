@@ -116,6 +116,21 @@ export default function LoanStatementReport() {
     return calculateLoanOpeningBalance(loans, from, selectedLoanId);
   }, [loans, from, selectedLoanId]);
 
+  const openingLoansList = useMemo(() => {
+    if (!from) return [];
+    const fromYMD = parseYMD(from);
+    if (!fromYMD) return [];
+    const names = [];
+    loans.forEach((loan) => {
+      if (selectedLoanId && selectedLoanId !== "All" && loan.id !== selectedLoanId) return;
+      const loanStart = parseYMD(loan.startDate || loan.createdAt?.slice(0, 10));
+      if (loanStart && loanStart < fromYMD) {
+        names.push(loan.loanName || loan.lenderName || "Loan");
+      }
+    });
+    return names;
+  }, [loans, from, selectedLoanId]);
+
   // 2. Build full chronological history with running balances
   const allChronologicalWithBalances = useMemo(() => {
     const raw = buildLoanStatementEntries(loans, selectedLoanId);
@@ -502,8 +517,13 @@ export default function LoanStatementReport() {
               {from && openingPrincipal > 0 && (
                 <tr className="bg-slate-50/80 font-medium text-slate-700 italic">
                   <td className="py-2.5 px-3">{fmtDateDisplay(from)}</td>
-                  <td className="py-2.5 px-3 font-semibold text-slate-900">
-                    Opening Principal Balance
+                  <td className="py-2.5 px-3">
+                    <p className="font-semibold text-slate-900">Opening Principal Balance</p>
+                    {openingLoansList.length > 0 && (
+                      <p className="text-[11px] text-slate-500 font-normal not-italic">
+                        From previous period: {openingLoansList.join(", ")}
+                      </p>
+                    )}
                   </td>
                   <td className="py-2.5 px-3 text-slate-400">—</td>
                   <td className="py-2.5 px-3">
