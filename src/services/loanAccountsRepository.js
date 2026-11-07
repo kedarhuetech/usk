@@ -39,14 +39,14 @@ export async function getLoanById(id) {
 }
 
 export async function createLoan(loan) {
-  const normalized = { ...loan, loanName: String(loan.loanName || "").trim(), lenderName: String(loan.lenderName || "").trim(), originalAmount: Number(loan.originalAmount), annualInterestRate: Number(loan.annualInterestRate), tenureMonths: Number(loan.tenureMonths), emiOverride: loan.emiOverride === "" || loan.emiOverride == null ? "" : Number(loan.emiOverride), notes: String(loan.notes || "").trim(), repaymentFrequency: loan.repaymentFrequency || "Monthly", status: "Active" };
+  const normalized = { ...loan, loanName: String(loan.loanName || "").trim(), lenderName: String(loan.lenderName || "").trim(), originalAmount: Number(loan.originalAmount), annualInterestRate: Number(loan.annualInterestRate), tenureMonths: Number(loan.tenureMonths), emiOverride: loan.emiOverride === "" || loan.emiOverride == null ? "" : Number(loan.emiOverride), notes: String(loan.notes || "").trim(), repaymentFrequency: loan.repaymentFrequency || "Monthly", status: (loan.status && ["Active", "Closed"].includes(loan.status)) ? loan.status : "Active" };
   const validation = validateLoan(normalized);
   if (validation) throw new Error(validation);
   const loans = readLoans();
   const id = loan.id || crypto.randomUUID();
   if (loans.some((entry) => entry.id === id)) throw new Error("This loan was already saved.");
   const now = new Date().toISOString();
-  const saved = { ...normalized, id, repayments: [], statusHistory: [event("Active")], createdAt: now, updatedAt: now };
+  const saved = { ...normalized, id, repayments: [], statusHistory: [event(normalized.status)], createdAt: now, updatedAt: now };
   writeLoans([saved, ...loans]);
   return saved;
 }
@@ -55,10 +55,11 @@ export async function updateLoan(id, changes) {
   const loans = readLoans();
   const index = loans.findIndex((loan) => loan.id === id);
   if (index < 0) throw new Error("Loan account not found.");
-  if (loans[index].status !== "Active") throw new Error("Closed loans cannot be edited.");
-  const editable = Object.fromEntries(Object.entries(changes).filter(([key]) => !["id", "status", "repayments", "statusHistory", "createdAt", "updatedAt"].includes(key)));
+  const nextStatus = changes.status && ["Active", "Closed"].includes(changes.status) ? changes.status : loans[index].status;
+  const statusHistory = nextStatus !== loans[index].status ? [...(loans[index].statusHistory || []), event(nextStatus)] : (loans[index].statusHistory || [event(loans[index].status)]);
+  const editable = Object.fromEntries(Object.entries(changes).filter(([key]) => !["id", "repayments", "statusHistory", "createdAt", "updatedAt"].includes(key)));
   const nextOverride = Object.hasOwn(editable, "emiOverride") ? (editable.emiOverride === "" || editable.emiOverride == null ? "" : Number(editable.emiOverride)) : loans[index].emiOverride;
-  const updated = { ...loans[index], ...editable, originalAmount: Number(editable.originalAmount ?? loans[index].originalAmount), annualInterestRate: Number(editable.annualInterestRate ?? loans[index].annualInterestRate), tenureMonths: Number(editable.tenureMonths ?? loans[index].tenureMonths), emiOverride: nextOverride, updatedAt: new Date().toISOString() };
+  const updated = { ...loans[index], ...editable, status: nextStatus, statusHistory, originalAmount: Number(editable.originalAmount ?? loans[index].originalAmount), annualInterestRate: Number(editable.annualInterestRate ?? loans[index].annualInterestRate), tenureMonths: Number(editable.tenureMonths ?? loans[index].tenureMonths), emiOverride: nextOverride, updatedAt: new Date().toISOString() };
   const validation = validateLoan(updated);
   if (validation) throw new Error(validation);
   const previouslyPaid = loans[index].repayments.reduce((sum, repayment) => sum + Math.round(Number(repayment.principalPaid || 0) * 100), 0);

@@ -45,6 +45,19 @@ test("loan creation persists; edit retains repayment history; repayment splits p
   assert.equal((await getLoanById(created.id)).repayments.length, 1);
 }));
 
+test("loan status can be updated between Active and Closed and persisted", async () => withLocalStorage(async () => {
+  const loan = await createLoan({ ...validLoan(), id: "loan-status-test", status: "Active" });
+  assert.equal(loan.status, "Active");
+
+  const closed = await updateLoan(loan.id, { status: "Closed" });
+  assert.equal(closed.status, "Closed");
+  assert.equal((await getLoanById(loan.id)).status, "Closed");
+
+  const reopened = await updateLoan(loan.id, { status: "Active" });
+  assert.equal(reopened.status, "Active");
+  assert.equal((await getLoanById(loan.id)).status, "Active");
+}));
+
 test("repayments cannot exceed principal and closed loans reject further payments", async () => withLocalStorage(async () => {
   const loan = await createLoan({ ...validLoan(), id: "loan-close" });
   await assert.rejects(() => recordRepayment(loan.id, { id: "bad", paymentDate: "2026-11-01", amountPaid: 12001, principalPaid: 12001 }), /exceed the outstanding/);
