@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from "react";
 import { FiX } from "react-icons/fi";
-import { getCompanyProfile } from "../../services/companyProfileStorage.js";
+import { getEffectiveCompanyInfo } from "../../services/unifiedPrintService.js";
 
 function parseYMD(val) {
   if (!val) return "";
@@ -52,9 +52,10 @@ export default function ReportPrintPreviewModal({
   totalAmount,
   printOnOpen = false,
 }) {
-  const profile = useMemo(() => getCompanyProfile(), [isOpen]);
-  const companyName = profile.businessName || profile.companyName || "sai kirana stores";
-  const phone = profile.phoneNumber || "8369501991";
+  const company = useMemo(() => getEffectiveCompanyInfo(), [isOpen]);
+  const companyName = company.name || "Sai Kirana Stores";
+  const phone = company.phone || "";
+  const themeColor = company.themeColor || "#881337";
 
   useEffect(() => {
     if (!isOpen || !printOnOpen) return undefined;
@@ -149,7 +150,10 @@ export default function ReportPrintPreviewModal({
             <div className="w-full overflow-x-auto border-t border-slate-200">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-[#cbd5e1] text-slate-900 font-bold uppercase text-[11px] tracking-wider">
+                  <tr
+                    style={{ backgroundColor: themeColor, color: "#ffffff" }}
+                    className="font-bold uppercase text-[11px] tracking-wider"
+                  >
                     <th className="py-2.5 px-3 whitespace-nowrap">DATE</th>
                     <th className="py-2.5 px-2 whitespace-nowrap">INVOICE NO.</th>
                     <th className="py-2.5 px-3">PARTY NAME</th>
@@ -349,21 +353,24 @@ export default function ReportPrintPreviewModal({
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-full border border-rose-500 bg-white px-5 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition shadow-sm cursor-pointer"
+            style={{ borderColor: themeColor, color: themeColor }}
+            className="rounded-full border bg-white px-5 py-2 text-sm font-semibold hover:bg-slate-50 transition shadow-xs cursor-pointer"
           >
             Open PDF
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-full border border-rose-500 bg-white px-5 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition shadow-sm cursor-pointer"
+            style={{ backgroundColor: themeColor, borderColor: themeColor, color: "#ffffff" }}
+            className="rounded-full border px-5 py-2 text-sm font-semibold transition shadow-xs cursor-pointer hover:opacity-95"
           >
             Print
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="rounded-full border border-rose-500 bg-white px-5 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition shadow-sm cursor-pointer"
+            style={{ borderColor: themeColor, color: themeColor }}
+            className="rounded-full border bg-white px-5 py-2 text-sm font-semibold hover:bg-slate-50 transition shadow-xs cursor-pointer"
           >
             Save PDF
           </button>

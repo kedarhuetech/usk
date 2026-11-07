@@ -15,6 +15,11 @@ import { getParties, saveParty } from "../../services/partiesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { moveBatchRows, reverseBatchMovement } from "../../services/batchInventoryService.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
+import {
+  buildUnifiedDocumentHtml,
+  getEffectiveCompanyInfo,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const STORAGE_KEY = "ledgerly:purchaseReturns.v1";
 
@@ -217,66 +222,39 @@ export default function PurchaseReturns() {
   };
 
   const printRecord = (record) => {
-    const popup = window.open("", "_blank", "width=900,height=700");
-    if (!popup) return;
-    const esc = (t) =>
-      String(t ?? "").replace(
-        /[&<>"']/g,
-        (c) =>
-          ({
-            "&": "&amp;",
-            "<": "&lt;",
-            ">": "&gt;",
-            '"': "&quot;",
-            "'": "&#39;",
-          }[c])
-      );
-    popup.document.write(`
-      <title>${esc(record.type)} ${esc(record.refNo)}</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 32px; color: #333; }
-        h1 { text-align: center; margin-bottom: 8px; }
-        .meta { margin-bottom: 24px; font-size: 14px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 13px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background: #f4f5f8; }
-        .total-box { text-align: right; margin-top: 24px; font-size: 16px; }
-        @media print { button { display: none; } }
-      </style>
-      <h1>${esc(record.type)}</h1>
-      <div class="meta">
-        <p><strong>Ref No:</strong> ${esc(record.refNo)} &nbsp;|&nbsp; <strong>Date:</strong> ${formatDisplayDate(record.date)}</p>
-        <p><strong>Party:</strong> ${esc(record.party)} &nbsp;|&nbsp; <strong>Bill No:</strong> ${esc(record.billNumber || "—")}</p>
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${(record.rows || [])
-            .map(
-              (r) => `
-            <tr>
-              <td>${esc(r.item)}</td>
-              <td>${esc(r.qty)}</td>
-              <td>${esc(r.unit)}</td>
-              <td>${money(r.price)}</td>
-              <td>${money(rowAmount(r))}</td>
-            </tr>`
-            )
-            .join("")}
-        </tbody>
-      </table>
-      <div class="total-box">
-        <p>Total: <strong>${money(record.total)}</strong></p>
-        <p>Received / Adjusted: ${money(record.received)}</p>
-        <p>Balance: <strong>${money(record.balance)}</strong></p>
-      </div>
-      <button style="margin-top:20px;padding:8px 16px;cursor:pointer" onclick="window.print()">Print / Save PDF</button>
-    `);
-    popup.document.close();
+    const info = getEffectiveCompanyInfo();
+    const items = (record.rows || []).map((r) => ({
+      name: r.item,
+      qtyUnit: `${r.qty} ${r.unit || ""}`.trim(),
+      price: r.price,
+      amount: rowAmount(r),
+    }));
+    const html = buildUnifiedDocumentHtml({
+      docType: record.type || "Debit Note / Purchase Return",
+      docNumber: record.refNo,
+      docDate: record.date,
+      partyName: record.party,
+      metadataRows: [
+        { label: "Bill No.", value: record.billNumber || "—" },
+        { label: "Status", value: record.status || "Debit" },
+      ],
+      items,
+      columns: [
+        { label: "Item", key: "name" },
+        { label: "Return Qty", key: "qtyUnit", align: "center" },
+        { label: "Price", align: "right", render: (r) => money(r.price) },
+        { label: "Amount", align: "right", render: (r) => money(r.amount) },
+      ],
+      totals: [
+        { label: "Total Return Amount", value: money(record.total), isGrand: true },
+        { label: "Received / Adjusted", value: money(record.received) },
+        { label: "Balance Due", value: money(record.balance) },
+      ],
+      totalAmount: record.total,
+      company: info,
+      autoPrint: true,
+    });
+    openPrintWindow(html, `DebitNote_${record.refNo}`);
   };
 
   const exportExcel = () => {

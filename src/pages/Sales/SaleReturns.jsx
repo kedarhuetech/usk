@@ -15,6 +15,11 @@ import { ensureLocalTestData } from "../../services/localTransactionTestData";
 import { taxPercent } from "../../utils/saleInvoice";
 import { getAppSettings } from "../../services/appSettingsStorage";
 import {
+  buildUnifiedDocumentHtml,
+  getEffectiveCompanyInfo,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
+import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
@@ -119,17 +124,53 @@ function calculateBreakdown(rows = []) {
 }
 
 function printCreditNote(record) {
-  const popup = window.open("", "_blank", "width=950,height=760");
-  if (!popup) { window.alert("Allow pop-ups to print the Credit Note."); return; }
-  const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+  const info = getEffectiveCompanyInfo();
   const breakdown = calculateBreakdown(record.rows);
-  const rows = (record.rows || []).map((row) => {
+  const items = (record.rows || []).map((row) => {
     const line = calculateSaleReturnRow(row);
-    return `<tr><td>${escape(row.item)}</td><td>${escape(row.qty)} ${escape(row.unit)}</td><td>${money(row.price)}</td><td>${money(line.discount)}</td><td>${money(line.tax)}</td><td>${money(line.amount)}</td></tr>`;
-  }).join("");
-  popup.document.open();
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escape(record.type)} ${escape(record.number)}</title><style>body{font:14px Arial,sans-serif;color:#172033;margin:36px}h1{text-align:center;margin:0}header{border-bottom:2px solid #1e3a8a;padding-bottom:16px;margin-bottom:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #cbd5e1;padding:9px;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#eff6ff}.summary{margin:18px 0 0 auto;width:300px}.summary div{display:flex;justify-content:space-between;padding:5px}.grand{border-top:2px solid #334155;font-size:18px;font-weight:bold;margin-top:8px;padding-top:10px}@media print{button{display:none}body{margin:15mm}}</style></head><body><header><h1>${escape(record.type)}</h1><p style="text-align:center">No. ${escape(record.number)} · ${dateLabel(record.date)}</p></header><div class="meta"><div><b>Customer</b><br>${escape(record.party)}</div><div><b>Original invoice</b><br>${escape(record.invoiceNumber || "—")}</div><div><b>Phone</b><br>${escape(record.phone || "—")}</div><div><b>Status</b><br>${escape(record.status || "Credit Available")}</div></div><table><thead><tr><th>Item</th><th>Return quantity</th><th>Price</th><th>Discount</th><th>GST</th><th>Credit</th></tr></thead><tbody>${rows}</tbody></table><div class="summary"><div><span>Taxable value</span><b>${money(breakdown.taxable)}</b></div><div><span>Discount</span><b>${money(breakdown.discount)}</b></div><div><span>GST</span><b>${money(breakdown.tax)}</b></div><div><span>Refunded</span><b>${money(record.received)}</b></div><div><span>Applied to invoice</span><b>${money(record.adjustedAmount)}</b></div><div><span>Customer credit</span><b>${money(record.customerCreditAmount)}</b></div><div class="grand"><span>Total credit</span><b>${money(record.total)}</b></div></div><p><b>Reason:</b> ${escape(record.reason || "—")}</p><button onclick="window.print()">Print / Save PDF</button></body></html>`);
-  popup.document.close();
+    return {
+      name: row.item,
+      qtyUnit: `${row.qty} ${row.unit || ""}`.trim(),
+      price: row.price,
+      discount: line.discount,
+      tax: line.tax,
+      amount: line.amount,
+    };
+  });
+  const html = buildUnifiedDocumentHtml({
+    docType: record.type || "Credit Note / Sale Return",
+    docNumber: record.number,
+    docDate: record.date,
+    partyName: record.party,
+    partyPhone: record.phone,
+    metadataRows: [
+      { label: "Original Invoice", value: record.invoiceNumber || "—" },
+      { label: "Status", value: record.status || "Credit Available" },
+    ],
+    items,
+    columns: [
+      { label: "Item", key: "name" },
+      { label: "Return Qty", key: "qtyUnit", align: "center" },
+      { label: "Price", align: "right", render: (r) => money(r.price) },
+      { label: "Discount", align: "right", render: (r) => money(r.discount) },
+      { label: "GST", align: "right", render: (r) => money(r.tax) },
+      { label: "Credit", align: "right", render: (r) => money(r.amount) },
+    ],
+    totals: [
+      { label: "Taxable Value", value: money(breakdown.taxable) },
+      { label: "Discount", value: money(breakdown.discount) },
+      { label: "GST", value: money(breakdown.tax) },
+      ...(Number(record.received || 0) > 0 ? [{ label: "Refunded", value: money(record.received) }] : []),
+      ...(Number(record.adjustedAmount || 0) > 0 ? [{ label: "Applied to Invoice", value: money(record.adjustedAmount) }] : []),
+      ...(Number(record.customerCreditAmount || 0) > 0 ? [{ label: "Customer Credit", value: money(record.customerCreditAmount) }] : []),
+      { label: "Total Credit", value: money(record.total), isGrand: true },
+    ],
+    totalAmount: record.total,
+    notes: record.reason ? `Reason: ${record.reason}` : "",
+    company: info,
+    autoPrint: true,
+  });
+  openPrintWindow(html, `CreditNote_${record.number}`);
 }
 
 function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, onClose, onSave }) {
