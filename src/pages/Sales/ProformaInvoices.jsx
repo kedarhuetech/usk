@@ -9,6 +9,11 @@ import {
   getEffectiveCompanyInfo,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const STORAGE_KEY = "ledgerly:proformaInvoices.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -76,6 +81,24 @@ export default function ProformaInvoices() {
     const saved = { ...value, id: value.id || `proforma-${Date.now()}` };
     persist(editor.mode === "edit" ? proformas.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...proformas]);
     setEditor(null);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if ((currentSettings.txnMsgSendToParty ?? true) && currentSettings.txnMsgAutoProformaInvoice) {
+        const phone = (saved.phone || "").trim();
+        if (phone) {
+          const msg = buildTransactionMessage({
+            type: "proformaInvoice",
+            number: saved.number,
+            amount: saved.amount || 0,
+            balance: saved.amount || 0,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {}
   };
   const deleteProforma = (entry) => {
     if (window.confirm(`Delete proforma invoice ${entry.number}?`)) persist(proformas.filter((value) => value.id !== entry.id));

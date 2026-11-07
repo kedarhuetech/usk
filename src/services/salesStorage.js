@@ -95,6 +95,41 @@ export function saveSaleInvoice(invoice) {
     }
   }
 
+  // Enforce Settings: Block New Items From Transaction
+  if (normalized.transactionType === "sale" && appSettings.blockNewItemsFromTxn) {
+    const rawItems = window.localStorage.getItem(inventoryItemsStorageKey);
+    let inventory = [];
+    try { inventory = rawItems ? JSON.parse(rawItems) : []; } catch {}
+    for (const row of normalized.rows || []) {
+      const name = (row.item || "").trim().toLowerCase();
+      if (!name) continue;
+      const match = inventory.find(
+        (i) => i.id === row.sourceItemId || i.id === row.itemId || (i.itemName && i.itemName.toLowerCase() === name)
+      );
+      if (!match) {
+        throw new Error(`Creating new items from transactions is blocked in Settings: "${row.item}" is not registered in Item master.`);
+      }
+    }
+  }
+
+  // Enforce Settings: Block New Parties From Transaction
+  if (normalized.transactionType === "sale" && appSettings.blockNewPartiesFromTxn) {
+    const customer = (normalized.form?.customer || normalized.customer || "").trim();
+    if (customer && customer.toLowerCase() !== "cash sale") {
+      let parties = [];
+      try {
+        const rawParties = window.localStorage.getItem("ledgerly:parties.v1");
+        parties = rawParties ? JSON.parse(rawParties) : [];
+      } catch {}
+      const match = parties.find(
+        (p) => (p.partyName || p.name || "").trim().toLowerCase() === customer.toLowerCase()
+      );
+      if (!match) {
+        throw new Error(`Creating new parties from transactions is blocked in Settings: "${customer}" is not registered in Party master.`);
+      }
+    }
+  }
+
   const shouldAdjustStock =
     normalized.transactionType === "sale" &&
     !normalized.stockAdjustedAt &&

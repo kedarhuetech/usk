@@ -9,6 +9,11 @@ import {
   getEffectiveCompanyInfo,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const STORAGE_KEY = "ledgerly:estimateQuotations.v1";
 
@@ -93,6 +98,24 @@ export default function EstimateQuotation() {
     const saved = { ...estimate, id: estimate.id || `estimate-${Date.now()}` };
     saveEstimates(editor.mode === "edit" ? estimates.map((item) => item.id === saved.id ? saved : item) : [saved, ...estimates]);
     setEditor(null);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if ((currentSettings.txnMsgSendToParty ?? true) && currentSettings.txnMsgAutoEstimate) {
+        const phone = (saved.phone || "").trim();
+        if (phone) {
+          const msg = buildTransactionMessage({
+            type: "estimate",
+            number: saved.number,
+            amount: saved.amount || 0,
+            balance: saved.amount || 0,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {}
   };
 
   const removeEstimate = (estimate) => {
