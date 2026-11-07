@@ -9,6 +9,11 @@ import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const KEY = "ledgerly:purchaseOrders.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -51,6 +56,24 @@ export default function PurchaseOrders() {
     const saved = { ...value, id: value.id || `purchase-order-${Date.now()}`, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
     saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
     setEditor(null);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if ((currentSettings.txnMsgSendToParty ?? true) && currentSettings.txnMsgAutoPurchaseOrder) {
+        const phone = (value.phone || "").trim();
+        if (phone) {
+          const msg = buildTransactionMessage({
+            type: "purchaseOrder",
+            number: saved.number,
+            amount: total,
+            balance: total,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {}
   };
   const action = (name, order) => {
     setMenuId("");

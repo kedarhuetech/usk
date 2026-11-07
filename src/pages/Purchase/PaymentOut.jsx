@@ -7,8 +7,14 @@ import { getParties } from "../../services/partiesStorage";
 import { getPaymentOuts, savePaymentOuts } from "../../services/transactionRepository.js";
 import {
   buildUnifiedDocumentHtml,
+  getEffectiveCompanyInfo,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -99,9 +105,29 @@ export default function PaymentOut() {
     const amount = (entry.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
     if (amount <= 0) { window.alert("Enter an amount greater than zero."); return; }
     const now = new Date().toISOString();
-    const saved = { ...entry, id: entry.id || `payment-out-${Date.now()}`, amount, received: amount, paymentType: [...new Set(entry.payments.map((payment) => payment.type))].join(", "), status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || "My Company", user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated payment" : "Created payment", at: now }] };
+    const defaultFirm = getEffectiveCompanyInfo().name || "Company";
+    const saved = { ...entry, id: entry.id || `payment-out-${Date.now()}`, amount, received: amount, paymentType: [...new Set(entry.payments.map((payment) => payment.type))].join(", "), status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || defaultFirm, user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated payment" : "Created payment", at: now }] };
     persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
     setEditor(null);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if ((currentSettings.txnMsgSendToParty ?? true) && currentSettings.txnMsgAutoPaymentOut) {
+        const party = parties.find((p) => String(p.id) === String(saved.partyId) || (p.partyName || p.name) === saved.partyName);
+        const phone = party?.phone || "";
+        if (phone) {
+          const msg = buildTransactionMessage({
+            type: "paymentOut",
+            number: saved.number,
+            amount,
+            balance: 0,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {}
   };
   const toggleMenu = (entry, event) => {
     if (openMenu === entry.id) { setOpenMenu(""); return; }

@@ -20,6 +20,11 @@ import {
   getEffectiveCompanyInfo,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const STORAGE_KEY = "ledgerly:purchaseReturns.v1";
 
@@ -218,6 +223,25 @@ export default function PurchaseReturns() {
     try {
       persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
       setEditor(null);
+
+      // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+      try {
+        const currentSettings = getAppSettings();
+        if ((currentSettings.txnMsgSendToParty ?? true) && currentSettings.txnMsgAutoPurchaseReturn) {
+          const party = parties.find((p) => (p.partyName || p.name) === saved.party);
+          const phone = party?.phone || "";
+          if (phone) {
+            const msg = buildTransactionMessage({
+              type: "purchaseReturn",
+              number: saved.refNo,
+              amount: total,
+              balance: balanceVal,
+              settings: currentSettings,
+            });
+            sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+          }
+        }
+      } catch {}
     } catch (error) { window.alert(error.message || "Could not save this purchase return."); }
   };
 

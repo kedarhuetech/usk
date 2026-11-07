@@ -11,6 +11,11 @@ import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
+import {
+  buildTransactionMessage,
+  sendMetaWhatsAppMessage,
+} from "../../services/transactionMessageService.js";
 
 const STORAGE_KEY = "ledgerly:deliveryChallans.v1";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -122,6 +127,10 @@ export default function DeliveryChallans() {
 
   const printChallan = (challan, autoPrint = false) => {
     if (!challan) return;
+    const appSettings = getAppSettings();
+    const showAmount = Boolean(appSettings.printAmountInDeliveryChallan);
+    const totalQty = (challan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
+
     const rows = (challan.rows || []).map((row) => ({
       item: row.item || "Item",
       hsn: row.hsn || row.sac || "—",
@@ -131,6 +140,31 @@ export default function DeliveryChallans() {
       amount: rowAmount(row),
     }));
 
+    const columns = [
+      { key: "index", label: "#", align: "center", width: "40px" },
+      { key: "item", label: "Item Description", align: "left" },
+      { key: "hsn", label: "HSN/SAC", align: "center", width: "90px" },
+      { key: "qty", label: "Qty", align: "center", width: "90px" },
+      ...(showAmount
+        ? [
+            { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
+            { key: "discount", label: "Discount", align: "center", width: "80px" },
+            { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
+          ]
+        : []),
+    ];
+
+    const totals = showAmount
+      ? {
+          subtotal: challan.total,
+          total: challan.total,
+          received: 0,
+          balance: challan.total,
+        }
+      : [
+          { label: "Total Quantity", value: `${totalQty} Units`, isGrand: true },
+        ];
+
     const html = buildUnifiedDocumentHtml({
       title: "Delivery Challan",
       documentNumber: challan.number || "",
@@ -139,22 +173,9 @@ export default function DeliveryChallans() {
       status: challan.status || "Open",
       partyName: challan.party || "",
       partyPhone: challan.phone || "",
-      columns: [
-        { key: "index", label: "#", align: "center", width: "40px" },
-        { key: "item", label: "Item Description", align: "left" },
-        { key: "hsn", label: "HSN/SAC", align: "center", width: "90px" },
-        { key: "qty", label: "Qty", align: "center", width: "90px" },
-        { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
-        { key: "discount", label: "Discount", align: "center", width: "80px" },
-        { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
-      ],
+      columns,
       rows,
-      totals: {
-        subtotal: challan.total,
-        total: challan.total,
-        received: 0,
-        balance: challan.total,
-      },
+      totals,
       notes: "Delivery Challan — Goods transported for delivery.",
       autoPrint,
     });
@@ -184,6 +205,24 @@ export default function DeliveryChallans() {
     const saved = { ...editor.value, id: editor.value.id || crypto.randomUUID(), rows: editor.value.rows.filter((row) => row.item || row.qty), total: subtotal };
     persist(editor.mode === "edit" ? challans.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...challans]);
     setEditor(null);
+
+    // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
+    try {
+      const currentSettings = getAppSettings();
+      if ((currentSettings.txnMsgSendToParty ?? true) && currentSettings.txnMsgAutoDeliveryChallan) {
+        const phone = (saved.phone || "").trim();
+        if (phone) {
+          const msg = buildTransactionMessage({
+            type: "deliveryChallan",
+            number: saved.number,
+            amount: saved.total || 0,
+            balance: saved.total || 0,
+            settings: currentSettings,
+          });
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+        }
+      }
+    } catch {}
   };
   const act = (action, challan) => {
     setMenuId("");
