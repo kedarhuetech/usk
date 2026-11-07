@@ -28,6 +28,7 @@ import Input from "../../components/Common/Input";
 import ImportPartiesModal from "./ImportPartiesModal";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { deleteParty, getPartyDeletionBlockReason, getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
+import { buildUnifiedStatementHtml } from "../../services/unifiedPrintService.js";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
@@ -439,9 +440,6 @@ function formatDateDMY(dateStr) {
 }
 
 function buildStatementDocument(party, invoices, activity = [], settings = {}) {
-  const company = getCompanyProfile();
-  const companyName = company.businessName || company.companyName || "Company Name";
-  const companyPhone = company.phoneNumber || company.phone || "";
   const opening = Math.abs(Number(party?.openingBalance || 0));
   const openingType = party?.openingBalanceType || "to-receive";
 
@@ -479,98 +477,20 @@ function buildStatementDocument(party, invoices, activity = [], settings = {}) {
   const printShipping = (settings?.printShippingAddress !== false) && party?.shippingAddress;
   const printableFields = (party?.additionalFields || []).filter((f) => f.showInPrint && f.value);
 
-  const tableRows = rows.map((r) => `
-    <tr>
-      <td>${escapeHtml(r.date)}</td>
-      <td>${escapeHtml(r.source)}</td>
-      <td>${escapeHtml(r.number)}</td>
-      <td style="color:${r.status === 'Paid' ? '#16a34a' : '#e11d48'};font-weight:600;">${escapeHtml(r.status)}</td>
-      <td style="text-align:right;">${money(r.total)}</td>
-      <td style="text-align:right;">${money(r.received)}</td>
-      <td style="text-align:right;">${money(r.balance)}</td>
-      <td style="text-align:right;color:#16a34a;">${r.receivableBalance > 0 ? money(r.receivableBalance) : '-'}</td>
-      <td style="text-align:right;color:#e11d48;">${r.payableBalance > 0 ? money(r.payableBalance) : '-'}</td>
-    </tr>
-  `).join("");
-
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Party statement - ${escapeHtml(party?.partyName || "Cash Sale")}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0f172a; margin: 36px; }
-    .company-header { text-align: center; margin-bottom: 24px; }
-    .company-name { font-size: 22px; font-weight: 800; margin: 0; }
-    .company-phone { font-size: 13px; color: #475569; margin: 4px 0 0; }
-    .doc-title { text-align: center; text-decoration: underline; font-size: 26px; font-weight: 800; margin: 28px 0 20px; }
-    .party-info { margin-bottom: 16px; line-height: 1.5; }
-    .party-name { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
-    .party-contact { font-size: 13px; color: #475569; margin: 2px 0; }
-    table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 12px; }
-    th { background: #cbd5e1; font-weight: 700; color: #0f172a; text-align: left; padding: 10px 8px; border-bottom: 2px solid #94a3b8; }
-    td { padding: 9px 8px; border-bottom: 1px solid #e2e8f0; }
-    .total-row td { background: #cbd5e1; font-weight: 800; border-top: 2px solid #94a3b8; }
-    .btn-bar { margin-top: 28px; display: flex; justify-content: flex-end; gap: 10px; }
-    .btn { padding: 8px 20px; border-radius: 9999px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e11d48; color: #e11d48; background: white; }
-    .btn-primary { background: #e11d48; color: white; }
-    @media print {
-      body { margin: 10mm; }
-      .btn-bar { display: none !important; }
-    }
-  </style>
-</head>
-<body>
-  <div class="company-header">
-    <h1 class="company-name">${escapeHtml(companyName)}</h1>
-    ${companyPhone ? `<p class="company-phone">Phone no.: ${escapeHtml(companyPhone)}</p>` : ""}
-  </div>
-
-  <h2 class="doc-title">Party statement</h2>
-
-  <div class="party-info">
-    <div class="party-name">Party name: ${escapeHtml(party?.partyName || "Cash Sale")}</div>
-    ${party?.phone ? `<div class="party-contact">Contact No.: ${escapeHtml(party.phone)}</div>` : ""}
-    ${party?.billingAddress ? `<div class="party-contact">Billing Address: ${escapeHtml(party.billingAddress)}</div>` : ""}
-    ${printShipping ? `<div class="party-contact"><strong>Shipping Address:</strong> ${escapeHtml(party.shippingAddress)}</div>` : ""}
-    ${printableFields.map((f) => `<div class="party-contact"><strong>${escapeHtml(f.fieldName || f.name)}:</strong> ${escapeHtml(f.value)}</div>`).join("")}
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Txn Type</th>
-        <th>Ref No.</th>
-        <th>Payment Status</th>
-        <th style="text-align:right;">Total</th>
-        <th style="text-align:right;">Received / Paid</th>
-        <th style="text-align:right;">Txn Balance</th>
-        <th style="text-align:right;">Receivable Balance</th>
-        <th style="text-align:right;">Payable Balance</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${tableRows || '<tr><td colspan="9" style="text-align:center;padding:24px;color:#94a3b8;">No transactions to show</td></tr>'}
-      ${rows.length > 0 ? `
-        <tr class="total-row">
-          <td colspan="4" style="font-weight:800;">Total</td>
-          <td style="text-align:right;font-weight:800;">${money(totalAmount)}</td>
-          <td style="text-align:right;font-weight:800;">${money(totalReceived)}</td>
-          <td style="text-align:right;font-weight:800;">${money(totalBalance)}</td>
-          <td style="text-align:right;font-weight:800;color:#15803d;">${money(totalReceivable)}</td>
-          <td style="text-align:right;font-weight:800;color:#be123c;">${money(totalPayable)}</td>
-        </tr>
-      ` : ""}
-    </tbody>
-  </table>
-
-  <div class="btn-bar">
-    <button class="btn" onclick="window.print()">Print</button>
-    <button class="btn" onclick="window.print()">Save PDF</button>
-  </div>
-</body>
-</html>`;
+  return buildUnifiedStatementHtml({
+    party,
+    rows,
+    totals: {
+      amount: totalAmount,
+      received: totalReceived,
+      balance: totalBalance,
+      receivable: totalReceivable,
+      payable: totalPayable,
+    },
+    printableFields,
+    printShipping: Boolean(printShipping),
+    autoPrint: true,
+  });
 }
 
 // Renders the party details interface.

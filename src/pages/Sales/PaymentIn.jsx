@@ -10,6 +10,10 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import {
+  buildUnifiedDocumentHtml,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -21,17 +25,43 @@ function readPayments() {
   catch { return []; }
 }
 
-function documentHtml(entry) {
-  const safe = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-  const rows = (entry.payments || []).map((payment) => `<tr><td>${safe(payment.type)}</td><td>${safe(payment.reference || "—")}</td><td>${money(payment.amount)}</td></tr>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Payment-In ${safe(entry.number)}</title><style>body{font:15px Arial;color:#172033;margin:40px}header{text-align:center;border-bottom:1px solid #cbd5e1;padding-bottom:18px}section{display:flex;justify-content:space-between;margin:28px 0}table{width:100%;border-collapse:collapse}th{background:#eaf2fb;text-align:left}td,th{padding:11px;border:1px solid #dbe2ea}.total{text-align:right;font-size:20px;font-weight:bold;margin-top:24px}.actions{text-align:right;margin-top:24px}.actions button{padding:10px 16px;background:#1683ee;color:#fff;border:0;border-radius:6px}@media print{.actions{display:none}body{margin:15mm}}</style></head><body><header><h1>My Company</h1><div>Payment-In Receipt</div></header><section><div><b>Received from</b><br>${safe(entry.partyName || "—")}</div><div><b>Receipt No.:</b> ${safe(entry.number)}<br><b>Date:</b> ${formatDate(entry.date)}</div></section><table><thead><tr><th>Payment Type</th><th>Reference</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table>${entry.description ? `<p><b>Description:</b> ${safe(entry.description)}</p>` : ""}<p class="total">Received: ${money(entry.amount)}</p><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div></body></html>`;
+function documentHtml(entry, printNow = false) {
+  const rows = (entry.payments || []).map((p) => ({
+    item: p.type || "Payment",
+    description: p.reference ? `Ref: ${p.reference}` : "Direct Payment",
+    qty: "1",
+    unit: "TXN",
+    price: p.amount || 0,
+    amount: p.amount || 0,
+  }));
+
+  return buildUnifiedDocumentHtml({
+    title: "Payment-In Receipt",
+    documentNumber: entry.number || "",
+    date: formatDate(entry.date),
+    status: entry.status || "Received",
+    partyName: entry.partyName || "",
+    columns: [
+      { key: "index", label: "#", align: "center", width: "40px" },
+      { key: "item", label: "Payment Mode", align: "left" },
+      { key: "description", label: "Reference / Details", align: "left" },
+      { key: "amount", label: "Amount Received", align: "right", width: "160px", formatMoney: true },
+    ],
+    rows,
+    totals: {
+      subtotal: entry.amount,
+      total: entry.amount,
+      received: entry.received ?? entry.amount,
+      balance: 0,
+    },
+    notes: entry.description || "",
+    autoPrint: printNow,
+  });
 }
 
 function openReceipt(entry, printNow = false) {
-  const target = window.open("", "_blank");
-  if (!target) { window.alert("Allow pop-ups to open the receipt."); return; }
-  target.document.open(); target.document.write(documentHtml(entry)); target.document.close();
-  if (printNow) target.addEventListener("load", () => target.print());
+  const html = documentHtml(entry, printNow);
+  openPrintWindow(html, printNow);
 }
 
 export default function PaymentIn() {

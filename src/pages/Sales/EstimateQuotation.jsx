@@ -4,6 +4,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import EstimateEditor from "./EstimateEditor";
+import {
+  buildUnifiedDocumentHtml,
+  getEffectiveCompanyInfo,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const STORAGE_KEY = "ledgerly:estimateQuotations.v1";
 
@@ -123,14 +128,44 @@ export default function EstimateQuotation() {
   };
 
   const openEstimateDocument = (estimate, printNow = false) => {
-    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-    const rows = (estimate.rows || []).map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.item)}</td><td>${escapeHtml(row.description)}</td><td>${escapeHtml(row.qty)} ${escapeHtml(row.unit)}</td><td>${escapeHtml(row.price)}</td><td>${formatMoney(Number(row.qty || 0) * Number(row.price || 0))}</td></tr>`).join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Estimate ${escapeHtml(estimate.number)}</title><style>body{font:14px Arial,sans-serif;color:#172033;margin:36px}header{text-align:center;border-bottom:2px solid #d8e0ea;padding-bottom:18px}h1{font-size:24px;margin:0 0 8px}h2{margin-top:30px}section{display:flex;justify-content:space-between;margin:24px 0}table{border-collapse:collapse;width:100%;margin-top:20px}th{background:#eaf2fb;text-align:left}th,td{border:1px solid #d4dbe5;padding:10px}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:20px}.actions{margin:24px 0;text-align:right}.actions button{padding:10px 20px;background:#1683ee;color:white;border:0;border-radius:6px;cursor:pointer}@media print{body{margin:15mm}.actions{display:none}}</style></head><body><header><h1>My Company</h1><div>Estimate / Quotation</div></header><h2>Estimate #${escapeHtml(estimate.number)}</h2><section><div><b>Prepared for:</b><br>${escapeHtml(estimate.customer)}<br>${escapeHtml(estimate.phone || "")}</div><div><b>Date:</b> ${escapeHtml(estimate.date)}<br><b>State of supply:</b> ${escapeHtml(estimate.state || "—")}</div></section><table><thead><tr><th>#</th><th>Item</th><th>Description</th><th>Qty / Unit</th><th>Price / Unit</th><th>Amount</th></tr></thead><tbody>${rows || "<tr><td colspan='6'>No items</td></tr>"}</tbody></table>${estimate.description ? `<p><b>Description:</b> ${escapeHtml(estimate.description)}</p>` : ""}${estimate.terms ? `<p><b>Terms & Conditions:</b><br>${escapeHtml(estimate.terms).replace(/\n/g, "<br>")}</p>` : ""}<p class="total">Total: ${formatMoney(estimate.amount)}</p><div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div>${printNow ? "<script>window.addEventListener('load',()=>window.print())</script>" : ""}</body></html>`;
-    const documentWindow = window.open("", "_blank");
-    if (!documentWindow) { window.alert("Allow pop-ups to open the estimate document."); return; }
-    documentWindow.document.open();
-    documentWindow.document.write(html);
-    documentWindow.document.close();
+    const info = getEffectiveCompanyInfo();
+    const rows = (estimate.rows || []).map((row, index) => ({
+      index: index + 1,
+      name: row.item,
+      description: row.description,
+      qty: row.qty,
+      unit: row.unit,
+      price: row.price,
+      amount: Number(row.qty || 0) * Number(row.price || 0),
+    }));
+    const html = buildUnifiedDocumentHtml({
+      docType: "Estimate / Quotation",
+      docNumber: estimate.number,
+      docDate: estimate.date,
+      partyName: estimate.customer || "Cash Sale",
+      partyPhone: estimate.phone || "",
+      billToAddress: estimate.billingAddress || "",
+      shipToAddress: estimate.shippingAddress || "",
+      status: estimate.status,
+      items: rows,
+      columns: [
+        { label: "#", key: "index", width: "40px" },
+        { label: "Item", key: "name" },
+        { label: "Description", key: "description" },
+        { label: "Qty / Unit", align: "center", render: (r) => `${r.qty || 0} ${r.unit || ""}` },
+        { label: "Price / Unit", align: "right", render: (r) => formatMoney(r.price) },
+        { label: "Amount", align: "right", render: (r) => formatMoney(r.amount) },
+      ],
+      totals: [
+        { label: "Total Amount", value: formatMoney(estimate.amount), isGrand: true },
+      ],
+      totalAmount: estimate.amount,
+      terms: estimate.terms || info.termsAndConditions,
+      notes: estimate.description,
+      company: info,
+      autoPrint: printNow,
+    });
+    openPrintWindow(html, `Estimate_${estimate.number}`);
   };
 
   const runEstimateAction = (action, estimate) => {

@@ -7,6 +7,10 @@ import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties } from "../../services/partiesStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
+import {
+  buildUnifiedDocumentHtml,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const STORAGE_KEY = "ledgerly:deliveryChallans.v1";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -118,141 +122,44 @@ export default function DeliveryChallans() {
 
   const printChallan = (challan, autoPrint = false) => {
     if (!challan) return;
-    const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-    const items = (challan.rows || []).map((row, index) => {
-      const q = Number(row.qty || 0);
-      const p = Number(row.price || 0);
-      const d = Number(row.discount || 0);
-      const discAmt = (q * p * d) / 100;
-      return `<tr>
-        <td style="text-align:center">${index + 1}</td>
-        <td style="font-weight:600">${escape(row.item || "—")}</td>
-        <td style="text-align:center">${escape(row.hsn || row.sac || "—")}</td>
-        <td style="text-align:center">${escape(row.qty || "0")}</td>
-        <td style="text-align:center">${escape(row.unit || "—")}</td>
-        <td style="text-align:right">${money(row.price)}</td>
-        <td style="text-align:right">${money(discAmt)} (${escape(row.discount || 0)}%)</td>
-        <td style="text-align:right;font-weight:600">${money(rowAmount(row))}</td>
-      </tr>`;
-    }).join("");
+    const rows = (challan.rows || []).map((row) => ({
+      item: row.item || "Item",
+      hsn: row.hsn || row.sac || "—",
+      qty: `${row.qty || 1} ${row.unit || ""}`.trim(),
+      price: row.price || 0,
+      discount: row.discount ? `${row.discount}%` : "—",
+      amount: rowAmount(row),
+    }));
 
-    const totalQty = (challan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
+    const html = buildUnifiedDocumentHtml({
+      title: "Delivery Challan",
+      documentNumber: challan.number || "",
+      date: dateLabel(challan.date),
+      dueDate: dateLabel(challan.dueDate),
+      status: challan.status || "Open",
+      partyName: challan.party || "",
+      partyPhone: challan.phone || "",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "item", label: "Item Description", align: "left" },
+        { key: "hsn", label: "HSN/SAC", align: "center", width: "90px" },
+        { key: "qty", label: "Qty", align: "center", width: "90px" },
+        { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
+        { key: "discount", label: "Discount", align: "center", width: "80px" },
+        { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
+      ],
+      rows,
+      totals: {
+        subtotal: challan.total,
+        total: challan.total,
+        received: 0,
+        balance: challan.total,
+      },
+      notes: "Delivery Challan — Goods transported for delivery.",
+      autoPrint,
+    });
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <title>Delivery Challan - ${escape(challan.number)}</title>
-  <style>
-    @page { size: A4 portrait; margin: 12mm; }
-    * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #1e293b; margin: 0; padding: 24px; background: #fff; }
-    .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 16px; margin-bottom: 20px; }
-    .company { font-size: 24px; font-weight: 800; color: #0f172a; }
-    .phone { font-size: 13px; color: #64748b; margin-top: 4px; }
-    .title { font-size: 18px; font-weight: 700; color: #0284c7; letter-spacing: 1px; margin-top: 10px; text-transform: uppercase; }
-    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; font-size: 13px; background: #f8fafc; padding: 12px 16px; border-radius: 6px; border: 1px solid #e2e8f0; }
-    .meta-row { margin-bottom: 4px; }
-    .meta-label { color: #64748b; font-weight: 500; }
-    .meta-val { font-weight: 600; color: #0f172a; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
-    th { background: #f1f5f9; color: #334155; font-weight: 700; text-align: left; padding: 10px 8px; border: 1px solid #cbd5e1; }
-    td { padding: 9px 8px; border: 1px solid #e2e8f0; }
-    .totals-wrap { display: flex; justify-content: flex-end; margin-top: 16px; }
-    .totals-box { width: 320px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; overflow: hidden; }
-    .total-line { display: flex; justify-content: space-between; padding: 8px 14px; border-bottom: 1px solid #e2e8f0; }
-    .total-final { background: #0284c7; color: #fff; font-size: 15px; font-weight: 700; }
-    .total-final span { color: #fff; }
-    .footer-note { margin-top: 32px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
-    @media print {
-      body { padding: 0; }
-      .no-print { display: none !important; }
-    }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="company">${escape(companyDisplayName)}</div>
-    ${companyPhone ? `<div class="phone">Phone: ${escape(companyPhone)}</div>` : ""}
-    <div class="title">Delivery Challan</div>
-  </div>
-
-  <div class="meta-grid">
-    <div>
-      <div class="meta-row"><span class="meta-label">Challan No:</span> <span class="meta-val">${escape(challan.number)}</span></div>
-      <div class="meta-row"><span class="meta-label">Date:</span> <span class="meta-val">${dateLabel(challan.date)}</span></div>
-      ${challan.dueDate ? `<div class="meta-row"><span class="meta-label">Due Date:</span> <span class="meta-val">${dateLabel(challan.dueDate)}</span></div>` : ""}
-    </div>
-    <div>
-      <div class="meta-row"><span class="meta-label">Party Name:</span> <span class="meta-val">${escape(challan.party)}</span></div>
-      ${challan.phone ? `<div class="meta-row"><span class="meta-label">Phone:</span> <span class="meta-val">${escape(challan.phone)}</span></div>` : ""}
-      <div class="meta-row"><span class="meta-label">Status:</span> <span class="meta-val">${escape(challan.status || "Open")}</span></div>
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width:40px;text-align:center">#</th>
-        <th>Item Name</th>
-        <th style="width:90px;text-align:center">HSN/SAC</th>
-        <th style="width:70px;text-align:center">Qty</th>
-        <th style="width:60px;text-align:center">Unit</th>
-        <th style="width:95px;text-align:right">Price/Unit</th>
-        <th style="width:110px;text-align:right">Discount</th>
-        <th style="width:105px;text-align:right">Amount</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${items}
-    </tbody>
-  </table>
-
-  <div class="totals-wrap">
-    <div class="totals-box">
-      <div class="total-line"><span>Total Qty</span><span style="font-weight:600">${totalQty}</span></div>
-      <div class="total-line"><span>Sub Total</span><span>${money(challan.total)}</span></div>
-      <div class="total-line total-final"><span>Total Amount</span><span>${money(challan.total)}</span></div>
-    </div>
-  </div>
-
-  <div class="footer-note">This is a computer-generated delivery challan.</div>
-</body>
-</html>`;
-
-    let iframe = document.getElementById("ledgerly-challan-print-frame");
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.id = "ledgerly-challan-print-frame";
-      iframe.style.position = "fixed";
-      iframe.style.top = "-9999px";
-      iframe.style.left = "-9999px";
-      iframe.style.width = "0px";
-      iframe.style.height = "0px";
-      iframe.style.border = "none";
-      document.body.appendChild(iframe);
-    }
-    const frameDoc = iframe.contentDocument || iframe.contentWindow.document;
-    frameDoc.open();
-    frameDoc.write(html);
-    frameDoc.close();
-
-    if (autoPrint) {
-      setTimeout(() => {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      }, 300);
-    } else {
-      const popup = window.open("", "_blank", "width=1000,height=750");
-      if (popup) {
-        popup.document.open();
-        popup.document.write(html);
-        popup.document.close();
-      } else {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      }
-    }
+    openPrintWindow(html, autoPrint);
   };
 
   const convertOne = (challan) => navigate("/sales/sale-invoices/new", { state: { from: "/sales/delivery-challan", deliveryChallansConversion: [challan] } });

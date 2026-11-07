@@ -66,11 +66,11 @@ app.use((error, req, res, next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`Vyapar backend running on port ${PORT}`);
+  console.log(`Usv backend running on port ${PORT}`);
 });
 
 server.on("error", (error) => {
-  console.error("Vyapar backend failed to start", {
+  console.error("usv backend failed to start", {
     message: error.message,
   });
 });

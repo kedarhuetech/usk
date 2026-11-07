@@ -11,6 +11,10 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import {
+  buildUnifiedDocumentHtml,
+  openPrintWindow,
+} from "../../services/unifiedPrintService.js";
 
 const KEY = "ledgerly:saleOrders.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -110,9 +114,45 @@ export default function SaleOrders() {
     if (action === "Delete" && window.confirm(`Delete sale order ${order.number}?`)) persist(orders.filter((entry) => entry.id !== order.id));
     if (action === "Duplicate") persist([{ ...order, id: `sale-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", createdAt: new Date().toISOString(), history: [] }, ...orders]);
     if (["Preview", "Open PDF", "Print"].includes(action)) {
-      const popup = window.open("", "_blank"); if (!popup) return;
-      const safe = (text) => String(text || "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
-      popup.document.write(`<html><head><title>Sale Order ${safe(order.number)}</title><style>body{font:14px Arial;margin:32px}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:9px;border:1px solid #ccc;text-align:left}th{background:#eee}@media print{button{display:none}}</style></head><body><h1>Sale Order #${safe(order.number)}</h1><p>Customer: ${safe(order.customer)} · Date: ${displayDate(order.date)} · Due: ${displayDate(order.dueDate)}</p><table><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Amount</th></tr>${(order.rows || []).map((row) => `<tr><td>${safe(row.item)}</td><td>${safe(row.qty)}</td><td>${safe(row.unit)}</td><td>${money(row.price)}</td><td>${money(rowAmount(row))}</td></tr>`).join("")}</table><h2>Total ${money(amount(order))}</h2><button onclick="window.print()">Print / Save PDF</button>${action === "Print" ? "<script>window.print()</script>" : ""}</body></html>`); popup.document.close();
+      const rows = (order.rows || []).map((row) => ({
+        item: row.item || "Item",
+        description: row.description || "",
+        qty: `${row.qty || 1} ${row.unit || ""}`.trim(),
+        price: row.price || 0,
+        amount: rowAmount(row),
+      }));
+
+      const html = buildUnifiedDocumentHtml({
+        title: "Sale Order",
+        documentNumber: order.number || "",
+        date: displayDate(order.date),
+        dueDate: displayDate(order.dueDate),
+        status: order.status || "Open",
+        partyName: order.customer || "",
+        partyPhone: order.phone || "",
+        partyBillingAddress: order.billingAddress || "",
+        partyShippingAddress: order.shippingAddress || "",
+        columns: [
+          { key: "index", label: "#", align: "center", width: "40px" },
+          { key: "item", label: "Item Description", align: "left" },
+          { key: "description", label: "Details", align: "left" },
+          { key: "qty", label: "Qty", align: "center", width: "90px" },
+          { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
+          { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
+        ],
+        rows,
+        totals: {
+          subtotal: amount(order),
+          total: amount(order),
+          received: 0,
+          balance: amount(order),
+        },
+        terms: order.terms || "",
+        notes: order.description || "",
+        autoPrint: action === "Print",
+      });
+
+      openPrintWindow(html, action === "Print");
     }
     if (action === "View History") window.alert((order.history || []).map((item) => `${item.action} — ${new Date(item.at).toLocaleString()}`).join("\n") || "No history recorded yet.");
   };
