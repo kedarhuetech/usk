@@ -102,7 +102,7 @@ export function getEffectiveCompanyInfo(settings = null) {
       : "";
 
   const themeColor = appSettings.themeColor || "#881337";
-  const currencySymbol = appSettings.currencySymbol || "₹";
+  const currencySymbol = appSettings.baseCurrency?.symbol || appSettings.currencySymbol || "₹";
 
   return {
     name,

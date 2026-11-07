@@ -307,12 +307,12 @@ function TextArea({ error, className = "", ...props }) {
 }
 
 // Renders the party picker interface.
-function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) {
+function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty, appSettings }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const query = value.toLowerCase();
   const filtered = parties.filter((party) => `${party.name} ${party.phone}`.toLowerCase().includes(query));
-  const exactMatch = parties.some((party) => party.name.trim().toLowerCase() === value.trim().toLowerCase());
+  const exactMatch = parties.some((party) => (party.partyName || party.name || "").trim().toLowerCase() === value.trim().toLowerCase());
   useDismiss(open, rootRef, () => setOpen(false));
 
   return (
@@ -334,10 +334,19 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
       <FiChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-600" />
       {open && (
         <div className="absolute left-0 top-10 z-40 w-[min(430px,calc(100vw-2rem))] rounded-lg border border-slate-200 bg-white p-2 shadow-xl">
-          <button type="button" onClick={() => { setOpen(false); onAddParty(); }} className="mb-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
-            <FiPlus /> Add Party
-          </button>
-          {value.trim() && !exactMatch && <button type="button" onClick={() => { onChange(value.trim()); setOpen(false); }} className="mb-1 w-full rounded-md px-3 py-2 text-left text-[13px] text-slate-600 hover:bg-slate-50">Use new name: <span className="font-semibold text-slate-800">{value.trim()}</span></button>}
+          {!appSettings?.blockNewPartiesFromTxn && (
+            <button type="button" onClick={() => { setOpen(false); onAddParty(); }} className="mb-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
+              <FiPlus /> Add Party
+            </button>
+          )}
+          {value.trim() && !exactMatch && !appSettings?.blockNewPartiesFromTxn && (
+            <button type="button" onClick={() => { onChange(value.trim()); setOpen(false); }} className="mb-1 w-full rounded-md px-3 py-2 text-left text-[13px] text-slate-600 hover:bg-slate-50">Use new name: <span className="font-semibold text-slate-800">{value.trim()}</span></button>
+          )}
+          {value.trim() && !exactMatch && appSettings?.blockNewPartiesFromTxn && (
+            <div className="mb-1 rounded bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+              Adding new parties from transactions is blocked in Settings. Please select an existing party.
+            </div>
+          )}
           <div className="max-h-36 overflow-y-auto">
             {filtered.length ? (
               filtered.map((party) => (
@@ -345,7 +354,7 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty }) 
                   <span>
                     <span className="flex items-center gap-1.5 font-medium text-slate-800">
                       <span>{party.partyName || party.name}</span>
-                      {(party.status === "Inactive" || party.isInactive) && (
+                      {(party.status?.toLowerCase() === "inactive" || party.isInactive) && (
                         <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
                           Inactive
                         </span>
@@ -448,6 +457,7 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             error={errors.customer}
             value={form.customer}
             parties={parties}
+            appSettings={appSettings}
             onAddParty={onAddParty}
             onChange={(value) => {
               setField("customer", value);
@@ -755,7 +765,12 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings =
                       <span className="ml-1 font-mono text-[11px] text-slate-500 font-normal">[{item.barcode}]</span>
                     )}
                   </span>
-                  <span className="text-slate-500">{item.price || "0"}</span>
+                  <span className="text-slate-500 text-right">
+                    <span>{item.price || "0"}</span>
+                    {appSettings.displayPurchasePriceOfItems && item.purchasePrice ? (
+                      <span className="block text-[10px] text-slate-400">Cost: ₹{item.purchasePrice}</span>
+                    ) : null}
+                  </span>
                   <span className="text-right font-semibold text-slate-700">{item.stock}</span>
                 </button>
               ))
@@ -763,9 +778,15 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings =
               <p className="px-3 py-1.5 text-[13px] text-slate-400">No items available.</p>
             )}
           </div>
-          <button type="button" onClick={() => { setOpen(false); onAddItem(); }} className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
-            <FiPlus /> Add Item
-          </button>
+          {!appSettings.blockNewItemsFromTxn ? (
+            <button type="button" onClick={() => { setOpen(false); onAddItem(); }} className="mt-2 flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
+              <FiPlus /> Add Item
+            </button>
+          ) : (
+            <div className="mt-2 rounded bg-amber-50 px-3 py-1 text-[11px] text-amber-700">
+              Adding new items from transactions is blocked in Settings.
+            </div>
+          )}
         </div>
       )}
     </div>
