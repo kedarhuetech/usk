@@ -18,6 +18,8 @@ import whatsappBusinessRoutes from "./routes/whatsappBusiness.js";
 import whatsappWebhookRoutes from "./routes/whatsappWebhook.js";
 import businessGrowthRoutes from "./routes/businessGrowth.js";
 import partiesRoutes from "./routes/parties.js";
+import hsnRoutes from "./routes/hsn.js";
+import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,6 +51,7 @@ app.use("/api/meta/ads", metaAdsRoutes);
 app.use("/api/whatsapp-business", whatsappBusinessRoutes);
 app.use("/api/whatsapp", whatsappWebhookRoutes);
 app.use("/api/parties", partiesRoutes);
+app.use("/api/hsn", hsnRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {
@@ -67,6 +70,7 @@ app.use((error, req, res, next) => {
 
 const server = app.listen(PORT, () => {
   console.log(`Usv backend running on port ${PORT}`);
+  seedDefaultHsnCodes().catch((err) => console.warn("Auto-seed HSN warning:", err.message));
 });
 
 server.on("error", (error) => {

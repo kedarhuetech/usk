@@ -4,9 +4,11 @@ import { FiCamera, FiChevronDown, FiPlus, FiSearch, FiSettings, FiTrash2, FiX } 
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import Input from "../../components/Common/Input";
+import HsnAutocomplete from "../../components/Common/HsnAutocomplete";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
 import { defaultCategories, defaultSubCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
+import { matchGstRateToOption } from "../../services/hsnService.js";
 import { saveBusinessItem } from "../../services/businessRecords";
 import { useAppSettings } from "../../hooks/useAppSettings";
 
@@ -650,9 +652,12 @@ function DiscountGroup({ form, setField }) {
 // Renders the taxes section interface.
 function TaxesSection({ form, setField, compact = false, enabled = true }) {
   if (!enabled) return null;
+  const currentOptions = taxOptions.includes(form.taxRate)
+    ? taxOptions
+    : [form.taxRate, ...taxOptions].filter(Boolean);
   return (
     <Card className={`p-5 ${compact ? "" : "min-h-32"}`}>
-      <SelectField label="Tax Rate" value={form.taxRate} onChange={(value) => setField("taxRate", value)} options={taxOptions} className="max-w-xs" />
+      <SelectField label="Tax Rate" value={form.taxRate} onChange={(value) => setField("taxRate", value)} options={currentOptions} className="max-w-xs" />
     </Card>
   );
 }
@@ -930,10 +935,49 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
           <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
             <div className="grid max-w-5xl gap-5 md:grid-cols-3">
               <Input value={form.itemName} onChange={(event) => setField("itemName", event.target.value)} placeholder={isProduct ? "Item Name *" : "Service Name *"} />
-              <div className="relative">
-                <Input value={form.hsn} onChange={(event) => setField("hsn", event.target.value)} placeholder={isProduct ? "Item HSN" : "Service HSN"} />
-                <FiSearch className="absolute right-3 top-3 h-5 w-5 text-slate-400" />
-              </div>
+              <HsnAutocomplete
+                value={form.hsn || (form.type === "service" ? form.sac : "") || ""}
+                type={form.type === "service" ? "SAC" : "HSN"}
+                placeholder={isProduct ? "Item HSN Code / Name" : "Service SAC Code / Name"}
+                onChange={(code) => {
+                  setField("hsn", code);
+                  if (form.type === "service") setField("sac", code);
+                }}
+                onSelect={(selected) => {
+                  if (!selected) return;
+                  setForm((current) => {
+                    const next = { ...current };
+                    next.hsn = selected.code || current.hsn;
+                    const isSac = selected.type === "SAC" || String(selected.code || "").startsWith("99");
+                    if (isSac) {
+                      next.sac = selected.code;
+                      next.type = "service";
+                    } else {
+                      next.type = "product";
+                    }
+
+                    // Auto-fill Item/Service Name with description if empty or matching previous description
+                    if (selected.description && (!current.itemName || current.itemName === current.description)) {
+                      next.itemName = selected.description;
+                    }
+
+                    // Auto-fill Description field if available
+                    if (selected.description) {
+                      next.description = selected.description;
+                    }
+
+                    // Auto-fill Tax Rate if GST rate exists in CBIC data
+                    if (selected.gst_rate !== null && selected.gst_rate !== undefined) {
+                      const matchedTax = matchGstRateToOption(selected.gst_rate, taxOptions);
+                      if (matchedTax) {
+                        next.taxRate = matchedTax;
+                      }
+                    }
+
+                    return next;
+                  });
+                }}
+              />
               <button
                 type="button"
                 onClick={() => setUnitModal(true)}

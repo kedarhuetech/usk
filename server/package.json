@@ -8,7 +8,9 @@
     "start": "node src/index.js",
     "seed:whatsapp-marketing": "node scripts/seedWhatsAppMarketingTemplates.js",
     "migrate:growth-fields": "node scripts/migrateBusinessGrowthRecordFields.js",
-    "db:views": "node scripts/createBusinessGrowthViews.js"
+    "db:views": "node scripts/createBusinessGrowthViews.js",
+    "import:hsn": "node scripts/importHsnMaster.js",
+    "import:cbic": "node -e \"import('./src/services/hsnService.js').then(s => s.importCbicFilesOnly().then(() => process.exit(0)))\""
   },
   "dependencies": {
     "cors": "^2.8.6",
@@ -16,7 +18,8 @@
     "express": "^5.2.1",
     "googleapis": "^174.0.1",
     "multer": "^2.4.0",
-    "mysql2": "^3.24.4"
+    "mysql2": "^3.24.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"
