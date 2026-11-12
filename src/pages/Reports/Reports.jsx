@@ -19,6 +19,7 @@ import GSTR3BReport from "./GSTR3BReport";
 import BalanceSheetReport from "./BalanceSheetReport";
 import BatchExpiryReport from "./BatchExpiryReport";
 import LoanStatementReport from "./LoanStatementReport";
+import PartyWiseProfitAndLoss from "./PartyWiseProfitAndLoss";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -383,7 +384,6 @@ function Reports({ defaultReport }) {
       [
         "All parties",
         "Party Statement",
-        "Party wise Profit & Loss",
       ].includes(activeReport)
     ) {
       return readLocal("ledgerly:parties.v1").map((party) => ({
@@ -761,6 +761,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "GSTR 3 B" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <GSTR3BReport />
+        </div>
+      ) : activeReport === "Party wise Profit & Loss" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <PartyWiseProfitAndLoss />
         </div>
       ) : activeReport === "All parties" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
