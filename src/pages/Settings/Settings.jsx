@@ -7,7 +7,6 @@ import {
   FiChevronDown,
   FiChevronLeft,
   FiChevronRight,
-  FiDollarSign,
   FiDownload,
   FiEdit,
   FiFileText,
@@ -34,6 +33,7 @@ import { validatePasscodeForm } from "../../services/appPasscodeValidation.js";
 import { addCustomUnit, getUnits } from "../../services/unitsStorage.js";
 import {
   applyScreenZoom,
+  resetAppSettings,
   createAutoBackupSnapshot,
   exportBackupData,
   getAppSettings,
@@ -50,7 +50,8 @@ import PrintTab from "./PrintTab";
 import TaxesTab from "./TaxesTab";
 import PartyTab from "./PartyTab";
 import TransactionMessageTab from "./TransactionMessageTab";
-import MultiCurrencyTab from "./MultiCurrencyTab";
+import ServiceRemindersTab from "./ServiceRemindersTab.jsx";
+
 
 const TABS = [
   { id: "general", label: "GENERAL", icon: FiSliders },
@@ -62,7 +63,7 @@ const TABS = [
   { id: "item", label: "ITEM", icon: FiPackage },
   { id: "service_reminders", label: "SERVICE REMINDERS", icon: FiBell },
   { id: "accounting", label: "ACCOUNTING", icon: FiBook },
-  { id: "multi_currency", label: "MULTI CURRENCY", icon: FiDollarSign },
+
 ];
 
 const ZOOM_LEVELS = ["70%", "80%", "90%", "100%", "110%", "115%", "120%", "130%"];
@@ -226,9 +227,8 @@ function Settings() {
               type="button"
               onClick={() => {
                 if (window.confirm("Reset all settings to default values?")) {
-                  saveAppSettings({ screenZoom: "100%" });
-                  setSettings(getAppSettings());
-                  applyScreenZoom("100%");
+                  const defaults = resetAppSettings();
+                  setSettings(defaults);
                   showToast("Settings reset to defaults");
                 }
               }}
@@ -297,7 +297,7 @@ function Settings() {
           {activeTab === "item" && <ItemTab settings={settings} update={update} />}
           {activeTab === "service_reminders" && <ServiceRemindersTab settings={settings} update={update} />}
           {activeTab === "accounting" && <AccountingTab settings={settings} update={update} />}
-          {activeTab === "multi_currency" && <MultiCurrencyTab settings={settings} update={update} />}
+          
         </div>
       </main>
 
@@ -2950,45 +2950,6 @@ function ItemTab({ settings, update }) {
   );
 }
 
-// -------------------------------------------------------------
-// SERVICE REMINDERS TAB
-// -------------------------------------------------------------
-function ServiceRemindersTab({ settings, update }) {
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Service Reminders</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.serviceRemindersEnabled || false}
-              onChange={(e) => update("serviceRemindersEnabled", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable Service Due Date Reminders
-          </label>
-
-          {settings.serviceRemindersEnabled && (
-            <div className="mt-3 flex items-center gap-2 text-xs text-slate-700">
-              <span>Notify customers</span>
-              <input
-                type="number"
-                min="1"
-                max="30"
-                value={settings.reminderDaysBefore || 3}
-                onChange={(e) => update("reminderDaysBefore", Number(e.target.value) || 3)}
-                className="h-8 w-14 rounded border border-slate-300 text-center font-bold text-slate-800"
-              />
-              <span>days before service due date</span>
-            </div>
-          )}
-        </div>
-      </section>
-    </div>
-  );
-}
 
 // -------------------------------------------------------------
 // ACCOUNTING TAB
