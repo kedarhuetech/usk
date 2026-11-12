@@ -196,10 +196,10 @@ export function buildWhatsAppReminder(record, companyName = "Sai Kirana Stores")
 }
 
 /**
- * Builds the external Email notification mailto URL.
+ * Builds external Email notification links (both mailto: protocol and direct Gmail Web compose URL).
  */
 export function buildEmailReminder(record, companyName = "Sai Kirana Stores") {
-  const email = String(record.customerEmail || "").trim();
+  const email = String(record.customerEmail || record.email || "").trim();
   if (!email || !email.includes("@")) {
     return {
       success: false,
@@ -208,24 +208,29 @@ export function buildEmailReminder(record, companyName = "Sai Kirana Stores") {
   }
 
   const message = formatReminderMessage(record, companyName);
-  const subject = encodeURIComponent(`Service Due Date Reminder - ${record.serviceName || "Service"} (${companyName})`);
-  const body = encodeURIComponent(message);
-  const url = `mailto:${email}?subject=${subject}&body=${body}`;
+  const subjectText = `Service Due Date Reminder - ${record.serviceName || "Service"} (${companyName})`;
+  const encodedSubject = encodeURIComponent(subjectText);
+  const encodedBody = encodeURIComponent(message);
+  const mailtoUrl = `mailto:${email}?subject=${encodedSubject}&body=${encodedBody}`;
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodedSubject}&body=${encodedBody}`;
 
   return {
     success: true,
     channel: "email",
-    url,
+    url: mailtoUrl,
+    mailtoUrl,
+    gmailUrl,
     email,
+    subject: subjectText,
     message,
   };
 }
 
 /**
  * Records that a reminder was dispatched to the customer.
- * Sets lastNotifiedAt and lastNotifiedDueDate to prevent duplicate alerts.
+ * Sets lastNotifiedAt, lastNotifiedMessage, and history entry to track what was sent.
  */
-export function recordReminderNotification(recordId, channel = "in_app") {
+export function recordReminderNotification(recordId, channel = "in_app", details = {}) {
   const records = getReminderRecords();
   const target = records.find((r) => r.id === recordId);
   if (!target) return null;
@@ -235,16 +240,154 @@ export function recordReminderNotification(recordId, channel = "in_app") {
     channel,
     at: now,
     dueDate: target.serviceDueDate,
+    message: details.message || target.lastNotifiedMessage || "",
+    recipient: details.recipient || target.customerPhone || target.customerEmail || "",
+    status: details.status || "SENT",
+    messageId: details.messageId || null,
   };
 
   const updated = {
     ...target,
     lastNotifiedAt: now,
     lastNotifiedDueDate: target.serviceDueDate,
+    lastNotifiedMessage: details.message || target.lastNotifiedMessage || "",
+    lastNotifiedChannel: channel,
     notificationHistory: [...(target.notificationHistory || []), historyEntry],
     updatedAt: now,
   };
 
   saveReminderRecord(updated);
   return updated;
+}
+
+/**
+ * Checks if the backend has an active Meta WhatsApp connection.
+ */
+export async function checkMetaWhatsAppConnection() {
+  try {
+    const response = await fetch("/api/whatsapp-business/connection");
+    if (!response.ok) return { connected: false, configured: false };
+    const data = await response.json();
+    return {
+      connected: Boolean(data.connected || data.testModeConfigured),
+      phoneNumber: data.selection?.phoneNumberId || data.assets?.phoneNumbers?.[0]?.display_phone_number || "",
+      readyToSend: Boolean(data.readiness?.readyToSend || data.testModeConfigured),
+      source: data.source || (data.testModeConfigured ? "test_mode" : "none"),
+    };
+  } catch {
+    return { connected: false, configured: false };
+  }
+}
+
+/**
+ * Sends a service due date reminder directly via Meta WhatsApp Cloud API in the background.
+ * Automatically saves the record's notification history and what message was sent.
+ */
+export async function sendServiceReminderViaMeta(record, companyName = "Sai Kirana Stores") {
+  const rawPhone = String(record.customerPhone || "").replace(/[^0-9]/g, "");
+  if (!rawPhone || rawPhone.length < 7) {
+    return {
+      success: false,
+      error: "Customer has no valid phone number.",
+    };
+  }
+
+  const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+  const message = formatReminderMessage(record, companyName);
+
+  try {
+    const response = await fetch("/api/whatsapp-business/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipientPhone: cleanPhone,
+        templateName: "service_reminder_alert",
+        requireApprovedTemplate: true,
+        message,
+        variables: {
+          body: [
+            record.customerName,
+            companyName,
+            record.serviceName,
+            record.serviceDueDate,
+          ],
+        },
+        recordId: record.id,
+      }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (response.ok && result.success) {
+      // Record successful notification in history
+      const updated = recordReminderNotification(record.id, "meta_whatsapp", {
+        message,
+        recipient: cleanPhone,
+        status: "DELIVERED",
+        messageId: result.messageId,
+      });
+
+      return {
+        success: true,
+        method: "meta_api",
+        message,
+        recipient: cleanPhone,
+        messageId: result.messageId,
+        updatedRecord: updated,
+      };
+    }
+
+    // If Meta API failed (e.g. token expired, unverified recipient, etc.)
+    const fallback = buildWhatsAppReminder(record, companyName);
+    return {
+      success: false,
+      error: result.message || "Meta WhatsApp Cloud API could not deliver the message.",
+      templateAbsent: result.templateAbsent || false,
+      templateRequested: result.templateRequested || false,
+      templateStatus: result.templateStatus || null,
+      fallbackUrl: fallback.url,
+      message,
+    };
+  } catch (err) {
+    const fallback = buildWhatsAppReminder(record, companyName);
+    return {
+      success: false,
+      error: err.message || "Could not reach backend Meta service.",
+      fallbackUrl: fallback.url,
+      message,
+    };
+  }
+}
+
+/**
+ * Sends a request to Meta WhatsApp Graph API to approve the official Service Reminder template.
+ */
+export async function requestServiceReminderTemplateApproval() {
+  try {
+    const response = await fetch("/api/whatsapp-business/templates/request-approval", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateType: "service_reminder",
+      }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (response.ok && result.success) {
+      return {
+        success: true,
+        message: result.message,
+        template: result.template,
+      };
+    }
+    return {
+      success: false,
+      error: result.message || "Could not submit template approval request to Meta.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message || "Failed to reach template approval service.",
+    };
+  }
 }

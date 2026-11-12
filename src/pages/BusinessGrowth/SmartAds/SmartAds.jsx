@@ -42,6 +42,8 @@ import {
   startMetaConnection,
 } from "../../../services/smartAdsMetaService";
 import { deleteGrowthCampaign, loadGrowthCampaigns, loadGrowthItems, saveGrowthCampaign } from "../../../services/businessGrowthData.js";
+import { toast } from "../../../components/Common/Toast.jsx";
+import ConfirmModal from "../../../components/Common/ConfirmModal.jsx";
 
 const goalOptions = [
   { id: "whatsapp", label: "Get WhatsApp Messages" },
@@ -1038,6 +1040,7 @@ function SmartAds() {
   const [campaignsLoadError, setCampaignsLoadError] = useState("");
   const [inventoryItems, setInventoryItems] = useState([]);
   const [sessionDesigns, setSessionDesigns] = useState([]);
+  const [confirmModalData, setConfirmModalData] = useState(null);
   const [form, setForm] = useState(() => createEmptyForm());
 
   useEffect(() => {
@@ -1472,15 +1475,28 @@ function SmartAds() {
     setView("builder");
   }
 
-  async function removeCampaign(campaign) {
-    if (!window.confirm(`Delete “${campaign.name}”? This removes the saved Smart Ads record from this browser.`)) return;
-    try {
-      await deleteGrowthCampaign(campaign.id);
-      setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
-      setToast("Saved campaign removed.");
-    } catch (deleteError) {
-      setCampaignsLoadError(deleteError.message || "Unable to delete this saved campaign.");
-    }
+  function removeCampaign(campaign) {
+    setConfirmModalData({
+      title: "Delete Campaign",
+      message: `Delete “${campaign.name}”? This removes the saved Smart Ads record from this browser.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModalData(null);
+        try {
+          await deleteGrowthCampaign(campaign.id);
+          setCampaigns((current) => current.filter((item) => item.id !== campaign.id));
+          setToast("Saved campaign removed.");
+          toast.success("Saved campaign removed.");
+        } catch (deleteError) {
+          const msg = deleteError.message || "Unable to delete this saved campaign.";
+          setCampaignsLoadError(msg);
+          toast.error(msg);
+        }
+      },
+      onCancel: () => setConfirmModalData(null),
+    });
   }
 
   async function refreshMetaCampaigns({ after = "", append = false } = {}) {
@@ -1514,29 +1530,53 @@ function SmartAds() {
     }
   }
 
-  async function changeCampaignStatus(campaign, nextStatus) {
+  function changeCampaignStatus(campaign, nextStatus) {
     const metaCampaignId = campaign.meta?.campaignId || campaign.id;
     const linkedRecord = campaigns.find((item) => item.meta?.campaignId === metaCampaignId);
     const name = campaign.name || "this campaign";
+    let title = "Pause Campaign";
+    let message = `Pause “${name}” in Meta?`;
+    let confirmText = "Pause Campaign";
+    let danger = false;
     if (nextStatus === "ACTIVE") {
       const selectedPage = metaAssets.pages.find((page) => page.id === metaSelection.pageId)?.name || metaSelection.pageId || "Not selected";
       const selectedAccount = metaAssets.adAccounts.find((account) => account.id === metaSelection.adAccountId);
       const budget = linkedRecord?.budget?.dailyBudget ? `${formatCurrency(linkedRecord.budget.dailyBudget)} per day` : campaign.daily_budget ? `${formatCurrency(Number(campaign.daily_budget) / 100)} per day` : "not available from the campaign record";
-      if (!window.confirm(`Publish “${name}” to Meta?\nBudget: ${budget}\nAd Account: ${selectedAccount?.name || selectedAccount?.id || "Not selected"}\nFacebook Page: ${selectedPage}\nMeta review, billing, restrictions, and delivery eligibility still apply.`)) return;
-    } else if (!window.confirm(`Pause “${name}” in Meta?`)) return;
-    setCampaignActionId(metaCampaignId);
-    try {
-      const result = await setMetaCampaignStatus(metaCampaignId, nextStatus);
-      if (!result.success) throw new Error("Meta did not confirm the status update.");
-      if (linkedRecord) {
-        const updated = { ...linkedRecord, status: nextStatus === "ACTIVE" ? "active" : "paused", meta: { ...linkedRecord.meta, publishStatus: nextStatus } };
-        await saveGrowthCampaign(updated);
-        setCampaigns((current) => current.map((item) => item.id === updated.id ? updated : item));
-      }
-      await refreshMetaCampaigns();
-      setToast(nextStatus === "ACTIVE" ? "Meta accepted the activation request. Review and delivery eligibility still apply." : "Meta confirmed the campaign is paused.");
-    } catch (error) { setError(error.message || "Unable to update this Meta campaign."); }
-    finally { setCampaignActionId(""); }
+      title = "Publish to Meta";
+      message = `Publish “${name}” to Meta?\nBudget: ${budget}\nAd Account: ${selectedAccount?.name || selectedAccount?.id || "Not selected"}\nFacebook Page: ${selectedPage}\nMeta review, billing, restrictions, and delivery eligibility still apply.`;
+      confirmText = "Publish";
+    }
+    setConfirmModalData({
+      title,
+      message,
+      confirmText,
+      cancelText: "Cancel",
+      danger,
+      onConfirm: async () => {
+        setConfirmModalData(null);
+        setCampaignActionId(metaCampaignId);
+        try {
+          const result = await setMetaCampaignStatus(metaCampaignId, nextStatus);
+          if (!result.success) throw new Error("Meta did not confirm the status update.");
+          if (linkedRecord) {
+            const updated = { ...linkedRecord, status: nextStatus === "ACTIVE" ? "active" : "paused", meta: { ...linkedRecord.meta, publishStatus: nextStatus } };
+            await saveGrowthCampaign(updated);
+            setCampaigns((current) => current.map((item) => item.id === updated.id ? updated : item));
+          }
+          await refreshMetaCampaigns();
+          const feedback = nextStatus === "ACTIVE" ? "Meta accepted the activation request. Review and delivery eligibility still apply." : "Meta confirmed the campaign is paused.";
+          setToast(feedback);
+          toast.success(feedback);
+        } catch (error) {
+          const msg = error.message || "Unable to update this Meta campaign.";
+          setError(msg);
+          toast.error(msg);
+        } finally {
+          setCampaignActionId("");
+        }
+      },
+      onCancel: () => setConfirmModalData(null),
+    });
   }
 
   // Refreshes meta connection.
@@ -2383,6 +2423,18 @@ function SmartAds() {
         </section>
       </div>
 
+      {confirmModalData && (
+        <ConfirmModal
+          isOpen={Boolean(confirmModalData)}
+          title={confirmModalData.title}
+          message={confirmModalData.message}
+          confirmText={confirmModalData.confirmText}
+          cancelText={confirmModalData.cancelText}
+          danger={confirmModalData.danger}
+          onConfirm={confirmModalData.onConfirm}
+          onCancel={confirmModalData.onCancel}
+        />
+      )}
     </div>
   );
 }

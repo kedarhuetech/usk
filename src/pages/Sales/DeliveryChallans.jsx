@@ -16,6 +16,7 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const STORAGE_KEY = "ledgerly:deliveryChallans.v1";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -33,6 +34,14 @@ export default function DeliveryChallans() {
   const location = useLocation();
   const [challans, setChallans] = useState(readChallans);
   const [editor, setEditor] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState("");
   const [openItemRow, setOpenItemRow] = useState("");
@@ -227,8 +236,24 @@ export default function DeliveryChallans() {
   const act = (action, challan) => {
     setMenuId("");
     if (action === "View/Edit") setEditor({ mode: "edit", value: challan });
-    if (action === "Delete" && window.confirm(`Delete delivery challan ${challan.number}?`)) persist(challans.filter((entry) => entry.id !== challan.id));
-    if (action === "Duplicate") setEditor({ mode: "new", value: { ...challan, id: "", number: String(Math.max(0, ...challans.map((entry) => Number(entry.number) || 0)) + 1), status: "Open" } });
+    if (action === "Delete") {
+      setConfirmModal({
+        isOpen: true,
+        title: "Delete Delivery Challan",
+        message: `Delete delivery challan ${challan.number}?`,
+        confirmText: "Delete",
+        confirmColor: "red",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          persist(challans.filter((entry) => entry.id !== challan.id));
+          toast.success(`Challan ${challan.number} deleted.`);
+        },
+      });
+    }
+    if (action === "Duplicate") {
+      setEditor({ mode: "new", value: { ...challan, id: "", number: String(Math.max(0, ...challans.map((entry) => Number(entry.number) || 0)) + 1), status: "Open" } });
+      toast.success("Challan duplicated.");
+    }
     if (["Preview", "Open PDF", "Print"].includes(action)) setPreviewChallan(challan);
   };
 
@@ -411,5 +436,14 @@ export default function DeliveryChallans() {
         <div className="overflow-x-auto bg-white"><table className="w-full min-w-[1450px] border-collapse text-sm"><thead><tr className="h-14 bg-white text-center font-semibold">{["#", "ITEM", "DESCRIPTION", "SIZE", "QTY", "UNIT", "PRICE/UNIT", "DISCOUNT %", "DISCOUNT AMOUNT", "TAX %", "TAX AMOUNT", "ADD CESS", "AMOUNT"].map((heading) => <th key={heading} className="border border-slate-300 px-2">{heading}</th>)}</tr></thead><tbody>{editor.value.rows.map((row, index) => <tr key={row.id} className="h-14 odd:bg-slate-100 even:bg-slate-50"><td className="border px-3 text-center">{index + 1}</td><td className="border"><div className="relative h-full"><input value={row.item} onFocus={() => setOpenItemRow(row.id)} onChange={(event) => { changeRow(row.id, "item", event.target.value); setOpenItemRow(row.id); }} placeholder="Select item" className="h-full w-full bg-transparent px-3"/>{openItemRow === row.id && <div className="absolute left-0 top-full z-40 max-h-56 w-72 overflow-auto rounded border bg-white p-1 shadow-xl">{inventory.filter((item) => String(item.itemName || item.name).toLowerCase().includes(row.item.toLowerCase())).map((item) => <button type="button" key={item.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { changeRow(row.id, "item", item.itemName || item.name); changeRow(row.id, "unit", item.unit || item.baseUnit || "NONE"); changeRow(row.id, "price", item.salePrice || item.price || ""); if (!row.qty) changeRow(row.id, "qty", "1"); setOpenItemRow(""); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">{item.itemName || item.name}</button>)}</div>}</div></td>{[["description", "text"], ["size", "text"], ["qty", "number"], ["unit", "text"], ["price", "number"], ["discount", "number"]].map(([key, type]) => <td key={key} className="border"><input type={type} value={row[key]} onChange={(event) => changeRow(row.id, key, event.target.value)} className="h-full w-full bg-transparent px-2 text-center"/></td>)}<td className="border text-right">{money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)}</td><td className="border"><select value={row.tax} onChange={(event) => changeRow(row.id, "tax", event.target.value)} className="h-full w-full bg-transparent"><option value="NONE">Select</option>{[5, 12, 18, 28].map((rate) => <option key={rate} value={rate}>{rate}%</option>)}</select></td><td className="border text-right">{money(rowAmount(row) - rowAmount({ ...row, tax: 0, cess: 0 }))}</td><td className="border"><input type="number" value={row.cess} onChange={(event) => changeRow(row.id, "cess", event.target.value)} className="w-full px-2"/></td><td className="border px-2 text-right">{money(rowAmount(row))}</td></tr>)}</tbody><tfoot><tr className="h-14 font-semibold"><td className="border px-2"><button onClick={() => change("rows", [...editor.value.rows, freshRow()])} className="rounded border border-blue-400 px-3 py-2 text-blue-600">ADD ROW</button></td><td colSpan="3" className="border px-3 text-right">TOTAL</td><td className="border text-center">{editor.value.rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}</td><td colSpan="7" className="border"/><td className="border px-3 text-right">{money(subtotal)}</td></tr></tfoot></table></div>
         <section className="grid min-h-72 gap-6 px-7 py-8 lg:grid-cols-[1fr_1fr_1fr]"><button type="button" className="h-14 rounded border text-slate-500">☷ ADD TERMS &amp; CONDITIONS</button><textarea value={editor.value.description} onChange={(event) => change("description", event.target.value)} placeholder="Description" className="h-24 rounded border bg-white p-3"/><div className="flex items-start justify-end gap-3"><label className="flex items-center gap-2"><input type="checkbox" defaultChecked/>Round Off</label><b className="pt-2">Total</b><div className="grid h-12 min-w-48 place-items-center rounded border bg-white font-bold">{money(Math.round(subtotal))}</div></div></section>
       </div><footer className="flex shrink-0 justify-end gap-3 border-t bg-white px-5 py-3"><Button className="border border-blue-300 text-blue-600">Share</Button><Button onClick={save} className="min-w-40 bg-blue-600 text-white">Save</Button></footer></div>}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }

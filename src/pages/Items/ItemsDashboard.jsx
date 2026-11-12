@@ -25,6 +25,8 @@ import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "
 import { deleteAllInventoryItems, previewDeleteAllInventoryItems } from "../../services/inventoryItemBulkDelete";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const tabs = [
   { id: "product", label: "PRODUCTS" },
@@ -402,6 +404,7 @@ function ItemsDashboard() {
   const [conversionUnit, setConversionUnit] = useState("");
   const [loadError, setLoadError] = useState("");
   const [notice, setNotice] = useState("");
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const menuRef = useRef(null);
   const csvInputRef = useRef(null);
 
@@ -621,9 +624,22 @@ function ItemsDashboard() {
       const eligibleItems = selectedBulkItems.filter((item) => bulkAction === "inactive" ? item.isActive !== false : item.isActive === false);
       if (!eligibleItems.length) { setNotice(bulkAction === "active" ? "The selected items are already active." : "The selected items are already inactive."); setBulkAction(""); setSelectedBulkIds([]); return; }
       const label = bulkAction === "inactive" ? "inactive" : "active";
-      if (!window.confirm(`Mark ${eligibleItems.length} selected items as ${label}? Disabled items remain visible in Items but are unavailable for new purchase and sale selections.`)) { setBulkAction(""); setSelectedBulkIds([]); return; }
-      const eligibleIds = new Set(eligibleItems.map((item) => item.id));
-      applyBulkUpdate((item) => eligibleIds.has(item.id) ? ({ ...item, isActive: bulkAction === "active" }) : item, bulkAction === "inactive" ? "Bulk inactive" : "Bulk active");
+      setConfirmDialog({
+        title: bulkAction === "inactive" ? "Bulk Inactivate Items" : "Bulk Activate Items",
+        message: `Mark ${eligibleItems.length} selected items as ${label}? Disabled items remain visible in Items but are unavailable for new purchase and sale selections.`,
+        confirmText: bulkAction === "inactive" ? "Mark Inactive" : "Mark Active",
+        danger: bulkAction === "inactive",
+        onConfirm: () => {
+          const eligibleIds = new Set(eligibleItems.map((item) => item.id));
+          applyBulkUpdate((item) => eligibleIds.has(item.id) ? ({ ...item, isActive: bulkAction === "active" }) : item, bulkAction === "inactive" ? "Bulk inactive" : "Bulk active");
+          setConfirmDialog(null);
+        },
+        onCancel: () => {
+          setBulkAction("");
+          setSelectedBulkIds([]);
+          setConfirmDialog(null);
+        },
+      });
       return;
     }
     if (bulkAction === "code") setBulkCodes(Object.fromEntries(selectedBulkItems.map((item) => [item.id, item.itemCode || ""])));
@@ -732,7 +748,62 @@ function ItemsDashboard() {
                 <button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 py-2 text-left"><span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span><span className="block truncate text-xs text-slate-400">{item.itemCode || ""}{enableItemCategory && item.category && <span className="ml-2 font-medium text-slate-500">[{item.category}]</span>}</span></button>
                 <span className={`whitespace-nowrap text-sm font-medium ${activeTab === "product" && quantity(item) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{activeTab === "product" ? `${quantity(item)}${item.unit ? ` ${item.unit}` : ""}` : item.unit || "-"}</span>
                 <button type="button" aria-label={`Actions for ${item.itemName}`} onClick={() => setRowMenu((current) => current === item.id ? "" : item.id)} className="grid h-8 w-6 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"><FiMoreVertical /></button>
-                {rowMenu === item.id && <div className="absolute right-2 top-9 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl"><button type="button" onClick={() => { setSelectedId(item.id); setItemModal({ mode: "edit", initialItem: item }); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">View / Edit</button><button type="button" onClick={() => { if (!window.confirm(`Permanently delete ${item.itemName} and matching local copies?`)) return; deleteInventoryItem(item); const remaining = items.filter((entry) => !sameInventoryItemIdentity(entry, item)); const csvItems = readCsvImportedItems().filter((entry) => !sameInventoryItemIdentity(entry, item)); window.localStorage.setItem(ITEM_CSV_IMPORTS_KEY, JSON.stringify(csvItems)); setItems(remaining); if (remaining.some((entry) => entry.id === selectedId) === false) setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || ""); setRowMenu(""); setNotice(`${item.itemName} and matching copies deleted from local storage.`); }} className="w-full rounded px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">Delete</button>{activeTab === "product" && <button type="button" onClick={() => { setAdjustItem(item); setRowMenu(""); }} className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Adjust Stock</button>}</div>}
+                {rowMenu === item.id && (
+                  <div className="absolute right-2 top-9 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(item.id);
+                        setItemModal({ mode: "edit", initialItem: item });
+                        setRowMenu("");
+                      }}
+                      className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      View / Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRowMenu("");
+                        setConfirmDialog({
+                          title: "Delete Item",
+                          message: `Permanently delete ${item.itemName} and matching local copies? This operation cannot be undone.`,
+                          confirmText: "Delete",
+                          danger: true,
+                          onConfirm: () => {
+                            deleteInventoryItem(item);
+                            const remaining = items.filter((entry) => !sameInventoryItemIdentity(entry, item));
+                            const csvItems = readCsvImportedItems().filter((entry) => !sameInventoryItemIdentity(entry, item));
+                            window.localStorage.setItem(ITEM_CSV_IMPORTS_KEY, JSON.stringify(csvItems));
+                            setItems(remaining);
+                            if (remaining.some((entry) => entry.id === selectedId) === false) {
+                              setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || "");
+                            }
+                            setNotice(`${item.itemName} and matching copies deleted from local storage.`);
+                            toast.success(`${item.itemName} deleted.`);
+                            setConfirmDialog(null);
+                          },
+                          onCancel: () => setConfirmDialog(null),
+                        });
+                      }}
+                      className="w-full rounded px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
+                    >
+                      Delete
+                    </button>
+                    {activeTab === "product" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAdjustItem(item);
+                          setRowMenu("");
+                        }}
+                        className="w-full rounded px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      >
+                        Adjust Stock
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>)}
               {!filteredItems.length && <div className="grid min-h-60 place-items-center px-6 text-center"><div><p className="font-semibold text-slate-700">{search ? "No items match your search" : `No ${activeTab}s yet`}</p><p className="mt-1 text-sm text-slate-500">Add a {activeTab} to get started.</p><Button onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="mt-4 bg-amber-500 text-white hover:bg-amber-600"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</Button></div></div>}
             </div>
@@ -885,8 +956,36 @@ function ItemsDashboard() {
                     }
                     if (action === "Open PDF" || action === "Print") { if (row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source, printAfterOpen: true } }); else setTransactionDetails(row); return; }
                     if (action === "View History") { setTransactionHistory(row); return; }
-                    if (action === "Delete" && !window.confirm("Hide this transaction from the Items screen? Its saved invoice will not be deleted.")) return;
-                    if (action === "Cancel Invoice" && !window.confirm("Mark this invoice as cancelled in the Items screen?")) return;
+                    if (action === "Delete") {
+                      setConfirmDialog({
+                        title: "Hide Transaction",
+                        message: "Hide this transaction from the Items screen? Its saved invoice will not be deleted.",
+                        confirmText: "Hide",
+                        danger: true,
+                        onConfirm: () => {
+                          localAction(action);
+                          toast.info("Transaction hidden from Items view.");
+                          setConfirmDialog(null);
+                        },
+                        onCancel: () => setConfirmDialog(null),
+                      });
+                      return;
+                    }
+                    if (action === "Cancel Invoice") {
+                      setConfirmDialog({
+                        title: "Cancel Invoice",
+                        message: "Mark this invoice as cancelled in the Items screen?",
+                        confirmText: "Cancel Invoice",
+                        danger: true,
+                        onConfirm: () => {
+                          localAction(action);
+                          toast.info("Invoice marked as cancelled.");
+                          setConfirmDialog(null);
+                        },
+                        onCancel: () => setConfirmDialog(null),
+                      });
+                      return;
+                    }
                     localAction(action);
                   }} className="w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-50">{action}</button>)}</div>}</div></td></tr>;
                 })}
@@ -915,6 +1014,18 @@ function ItemsDashboard() {
       {bulkAction && !bulkSelectionOpen && <Modal title={bulkAction === "code" ? "Bulk Assign Code" : bulkAction === "units" ? "Assign Units" : "Bulk Update Items"} onClose={() => { setBulkAction(""); setSelectedBulkIds([]); }}><div className="space-y-4 p-5"><p className="text-sm text-slate-500">This action applies to {selectedBulkItems.length} selected {activeTab}{selectedBulkItems.length === 1 ? "" : "s"} and is saved only in this browser.</p>{bulkAction === "code" && <div className="max-h-72 space-y-3 overflow-y-auto">{selectedBulkItems.map((item) => <label key={item.id} className="block text-sm font-medium text-slate-600">{item.itemName}<input value={bulkCodes[item.id] || ""} onChange={(event) => setBulkCodes((current) => ({ ...current, [item.id]: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder={`Unique code for ${item.itemName}`} /></label>)}</div>}{bulkAction === "units" && <label className="block text-sm font-medium text-slate-600">Set the same unit for all selected items<select value={bulkUnit} onChange={(event) => setBulkUnit(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 bg-white px-3"><option value="">Choose a unit</option>{units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>}{bulkAction === "update" && <div className="space-y-3"><label className="block text-sm font-medium text-slate-600">Sale price<input value={bulkFields.salePrice} onChange={(event) => setBulkFields((current) => ({ ...current, salePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Purchase price<input value={bulkFields.purchasePrice} onChange={(event) => setBulkFields((current) => ({ ...current, purchasePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Category<input value={bulkFields.category} onChange={(event) => setBulkFields((current) => ({ ...current, category: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label></div>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button onClick={() => { setBulkAction(""); setSelectedBulkIds([]); }} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={saveBulkAction} disabled={(bulkAction === "units" && !bulkUnit) || (bulkAction === "code" && selectedBulkItems.some((item) => !String(bulkCodes[item.id] || "").trim()))} className="bg-blue-600 text-white">Apply</Button></div></div></Modal>}
       {unitModal && <Modal title="Add Unit" onClose={() => setUnitModal(false)}><div className="space-y-4 p-5"><label className="block text-sm font-semibold text-slate-600">Unit name<input autoFocus value={unitName} onChange={(event) => setUnitName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") createUnit(); }} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="e.g. Carton" /></label><div className="flex justify-end gap-2"><Button onClick={() => setUnitModal(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={createUnit} className="bg-blue-600 text-white">Save Unit</Button></div></div></Modal>}
       {conversionModal && <Modal title={`Add Conversion · ${selectedUnit}`} onClose={() => setConversionModal(false)}><div className="space-y-4 p-5"><label className="block text-sm font-semibold text-slate-600">1 {selectedUnit} equals<input inputMode="decimal" value={conversionFactor} onChange={(event) => setConversionFactor(event.target.value.replace(/[^\d.]/g, ""))} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" /></label><label className="block text-sm font-semibold text-slate-600">Unit<select value={conversionUnit} onChange={(event) => setConversionUnit(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal"><option value="">Select unit</option>{units.filter((unit) => unit !== selectedUnit).map((unit) => <option key={unit}>{unit}</option>)}</select></label><div className="flex justify-end gap-2"><Button onClick={() => setConversionModal(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={createConversion} className="bg-blue-600 text-white">Save Conversion</Button></div></div></Modal>}
+      {confirmDialog && (
+        <ConfirmModal
+          isOpen={Boolean(confirmDialog)}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmText={confirmDialog.confirmText}
+          cancelText="Cancel"
+          danger={confirmDialog.danger}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={confirmDialog.onCancel || (() => setConfirmDialog(null))}
+        />
+      )}
     </div>
   );
 }

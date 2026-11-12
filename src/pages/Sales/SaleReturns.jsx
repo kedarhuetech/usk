@@ -23,6 +23,7 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -397,6 +398,14 @@ export default function SaleReturns() {
   const [firmFilter, setFirmFilter] = useState("ALL FIRMS");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [remoteInvoices, setRemoteInvoices] = useState([]);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
 
   useEffect(() => {
     ensureLocalTestData();
@@ -538,13 +547,24 @@ export default function SaleReturns() {
     if (action === "View") setEditor({ mode: "view", value: record });
     if (action === "Edit") setEditor({ mode: "edit", value: record });
     if (action === "Print") printCreditNote(record);
-    if (action === "Cancel" && window.confirm(`Cancel ${record.type} ${record.number}? Linked stock and balance effects will be reversed.`)) {
-      try {
-        const next = cancelSaleReturn(record.id);
-        setRecords((current) => current.map((entry) => entry.id === next.id ? next : entry));
-      } catch (error) {
-        window.alert(`Could not cancel ${record.type}: ${error.message}`);
-      }
+    if (action === "Cancel") {
+      setConfirmModal({
+        isOpen: true,
+        title: `Cancel ${record.type}`,
+        message: `Cancel ${record.type} ${record.number}? Linked stock and balance effects will be reversed.`,
+        confirmText: "Cancel Return",
+        confirmColor: "red",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          try {
+            const next = cancelSaleReturn(record.id);
+            setRecords((current) => current.map((entry) => entry.id === next.id ? next : entry));
+            toast.success(`${record.type} ${record.number} cancelled`);
+          } catch (error) {
+            toast.error(`Could not cancel ${record.type}: ${error.message}`);
+          }
+        },
+      });
     }
   };
 
@@ -665,5 +685,14 @@ export default function SaleReturns() {
     {editor && <CreditNoteEditor value={editor.value} mode={editor.mode} records={records} parties={allParties} invoices={allInvoices} onChange={(value) => setEditor((current) => ({ ...current, value }))} onClose={() => setEditor(null)} onSave={save}/>}
     {jobWorkEditor && <PurchaseJobWorkEditor initial={jobWorkEditor.id ? jobWorkEditor : null} parties={parties} items={inventoryItems} onClose={() => setJobWorkEditor(null)} onSave={() => setJobWorkEditor(null)}/>}
     {viewDetailModal && <ViewTransactionModal record={viewDetailModal} onClose={() => setViewDetailModal(null)}/>}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }

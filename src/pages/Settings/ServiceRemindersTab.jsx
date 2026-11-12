@@ -9,13 +9,17 @@ import {
   FiCheck,
   FiClock,
   FiEdit,
+  FiEye,
+  FiLoader,
   FiMail,
   FiMessageSquare,
   FiPhone,
   FiPlus,
+  FiSend,
   FiTrash2,
   FiUser,
   FiX,
+  FiZap,
 } from "react-icons/fi";
 import {
   getReminderSettings,
@@ -31,9 +35,14 @@ import {
   buildEmailReminder,
   recordReminderNotification,
   localDateString,
+  sendServiceReminderViaMeta,
+  checkMetaWhatsAppConnection,
+  formatReminderMessage,
+  requestServiceReminderTemplateApproval,
 } from "../../services/serviceRemindersService.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { getParties } from "../../services/partiesStorage.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 export default function ServiceRemindersTab({ settings: parentSettings, update: parentUpdate }) {
   const [settings, setSettings] = useState(() => getReminderSettings());
@@ -42,6 +51,27 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
   const [editingRecord, setEditingRecord] = useState(null);
   const [filter, setFilter] = useState("all");
   const [notice, setNotice] = useState("");
+  const [metaStatus, setMetaStatus] = useState({ connected: false, loading: true });
+  const [sendingId, setSendingId] = useState(null);
+  const [bulkSending, setBulkSending] = useState(false);
+  const [requestingApproval, setRequestingApproval] = useState(false);
+  const [viewSentModal, setViewSentModal] = useState(null);
+  const [emailModal, setEmailModal] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    cancelText: "Cancel",
+    tone: "primary",
+    onConfirm: null,
+  });
+
+  useEffect(() => {
+    checkMetaWhatsAppConnection().then((status) => {
+      setMetaStatus({ ...status, loading: false });
+    });
+  }, []);
 
   const [formCustomer, setFormCustomer] = useState("");
   const [formPhone, setFormPhone] = useState("");
@@ -97,6 +127,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
 
   const showNotice = (msg) => {
     setNotice(msg);
+    toast.success(msg);
     setTimeout(() => setNotice(""), 3500);
   };
 
@@ -154,11 +185,11 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
   const handleSaveModal = (e) => {
     e.preventDefault();
     if (!formCustomer.trim()) {
-      alert("Please enter customer name.");
+      toast.error("Please enter customer name.");
       return;
     }
     if (!formDueDate) {
-      alert("Please select a service due date.");
+      toast.error("Please select a service due date.");
       return;
     }
 
@@ -183,12 +214,20 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     showNotice(editingRecord ? "Service reminder updated" : "Service reminder scheduled");
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Delete this service due date record?")) {
-      deleteReminderRecord(id);
-      setRecords(getReminderRecords());
-      showNotice("Service reminder deleted");
-    }
+  const handleDelete = (id, customerName = "") => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Service Reminder",
+      message: `Are you sure you want to delete this service due date record${customerName ? ` for "${customerName}"` : ""}?`,
+      confirmText: "Delete Record",
+      tone: "danger",
+      onConfirm: () => {
+        deleteReminderRecord(id);
+        setRecords(getReminderRecords());
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        showNotice("Service reminder deleted");
+      },
+    });
   };
 
   const handleMarkCompleted = (record) => {
@@ -200,29 +239,181 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     showNotice(`Marked ${record.serviceName} as completed`);
   };
 
+  const handleRequestTemplateApproval = async () => {
+    setRequestingApproval(true);
+    try {
+      const res = await requestServiceReminderTemplateApproval();
+      if (res.success) {
+        toast.success(res.message || "Template approval request submitted to Meta!", {
+          title: "Template Request Sent",
+          duration: 7000,
+        });
+      } else {
+        toast.error(res.error || "Could not submit template approval request.");
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to submit template approval request.");
+    } finally {
+      setRequestingApproval(false);
+    }
+  };
+
+  const handleSendMetaWhatsApp = async (record) => {
+    setSendingId(record.id);
+    try {
+      const res = await sendServiceReminderViaMeta(record, company);
+      setRecords(getReminderRecords());
+      if (res.success) {
+        showNotice(`✓ Reminder delivered to ${record.customerName} via Meta WhatsApp Cloud API!`);
+      } else {
+        if (res.templateAbsent && res.templateRequested) {
+          toast.info(res.error || "The required template was absent, so an approval request was automatically submitted to Meta.", {
+            title: "Template Sent for Meta Approval",
+            duration: 9000,
+            action: {
+              label: "Open WhatsApp Web Link",
+              onClick: () => {
+                window.open(res.fallbackUrl, "_blank");
+                recordReminderNotification(record.id, "whatsapp", { message: res.message, recipient: record.customerPhone });
+                setRecords(getReminderRecords());
+                toast.info(`WhatsApp chat opened for ${record.customerName}`);
+              },
+            },
+          });
+        } else if (res.fallbackUrl) {
+          toast.error(res.error || "Meta WhatsApp Cloud API could not deliver the message.", {
+            title: "Meta Delivery Failed",
+            duration: 8500,
+            action: {
+              label: "Open WhatsApp Web Link",
+              onClick: () => {
+                window.open(res.fallbackUrl, "_blank");
+                recordReminderNotification(record.id, "whatsapp", { message: res.message, recipient: record.customerPhone });
+                setRecords(getReminderRecords());
+                toast.info(`WhatsApp chat opened for ${record.customerName}`);
+              },
+            },
+          });
+        } else {
+          toast.error(res.error || "Failed to send reminder via Meta WhatsApp.");
+        }
+      }
+    } catch (err) {
+      toast.error(err.message || "Failed to send reminder.");
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const handleSendAllDueMeta = async () => {
+    const eligible = processed.activeAlerts.filter((r) => r.hasValidPhone);
+    if (!eligible.length) {
+      toast.info("No due service reminders with phone numbers require sending right now.");
+      return;
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Send Background Reminders",
+      message: `Send ${eligible.length} service reminder${eligible.length > 1 ? "s" : ""} directly via Meta WhatsApp in the background?`,
+      confirmText: `Send ${eligible.length} Reminders Now`,
+      tone: "emerald",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setBulkSending(true);
+        let sentCount = 0;
+        let failCount = 0;
+
+        for (const record of eligible) {
+          try {
+            const res = await sendServiceReminderViaMeta(record, company);
+            if (res.success) sentCount++;
+            else failCount++;
+          } catch {
+            failCount++;
+          }
+        }
+
+        setRecords(getReminderRecords());
+        setBulkSending(false);
+        if (sentCount > 0 && failCount === 0) {
+          toast.success(`Successfully sent ${sentCount} reminders via Meta WhatsApp!`);
+        } else if (sentCount > 0 && failCount > 0) {
+          toast.warning(`Sent ${sentCount} reminders, but ${failCount} failed to deliver.`);
+        } else {
+          toast.error(`Could not deliver background reminders. Check your Meta template and phone number setup.`);
+        }
+      },
+    });
+  };
+
   const handleSendWhatsApp = (record) => {
     const res = buildWhatsAppReminder(record, company);
     if (!res.success) {
-      alert(res.error || "Cannot send WhatsApp reminder: missing phone number.");
+      toast.error(res.error || "Cannot send WhatsApp reminder: missing phone number.");
       return;
     }
-    recordReminderNotification(record.id, "whatsapp");
+    recordReminderNotification(record.id, "whatsapp", { message: res.message, recipient: record.customerPhone });
     setRecords(getReminderRecords());
     window.open(res.url, "_blank");
-    showNotice(`WhatsApp reminder launched for ${record.customerName}`);
+    toast.success(`WhatsApp chat opened for ${record.customerName}`);
   };
 
   const handleSendEmail = (record) => {
-    const res = buildEmailReminder(record, company);
-    if (!res.success) {
-      alert(res.error || "Cannot send email reminder: missing email address.");
+    const email = record.customerEmail || record.email || "";
+    const res = buildEmailReminder({ ...record, customerEmail: email || "customer@example.com" }, company);
+    setEmailModal({
+      record,
+      email,
+      subject: res.subject,
+      message: res.message,
+    });
+  };
+
+  const handleDispatchEmail = (method = "gmail") => {
+    if (!emailModal) return;
+    const email = (emailModal.email || "").trim();
+    if (!email || !email.includes("@")) {
+      toast.error("Please enter a valid customer email address.");
       return;
     }
-    recordReminderNotification(record.id, "email");
+
+    // If customer email was added/updated, persist it back to the record
+    if (email !== emailModal.record.customerEmail) {
+      saveReminderRecord({
+        ...emailModal.record,
+        customerEmail: email,
+      });
+    }
+
+    const res = buildEmailReminder({ ...emailModal.record, customerEmail: email }, company);
+    recordReminderNotification(emailModal.record.id, "email", {
+      message: res.message,
+      recipient: email,
+      status: "SENT",
+    });
     setRecords(getReminderRecords());
-    window.location.href = res.url;
-    showNotice(`Email reminder launched for ${record.customerName}`);
+
+    if (method === "gmail") {
+      window.open(res.gmailUrl, "_blank");
+      toast.success(`Opened Gmail Web compose for ${emailModal.record.customerName}`);
+    } else {
+      const a = document.createElement("a");
+      a.href = res.mailtoUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      toast.success(`Launched default email client for ${emailModal.record.customerName}`);
+    }
+
+    setEmailModal(null);
   };
+
+  const sentCount = useMemo(() => {
+    return records.filter((r) => r.lastNotifiedAt || (r.notificationHistory && r.notificationHistory.length > 0)).length;
+  }, [records]);
 
   const filteredList = useMemo(() => {
     if (filter === "dueSoon") return processed.dueSoon;
@@ -230,8 +421,11 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     if (filter === "overdue") return processed.overdue;
     if (filter === "upcoming") return processed.upcoming;
     if (filter === "completed") return processed.completed;
+    if (filter === "sentHistory") {
+      return records.filter((r) => r.lastNotifiedAt || (r.notificationHistory && r.notificationHistory.length > 0));
+    }
     return processed.all.filter((r) => r.status !== "Completed" && r.status !== "Cancelled");
-  }, [processed, filter]);
+  }, [processed, records, filter]);
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -288,22 +482,68 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
           {/* Header & Controls */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
             <div>
-              <h4 className="text-sm font-bold text-slate-900">Active Service Due Dates</h4>
-              <p className="text-xs text-slate-500">
-                Monitors customer service schedules and provides one-click reminders via WhatsApp and Email.
+              <div className="flex items-center gap-2.5">
+                <h4 className="text-sm font-bold text-slate-900">Active Service Due Dates</h4>
+                {metaStatus.connected ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Meta WhatsApp Connected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    Meta Offline (Using Web Link)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Monitors customer service schedules with automatic background dispatch via Meta WhatsApp Cloud API and detailed dispatch history.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => openAddModal(null)}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition"
-            >
-              <FiPlus className="h-4 w-4" /> Add Service Due Date
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Bulk Send Due Reminders in Background */}
+              {metaStatus.connected && processed.activeAlerts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSendAllDueMeta}
+                  disabled={bulkSending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition disabled:opacity-50"
+                  title="Send all due reminders to customer phones in background via Meta API"
+                >
+                  {bulkSending ? (
+                    <><FiLoader className="h-4 w-4 animate-spin" /> Sending in Background...</>
+                  ) : (
+                    <><FiZap className="h-4 w-4" /> Send Due ({processed.activeAlerts.length}) via Meta</>
+                  )}
+                </button>
+              )}
+              {/* Request Meta Template Approval */}
+              {metaStatus.connected && (
+                <button
+                  type="button"
+                  onClick={handleRequestTemplateApproval}
+                  disabled={requestingApproval}
+                  title="Send approval request to Meta WhatsApp for service reminder template"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition disabled:opacity-50"
+                >
+                  {requestingApproval ? (
+                    <><FiLoader className="h-4 w-4 animate-spin text-emerald-600" /> Submitting to Meta...</>
+                  ) : (
+                    <><FiCheck className="h-4 w-4 text-emerald-600" /> Request Meta Template</>
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => openAddModal(null)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+              >
+                <FiPlus className="h-4 w-4" /> Add Service Due Date
+              </button>
+            </div>
           </div>
 
           {/* Metric KPI Pills */}
-          <div className="grid grid-cols-2 gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:grid-cols-4 text-xs">
+          <div className="grid grid-cols-2 gap-3 border-b border-slate-100 bg-slate-50/60 p-4 sm:grid-cols-5 text-xs">
             <button
               type="button"
               onClick={() => setFilter("all")}
@@ -347,6 +587,17 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
               <span className="block text-[11px] font-semibold text-purple-600">Overdue</span>
               <span className="text-xl font-bold text-purple-700">{processed.summary.overdue}</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setFilter("sentHistory")}
+              className={`rounded-lg p-3 text-left transition border ${
+                filter === "sentHistory" ? "bg-white border-emerald-500 shadow-sm" : "bg-white/80 border-slate-200 hover:bg-white"
+              }`}
+            >
+              <span className="block text-[11px] font-semibold text-emerald-700">Sent History</span>
+              <span className="text-xl font-bold text-emerald-800">{sentCount}</span>
+            </button>
           </div>
 
           {/* Table */}
@@ -358,7 +609,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                   <th className="px-4 py-3">Service / Task</th>
                   <th className="px-4 py-3">Service Date</th>
                   <th className="px-4 py-3">Due Date</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Status &amp; Notification</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>
@@ -367,9 +618,11 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                   <tr>
                     <td colSpan="6" className="py-12 text-center text-slate-400">
                       <FiCalendar className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                      <p className="font-semibold text-slate-600">No service due dates found</p>
+                      <p className="font-semibold text-slate-600">No service records found</p>
                       <p className="text-[11px] text-slate-400 mt-1">
-                        Click "Add Service Due Date" to record upcoming customer maintenance schedules.
+                        {filter === "sentHistory"
+                          ? "No dispatched reminders recorded yet. Use 'Send via Meta' to notify customers."
+                          : 'Click "Add Service Due Date" to record upcoming customer maintenance schedules.'}
                       </p>
                     </td>
                   </tr>
@@ -391,8 +644,9 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                     <tr key={record.id} className="hover:bg-slate-50/70 transition">
                       <td className="px-4 py-3 font-medium text-slate-900">
                         <div className="font-semibold text-slate-900">{record.customerName}</div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1">
-                          {record.customerPhone ? <span>{record.customerPhone}</span> : <span className="text-amber-600">No phone</span>}
+                        <div className="text-[11px] text-slate-500 flex flex-col gap-0.5 mt-0.5">
+                          {record.customerPhone ? <span>📞 {record.customerPhone}</span> : <span className="text-amber-600">No phone</span>}
+                          {record.customerEmail ? <span className="text-blue-600 truncate max-w-[170px]" title={record.customerEmail}>✉️ {record.customerEmail}</span> : <span className="text-slate-400 italic">No email</span>}
                         </div>
                       </td>
 
@@ -419,40 +673,70 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                       </td>
 
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusTone}`}>
-                          {record.status}
-                        </span>
-                        {record.lastNotifiedAt && (
-                          <div className="text-[10px] text-emerald-600 mt-1 flex items-center gap-0.5">
-                            <FiCheck className="h-3 w-3" /> Notified
-                          </div>
-                        )}
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${statusTone}`}>
+                            {record.status}
+                          </span>
+                          {record.lastNotifiedAt ? (
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                <FiCheck className="h-3 w-3" />
+                                {record.lastNotifiedChannel === "meta_whatsapp" ? "Sent via Meta" : "Sent via WhatsApp"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setViewSentModal(record)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                                title="View exact message sent to customer"
+                              >
+                                <FiEye className="h-3 w-3" /> View Message
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Not sent yet</span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* WhatsApp Reminder Button */}
+                          {/* Direct Meta WhatsApp Background Send Button */}
+                          {metaStatus.connected && record.customerPhone && (
+                            <button
+                              type="button"
+                              title="Send directly to customer phone in background via Meta API"
+                              disabled={sendingId === record.id || bulkSending}
+                              onClick={() => handleSendMetaWhatsApp(record)}
+                              className="inline-flex items-center gap-1 rounded border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition active:scale-98"
+                            >
+                              {sendingId === record.id ? (
+                                <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
+                              ) : (
+                                <><FiZap className="h-3 w-3" /> Send via Meta</>
+                              )}
+                            </button>
+                          )}
+
+                          {/* WhatsApp Manual Web Link Fallback */}
                           <button
                             type="button"
-                            title="Send WhatsApp Reminder"
+                            title="Open WhatsApp Web chat link"
                             onClick={() => handleSendWhatsApp(record)}
                             disabled={!record.customerPhone}
-                            className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition"
                           >
-                            <FiMessageSquare className="h-3 w-3" /> WhatsApp
+                            <FiMessageSquare className="h-3 w-3 text-emerald-600" /> Web Link
                           </button>
 
                           {/* Email Reminder Button */}
-                          {record.customerEmail && (
-                            <button
-                              type="button"
-                              title="Send Email Reminder"
-                              onClick={() => handleSendEmail(record)}
-                              className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
-                            >
-                              <FiMail className="h-3 w-3" /> Email
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            title={record.customerEmail ? `Send email reminder to ${record.customerEmail}` : "Send or add customer email"}
+                            onClick={() => handleSendEmail(record)}
+                            className="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 transition"
+                          >
+                            <FiMail className="h-3 w-3" /> Email
+                          </button>
 
                           {/* Mark Complete */}
                           {record.status !== "Completed" && (
@@ -460,7 +744,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                               type="button"
                               title="Mark Completed"
                               onClick={() => handleMarkCompleted(record)}
-                              className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-emerald-600"
+                              className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-emerald-600 transition"
                             >
                               <FiCheck className="h-3.5 w-3.5" />
                             </button>
@@ -471,7 +755,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                             type="button"
                             title="Edit"
                             onClick={() => openAddModal(record)}
-                            className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-blue-600"
+                            className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-blue-600 transition"
                           >
                             <FiEdit className="h-3.5 w-3.5" />
                           </button>
@@ -480,8 +764,8 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                           <button
                             type="button"
                             title="Delete"
-                            onClick={() => handleDelete(record.id)}
-                            className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-rose-600"
+                            onClick={() => handleDelete(record.id, record.customerName)}
+                            className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-rose-600 transition"
                           >
                             <FiTrash2 className="h-3.5 w-3.5" />
                           </button>
@@ -635,6 +919,237 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
           </div>
         </div>
       )}
+
+      {/* View Sent Message Details Modal */}
+      {viewSentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                  <FiMessageSquare className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Sent Reminder Details</h3>
+                  <p className="text-[11px] text-slate-500">
+                    To: <span className="font-semibold text-slate-800">{viewSentModal.customerName}</span> ({viewSentModal.customerPhone || "No phone"})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewSentModal(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </header>
+
+            <div className="p-6 space-y-4 text-xs">
+              {/* Delivery Meta Summary */}
+              <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 border border-slate-200/70">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Delivery Channel</span>
+                  <p className="font-semibold text-slate-800 flex items-center gap-1 mt-0.5">
+                    {viewSentModal.lastNotifiedChannel === "meta_whatsapp" ? (
+                      <span className="text-emerald-700 font-bold flex items-center gap-1">
+                        <FiZap className="h-3.5 w-3.5 text-emerald-600" /> Meta Cloud API
+                      </span>
+                    ) : viewSentModal.lastNotifiedChannel === "email" ? (
+                      <span className="text-blue-700 font-bold flex items-center gap-1">
+                        <FiMail className="h-3.5 w-3.5 text-blue-600" /> Email
+                      </span>
+                    ) : (
+                      <span className="text-emerald-800 font-bold flex items-center gap-1">
+                        <FiMessageSquare className="h-3.5 w-3.5 text-emerald-600" /> WhatsApp Direct Link
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Dispatched At</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">
+                    {viewSentModal.lastNotifiedAt ? new Date(viewSentModal.lastNotifiedAt).toLocaleString() : "N/A"}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Service Due Item</span>
+                  <p className="font-semibold text-slate-800 mt-0.5">{viewSentModal.serviceName}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400">Due Date Mentioned</span>
+                  <p className="font-semibold text-rose-600 mt-0.5">{viewSentModal.nextDueDate}</p>
+                </div>
+              </div>
+
+              {/* Message Content Bubble */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold text-slate-700">Message Content Delivered:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const msg = viewSentModal.lastNotifiedMessage || formatReminderMessage(viewSentModal, company);
+                      navigator.clipboard.writeText(msg);
+                      showNotice("Copied message to clipboard!");
+                    }}
+                    className="text-[10px] font-semibold text-blue-600 hover:text-blue-800"
+                  >
+                    Copy Text
+                  </button>
+                </div>
+                <div className="rounded-xl border border-emerald-200 bg-[#E7F8EC] p-3.5 text-slate-900 whitespace-pre-wrap font-sans text-xs leading-relaxed shadow-xs">
+                  {viewSentModal.lastNotifiedMessage || formatReminderMessage(viewSentModal, company)}
+                </div>
+              </div>
+
+              {/* Notification History Log (if any) */}
+              {Array.isArray(viewSentModal.notificationHistory) && viewSentModal.notificationHistory.length > 1 && (
+                <div className="pt-2 border-t border-slate-100">
+                  <span className="text-[11px] font-bold text-slate-700 block mb-1.5">Send History ({viewSentModal.notificationHistory.length} events):</span>
+                  <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                    {viewSentModal.notificationHistory.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-slate-600">
+                        <span className="font-medium text-slate-800 capitalize">
+                          {item.channel?.replace("_", " ") || "WhatsApp"}
+                        </span>
+                        <span>{item.recipient || viewSentModal.customerPhone}</span>
+                        <span className="text-slate-400 text-[10px]">{new Date(item.timestamp).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setViewSentModal(null)}
+                  className="rounded-lg bg-slate-800 px-5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-900 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Composer & Dispatch Modal */}
+      {emailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-150">
+            <header className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <FiMail className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Send Email Service Reminder</h3>
+                  <p className="text-[11px] text-slate-500">
+                    To: <span className="font-semibold text-slate-800">{emailModal.record.customerName}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailModal(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </header>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700">
+                  Customer Email Address <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={emailModal.email}
+                  onChange={(e) => setEmailModal({ ...emailModal, email: e.target.value })}
+                  placeholder="e.g. customer@gmail.com"
+                  className="mt-1 h-9 w-full rounded-md border border-slate-300 px-3 text-xs outline-none focus:border-blue-500 font-medium text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700">
+                  Subject Line
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={emailModal.subject}
+                  className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-xs outline-none text-slate-700 cursor-default"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-semibold text-slate-700">
+                    Message Body:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(emailModal.message);
+                      toast.success("Copied email text to clipboard!");
+                    }}
+                    className="text-[10px] font-semibold text-blue-600 hover:text-blue-800"
+                  >
+                    Copy Text
+                  </button>
+                </div>
+                <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 text-slate-900 whitespace-pre-wrap font-sans text-xs leading-relaxed max-h-36 overflow-y-auto">
+                  {emailModal.message}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEmailModal(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleDispatchEmail("default")}
+                    title="Open default desktop mail client (Outlook, Thunderbird, Mail app)"
+                    className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+                  >
+                    Default Mail App
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDispatchEmail("gmail")}
+                    title="Open Gmail Web in new tab with draft ready"
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition"
+                  >
+                    Open in Gmail Web
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modern Confirm Modal (replaces native window.confirm) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        tone={confirmModal.tone}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

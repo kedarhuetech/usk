@@ -14,6 +14,7 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const STORAGE_KEY = "ledgerly:estimateQuotations.v1";
 
@@ -57,6 +58,14 @@ export default function EstimateQuotation() {
   const [actionMenu, setActionMenu] = useState("");
   const [actionMenuPosition, setActionMenuPosition] = useState({ top: 0, right: 8 });
   const [previewEstimate, setPreviewEstimate] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
 
   const firms = useMemo(() => ["All Firms", ...new Set(estimates.map((item) => item.firm).filter(Boolean))], [estimates]);
   const users = useMemo(() => ["All Users", ...new Set(estimates.map((item) => item.user).filter(Boolean))], [estimates]);
@@ -119,7 +128,18 @@ export default function EstimateQuotation() {
   };
 
   const removeEstimate = (estimate) => {
-    if (window.confirm(`Delete quotation ${estimate.number}?`)) saveEstimates(estimates.filter((item) => item.id !== estimate.id));
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Quotation",
+      message: `Delete quotation ${estimate.number}?`,
+      confirmText: "Delete",
+      confirmColor: "red",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        saveEstimates(estimates.filter((item) => item.id !== estimate.id));
+        toast.success(`Quotation ${estimate.number} deleted.`);
+      },
+    });
     setActionMenu("");
   };
 
@@ -224,6 +244,14 @@ export default function EstimateQuotation() {
     </Card>
 
     {previewEstimate && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewEstimate(null); }}><section className="max-h-[92vh] w-full max-w-5xl overflow-auto rounded-xl bg-white shadow-2xl"><header className="sticky top-0 flex items-center justify-between border-b bg-white px-6 py-4"><h2 className="text-xl font-bold">Estimate Preview</h2><button type="button" aria-label="Close preview" onClick={() => setPreviewEstimate(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100">×</button></header><div className="p-8"><div className="text-center"><h1 className="text-2xl font-bold">My Company</h1><p className="mt-1 text-sm text-slate-500">Estimate / Quotation</p></div><div className="my-8 flex flex-wrap justify-between gap-5 border-y py-5"><div><p className="text-sm text-slate-500">Estimate #</p><p className="font-semibold">{previewEstimate.number}</p><p className="mt-3 text-sm text-slate-500">Customer</p><p className="font-semibold">{previewEstimate.customer}</p>{previewEstimate.phone && <p>{previewEstimate.phone}</p>}</div><div className="text-right"><p className="text-sm text-slate-500">Date</p><p className="font-semibold">{estimateDate(previewEstimate)?.toLocaleDateString("en-GB") || "—"}</p><p className="mt-3 text-sm text-slate-500">State of supply</p><p>{previewEstimate.state || "—"}</p></div></div><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-slate-100"><tr>{["#", "Item", "Description", "Qty", "Unit Price", "Amount"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr></thead><tbody>{(previewEstimate.rows || []).map((row, index) => <tr key={row.id || index}><td className="border-b px-3 py-3">{index + 1}</td><td className="border-b px-3 py-3 font-medium">{row.item || "—"}</td><td className="border-b px-3 py-3">{row.description || "—"}</td><td className="border-b px-3 py-3">{row.qty || "—"} {row.unit}</td><td className="border-b px-3 py-3">{formatMoney(row.price)}</td><td className="border-b px-3 py-3 text-right">{formatMoney((Number(row.qty) || 0) * (Number(row.price) || 0))}</td></tr>)}</tbody></table></div>{previewEstimate.description && <p className="mt-5"><b>Description:</b> {previewEstimate.description}</p>}{previewEstimate.terms && <p className="mt-4 whitespace-pre-wrap"><b>Terms & Conditions:</b> {previewEstimate.terms}</p>}<p className="mt-6 text-right text-xl font-bold">Total: {formatMoney(previewEstimate.amount)}</p></div><footer className="sticky bottom-0 flex justify-end gap-3 border-t bg-white px-6 py-4"><Button onClick={() => openEstimateDocument(previewEstimate)} className="border border-blue-300 text-blue-600">Open PDF</Button><Button onClick={() => openEstimateDocument(previewEstimate, true)} className="bg-blue-600 text-white">Print</Button><Button onClick={() => setPreviewEstimate(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}
-
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }

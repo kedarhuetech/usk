@@ -15,6 +15,7 @@ import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const KEY = "ledgerly:saleOrders.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -41,6 +42,15 @@ export default function SaleOrders() {
   const [selectorFrom, setSelectorFrom] = useState(() => localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [selectorTo, setSelectorTo] = useState(() => localDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0)));
   const [selectorPreset, setSelectorPreset] = useState("This Month");
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
+  const [historyModal, setHistoryModal] = useState(null);
   const parties = useMemo(() => getParties(), []);
   useEffect(() => {
     let active = true;
@@ -58,8 +68,8 @@ export default function SaleOrders() {
   const beginNew = () => setEditor({ mode: "new", value: { id: "", number: String(Math.max(0, ...orders.map((order) => Number(order.number) || 0)) + 1), customer: "", phone: "", date: localDate(), dueDate: localDate(), state: "Select", rows: [newRow(), newRow()], payments: [newPayment()], roundOff: true, roundOffValue: "", terms: "", description: "", status: "Open", linkedOrderIds: [] } });
   const save = () => {
     const value = editor.value;
-    if (!value.customer.trim()) { window.alert("Select or enter a customer."); return; }
-    if (!(value.rows || []).some((row) => row.item.trim() && Number(row.qty) > 0)) { window.alert("Add at least one item and quantity."); return; }
+    if (!value.customer.trim()) { toast.error("Select or enter a customer."); return; }
+    if (!(value.rows || []).some((row) => row.item.trim() && Number(row.qty) > 0)) { toast.error("Add at least one item and quantity."); return; }
     const subtotal = value.rows.reduce((sum, row) => sum + rowAmount(row), 0);
     const amount = value.roundOff ? Math.round(subtotal) + (Number(value.roundOffValue) || 0) : subtotal;
     if (!parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.customer.trim().toLowerCase())) {
@@ -67,6 +77,7 @@ export default function SaleOrders() {
     }
     const saved = { ...value, id: value.id || `sale-order-${Date.now()}`, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
     persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]);
+    toast.success(editor.mode === "edit" ? "Sale order updated." : "Sale order created.");
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -111,8 +122,24 @@ export default function SaleOrders() {
   const act = (action, order) => {
     setMenuId("");
     if (action === "View/Edit") setEditor({ mode: "edit", value: order });
-    if (action === "Delete" && window.confirm(`Delete sale order ${order.number}?`)) persist(orders.filter((entry) => entry.id !== order.id));
-    if (action === "Duplicate") persist([{ ...order, id: `sale-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", createdAt: new Date().toISOString(), history: [] }, ...orders]);
+    if (action === "Delete") {
+      setConfirmModal({
+        isOpen: true,
+        title: "Delete Sale Order",
+        message: `Delete sale order ${order.number}?`,
+        confirmText: "Delete",
+        confirmColor: "red",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          persist(orders.filter((entry) => entry.id !== order.id));
+          toast.success(`Sale order ${order.number} deleted.`);
+        },
+      });
+    }
+    if (action === "Duplicate") {
+      persist([{ ...order, id: `sale-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", createdAt: new Date().toISOString(), history: [] }, ...orders]);
+      toast.success("Sale order duplicated.");
+    }
     if (["Preview", "Open PDF", "Print"].includes(action)) {
       const rows = (order.rows || []).map((row) => ({
         item: row.item || "Item",
@@ -154,7 +181,18 @@ export default function SaleOrders() {
 
       openPrintWindow(html, action === "Print");
     }
-    if (action === "View History") window.alert((order.history || []).map((item) => `${item.action} — ${new Date(item.at).toLocaleString()}`).join("\n") || "No history recorded yet.");
+    if (action === "View History") {
+      const historyList = order.history || [];
+      if (!historyList.length) {
+        toast.info("No history recorded yet for this order.");
+      } else {
+        setHistoryModal({
+          isOpen: true,
+          orderNumber: order.number,
+          history: historyList,
+        });
+      }
+    }
   };
   const change = (key, value) => setEditor((current) => ({ ...current, value: { ...current.value, [key]: value } }));
   // Use a functional update so several field updates from one item selection
@@ -180,5 +218,35 @@ export default function SaleOrders() {
       <section className="grid min-h-72 gap-6 px-7 py-8 lg:grid-cols-[1fr_1fr_1fr]"><div><button className="mb-2 rounded-md border bg-white px-5 py-3 text-slate-500" onClick={()=>change("terms",editor.value.terms ? "" : "Payment due as agreed.")}>☷ ADD TERMS &amp; CONDITIONS</button><textarea value={editor.value.terms} onChange={(event)=>change("terms",event.target.value)} placeholder="Terms and conditions" className="h-20 w-full rounded border bg-white p-3"/></div><div className="space-y-3"><label className="block text-sm text-slate-500">Payment Type<select value={editor.value.payments[0]?.type || "Cash"} onChange={(event)=>change("payments",[{...editor.value.payments[0],type:event.target.value}])} className="mt-1 block h-12 w-full rounded border bg-white px-3">{["Cash","Cheque","UPI","Card","Bank Transfer"].map((method)=><option key={method}>{method}</option>)}</select></label><button onClick={()=>change("payments",[...editor.value.payments,newPayment()])} className="text-blue-600"><FiPlus className="inline"/> Add Payment type</button><textarea value={editor.value.description} onChange={(event)=>change("description",event.target.value)} placeholder="Description" className="h-20 w-full rounded border bg-white p-3"/></div><div className="flex flex-wrap items-start justify-end gap-3"><label className="flex items-center gap-2"><input type="checkbox" checked={editor.value.roundOff} onChange={(event)=>change("roundOff",event.target.checked)}/>Round Off</label><input type="number" value={editor.value.roundOffValue} onChange={(event)=>change("roundOffValue",event.target.value)} disabled={!editor.value.roundOff} className="h-10 w-20 rounded border px-2"/><b className="pt-2">Total</b><div className="grid h-12 min-w-48 place-items-center rounded border bg-white font-bold">{money(total)}</div></div></section></div><footer className="flex shrink-0 justify-end gap-3 border-t bg-white px-5 py-3"><Button onClick={()=>window.print()} className="border border-blue-300 text-blue-600">Share</Button><Button onClick={save} className="min-w-40 bg-blue-600 text-white">Save</Button></footer></div>}
 
     {selector && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4"><section className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-semibold">Select orders to attach</h2><button onClick={()=>setSelector(null)}><FiX className="text-2xl"/></button></header><div className="space-y-5 overflow-auto px-6 py-5"><label className="block max-w-md text-sm text-slate-500">Customer *<select value={selectorParty} onChange={(event)=>setSelectorParty(event.target.value)} className="mt-1 h-12 w-full rounded border bg-white px-3"><option value="">All customers</option>{parties.map((party)=><option key={party.id}>{party.partyName}</option>)}</select></label><div className="flex flex-wrap items-center gap-3 border-y py-4"><span className="font-semibold">Filter By:</span><select className="rounded px-3 py-2" defaultValue="This Month"><option>This Month</option><option>All Time</option><option>Custom</option></select><span>Between</span><input type="date" value={selectorFrom} onChange={(event)=>setSelectorFrom(event.target.value)} className="rounded border p-2"/><span>To</span><input type="date" value={selectorTo} onChange={(event)=>setSelectorTo(event.target.value)} className="rounded border p-2"/></div><div className="flex items-center justify-between gap-4"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={selectorSearch} onChange={(event)=>setSelectorSearch(event.target.value)} placeholder="Search By order No." className="h-10 w-80 rounded-full border pl-9 pr-3"/></label><span className="italic text-slate-400">{candidates.length} Orders found</span></div><div className="max-h-[45vh] overflow-auto"><table className="w-full border-collapse text-left"><thead className="sticky top-0 bg-slate-100"><tr><th className="border p-3"><input type="checkbox" checked={candidates.length>0 && candidates.every((order)=>selectedIds.includes(order.id))} onChange={(event)=>setSelectedIds(event.target.checked?candidates.map((order)=>order.id):[])}/> Select All</th>{["DATE","ORDER NO.","DUE DATE","TOTAL AMOUNT (₹)"].map((label)=><th key={label} className="border p-3">{label}</th>)}</tr></thead><tbody>{candidates.map((order)=><tr key={order.id}><td className="border p-3"><input type="checkbox" checked={selectedIds.includes(order.id)} onChange={(event)=>setSelectedIds((ids)=>event.target.checked?[...ids,order.id]:ids.filter((id)=>id!==order.id))}/></td><td className="border p-3">{displayDate(order.date)}</td><td className="border p-3">{order.number}</td><td className="border p-3">{displayDate(order.dueDate)}</td><td className="border p-3">{money(amount(order))}</td></tr>)}</tbody></table>{!candidates.length&&<p className="p-12 text-center text-slate-400">No open sale orders match the selected filters.</p>}</div></div><footer className="flex justify-end gap-3 border-t px-6 py-4"><Button onClick={()=>setSelector(null)} className="bg-slate-100">Cancel</Button><Button disabled={!selectedIds.length} onClick={attachSelected} className="bg-blue-600 text-white">{selector === "attach" ? "Attach" : "Convert"} {selectedIds.length} Orders</Button></footer></section></div>}
+    {historyModal && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4" onClick={() => setHistoryModal(null)}>
+        <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b pb-3">
+            <h3 className="font-bold text-slate-800">Order #{historyModal.orderNumber} History</h3>
+            <button onClick={() => setHistoryModal(null)} className="rounded p-1 text-slate-400 hover:text-slate-600"><FiX /></button>
+          </div>
+          <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
+            {historyModal.history.map((h, i) => (
+              <div key={i} className="rounded bg-slate-50 p-2.5 text-xs">
+                <p className="font-semibold text-slate-800">{h.action}</p>
+                <p className="text-slate-400">{new Date(h.at).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button onClick={() => setHistoryModal(null)} className="bg-blue-600 text-white">Close</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }

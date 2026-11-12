@@ -15,6 +15,8 @@ import {
   filterAndCalculateCashFlow,
   parseYMD,
 } from "../../utils/cashFlowCalculations";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const readLocal = (...keys) => {
@@ -96,6 +98,7 @@ export default function CashFlowReport() {
   const [selectedRowId, setSelectedRowId] = useState(null);
   const [menuState, setMenuState] = useState(null); // { row, top, right }
   const [historyModal, setHistoryModal] = useState(null); // row
+  const [deleteConfirmRow, setDeleteConfirmRow] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const menuRef = useRef(null);
@@ -238,16 +241,7 @@ export default function CashFlowReport() {
     }
 
     if (action === "Delete") {
-      if (!window.confirm(`Delete this ${row.type} transaction (${row.refNo || row.name})?`)) {
-        return;
-      }
-      if (row.storageKey) {
-        const currentList = readLocal(row.storageKey);
-        const updated = currentList.filter(
-          (item) => (item.id || item.invoiceId) !== (row.raw.id || row.raw.invoiceId)
-        );
-        writeLocal(row.storageKey, updated);
-      }
+      setDeleteConfirmRow(row);
       return;
     }
 
@@ -732,6 +726,29 @@ export default function CashFlowReport() {
             : `Closing Balance (Cash & Bank): ${fmt(closingBalance)}`}
         </span>
       </div>
+      {deleteConfirmRow && (
+        <ConfirmModal
+          isOpen={Boolean(deleteConfirmRow)}
+          title="Delete Transaction"
+          message={`Are you sure you want to delete this ${deleteConfirmRow.type} transaction (${deleteConfirmRow.refNo || deleteConfirmRow.name})?`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          danger={true}
+          onConfirm={() => {
+            const row = deleteConfirmRow;
+            if (row.storageKey) {
+              const currentList = readLocal(row.storageKey);
+              const updated = currentList.filter(
+                (item) => (item.id || item.invoiceId) !== (row.raw?.id || row.raw?.invoiceId)
+              );
+              writeLocal(row.storageKey, updated);
+              toast.success(`${row.type} deleted.`);
+            }
+            setDeleteConfirmRow(null);
+          }}
+          onCancel={() => setDeleteConfirmRow(null)}
+        />
+      )}
     </div>
   );
 }

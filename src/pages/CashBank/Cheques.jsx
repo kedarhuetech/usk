@@ -4,6 +4,8 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { CHEQUE_STATUSES, CHEQUE_TYPES, allowedChequeStatuses, filterCheques, formatChequeAmount, initialChequeStatus, summarizeCheques, validateCheque } from "../../services/cheques";
 import { createCheque, deleteOrCancelCheque, getAllCheques, updateCheque, updateChequeStatus } from "../../services/chequesRepository";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const localDate = () => {
   const now = new Date();
@@ -93,6 +95,7 @@ function Cheques() {
   const [viewing, setViewing] = useState(null);
   const [pendingStatuses, setPendingStatuses] = useState({});
   const [updatingId, setUpdatingId] = useState("");
+  const [cancelConfirm, setCancelConfirm] = useState(null);
 
   const refresh = useCallback(async () => {
     setLoading(true); setLoadError("");
@@ -122,12 +125,22 @@ function Cheques() {
     finally { setUpdatingId(""); }
   };
 
-  const cancelCheque = async (cheque) => {
-    if (!window.confirm(`Cancel cheque ${cheque.chequeNumber} for ${cheque.partyName}? The record will be retained in history.`)) return;
+  const executeCancelCheque = async (cheque) => {
     setUpdatingId(cheque.id); setNotice("");
-    try { await deleteOrCancelCheque(cheque.id); setNotice(`Cheque ${cheque.chequeNumber} cancelled; its record was retained.`); await refresh(); }
-    catch (error) { setNotice(error.message || "Cheque could not be cancelled."); }
-    finally { setUpdatingId(""); }
+    try {
+      await deleteOrCancelCheque(cheque.id);
+      const msg = `Cheque ${cheque.chequeNumber} cancelled; its record was retained.`;
+      setNotice(msg);
+      toast.success(msg);
+      await refresh();
+    } catch (error) {
+      const msg = error.message || "Cheque could not be cancelled.";
+      setNotice(msg);
+      toast.error(msg);
+    } finally {
+      setUpdatingId("");
+      setCancelConfirm(null);
+    }
   };
 
   const summaryCards = [
@@ -143,12 +156,24 @@ function Cheques() {
     {notice && <Card role="status" className="flex justify-between gap-2 border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><span>{notice}</span><button type="button" aria-label="Dismiss" onClick={() => setNotice("")}><FiX /></button></Card>}
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{summaryCards.map(({ label, value, icon: Icon, color }) => <Card key={label} className="flex items-center gap-3 p-4"><span className={`rounded-full bg-slate-100 p-3 ${color}`}><Icon /></span><div><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 text-xl font-bold text-slate-900">{value}</p></div></Card>)}</div>
     <Card className="overflow-hidden shadow-sm"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-4"><h2 className="text-lg font-bold text-slate-900">Cheque register</h2><div className="flex flex-wrap gap-2"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400" /><input aria-label="Search cheques" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search party, number, bank" className="h-10 w-64 rounded-md border border-slate-300 pl-9 pr-3" /></label><select aria-label="Filter by cheque type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3"><option value="all">All types</option><option value={CHEQUE_TYPES.RECEIVED}>Received</option><option value={CHEQUE_TYPES.ISSUED}>Issued</option></select><select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3"><option value="all">All statuses</option>{CHEQUE_STATUSES.map((status) => <option key={status}>{status}</option>)}</select></div></div>
-      {loading ? <p className="p-14 text-center text-sm text-slate-500">Loading cheques…</p> : filtered.length === 0 ? <div className="flex flex-col items-center px-5 py-14 text-center"><span className="rounded-full bg-blue-50 p-4 text-2xl text-blue-800"><FiFileText /></span><h3 className="mt-4 text-lg font-bold text-slate-900">{cheques.length ? "No cheques match these filters" : "No cheques recorded yet"}</h3><p className="mt-1 text-sm text-slate-600">{cheques.length ? "Change or clear the filters to see other cheque records." : "Add a received or issued cheque to start your register."}</p>{!cheques.length && <Button onClick={() => { setEditing(null); setShowForm(true); }} className="mt-4 bg-[#1A1F71] text-white"><FiPlus /> Add Cheque</Button>}</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Type</th><th className="px-3 py-3">Cheque No.</th><th className="px-3 py-3">Party</th><th className="px-3 py-3">Bank</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Cheque date</th><th className="px-3 py-3">Expected date</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((cheque) => <tr key={cheque.id} className="hover:bg-slate-50"><td className="px-3 py-3"><span className={`inline-flex items-center gap-1 font-medium ${cheque.type === CHEQUE_TYPES.RECEIVED ? "text-emerald-700" : "text-blue-700"}`}>{cheque.type === CHEQUE_TYPES.RECEIVED ? <FiArrowDownLeft /> : <FiArrowUpRight />}{cheque.type}</span></td><td className="px-3 py-3 font-semibold text-slate-900">{cheque.chequeNumber}</td><td className="px-3 py-3">{cheque.partyName}</td><td className="px-3 py-3">{cheque.bankName}</td><td className="px-3 py-3 text-right font-semibold tabular-nums">{formatChequeAmount(cheque.amount)}</td><td className="px-3 py-3">{cheque.chequeDate}</td><td className="px-3 py-3">{cheque.expectedDate}</td><td className="px-3 py-3"><StatusBadge status={cheque.status} /></td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" title="View" aria-label={`View cheque ${cheque.chequeNumber}`} onClick={() => setViewing(cheque)} className="rounded p-1.5 text-slate-600 hover:bg-slate-200"><FiEye /></button><button type="button" disabled={cheque.status === "Cancelled"} onClick={() => { setEditing(cheque); setShowForm(true); }} className="rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:text-slate-400">Edit</button>{allowedChequeStatuses(cheque).length > 0 && <><select aria-label={`Next status for cheque ${cheque.chequeNumber}`} value={pendingStatuses[cheque.id] || ""} disabled={updatingId === cheque.id} onChange={(event) => setPendingStatuses((current) => ({ ...current, [cheque.id]: event.target.value }))} className="h-8 max-w-32 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Update status</option>{allowedChequeStatuses(cheque).map((status) => <option key={status}>{status}</option>)}</select><button type="button" disabled={!pendingStatuses[cheque.id] || updatingId === cheque.id} onClick={() => void changeStatus(cheque)} className="rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:text-slate-400">Save</button></>}{cheque.status !== "Cancelled" && allowedChequeStatuses(cheque).includes("Cancelled") && <button type="button" disabled={updatingId === cheque.id} onClick={() => void cancelCheque(cheque)} className="rounded px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Cancel</button>}</div></td></tr>)}</tbody></table></div>}
+      {loading ? <p className="p-14 text-center text-sm text-slate-500">Loading cheques…</p> : filtered.length === 0 ? <div className="flex flex-col items-center px-5 py-14 text-center"><span className="rounded-full bg-blue-50 p-4 text-2xl text-blue-800"><FiFileText /></span><h3 className="mt-4 text-lg font-bold text-slate-900">{cheques.length ? "No cheques match these filters" : "No cheques recorded yet"}</h3><p className="mt-1 text-sm text-slate-600">{cheques.length ? "Change or clear the filters to see other cheque records." : "Add a received or issued cheque to start your register."}</p>{!cheques.length && <Button onClick={() => { setEditing(null); setShowForm(true); }} className="mt-4 bg-[#1A1F71] text-white"><FiPlus /> Add Cheque</Button>}</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1120px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-3 py-3">Type</th><th className="px-3 py-3">Cheque No.</th><th className="px-3 py-3">Party</th><th className="px-3 py-3">Bank</th><th className="px-3 py-3 text-right">Amount</th><th className="px-3 py-3">Cheque date</th><th className="px-3 py-3">Expected date</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{filtered.map((cheque) => <tr key={cheque.id} className="hover:bg-slate-50"><td className="px-3 py-3"><span className={`inline-flex items-center gap-1 font-medium ${cheque.type === CHEQUE_TYPES.RECEIVED ? "text-emerald-700" : "text-blue-700"}`}>{cheque.type === CHEQUE_TYPES.RECEIVED ? <FiArrowDownLeft /> : <FiArrowUpRight />}{cheque.type}</span></td><td className="px-3 py-3 font-semibold text-slate-900">{cheque.chequeNumber}</td><td className="px-3 py-3">{cheque.partyName}</td><td className="px-3 py-3">{cheque.bankName}</td><td className="px-3 py-3 text-right font-semibold tabular-nums">{formatChequeAmount(cheque.amount)}</td><td className="px-3 py-3">{cheque.chequeDate}</td><td className="px-3 py-3">{cheque.expectedDate}</td><td className="px-3 py-3"><StatusBadge status={cheque.status} /></td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" title="View" aria-label={`View cheque ${cheque.chequeNumber}`} onClick={() => setViewing(cheque)} className="rounded p-1.5 text-slate-600 hover:bg-slate-200"><FiEye /></button><button type="button" disabled={cheque.status === "Cancelled"} onClick={() => { setEditing(cheque); setShowForm(true); }} className="rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:text-slate-400">Edit</button>{allowedChequeStatuses(cheque).length > 0 && <><select aria-label={`Next status for cheque ${cheque.chequeNumber}`} value={pendingStatuses[cheque.id] || ""} disabled={updatingId === cheque.id} onChange={(event) => setPendingStatuses((current) => ({ ...current, [cheque.id]: event.target.value }))} className="h-8 max-w-32 rounded border border-slate-300 bg-white px-2 text-xs"><option value="">Update status</option>{allowedChequeStatuses(cheque).map((status) => <option key={status}>{status}</option>)}</select><button type="button" disabled={!pendingStatuses[cheque.id] || updatingId === cheque.id} onClick={() => void changeStatus(cheque)} className="rounded px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:text-slate-400">Save</button></>}{cheque.status !== "Cancelled" && allowedChequeStatuses(cheque).includes("Cancelled") && <button type="button" disabled={updatingId === cheque.id} onClick={() => setCancelConfirm(cheque)} className="rounded px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">Cancel</button>}</div></td></tr>)}</tbody></table></div>}
     </Card>
     <p className="text-xs text-slate-500">Cheques are stored only in this browser and are not shared between browsers or devices. This tracking register does not change cash or bank balances and does not verify bank clearance.</p>
   </div>
   {showForm && <ChequeForm key={editing?.id || "new-cheque"} initialCheque={editing} onClose={() => { setShowForm(false); setEditing(null); }} onSaved={saved} />}
   {viewing && <ChequeDetails cheque={viewing} onClose={() => setViewing(null)} />}
+  {cancelConfirm && (
+    <ConfirmModal
+      isOpen={Boolean(cancelConfirm)}
+      title="Cancel Cheque"
+      message={`Cancel cheque ${cancelConfirm.chequeNumber} for ${cancelConfirm.partyName}? The record will be retained in history.`}
+      confirmText="Cancel Cheque"
+      cancelText="Keep Cheque"
+      danger={true}
+      onConfirm={() => void executeCancelCheque(cancelConfirm)}
+      onCancel={() => setCancelConfirm(null)}
+    />
+  )}
   </main>;
 }
 
