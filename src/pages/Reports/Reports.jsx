@@ -20,6 +20,7 @@ import BalanceSheetReport from "./BalanceSheetReport";
 import BatchExpiryReport from "./BatchExpiryReport";
 import LoanStatementReport from "./LoanStatementReport";
 import PartyWiseProfitAndLoss from "./PartyWiseProfitAndLoss";
+import PartyStatementReport from "./PartyStatementReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -59,7 +60,7 @@ const reportGroups = [
   },
   {
     heading: "GST reports",
-    reports: ["GSTR 3 B", "GSTR 4", "GSTR 9A", "Sale Summary By HSN", "SAC Report"],
+    reports: ["GSTR 3 B", "GSTR 4", "GSTR 9A", "Sale Summary By HSN"],
   },
   {
     heading: "Item/ Stock report",
@@ -72,12 +73,8 @@ const reportGroups = [
       "Low Stock Summary",
       "Stock Detail",
       "Item Detail",
-      "Sale/Purchase Report By Item Category",
-      "Stock Summary Report By Item Category",
-      "Item Wise Discount",
     ],
   },
-  { heading: "Business Status", reports: ["Bank Statement", "Discount Report"] },
   {
     heading: "Taxes",
     reports: [
@@ -91,11 +88,11 @@ const reportGroups = [
   },
   {
     heading: "Expense report",
-    reports: ["Expense", "Expense Category Report", "Expense Item Report"],
+    reports: ["Expense", "Expense Category Report"],
   },
   {
     heading: "Sale/ Purchase Order report",
-    reports: ["Sale/Purchase Orders", "Sale/Purchase Order Item"],
+    reports: ["Sale/Purchase Orders"],
   },
   { heading: "Loan Accounts", reports: ["Loan Statement"] },
 ];
@@ -272,6 +269,8 @@ function Reports({ defaultReport }) {
       setActiveReport("Item Detail");
     } else if (location.pathname.includes("loan-statement")) {
       setActiveReport("Loan Statement");
+    } else if (location.pathname.includes("party-statement")) {
+      setActiveReport("Party Statement");
     }
   }, [defaultReport, location.pathname]);
   const [search, setSearch] = useState("");
@@ -382,8 +381,8 @@ function Reports({ defaultReport }) {
 
     if (
       [
-        "All parties",
-        "Party Statement",
+        // "All parties" handled by AllPartiesReport
+        // "Party Statement" handled by PartyStatementReport
       ].includes(activeReport)
     ) {
       return readLocal("ledgerly:parties.v1").map((party) => ({
@@ -671,7 +670,7 @@ function Reports({ defaultReport }) {
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-[#eaf0f6] text-[#263b57]">
       {/* Report sidebar */}
-      <aside className="hidden h-full min-h-0 w-[248px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white md:block">
+      <aside className="hidden h-full min-h-0 w-[248px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white md:block print:hidden">
         {reportGroups.map((group) => (
           <section key={group.heading}>
             <h2 className="sticky top-0 z-10 bg-[#eff8f7] px-3 py-3 text-sm font-medium text-slate-500">
@@ -761,6 +760,10 @@ function Reports({ defaultReport }) {
       ) : activeReport === "GSTR 3 B" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <GSTR3BReport />
+        </div>
+      ) : activeReport === "Party Statement" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <PartyStatementReport />
         </div>
       ) : activeReport === "Party wise Profit & Loss" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">

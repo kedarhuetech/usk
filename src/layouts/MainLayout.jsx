@@ -39,14 +39,16 @@ function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100">
-      <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
-      {!isTransactionRoute && <HorizontalNavbar />}
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
+      <div className="print:hidden">
+        <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
+        {!isTransactionRoute && <HorizontalNavbar />}
+      </div>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         {showBackButton && (
-          <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white text-slate-800 dark:border-[#252B37] dark:bg-[#12151B] dark:text-slate-100 px-4 sm:px-6">
+          <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white text-slate-800 dark:border-[#252B37] dark:bg-[#12151B] dark:text-slate-100 px-4 sm:px-6 print:hidden">
             <button
               type="button"
               onClick={() => navigate(-1)}
@@ -59,7 +61,7 @@ function MainLayout() {
           </div>
         )}
 
-        <main className={`min-h-0 min-w-0 flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"}`}>
+        <main className={`min-h-0 min-w-0 flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"} print:h-auto print:overflow-visible`}>
           {outlet && cloneElement(outlet, { key: refreshKey })}
         </main>
       </div>

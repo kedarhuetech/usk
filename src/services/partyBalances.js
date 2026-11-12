@@ -91,19 +91,82 @@ function partyKey(record) {
   return id ? `id:${id}` : `name:${normalizedName(partyName(record))}`;
 }
 
+function resolveRecordPartyKey(record, idToKey, nameToKey) {
+  if (!record) return "";
+  const id = partyId(record);
+  if (id && idToKey.has(id)) return idToKey.get(id);
+  const norm = normalizedName(partyName(record));
+  if (norm && nameToKey.has(norm)) return nameToKey.get(norm);
+  if (id) return `id:${id}`;
+  if (norm) return `name:${norm}`;
+  return "";
+}
+
 function makePartyKeyedMap(parties, records) {
   const map = new Map();
+  const idToKey = new Map();
+  const nameToKey = new Map();
+
   for (const party of parties) {
-    const id = party?.id == null ? "" : String(party.id);
-    const key = id ? `id:${id}` : `name:${normalizedName(party?.partyName || party?.name)}`;
-    if (key !== "name:") map.set(key, { ...party, id: id || `legacy:${normalizedName(party.partyName || party.name)}`, partyName: party.partyName || party.name || "Unnamed party" });
+    if (!party) continue;
+    const rawId = party?.id == null ? "" : String(party.id).trim();
+    const rawName = String(party?.partyName || party?.name || "").trim();
+    const norm = normalizedName(rawName);
+
+    // Skip ghost/legacy duplicates if a registered master party with this name is already present
+    if ((!rawId || rawId.startsWith("legacy:")) && norm && nameToKey.has(norm)) {
+      continue;
+    }
+
+    const key = rawId ? `id:${rawId}` : (norm ? `name:${norm}` : "");
+    if (!key || key === "name:") continue;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        ...party,
+        id: rawId || `legacy:${norm}`,
+        partyName: rawName || "Unnamed party",
+      });
+      if (rawId) idToKey.set(rawId, key);
+      if (norm && !nameToKey.has(norm)) nameToKey.set(norm, key);
+    }
   }
+
   for (const record of records) {
-    const key = partyKey(record);
-    const name = partyName(record);
-    if (key !== "name:" && !map.has(key)) map.set(key, { id: partyId(record) || `legacy:${normalizedName(name)}`, partyName: name || "Unnamed party", openingBalance: 0, openingBalanceType: "to-receive" });
+    if (!record) continue;
+    const recId = partyId(record);
+    const recName = partyName(record);
+    const recNorm = normalizedName(recName);
+
+    // Check if record matches an existing registered party
+    let matchedKey = null;
+    if (recId && idToKey.has(recId)) {
+      matchedKey = idToKey.get(recId);
+    } else if (recNorm && nameToKey.has(recNorm)) {
+      matchedKey = nameToKey.get(recNorm);
+    } else if (recId && map.has(`id:${recId}`)) {
+      matchedKey = `id:${recId}`;
+    } else if (recNorm && map.has(`name:${recNorm}`)) {
+      matchedKey = `name:${recNorm}`;
+    }
+
+    // Only create a new party entry if neither ID nor name was matched
+    if (!matchedKey) {
+      const key = recId ? `id:${recId}` : (recNorm ? `name:${recNorm}` : "");
+      if (!key || key === "name:") continue;
+
+      map.set(key, {
+        id: recId || `legacy:${recNorm}`,
+        partyName: recName || "Unnamed party",
+        openingBalance: 0,
+        openingBalanceType: "to-receive",
+      });
+      if (recId) idToKey.set(recId, key);
+      if (recNorm && !nameToKey.has(recNorm)) nameToKey.set(recNorm, key);
+    }
   }
-  return map;
+
+  return { map, idToKey, nameToKey };
 }
 
 export function calculatePartyBalances({ parties = [], sales = [], purchases = [], paymentIns = [], paymentOuts = [], creditNotes = [], debitNotes = [], saleUi = {}, from = "", to = "" } = {}) {
@@ -118,7 +181,9 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
   const liveCredits = creditNotes.filter((record) => !isVoided(record));
   const liveDebits = debitNotes.filter((record) => !isVoided(record));
   const allRecords = [...saleRecords, ...purchaseRecords, ...liveReceipts, ...livePayments, ...liveCredits, ...liveDebits];
-  const partyMap = makePartyKeyedMap(parties, allRecords);
+  const { map: partyMap, idToKey, nameToKey } = makePartyKeyedMap(parties, allRecords);
+  const resolveKey = (record) => resolveRecordPartyKey(record, idToKey, nameToKey);
+
   const inRange = (record) => {
     if (!from && !to) return true;
     const value = String(record?.form?.invoiceDate || record?.form?.billDate || record?.date || record?.createdAt || "").slice(0, 10);
@@ -126,8 +191,8 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
     return (!from || value >= from) && (!to || value <= to);
   };
   const results = [...partyMap.entries()].map(([key, party]) => {
-    const partySales = saleRecords.filter((record) => inRange(record) && (partyKey(record) === key || (!partyId(record) && transactionMatchesParty(record, party))));
-    const partyPurchases = purchaseRecords.filter((record) => inRange(record) && (partyKey(record) === key || !partyId(record) && transactionMatchesParty(record, party)));
+    const partySales = saleRecords.filter((record) => inRange(record) && resolveKey(record) === key);
+    const partyPurchases = purchaseRecords.filter((record) => inRange(record) && resolveKey(record) === key);
     const receivableInvoices = partySales.map((invoice) => ({ invoice, settlement: calculateInvoiceSettlement(invoice, { kind: "sale", payments: liveReceipts, adjustments: liveCredits }) }));
     const payableInvoices = partyPurchases.map((invoice) => ({ invoice, settlement: calculateInvoiceSettlement(invoice, { kind: "purchase", payments: livePayments, adjustments: liveDebits }) }));
     const ob = amount(party.openingBalance);
@@ -146,20 +211,19 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
     const purchasesPayable = payableInvoices.reduce((sum, row) => sum + row.settlement.outstanding, 0);
     const customerOverpayments = receivableInvoices.reduce((sum, row) => sum + row.settlement.overpayment, 0);
     const supplierOverpayments = payableInvoices.reduce((sum, row) => sum + row.settlement.overpayment, 0);
-    const customerAdvances = liveReceipts.filter((payment) => (partyKey(payment) === key || (!partyId(payment) && transactionMatchesParty(payment, party))) && !payment.linkedInvoiceId && !payment.invoiceId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.received), 0) + customerOverpayments;
-    const supplierAdvances = livePayments.filter((payment) => (partyKey(payment) === key || (!partyId(payment) && transactionMatchesParty(payment, party))) && !payment.linkedInvoiceId && !payment.linkedBillId && !payment.invoiceId && !payment.billId && !payment.purchaseId && !payment.linkedCreditNoteId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.paid), 0) + supplierOverpayments;
-    const customerCredits = liveCredits.filter((note) => (partyKey(note) === key || (!partyId(note) && transactionMatchesParty(note, party)))).reduce((sum, note) => sum + amount(note.customerCreditAmount ?? Math.max(0, invoiceTotal(note) - amount(note.adjustedAmount) - amount(note.received))), 0);
-    const supplierCredits = liveDebits.filter((note) => (partyKey(note) === key || (!partyId(note) && transactionMatchesParty(note, party)))).filter((note) => !note.billId && !note.purchaseId && !note.linkedInvoiceId).reduce((sum, note) => sum + amount(note.balance ?? Math.max(0, invoiceTotal(note) - amount(note.received))), 0);
+    const customerAdvances = liveReceipts.filter((payment) => (resolveKey(payment) === key) && !payment.linkedInvoiceId && !payment.invoiceId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.received), 0) + customerOverpayments;
+    const supplierAdvances = livePayments.filter((payment) => (resolveKey(payment) === key) && !payment.linkedInvoiceId && !payment.linkedBillId && !payment.invoiceId && !payment.billId && !payment.purchaseId && !payment.linkedCreditNoteId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.paid), 0) + supplierOverpayments;
+    const customerCredits = liveCredits.filter((note) => resolveKey(note) === key).reduce((sum, note) => sum + amount(note.customerCreditAmount ?? Math.max(0, invoiceTotal(note) - amount(note.adjustedAmount) - amount(note.received))), 0);
+    const supplierCredits = liveDebits.filter((note) => resolveKey(note) === key).filter((note) => !note.billId && !note.purchaseId && !note.linkedInvoiceId).reduce((sum, note) => sum + amount(note.balance ?? Math.max(0, invoiceTotal(note) - amount(note.received))), 0);
     const receivable = openingReceivable + salesReceivable + supplierAdvances + supplierCredits;
     const payable = openingPayable + purchasesPayable + customerAdvances + customerCredits;
     return { ...party, openingReceivable, openingPayable, salesReceivable, purchasesPayable, customerAdvances: customerAdvances + customerCredits, supplierAdvances: supplierAdvances + supplierCredits, receivable, payable, net: receivable - payable, sales: receivableInvoices, purchases: payableInvoices };
   });
   const transactionReceivable = results.reduce((sum, party) => sum + party.salesReceivable + party.supplierAdvances, 0);
   const transactionPayable = results.reduce((sum, party) => sum + party.purchasesPayable + party.customerAdvances, 0);
-  const assignedKeys = new Set(partyMap.keys());
-  const unassignedSalesReceivable = saleRecords.filter((record) => !partyId(record) && !partyName(record) && !assignedKeys.has(partyKey(record)) && inRange(record))
+  const unassignedSalesReceivable = saleRecords.filter((record) => !resolveKey(record) && inRange(record))
     .reduce((sum, invoice) => sum + calculateInvoiceSettlement(invoice, { kind: "sale", payments: liveReceipts, adjustments: liveCredits }).outstanding, 0);
-  const unassignedPurchasesPayable = purchaseRecords.filter((record) => !partyId(record) && !partyName(record) && !assignedKeys.has(partyKey(record)) && inRange(record))
+  const unassignedPurchasesPayable = purchaseRecords.filter((record) => !resolveKey(record) && inRange(record))
     .reduce((sum, invoice) => sum + calculateInvoiceSettlement(invoice, { kind: "purchase", payments: livePayments, adjustments: liveDebits }).outstanding, 0);
   const openingReceivable = results.reduce((sum, party) => sum + party.openingReceivable, 0);
   const openingPayable = results.reduce((sum, party) => sum + party.openingPayable, 0);

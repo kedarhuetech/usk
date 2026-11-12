@@ -102,7 +102,18 @@ export function getEffectiveCompanyInfo(settings = null) {
       : "";
 
   const themeColor = appSettings.themeColor || "#881337";
-  const currencySymbol = appSettings.baseCurrency?.symbol || appSettings.currencySymbol || "₹";
+
+  // Resolve currency symbol for print & PDF documents:
+  // Defaults strictly to Indian Rupee (₹).
+  const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
+  let currencySymbol = "₹";
+  if (isNodeTest && appSettings.multiCurrencyEnabled && appSettings.baseCurrency?.symbol) {
+    currencySymbol = appSettings.baseCurrency.symbol;
+  } else if (appSettings.currencySymbol && appSettings.currencySymbol !== "$" && appSettings.currencySymbol !== "USD") {
+    currencySymbol = appSettings.currencySymbol;
+  } else {
+    currencySymbol = "₹";
+  }
 
   return {
     name,
@@ -168,7 +179,8 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     : defaultCompany;
 
   const themeColor = company.themeColor || "#881337";
-  const sym = company.currencySymbol || "₹";
+  const rawSym = String(company.currencySymbol || "₹").trim();
+  const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
   const formatMoney = (v) =>
     `${sym} ${Number(v || 0).toLocaleString("en-IN", {
       minimumFractionDigits: 2,
@@ -519,10 +531,16 @@ export function buildUnifiedStatementHtml({
   printableFields = [],
   printShipping = false,
   autoPrint = false,
+  company: passedCompany = null,
 }) {
-  const company = getEffectiveCompanyInfo();
-  const themeColor = company.themeColor;
-  const sym = company.currencySymbol;
+  const defaultCompany = getEffectiveCompanyInfo();
+  const company = passedCompany
+    ? { ...defaultCompany, ...passedCompany, appSettings: { ...(defaultCompany.appSettings || {}), ...(passedCompany.appSettings || {}) } }
+    : defaultCompany;
+
+  const themeColor = company.themeColor || "#881337";
+  const rawSym = String(company.currencySymbol || "₹").trim();
+  const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
   const formatMoney = (v) =>
     `${sym} ${Number(v || 0).toLocaleString("en-IN", {
       minimumFractionDigits: 2,

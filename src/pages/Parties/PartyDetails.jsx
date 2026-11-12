@@ -1,5 +1,5 @@
 // Implements the party details page.
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   FiAlertCircle,
   FiBell,
@@ -35,6 +35,7 @@ import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { calculateInvoiceSettlement, calculatePartyBalances, transactionMatchesParty } from "../../services/partyBalances";
 import useAppSettings from "../../hooks/useAppSettings";
+import TransactionActionMenu from "../../components/Common/TransactionActionMenu.jsx";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -479,6 +480,7 @@ function buildStatementDocument(party, invoices, activity = [], settings = {}) {
 
   return buildUnifiedStatementHtml({
     party,
+    company: { currencySymbol: "₹" },
     rows,
     totals: {
       amount: totalAmount,
@@ -601,32 +603,33 @@ function PartyDetails() {
     }
   }, []);
 
-  useEffect(() => {
-    const reloadLocalData = () => {
-      setParties(getParties());
-      setInvoices(getSaleInvoices());
-      setPurchases(getPurchaseBills());
-      const readLocalList = (key) => {
-        try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
-        catch { return []; }
-      };
-      setPartyActivity({
-        estimates: readLocalList("ledgerly:estimateQuotations.v1"),
-        proformas: readLocalList("ledgerly:proformaInvoices.v1"),
-        payments: readLocalList("ledgerly:paymentIns.v1"),
-        paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
-        creditNotes: readLocalList("ledgerly:saleReturns.v1"),
-        debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
-        saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
-      });
+  const reloadLocalData = useCallback(() => {
+    setParties(getParties());
+    setInvoices(getSaleInvoices());
+    setPurchases(getPurchaseBills());
+    const readLocalList = (key) => {
+      try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
+      catch { return []; }
     };
+    setPartyActivity({
+      estimates: readLocalList("ledgerly:estimateQuotations.v1"),
+      proformas: readLocalList("ledgerly:proformaInvoices.v1"),
+      payments: readLocalList("ledgerly:paymentIns.v1"),
+      paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
+      creditNotes: readLocalList("ledgerly:saleReturns.v1"),
+      debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
+      saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
+    });
+  }, []);
+
+  useEffect(() => {
     window.addEventListener(businessDataChangedEvent, reloadLocalData);
     window.addEventListener("storage", reloadLocalData);
     return () => {
       window.removeEventListener(businessDataChangedEvent, reloadLocalData);
       window.removeEventListener("storage", reloadLocalData);
     };
-  }, []);
+  }, [reloadLocalData]);
 
   useEffect(() => {
     if (!statementOpen || !printStatementOnOpen) return undefined;
@@ -717,11 +720,15 @@ function PartyDetails() {
   const partyTransactions = [
     ...partyInvoices.map((invoice) => {
       const settlement = calculateInvoiceSettlement(invoice, { kind: "sale", payments: partyActivity.payments, adjustments: partyActivity.creditNotes });
-      return { id: `sale:${invoice.id}`, source: "Sale", number: invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—", date: invoice.form?.invoiceDate || invoice.createdAt, total: settlement.total, received: settlement.paid, balance: settlement.outstanding, receivableBalance: settlement.outstanding, payableBalance: 0, status: settlement.status, raw: invoice };
+      const hasSeparatePayment = (partyActivity.payments || []).some((p) => String(p.linkedInvoiceId || p.invoiceId) === String(invoice.id));
+      const directPaid = hasSeparatePayment ? 0 : settlement.paid;
+      return { id: `sale:${invoice.id}`, source: "Sale", number: invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || "—", date: invoice.form?.invoiceDate || invoice.createdAt, total: settlement.total, received: directPaid, balance: settlement.outstanding, receivableBalance: settlement.outstanding, payableBalance: 0, status: settlement.status, raw: invoice };
     }),
     ...partyPurchases.map((bill) => {
       const settlement = calculateInvoiceSettlement(bill, { kind: "purchase", payments: partyActivity.paymentsOut, adjustments: partyActivity.debitNotes });
-      return { id: `purchase:${bill.id}`, source: "Purchase", number: bill.form?.invoiceNumber || bill.invoiceNumber || bill.billNumber || bill.number || "—", date: bill.form?.invoiceDate || bill.form?.billDate || bill.date || bill.createdAt, total: settlement.total, received: settlement.paid, balance: settlement.outstanding, receivableBalance: 0, payableBalance: settlement.outstanding, status: settlement.status, raw: bill };
+      const hasSeparatePayment = (partyActivity.paymentsOut || []).some((p) => String(p.linkedInvoiceId || p.linkedBillId || p.billId || p.purchaseId) === String(bill.id));
+      const directPaid = hasSeparatePayment ? 0 : settlement.paid;
+      return { id: `purchase:${bill.id}`, source: "Purchase", number: bill.form?.invoiceNumber || bill.invoiceNumber || bill.billNumber || bill.number || "—", date: bill.form?.invoiceDate || bill.form?.billDate || bill.date || bill.createdAt, total: settlement.total, received: directPaid, balance: settlement.outstanding, receivableBalance: 0, payableBalance: settlement.outstanding, status: settlement.status, raw: bill };
     }),
     ...partyActivity.estimates.filter(belongsToSelectedParty).map((entry) => ({ id: `estimate:${entry.id}`, source: "Estimate/Quotation", number: entry.number || entry.refNo || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
     ...partyActivity.proformas.filter(belongsToSelectedParty).map((entry) => ({ id: `proforma:${entry.id}`, source: "Proforma Invoice", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
@@ -1153,7 +1160,12 @@ function PartyDetails() {
                     <td className="px-3 py-3.5 text-xs text-right font-semibold">{money(entry.total)}</td>
                     <td className="px-3 py-3.5 text-xs text-right font-semibold">{(entry.source === "Payment-In" || entry.source === "Payment-Out") && !entry.balance ? "—" : money(entry.balance)}</td>
                     <td className={`px-3 py-3.5 text-xs font-semibold ${entry.status === "Paid" || entry.status === "Used" ? "text-emerald-500" : entry.status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{entry.status}</td>
-                    <td className="px-3 py-3.5 text-xs">—</td>
+                    <td className="px-2 py-2 text-center">
+                      <TransactionActionMenu
+                        transaction={entry}
+                        onRefresh={reloadLocalData}
+                      />
+                    </td>
                   </tr>
                 ))}
                 {!visiblePartyTransactions.length && (openingBalance <= 0 || !`${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} opening balance ${selectedParty?.asOfDate || ""}`.toLowerCase().includes(transactionSearch.toLowerCase())) && (
