@@ -39,7 +39,8 @@ export function listBatchExpiryStatus({ today = localDateOnly(), nearExpiryDays 
     const expiryMs = Date.parse(`${batch.expDate}T00:00:00Z`);
     const daysToExpiry = Math.floor((expiryMs - todayMs) / DAY_MS);
     const status = daysToExpiry < 0 ? "Expired" : daysToExpiry <= nearExpiryDays ? "Near expiry" : "Not expired";
-    return { itemId: item.id, itemName: item.itemName || item.name, batchId: batch.id || "", batchNo: batch.batchNo || "", quantity: Number(batch.openingQty ?? batch.quantity ?? 0) || 0, mfgDate: batch.mfgDate || "", expDate: batch.expDate, daysToExpiry, status };
+    const qty = Number(batch.openingQty ?? batch.quantity ?? 0) || 0;
+    return { itemId: item.id, itemName: item.itemName || item.name, batchId: batch.id || "", batchNo: batch.batchNo || "", quantity: qty, availableQty: qty, available: qty, mfgDate: batch.mfgDate || "", expDate: batch.expDate, daysToExpiry, status };
   }));
 }
 

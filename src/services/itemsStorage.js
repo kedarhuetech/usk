@@ -133,6 +133,9 @@ export function normalizeInventoryItem(itemForm = {}) {
       : serialNumbers.length
         ? String(serialNumbers.length)
         : manualOpeningQuantity;
+  const initialOpeningQuantity = hasValue(itemForm.initialOpeningQuantity)
+    ? String(itemForm.initialOpeningQuantity)
+    : manualOpeningQuantity;
   const discount = hasValue(itemForm.discount) ? itemForm.discount : itemForm.discountValue || "";
 
   return {
@@ -168,6 +171,7 @@ export function normalizeInventoryItem(itemForm = {}) {
     wholesaleTaxMode: itemForm.wholesaleTaxMode || wholesale?.taxMode || "",
     minimumWholesaleQuantity: itemForm.minimumWholesaleQuantity || wholesale?.minimumQty || "",
     taxRate: itemForm.taxRate || "None",
+    initialOpeningQuantity,
     openingQuantity,
     stock: openingQuantity || "0",
     atPrice: itemForm.atPrice || "",
@@ -255,8 +259,9 @@ export function applyBatchStockMovement(item, row, direction, { allowCreate = fa
     if (direction === "reduce" && current < quantity) throw new Error(`Batch ${batchNo} has only ${current} in stock.`);
     batches[index] = { ...batch, openingQty: String(direction === "add" ? current + quantity : current - quantity) };
   }
-  const total = String(batches.reduce((sum, batch) => sum + Math.max(toNumber(batch.openingQty), 0), 0));
-  return { ...item, batches, openingQuantity: total, stock: total, updatedAt: new Date().toISOString() };
+  const currentAggregate = Math.max(toNumber(hasValue(item.openingQuantity) ? item.openingQuantity : item.stock), 0);
+  const nextAggregate = String(direction === "add" ? currentAggregate + quantity : Math.max(currentAggregate - quantity, 0));
+  return { ...item, batches, openingQuantity: nextAggregate, stock: nextAggregate, updatedAt: new Date().toISOString() };
 }
 
 export function applyBatchRowsToInventory(rows = [], direction, { allowCreate = false } = {}) {
@@ -266,7 +271,7 @@ export function applyBatchRowsToInventory(rows = [], direction, { allowCreate = 
     if (!matchedRows.length || itemType(item) === "service") return item;
     const batchTotal = (item.batches || []).reduce((sum, batch) => sum + Math.max(toNumber(batch.openingQty ?? batch.quantity), 0), 0);
     const aggregate = Math.max(toNumber(hasValue(item.openingQuantity) ? item.openingQuantity : item.stock), 0);
-    if (Math.abs(batchTotal - aggregate) > 1e-9) throw new Error(`Batch stock for ${item.itemName} does not reconcile with aggregate stock (${batchTotal} batch / ${aggregate} total). Review historical stock before moving this item.`);
+    if (direction === "reduce" && Math.abs(batchTotal - aggregate) > 1e-9) throw new Error(`Batch stock for ${item.itemName} does not reconcile with aggregate stock (${batchTotal} batch / ${aggregate} total). Review historical stock before moving this item.`);
     return matchedRows.reduce((updated, row) => applyBatchStockMovement(updated, row, direction, { allowCreate }), item);
   });
   writeItems(nextItems);
@@ -374,6 +379,52 @@ export function applySaleInvoiceStockUpdate(invoice = {}) {
 
     const currentQuantity = Math.max(toNumber(hasValue(item.openingQuantity) ? item.openingQuantity : item.stock), 0);
     const nextQuantity = String(Math.max(currentQuantity - soldQuantity, 0));
+    changed = true;
+
+    return {
+      ...item,
+      openingQuantity: nextQuantity,
+      stock: nextQuantity,
+      updatedAt: timestamp,
+    };
+  });
+
+  if (changed) writeItems(nextItems);
+  return nextItems;
+}
+
+// Applies purchase bill stock update for non-batch rows.
+export function applyPurchaseBillStockUpdate(bill = {}, direction = "add") {
+  const purchaseRows = (bill.rows || []).filter((row) => row.item && saleRowQuantity(row) > 0);
+  if (!purchaseRows.length) return [];
+
+  const timestamp = new Date().toISOString();
+  const normalizedItems = readItems().map((item) => normalizeInventoryItem(item));
+  const quantityByItemId = new Map();
+  const quantityByItemName = new Map();
+
+  purchaseRows.forEach((row) => {
+    if (String(row.batchNo || "").trim()) return;
+    const quantity = saleRowQuantity(row);
+    const itemId = saleRowItemId(row);
+    if (itemId) {
+      quantityByItemId.set(itemId, (quantityByItemId.get(itemId) || 0) + quantity);
+      return;
+    }
+
+    const name = normalizedName(row.item);
+    if (name) quantityByItemName.set(name, (quantityByItemName.get(name) || 0) + quantity);
+  });
+
+  let changed = false;
+  const nextItems = normalizedItems.map((item) => {
+    if (itemType(item) === "service") return item;
+
+    const qty = (quantityByItemId.get(item.id) || 0) + (quantityByItemId.has(item.id) ? 0 : quantityByItemName.get(normalizedName(item.itemName)) || 0);
+    if (!qty) return item;
+
+    const currentQuantity = Math.max(toNumber(hasValue(item.openingQuantity) ? item.openingQuantity : item.stock), 0);
+    const nextQuantity = String(direction === "add" ? currentQuantity + qty : Math.max(currentQuantity - qty, 0));
     changed = true;
 
     return {
