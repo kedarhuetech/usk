@@ -84,7 +84,7 @@ export default function PurchaseOrders() {
       navigate("/purchase-expense/purchase-bills/new", {
         state: {
           from: "/purchase-expense/purchase-order",
-          localOnlyPurchase: true,
+          
           purchaseOrderConversion: order,
         },
       });

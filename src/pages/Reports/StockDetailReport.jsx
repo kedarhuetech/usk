@@ -160,9 +160,11 @@ export default function StockDetailReport() {
         };
 
         const initialStock = Number(
-          item.openingQuantity !== undefined && item.openingQuantity !== ""
-            ? item.openingQuantity
-            : item.stock || 0
+          item.initialOpeningQuantity !== undefined && item.initialOpeningQuantity !== ""
+            ? item.initialOpeningQuantity
+            : (item.openingQuantity !== undefined && item.openingQuantity !== ""
+              ? item.openingQuantity
+              : item.stock || 0)
         );
 
         // Beginning Quantity = initial stock + beforeIn - beforeOut

@@ -103,9 +103,11 @@ export default function ItemDetailReport() {
       (i) => (i.itemName || i.name || "").trim().toLowerCase() === target
     );
     const openingQty = Number(
-      invItem?.openingQuantity !== undefined && invItem?.openingQuantity !== ""
-        ? invItem.openingQuantity
-        : invItem?.stock || 0
+      invItem?.initialOpeningQuantity !== undefined && invItem?.initialOpeningQuantity !== ""
+        ? invItem.initialOpeningQuantity
+        : (invItem?.openingQuantity !== undefined && invItem?.openingQuantity !== ""
+          ? invItem.openingQuantity
+          : invItem?.stock || 0)
     );
 
     // Collect daily activity: map of YYYY-MM-DD -> { saleQty, purchaseQty, adjQty }

@@ -1829,6 +1829,8 @@ function AddSale({ mode = "sale", localOnly = false }) {
       } else {
         navigate("/sales/sale-invoices/preview", { state: { invoice: savedInvoice } });
       }
+    } else {
+      navigate(returnPath);
     }
   };
 

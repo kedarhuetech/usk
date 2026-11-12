@@ -135,11 +135,10 @@ function ActionButton({ children, primary = false, onClick, disabled = false }) 
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`min-h-[48px] rounded-md border px-3 py-2 text-sm font-semibold transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
-        primary
-          ? "border-emerald-500 bg-emerald-200 text-slate-800"
-          : "border-blue-300 bg-blue-100 text-slate-700"
-      }`}
+      className={`min-h-[48px] rounded-md border px-3 py-2 text-sm font-semibold transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${primary
+        ? "border-emerald-500 bg-emerald-200 text-slate-800"
+        : "border-blue-300 bg-blue-100 text-slate-700"
+        }`}
     >
       {children}
     </button>
@@ -461,32 +460,32 @@ export default function PointOfSale() {
   const loadProducts = useCallback(() => {
     const inventory = getInventoryItems();
     return inventory.map((item) => ({
-        id: item.id,
-        isActive: item.isActive !== false,
-        code: item.itemCode || item.code || `ITM-${String(item.id || "").slice(-4)}`,
-        name: item.itemName || item.name || "Item",
-        price: Number(item.salePrice ?? item.price ?? 0),
-        taxRate: appSettings.enableGst === false ? 0 : Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
-        unit: item.unit || item.baseUnit || "Pcs",
-        stock: Number(item.stock ?? item.openingQuantity ?? 0),
-        discount: Number(item.discount || 0),
-        discountType: item.discountType || "Percentage",
-        category: item.category || "",
-        barcode: item.barcode || item.barCode || item.itemBarcode || "",
-        type: item.type || item.itemType || "product",
-      }));
+      id: item.id,
+      isActive: item.isActive !== false,
+      code: item.itemCode || item.code || `ITM-${String(item.id || "").slice(-4)}`,
+      name: item.itemName || item.name || "Item",
+      price: Number(item.salePrice ?? item.price ?? 0),
+      taxRate: appSettings.enableGst === false ? 0 : Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
+      unit: item.unit || item.baseUnit || "Pcs",
+      stock: Number(item.stock ?? item.openingQuantity ?? 0),
+      discount: Number(item.discount || 0),
+      discountType: item.discountType || "Percentage",
+      category: item.category || "",
+      barcode: item.barcode || item.barCode || item.itemBarcode || "",
+      type: item.type || item.itemType || "product",
+    }));
   }, [appSettings.enableGst]);
 
   // Load customers from localStorage (getParties)
   const loadCustomers = useCallback(() => {
     const parties = getParties();
     return parties.map((p) => ({
-        id: p.id,
-        name: p.partyName || p.name || "Customer",
-        phone: p.phoneNumber || p.phone || "",
-        address: p.billingAddress || p.address || "",
-        loyaltyPoints: Number(p.loyaltyPoints || p.points || 0),
-      }));
+      id: p.id,
+      name: p.partyName || p.name || "Customer",
+      phone: p.phoneNumber || p.phone || "",
+      address: p.billingAddress || p.address || "",
+      loyaltyPoints: Number(p.loyaltyPoints || p.points || 0),
+    }));
   }, []);
 
   const [products, setProducts] = useState(loadProducts);
@@ -944,7 +943,7 @@ export default function PointOfSale() {
             balance: bill.due ?? 0,
             settings: currentSettings,
           });
-          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => {});
+          sendMetaWhatsAppMessage({ phone, message: msg }).catch(() => { });
         }
       } catch {
         // Background dispatch does not interrupt POS checkout
@@ -1073,13 +1072,13 @@ export default function PointOfSale() {
 
         <div className="hidden items-center gap-2 text-xs md:flex">
           <span>Customer Support:</span>
-          <a className="text-blue-600 hover:underline" href="tel:+919333911911">
-            +91-9333911911
+          <a className="text-blue-600 hover:underline" href="tel:+9876544567">
+            +91-8764567987
           </a>
           <span className="text-slate-300">|</span>
           <button
             type="button"
-            onClick={() => showToast("Online Support is available 24/7 at support@vyapar.com")}
+            onClick={() => showToast("Online Support is available 24/7 at supportudyog.com")}
             className="text-blue-600 hover:underline"
           >
             Get Instant Online Support
@@ -1139,99 +1138,33 @@ export default function PointOfSale() {
       {/* Main Split Grid */}
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-auto p-1.5 lg:grid-cols-[minmax(0,1.82fr)_minmax(340px,1fr)]">
         {activeBill ? <>
-        {/* Left Section: Search, Table, Shortcuts Bar */}
-        <section className="flex min-h-[500px] flex-col gap-1.5">
-          {/* Item Search Bar */}
-          <div className="relative shrink-0">
-            <label className="flex h-[58px] items-center gap-3 rounded-md border-2 border-blue-500 bg-white px-3 shadow-sm">
-              <input
-                ref={searchRef}
-                aria-label="Search items"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setProductOpen(true);
-                }}
-                onFocus={() => setProductOpen(true)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    const query = search.trim().toLowerCase();
-                    const exactMatch = products.find((product) => {
-                      if (product.isActive === false) return false;
-                      const fields = [product.code];
-                      if (enableBarcodeScanning) fields.push(product.barcode);
-                      return fields.some((value) => String(value || "").trim().toLowerCase() === query);
-                    });
-                    if (exactMatch || filteredProducts[0]) {
-                      addProduct(exactMatch || filteredProducts[0]);
-                    } else if (search.trim()) {
-                      setModal({
-                        type: "addProduct",
-                        name: search.trim(),
-                        price: "",
-                        unit: "Pcs",
-                        taxRate: "0",
-                        code: "",
-                        stock: "",
+          {/* Left Section: Search, Table, Shortcuts Bar */}
+          <section className="flex min-h-[500px] flex-col gap-1.5">
+            {/* Item Search Bar */}
+            <div className="relative shrink-0">
+              <label className="flex h-[58px] items-center gap-3 rounded-md border-2 border-blue-500 bg-white px-3 shadow-sm">
+                <input
+                  ref={searchRef}
+                  aria-label="Search items"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setProductOpen(true);
+                  }}
+                  onFocus={() => setProductOpen(true)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      const query = search.trim().toLowerCase();
+                      const exactMatch = products.find((product) => {
+                        if (product.isActive === false) return false;
+                        const fields = [product.code];
+                        if (enableBarcodeScanning) fields.push(product.barcode);
+                        return fields.some((value) => String(value || "").trim().toLowerCase() === query);
                       });
-                      setProductOpen(false);
-                    }
-                  }
-                  if (event.key === "ArrowDown" && filteredProducts[0]) {
-                    event.preventDefault();
-                    addProduct(filteredProducts[0]);
-                  }
-                }}
-                placeholder={enableBarcodeScanning ? "Search item name or code, or scan barcode..." : "Search item name or code..."}
-                className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:font-medium placeholder:text-slate-400 sm:text-lg"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                  className="rounded p-1 text-slate-400 hover:text-slate-600"
-                >
-                  <FiX />
-                </button>
-              )}
-              <FiSearch size={24} className="shrink-0 text-blue-500" />
-            </label>
-
-            {/* Product Dropdown Results */}
-            {productOpen && (
-              <div className="absolute left-0 right-0 top-full z-20 max-h-80 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
-                <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 border-b">
-                  Stored Items in LocalStorage ({products.length} total)
-                </div>
-                {filteredProducts.map((product) => (
-                  <button
-                    type="button"
-                    key={product.id}
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => addProduct(product)}
-                    className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-2.5 text-left transition hover:bg-blue-50"
-                  >
-                    <div>
-                      <span className="block font-semibold text-slate-800">{product.name}</span>
-                      <span className="text-xs text-slate-500">
-                        {product.code} · {product.unit} · GST {product.taxRate}%
-                        {product.type !== "service" ? ` · Stock: ${product.stock}` : ""}
-                        {enableItemCategory && product.category ? ` · ${product.category}` : ""}
-                        {enableBarcodeScanning && product.barcode ? ` · Barcode: ${product.barcode}` : ""}
-                      </span>
-                    </div>
-                    <span className="font-bold text-slate-900">₹{money(product.price)}</span>
-                  </button>
-                ))}
-
-                {filteredProducts.length === 0 && (
-                  <div className="p-4 text-sm text-slate-500">
-                    No matching item found in local storage.
-                    <button
-                      type="button"
-                      onClick={() => {
+                      if (exactMatch || filteredProducts[0]) {
+                        addProduct(exactMatch || filteredProducts[0]);
+                      } else if (search.trim()) {
                         setModal({
                           type: "addProduct",
                           name: search.trim(),
@@ -1242,235 +1175,350 @@ export default function PointOfSale() {
                           stock: "",
                         });
                         setProductOpen(false);
-                      }}
-                      className="ml-2 font-bold text-blue-600 hover:underline"
-                    >
-                      + Add this item to LocalStorage
-                    </button>
-                  </div>
+                      }
+                    }
+                    if (event.key === "ArrowDown" && filteredProducts[0]) {
+                      event.preventDefault();
+                      addProduct(filteredProducts[0]);
+                    }
+                  }}
+                  placeholder={enableBarcodeScanning ? "Search item name or code, or scan barcode..." : "Search item name or code..."}
+                  className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:font-medium placeholder:text-slate-400 sm:text-lg"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="rounded p-1 text-slate-400 hover:text-slate-600"
+                  >
+                    <FiX />
+                  </button>
                 )}
-              </div>
-            )}
-          </div>
+                <FiSearch size={24} className="shrink-0 text-blue-500" />
+              </label>
 
-          {/* Items Table */}
-          <div
-            className="min-h-[220px] flex-1 overflow-auto rounded-md border border-slate-300 bg-white shadow-sm"
-            onClick={() => setProductOpen(false)}
-          >
-            <table className="min-w-[900px] w-full border-collapse text-sm">
-              <thead className="sticky top-0 z-10 bg-[#f3f4f6] text-left font-semibold text-slate-600">
-                <tr className="h-[55px]">
-                  <th className="border border-slate-200 px-3">#</th>
-                  <th className="border border-slate-200 px-3">ITEM CODE</th>
-                  <th className="border border-slate-200 px-3">ITEM NAME</th>
-                  <th className="border border-slate-200 px-2 text-center">QTY</th>
-                  <th className="border border-slate-200 px-2">UNIT</th>
-                  <th className="border border-slate-200 px-2">PRICE/UNIT (₹)</th>
-                  <th className="border border-slate-200 px-2">DISCOUNT (₹)</th>
-                  <th className="border border-slate-200 px-2">TAX (₹)</th>
-                  <th className="border border-slate-200 px-2">TOTAL (₹)</th>
-                  <th className="border border-slate-200 px-2 text-center">ACTION</th>
-                </tr>
-              </thead>
-              <tbody>
-                {calculations.lines.map((item, index) => {
-                  const isSelected = selectedItem?.lineId === item.lineId;
-                  return (
-                    <tr
-                      key={item.lineId}
-                      onClick={() => setSelectedId(item.lineId)}
-                      className={`h-[52px] cursor-pointer transition ${
-                        isSelected
+              {/* Product Dropdown Results */}
+              {productOpen && (
+                <div className="absolute left-0 right-0 top-full z-20 max-h-80 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                  <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 border-b">
+                    Stored Items in LocalStorage ({products.length} total)
+                  </div>
+                  {filteredProducts.map((product) => (
+                    <button
+                      type="button"
+                      key={product.id}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => addProduct(product)}
+                      className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-2.5 text-left transition hover:bg-blue-50"
+                    >
+                      <div>
+                        <span className="block font-semibold text-slate-800">{product.name}</span>
+                        <span className="text-xs text-slate-500">
+                          {product.code} · {product.unit} · GST {product.taxRate}%
+                          {product.type !== "service" ? ` · Stock: ${product.stock}` : ""}
+                          {enableItemCategory && product.category ? ` · ${product.category}` : ""}
+                          {enableBarcodeScanning && product.barcode ? ` · Barcode: ${product.barcode}` : ""}
+                        </span>
+                      </div>
+                      <span className="font-bold text-slate-900">₹{money(product.price)}</span>
+                    </button>
+                  ))}
+
+                  {filteredProducts.length === 0 && (
+                    <div className="p-4 text-sm text-slate-500">
+                      No matching item found in local storage.
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModal({
+                            type: "addProduct",
+                            name: search.trim(),
+                            price: "",
+                            unit: "Pcs",
+                            taxRate: "0",
+                            code: "",
+                            stock: "",
+                          });
+                          setProductOpen(false);
+                        }}
+                        className="ml-2 font-bold text-blue-600 hover:underline"
+                      >
+                        + Add this item to LocalStorage
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Items Table */}
+            <div
+              className="min-h-[220px] flex-1 overflow-auto rounded-md border border-slate-300 bg-white shadow-sm"
+              onClick={() => setProductOpen(false)}
+            >
+              <table className="min-w-[900px] w-full border-collapse text-sm">
+                <thead className="sticky top-0 z-10 bg-[#f3f4f6] text-left font-semibold text-slate-600">
+                  <tr className="h-[55px]">
+                    <th className="border border-slate-200 px-3">#</th>
+                    <th className="border border-slate-200 px-3">ITEM CODE</th>
+                    <th className="border border-slate-200 px-3">ITEM NAME</th>
+                    <th className="border border-slate-200 px-2 text-center">QTY</th>
+                    <th className="border border-slate-200 px-2">UNIT</th>
+                    <th className="border border-slate-200 px-2">PRICE/UNIT (₹)</th>
+                    <th className="border border-slate-200 px-2">DISCOUNT (₹)</th>
+                    <th className="border border-slate-200 px-2">TAX (₹)</th>
+                    <th className="border border-slate-200 px-2">TOTAL (₹)</th>
+                    <th className="border border-slate-200 px-2 text-center">ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calculations.lines.map((item, index) => {
+                    const isSelected = selectedItem?.lineId === item.lineId;
+                    return (
+                      <tr
+                        key={item.lineId}
+                        onClick={() => setSelectedId(item.lineId)}
+                        className={`h-[52px] cursor-pointer transition ${isSelected
                           ? "bg-[#e3f1ff] ring-1 ring-blue-300"
                           : "hover:bg-slate-50"
-                      }`}
-                    >
-                      <td className="border border-slate-200 px-3 font-medium">{index + 1}</td>
-                      <td className="border border-slate-200 px-3 text-slate-600">{item.code}</td>
-                      <td className="border border-slate-200 px-3">
-                        <div className="font-semibold text-slate-800">{item.name}</div>
-                        <div className="text-xs text-slate-500">GST {item.taxRate}%</div>
-                      </td>
-                      <td className="border border-slate-200 p-1 text-center">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedId(item.lineId);
-                            setModal({
-                              type: "quantity",
-                              item,
-                              qty: String(item.qty),
-                            });
-                          }}
-                          className="rounded border border-slate-200 bg-white px-2.5 py-1 text-sm font-semibold hover:border-blue-500 hover:text-blue-600 transition"
-                          title="Click to change quantity"
-                        >
-                          {item.qty}
-                        </button>
-                      </td>
-                      <td className="border border-slate-200 px-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedId(item.lineId);
-                            setModal({
-                              type: "unit",
-                              item,
-                              unit: item.unit,
-                            });
-                          }}
-                          className="hover:text-blue-600 underline font-medium"
-                          title="Click to change unit"
-                        >
-                          {item.unit}
-                        </button>
-                      </td>
-                      <td className="border border-slate-200 px-2 font-medium">
-                        ₹{money(item.price)}
-                      </td>
-                      <td className="border border-slate-200 px-2 text-slate-600">
-                        {item.discount > 0 ? (
-                          <span className="text-emerald-600 font-semibold">
-                            −₹{money(item.discount)}
-                          </span>
-                        ) : (
-                          "₹0.00"
-                        )}
-                      </td>
-                      <td className="border border-slate-200 px-2 text-slate-600">
-                        ₹{money(item.itemTax)}
-                      </td>
-                      <td className="border border-slate-200 px-2 font-bold text-slate-900">
-                        ₹{money(item.total)}
-                      </td>
-                      <td className="border border-slate-200 px-2 text-center">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setSelectedId(item.lineId);
-                            setModal({
-                              type: "remove",
-                              item,
-                            });
-                          }}
-                          title="Remove item"
-                          className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
-                        >
-                          <FiTrash2 size={16} />
-                        </button>
+                          }`}
+                      >
+                        <td className="border border-slate-200 px-3 font-medium">{index + 1}</td>
+                        <td className="border border-slate-200 px-3 text-slate-600">{item.code}</td>
+                        <td className="border border-slate-200 px-3">
+                          <div className="font-semibold text-slate-800">{item.name}</div>
+                          <div className="text-xs text-slate-500">GST {item.taxRate}%</div>
+                        </td>
+                        <td className="border border-slate-200 p-1 text-center">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(item.lineId);
+                              setModal({
+                                type: "quantity",
+                                item,
+                                qty: String(item.qty),
+                              });
+                            }}
+                            className="rounded border border-slate-200 bg-white px-2.5 py-1 text-sm font-semibold hover:border-blue-500 hover:text-blue-600 transition"
+                            title="Click to change quantity"
+                          >
+                            {item.qty}
+                          </button>
+                        </td>
+                        <td className="border border-slate-200 px-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedId(item.lineId);
+                              setModal({
+                                type: "unit",
+                                item,
+                                unit: item.unit,
+                              });
+                            }}
+                            className="hover:text-blue-600 underline font-medium"
+                            title="Click to change unit"
+                          >
+                            {item.unit}
+                          </button>
+                        </td>
+                        <td className="border border-slate-200 px-2 font-medium">
+                          ₹{money(item.price)}
+                        </td>
+                        <td className="border border-slate-200 px-2 text-slate-600">
+                          {item.discount > 0 ? (
+                            <span className="text-emerald-600 font-semibold">
+                              −₹{money(item.discount)}
+                            </span>
+                          ) : (
+                            "₹0.00"
+                          )}
+                        </td>
+                        <td className="border border-slate-200 px-2 text-slate-600">
+                          ₹{money(item.itemTax)}
+                        </td>
+                        <td className="border border-slate-200 px-2 font-bold text-slate-900">
+                          ₹{money(item.total)}
+                        </td>
+                        <td className="border border-slate-200 px-2 text-center">
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedId(item.lineId);
+                              setModal({
+                                type: "remove",
+                                item,
+                              });
+                            }}
+                            title="Remove item"
+                            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
+                          >
+                            <FiTrash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {calculations.lines.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={10}
+                        className="h-48 border border-slate-200 text-center text-slate-400"
+                      >
+                        <FiFileText size={32} className="mx-auto mb-2 opacity-40" />
+                        No items added. Search or scan a product above to add.
                       </td>
                     </tr>
-                  );
-                })}
-
-                {calculations.lines.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={10}
-                      className="h-48 border border-slate-200 text-center text-slate-400"
-                    >
-                      <FiFileText size={32} className="mx-auto mb-2 opacity-40" />
-                      No items added. Search or scan a product above to add.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Bottom Action Buttons Bar */}
-          <div className="grid shrink-0 grid-cols-2 gap-2 rounded-md border border-slate-200 bg-white p-2 sm:grid-cols-4">
-            {shortcuts.map(([label, action]) => (
-              <ActionButton key={label} onClick={action}>
-                {label}
-              </ActionButton>
-            ))}
-          </div>
-
-          {/* Backup & Status Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-            <span className="flex items-center gap-1.5 text-slate-600">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              All products loaded directly from LocalStorage ({products.length} products).
-            </span>
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setModal({
-                    type: "addProduct",
-                    name: "",
-                    price: "",
-                    unit: "Pcs",
-                    taxRate: "0",
-                    code: "",
-                    stock: "",
-                  });
-                }}
-                className="font-semibold text-blue-600 hover:underline"
-              >
-                + Add New Product
-              </button>
-              <button
-                type="button"
-                className="font-semibold text-slate-600 hover:text-blue-600 hover:underline"
-                onClick={() => {
-                  const data = JSON.stringify({ products, customers, bills, draft }, null, 2);
-                  const blob = new Blob([data], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const anchor = document.createElement("a");
-                  anchor.href = url;
-                  anchor.download = `pos-backup-${new Date().toISOString().slice(0, 10)}.json`;
-                  anchor.click();
-                  URL.revokeObjectURL(url);
-                  showToast("POS backup exported successfully!");
-                }}
-              >
-                Export backup
-              </button>
+                  )}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </section>
 
-        {/* Right Section: Bill Details, Totals & Payment Controls */}
-        <aside className="flex min-h-[500px] flex-col gap-1.5">
-          {/* Customer & Date Selector */}
-          <div className="shrink-0 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-            <label className="flex h-[52px] items-center justify-between rounded-xl border border-slate-300 px-4">
-              <span className="text-sm font-semibold text-slate-700">Date</span>
-              <input
-                type="date"
-                aria-label="Bill date"
-                value={draft.date}
-                onChange={(event) => updateDraft({ date: event.target.value })}
-                className="max-w-[165px] bg-transparent text-sm font-medium text-slate-800 outline-none"
-              />
-              <FiCalendar className="text-blue-500" size={19} />
-            </label>
+            {/* Bottom Action Buttons Bar */}
+            <div className="grid shrink-0 grid-cols-2 gap-2 rounded-md border border-slate-200 bg-white p-2 sm:grid-cols-4">
+              {shortcuts.map(([label, action]) => (
+                <ActionButton key={label} onClick={action}>
+                  {label}
+                </ActionButton>
+              ))}
+            </div>
 
-            <div className="relative mt-3">
-              <div className="flex h-[56px] items-center rounded-xl border border-slate-300 px-3">
-                <FiUser className="mr-2 text-slate-400" />
+            {/* Backup & Status Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
+              <span className="flex items-center gap-1.5 text-slate-600">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                All products loaded directly from LocalStorage ({products.length} products).
+              </span>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModal({
+                      type: "addProduct",
+                      name: "",
+                      price: "",
+                      unit: "Pcs",
+                      taxRate: "0",
+                      code: "",
+                      stock: "",
+                    });
+                  }}
+                  className="font-semibold text-blue-600 hover:underline"
+                >
+                  + Add New Product
+                </button>
+                <button
+                  type="button"
+                  className="font-semibold text-slate-600 hover:text-blue-600 hover:underline"
+                  onClick={() => {
+                    const data = JSON.stringify({ products, customers, bills, draft }, null, 2);
+                    const blob = new Blob([data], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const anchor = document.createElement("a");
+                    anchor.href = url;
+                    anchor.download = `pos-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                    anchor.click();
+                    URL.revokeObjectURL(url);
+                    showToast("POS backup exported successfully!");
+                  }}
+                >
+                  Export backup
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Right Section: Bill Details, Totals & Payment Controls */}
+          <aside className="flex min-h-[500px] flex-col gap-1.5">
+            {/* Customer & Date Selector */}
+            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+              <label className="flex h-[52px] items-center justify-between rounded-xl border border-slate-300 px-4">
+                <span className="text-sm font-semibold text-slate-700">Date</span>
                 <input
-                  value={customerOpen ? customerSearch : draft.customer}
-                  onChange={(event) => {
-                    setCustomerSearch(event.target.value);
-                    setCustomerOpen(true);
-                  }}
-                  onFocus={() => {
-                    setCustomerSearch(draft.customer);
-                    setCustomerOpen(true);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && customerSearch.trim()) {
-                      event.preventDefault();
-                      const existing = filteredCustomers[0];
-                      if (existing) selectCustomer(existing);
-                      else {
+                  type="date"
+                  aria-label="Bill date"
+                  value={draft.date}
+                  onChange={(event) => updateDraft({ date: event.target.value })}
+                  className="max-w-[165px] bg-transparent text-sm font-medium text-slate-800 outline-none"
+                />
+                <FiCalendar className="text-blue-500" size={19} />
+              </label>
+
+              <div className="relative mt-3">
+                <div className="flex h-[56px] items-center rounded-xl border border-slate-300 px-3">
+                  <FiUser className="mr-2 text-slate-400" />
+                  <input
+                    value={customerOpen ? customerSearch : draft.customer}
+                    onChange={(event) => {
+                      setCustomerSearch(event.target.value);
+                      setCustomerOpen(true);
+                    }}
+                    onFocus={() => {
+                      setCustomerSearch(draft.customer);
+                      setCustomerOpen(true);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && customerSearch.trim()) {
+                        event.preventDefault();
+                        const existing = filteredCustomers[0];
+                        if (existing) selectCustomer(existing);
+                        else {
+                          setModal({
+                            type: "addCustomer",
+                            name: customerSearch.trim(),
+                            phone: "",
+                            address: "",
+                          });
+                          setCustomerOpen(false);
+                        }
+                      }
+                    }}
+                    placeholder="Search customer name or phone"
+                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCustomerOpen((open) => !open)}
+                    aria-label="Show customers"
+                    className="p-1"
+                  >
+                    <FiChevronDown className="text-blue-500" />
+                  </button>
+                </div>
+
+                {/* Customer Dropdown */}
+                {customerOpen && (
+                  <div className="absolute left-0 right-0 top-full z-20 max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                    <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 border-b">
+                      Customers in LocalStorage ({customers.length})
+                    </div>
+                    {filteredCustomers.map((customer) => (
+                      <button
+                        type="button"
+                        key={customer.id}
+                        onClick={() => selectCustomer(customer)}
+                        className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-blue-50 transition"
+                      >
+                        <span className="flex items-center gap-1.5 font-semibold text-slate-800">
+                          <span>{customer.name}</span>
+                          {(customer.status === "Inactive" || customer.isInactive) && (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
+                              Inactive
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-xs text-slate-500">{customer.phone || "No phone number"}</span>
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
                         setModal({
                           type: "addCustomer",
                           name: customerSearch.trim(),
@@ -1478,226 +1526,176 @@ export default function PointOfSale() {
                           address: "",
                         });
                         setCustomerOpen(false);
-                      }
-                    }
-                  }}
-                  placeholder="Search customer name or phone"
-                  className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                />
-                <button
-                  type="button"
-                  onClick={() => setCustomerOpen((open) => !open)}
-                  aria-label="Show customers"
-                  className="p-1"
-                >
-                  <FiChevronDown className="text-blue-500" />
-                </button>
-              </div>
-
-              {/* Customer Dropdown */}
-              {customerOpen && (
-                <div className="absolute left-0 right-0 top-full z-20 max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
-                  <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 border-b">
-                    Customers in LocalStorage ({customers.length})
-                  </div>
-                  {filteredCustomers.map((customer) => (
+                      }}
+                      className="w-full px-3 py-2.5 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 border-t"
+                    >
+                      <FiPlus className="mr-2 inline" /> + Add new customer
+                    </button>
                     <button
                       type="button"
-                      key={customer.id}
-                      onClick={() => selectCustomer(customer)}
-                      className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-blue-50 transition"
+                      onClick={() => {
+                        updateDraft({ customer: "", customerPhone: "" });
+                        setCustomerOpen(false);
+                        showToast("Set as Walk-in Customer");
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs font-medium text-slate-500 hover:bg-slate-50"
                     >
-                      <span className="flex items-center gap-1.5 font-semibold text-slate-800">
-                        <span>{customer.name}</span>
-                        {(customer.status === "Inactive" || customer.isInactive) && (
-                          <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
-                            Inactive
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-xs text-slate-500">{customer.phone || "No phone number"}</span>
+                      Walk-in customer (default)
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setModal({
-                        type: "addCustomer",
-                        name: customerSearch.trim(),
-                        phone: "",
-                        address: "",
-                      });
-                      setCustomerOpen(false);
-                    }}
-                    className="w-full px-3 py-2.5 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 border-t"
-                  >
-                    <FiPlus className="mr-2 inline" /> + Add new customer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateDraft({ customer: "", customerPhone: "" });
-                      setCustomerOpen(false);
-                      showToast("Set as Walk-in Customer");
-                    }}
-                    className="w-full px-3 py-2 text-left text-xs font-medium text-slate-500 hover:bg-slate-50"
-                  >
-                    Walk-in customer (default)
-                  </button>
-                </div>
-              )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Total & Breakup Card */}
-          <button
-            type="button"
-            onClick={handleBreakupClick}
-            className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:bg-slate-50 transition"
-          >
-            <span className="flex items-center gap-3">
-              <span className="grid h-12 w-12 place-items-center rounded-full bg-blue-50 text-blue-500">
-                <FiFileText size={24} />
-              </span>
-              <span>
-                <span className="block text-xl font-bold text-slate-900">
-                  Total ₹ {money(calculations.total)}
+            {/* Total & Breakup Card */}
+            <button
+              type="button"
+              onClick={handleBreakupClick}
+              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:bg-slate-50 transition"
+            >
+              <span className="flex items-center gap-3">
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-blue-50 text-blue-500">
+                  <FiFileText size={24} />
                 </span>
-                <span className="block text-xs font-medium text-slate-500">
-                  Items: {draft.items.length}, Quantity:{" "}
-                  {calculations.lines.reduce((sum, item) => sum + item.qty, 0)}
+                <span>
+                  <span className="block text-xl font-bold text-slate-900">
+                    Total ₹ {money(calculations.total)}
+                  </span>
+                  <span className="block text-xs font-medium text-slate-500">
+                    Items: {draft.items.length}, Quantity:{" "}
+                    {calculations.lines.reduce((sum, item) => sum + item.qty, 0)}
+                  </span>
                 </span>
               </span>
-            </span>
-            <span className="flex items-center gap-1 text-right text-xs font-bold leading-tight text-blue-600">
-              <span>
-                Full Breakup
-                <br />
-                [Ctrl+F]
+              <span className="flex items-center gap-1 text-right text-xs font-bold leading-tight text-blue-600">
+                <span>
+                  Full Breakup
+                  <br />
+                  [Ctrl+F]
+                </span>
+                <FiChevronRight size={20} />
               </span>
-              <FiChevronRight size={20} />
-            </span>
-          </button>
+            </button>
 
-          {/* Payment & Charges Box */}
-          <div className="flex min-h-[210px] flex-1 flex-col rounded-md border border-slate-200 bg-white shadow-sm">
-            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold text-slate-600">
-                Payment Mode
-                <select
-                  value={draft.paymentMode}
-                  onChange={(event) => updateDraft({ paymentMode: event.target.value })}
-                  className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-blue-500"
-                >
-                  <option>Cash</option>
-                  <option>UPI</option>
-                  <option>Card</option>
-                  <option>Bank Transfer</option>
-                  <option>Credit</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold text-slate-600">
-                Amount Received (₹)
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={draft.amountReceived}
-                  onChange={(event) => updateDraft({ amountReceived: event.target.value })}
-                  placeholder={money(calculations.total)}
-                  className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-blue-500"
-                />
-              </label>
-            </div>
-
-            <div className="flex-1 border-t border-slate-100 bg-[#fafafa] px-3 py-2.5">
-              <div className="flex justify-between py-1 text-sm text-slate-600">
-                <span>Subtotal</span>
-                <span>₹ {money(calculations.subtotal)}</span>
-              </div>
-              <div className="flex justify-between py-1 text-sm text-slate-600">
-                <span>Item discounts</span>
-                <span className="text-emerald-600 font-medium">− ₹ {money(calculations.itemDiscount)}</span>
-              </div>
-              <div className="flex justify-between py-1 text-sm text-slate-600">
-                <span>Tax (GST)</span>
-                <span>₹ {money(calculations.tax)}</span>
-              </div>
-              <div className="flex justify-between py-1 text-sm text-slate-600">
-                <span>Bill discount</span>
-                <span className="text-emerald-600 font-medium">− ₹ {money(calculations.billDiscount)}</span>
-              </div>
-              {calculations.loyaltyDiscount > 0 && (
-                <div className="flex justify-between py-1 text-sm text-purple-700 font-medium">
-                  <span>Loyalty Redeemed</span>
-                  <span>− ₹ {money(calculations.loyaltyDiscount)}</span>
-                </div>
-              )}
-              <div className="flex justify-between py-1 text-sm text-slate-600">
-                <span>Additional charges</span>
-                <span>₹ {money(calculations.charges)}</span>
-              </div>
-              <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-800">
-                <span>Change to Return</span>
-                <span className="text-emerald-700">₹ {money(calculations.change)}</span>
-              </div>
-              {calculations.due > 0 && (
-                <div className="flex justify-between pt-1 font-bold text-rose-600">
-                  <span>Balance Due</span>
-                  <span>₹ {money(calculations.due)}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Save / Print Buttons */}
-          <div className="grid shrink-0 gap-2 rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-            <ActionButton primary onClick={() => saveBill(true)}>
-              Save &amp; Print Bill [Ctrl+P]
-            </ActionButton>
-            <ActionButton onClick={handleOtherPaymentsClick}>
-              Other/Credit Payments [Ctrl+M]
-            </ActionButton>
-            <ActionButton onClick={() => saveBill(false)}>Save Bill</ActionButton>
-          </div>
-
-          {/* Saved Bills Accordion */}
-          <details className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-            <summary className="cursor-pointer font-semibold text-slate-800">
-              Saved bills ({bills.length})
-            </summary>
-            <div className="mt-2 max-h-48 space-y-2 overflow-auto">
-              {bills.map((bill) => (
-                <div
-                  key={bill.invoiceNo}
-                  className="flex items-center justify-between gap-2 border-b border-slate-100 py-2 text-sm"
-                >
-                  <button
-                    type="button"
-                    onClick={() => openSavedBill(bill)}
-                    className="min-w-0 text-left hover:text-blue-600"
+            {/* Payment & Charges Box */}
+            <div className="flex min-h-[210px] flex-1 flex-col rounded-md border border-slate-200 bg-white shadow-sm">
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-600">
+                  Payment Mode
+                  <select
+                    value={draft.paymentMode}
+                    onChange={(event) => updateDraft({ paymentMode: event.target.value })}
+                    className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-blue-500"
                   >
-                    <span className="block font-semibold">{bill.invoiceNo}</span>
-                    <span className="block text-xs text-slate-500">
-                      {bill.customer || "Walk-in"} · {bill.date}
-                    </span>
-                  </button>
-                  <span className="shrink-0 font-bold text-slate-800">₹{money(bill.total)}</span>
+                    <option>Cash</option>
+                    <option>UPI</option>
+                    <option>Card</option>
+                    <option>Bank Transfer</option>
+                    <option>Credit</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-slate-600">
+                  Amount Received (₹)
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={draft.amountReceived}
+                    onChange={(event) => updateDraft({ amountReceived: event.target.value })}
+                    placeholder={money(calculations.total)}
+                    className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-blue-500"
+                  />
+                </label>
+              </div>
+
+              <div className="flex-1 border-t border-slate-100 bg-[#fafafa] px-3 py-2.5">
+                <div className="flex justify-between py-1 text-sm text-slate-600">
+                  <span>Subtotal</span>
+                  <span>₹ {money(calculations.subtotal)}</span>
                 </div>
-              ))}
-              {bills.length === 0 && <p className="text-sm text-slate-400">No saved bills yet.</p>}
+                <div className="flex justify-between py-1 text-sm text-slate-600">
+                  <span>Item discounts</span>
+                  <span className="text-emerald-600 font-medium">− ₹ {money(calculations.itemDiscount)}</span>
+                </div>
+                <div className="flex justify-between py-1 text-sm text-slate-600">
+                  <span>Tax (GST)</span>
+                  <span>₹ {money(calculations.tax)}</span>
+                </div>
+                <div className="flex justify-between py-1 text-sm text-slate-600">
+                  <span>Bill discount</span>
+                  <span className="text-emerald-600 font-medium">− ₹ {money(calculations.billDiscount)}</span>
+                </div>
+                {calculations.loyaltyDiscount > 0 && (
+                  <div className="flex justify-between py-1 text-sm text-purple-700 font-medium">
+                    <span>Loyalty Redeemed</span>
+                    <span>− ₹ {money(calculations.loyaltyDiscount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between py-1 text-sm text-slate-600">
+                  <span>Additional charges</span>
+                  <span>₹ {money(calculations.charges)}</span>
+                </div>
+                <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-800">
+                  <span>Change to Return</span>
+                  <span className="text-emerald-700">₹ {money(calculations.change)}</span>
+                </div>
+                {calculations.due > 0 && (
+                  <div className="flex justify-between pt-1 font-bold text-rose-600">
+                    <span>Balance Due</span>
+                    <span>₹ {money(calculations.due)}</span>
+                  </div>
+                )}
+              </div>
             </div>
-            {bills.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setModal({ type: "clearBills" })}
-                className="mt-3 text-xs font-semibold text-rose-600 underline"
-              >
-                Clear saved bills
-              </button>
-            )}
-          </details>
-        </aside>
+
+            {/* Save / Print Buttons */}
+            <div className="grid shrink-0 gap-2 rounded-md border border-slate-200 bg-white p-2 shadow-sm">
+              <ActionButton primary onClick={() => saveBill(true)}>
+                Save &amp; Print Bill [Ctrl+P]
+              </ActionButton>
+              <ActionButton onClick={handleOtherPaymentsClick}>
+                Other/Credit Payments [Ctrl+M]
+              </ActionButton>
+              <ActionButton onClick={() => saveBill(false)}>Save Bill</ActionButton>
+            </div>
+
+            {/* Saved Bills Accordion */}
+            <details className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
+              <summary className="cursor-pointer font-semibold text-slate-800">
+                Saved bills ({bills.length})
+              </summary>
+              <div className="mt-2 max-h-48 space-y-2 overflow-auto">
+                {bills.map((bill) => (
+                  <div
+                    key={bill.invoiceNo}
+                    className="flex items-center justify-between gap-2 border-b border-slate-100 py-2 text-sm"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openSavedBill(bill)}
+                      className="min-w-0 text-left hover:text-blue-600"
+                    >
+                      <span className="block font-semibold">{bill.invoiceNo}</span>
+                      <span className="block text-xs text-slate-500">
+                        {bill.customer || "Walk-in"} · {bill.date}
+                      </span>
+                    </button>
+                    <span className="shrink-0 font-bold text-slate-800">₹{money(bill.total)}</span>
+                  </div>
+                ))}
+                {bills.length === 0 && <p className="text-sm text-slate-400">No saved bills yet.</p>}
+              </div>
+              {bills.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setModal({ type: "clearBills" })}
+                  className="mt-3 text-xs font-semibold text-rose-600 underline"
+                >
+                  Clear saved bills
+                </button>
+              )}
+            </details>
+          </aside>
         </> : <section className="col-span-full flex min-h-[420px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-sm">
           <h2 className="text-lg font-bold text-slate-800">No open bills</h2>
           <p className="mt-2 text-sm text-slate-500">Start a new bill to add products and take payment.</p>
@@ -1709,13 +1707,12 @@ export default function PointOfSale() {
       {/* Floating Animated Toast Notifications */}
       {toast && (
         <div
-          className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm font-semibold text-white shadow-xl animate-bounce-in transition ${
-            toast.type === "warning"
-              ? "bg-amber-600"
-              : toast.type === "info"
+          className={`fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-lg px-4 py-3 text-sm font-semibold text-white shadow-xl animate-bounce-in transition ${toast.type === "warning"
+            ? "bg-amber-600"
+            : toast.type === "info"
               ? "bg-blue-600"
               : "bg-emerald-600"
-          }`}
+            }`}
         >
           {toast.type === "warning" ? (
             <FiAlertCircle size={18} />
@@ -1900,22 +1897,20 @@ export default function PointOfSale() {
                   <button
                     type="button"
                     onClick={() => setModal((m) => ({ ...m, discountType: "flat" }))}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${
-                      modal.discountType === "flat"
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-slate-600"
-                    }`}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${modal.discountType === "flat"
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-slate-600"
+                      }`}
                   >
                     Flat Amount (₹)
                   </button>
                   <button
                     type="button"
                     onClick={() => setModal((m) => ({ ...m, discountType: "percent" }))}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${
-                      modal.discountType === "percent"
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-slate-600"
-                    }`}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${modal.discountType === "percent"
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-slate-600"
+                      }`}
                   >
                     Percentage (%)
                   </button>
@@ -1992,11 +1987,10 @@ export default function PointOfSale() {
                           key={u}
                           type="button"
                           onClick={() => setModal((m) => ({ ...m, unit: u }))}
-                          className={`rounded-lg border py-2 text-xs font-bold transition ${
-                            modal.unit === u
-                              ? "border-blue-500 bg-blue-50 text-blue-600"
-                              : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                          }`}
+                          className={`rounded-lg border py-2 text-xs font-bold transition ${modal.unit === u
+                            ? "border-blue-500 bg-blue-50 text-blue-600"
+                            : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                            }`}
                         >
                           {u}
                         </button>
@@ -2183,22 +2177,20 @@ export default function PointOfSale() {
                   <button
                     type="button"
                     onClick={() => setModal((m) => ({ ...m, discountType: "flat" }))}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${
-                      modal.discountType === "flat"
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-slate-600"
-                    }`}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${modal.discountType === "flat"
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-slate-600"
+                      }`}
                   >
                     Flat (₹)
                   </button>
                   <button
                     type="button"
                     onClick={() => setModal((m) => ({ ...m, discountType: "percent" }))}
-                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${
-                      modal.discountType === "percent"
-                        ? "bg-white text-blue-600 shadow-sm"
-                        : "text-slate-600"
-                    }`}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-md transition ${modal.discountType === "percent"
+                      ? "bg-white text-blue-600 shadow-sm"
+                      : "text-slate-600"
+                      }`}
                   >
                     Percentage (%)
                   </button>
@@ -2774,11 +2766,10 @@ export default function PointOfSale() {
                           paymentMode: mode,
                           amountReceived: mode === "Credit" && m.amountReceived === String(calculations.total) ? "0" : m.amountReceived,
                         }))}
-                        className={`rounded-lg border py-2 text-xs font-bold transition ${
-                          modal.paymentMode === mode
-                            ? "border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-300"
-                            : "border-slate-200 text-slate-700 hover:bg-slate-50"
-                        }`}
+                        className={`rounded-lg border py-2 text-xs font-bold transition ${modal.paymentMode === mode
+                          ? "border-blue-600 bg-blue-50 text-blue-700 ring-1 ring-blue-300"
+                          : "border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
                       >
                         {mode}
                       </button>
@@ -3003,6 +2994,6 @@ export default function PointOfSale() {
         </div>
       )}
 
-      </main>
+    </main>
   );
 }

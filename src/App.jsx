@@ -125,7 +125,7 @@ function App() {
           <Route path="purchase-expense/purchase-bills" element={<PurchaseBills />} />
           <Route
             path="purchase-expense/purchase-bills/new"
-            element={<AddPurchase localOnly />}
+            element={<AddPurchase />}
           />
           <Route path="purchase-expense/payment-out" element={<PaymentOut />} />
           <Route path="purchase-expense/expenses" element={<Expenses />} />

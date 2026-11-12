@@ -1,11 +1,11 @@
-// Provides the business records application service.
-import { businessDataApi } from "./apiClient.js";
+import { businessDataApi, businessGrowthApi } from "./apiClient.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
 import { getParties, saveParty } from "./partiesStorage.js";
-import { savePurchaseBill } from "./purchaseBillsStorage.js";
+import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 // This helper handles id logic.
 function withId(record = {}) {
@@ -14,7 +14,6 @@ function withId(record = {}) {
 
 // Loads business items.
 export async function loadBusinessItems() {
-  // Item master data remains browser-local during the current development phase.
   return getInventoryItems();
 }
 
@@ -22,9 +21,11 @@ export async function loadBusinessItems() {
 export async function saveBusinessItem(value) {
   const normalized = normalizeInventoryItem(value);
   const saved = saveInventoryItem(normalized);
-  try {
-    businessGrowthApi.save("items", saved).catch(() => {});
-  } catch {}
+  if (isDatabaseMode()) {
+    try {
+      businessGrowthApi.save("items", saved).catch(() => {});
+    } catch {}
+  }
   return saved;
 }
 
@@ -46,18 +47,17 @@ export async function saveBusinessParty(value) {
 // Loads sales invoices.
 export async function loadSalesInvoices() {
   const localInvoices = getSaleInvoices();
+  if (!isDatabaseMode()) return localInvoices;
+
   let rows;
   try {
     rows = await businessDataApi.list("sales-invoices");
   } catch (error) {
-    // POS invoices are committed to the local sales repository. Keep them
-    // visible in the Sales module during backend downtime instead of turning
-    // a reachable local invoice into an empty/error list.
     if (localInvoices.length) {
       console.warn("Backend invoice list unavailable; using saved local sale invoices.", error);
       return localInvoices;
     }
-    throw error;
+    return localInvoices;
   }
 
   if (rows.length) {
@@ -81,7 +81,6 @@ export async function loadSalesInvoices() {
     return invoices;
   }
 
-  // Preserve existing invoices created before MySQL persistence was enabled.
   const migrated = [];
   for (const invoice of localInvoices) {
     try {
@@ -103,6 +102,8 @@ export async function nextSalesInvoiceNumber() {
 // Saves business sale invoice.
 export async function saveBusinessSaleInvoice(value) {
   const localInvoice = saveSaleInvoice(value);
+  if (!isDatabaseMode()) return localInvoice;
+
   let saved = localInvoice;
   try {
     saved = await businessDataApi.save("sales-invoices", localInvoice);
@@ -110,7 +111,6 @@ export async function saveBusinessSaleInvoice(value) {
     console.warn("Backend unavailable; saved sale invoice to local storage.", error);
   }
 
-  // Keep MySQL inventory quantities in step with the existing sale stock update.
   const changedItems = getInventoryItems();
   const touchedIds = new Set((localInvoice.rows || []).map((row) => row.sourceItemId).filter(Boolean));
   for (const item of changedItems) {
@@ -121,9 +121,17 @@ export async function saveBusinessSaleInvoice(value) {
 
 // Loads purchase bills.
 export async function loadPurchaseBills() {
-  const bills = await businessDataApi.list("purchase-bills");
-  for (const bill of bills) savePurchaseBill(bill);
-  return bills;
+  const localBills = getPurchaseBills();
+  if (!isDatabaseMode()) return localBills;
+
+  try {
+    const bills = await businessDataApi.list("purchase-bills");
+    for (const bill of bills) savePurchaseBill(bill);
+    return bills;
+  } catch (error) {
+    console.warn("Backend unavailable; using local purchase bills.", error);
+    return localBills;
+  }
 }
 
 // This helper handles purchase bill number logic.
@@ -135,35 +143,25 @@ export async function nextPurchaseBillNumber() {
 // Saves business purchase bill.
 export async function saveBusinessPurchaseBill(value) {
   const bill = withId({ ...value, transactionType: "purchase" });
-  // Handles result.
-  const existing = (await loadPurchaseBills()).some((entry) => entry.id === bill.id);
-  const saved = await businessDataApi.save("purchase-bills", bill);
-  // Keep a browser-local copy for Utilities that need to work without a database read.
-  savePurchaseBill(saved);
-  if (!existing) {
-    const items = await loadBusinessItems();
-    const quantities = new Map();
-    for (const row of bill.rows || []) {
-      if (getAppSettings().enableBatchTracking && String(row.batchNo || "").trim()) continue;
-      const quantity = Math.max(Number(row.qty || 0), 0);
-      if (!row.item || !quantity) continue;
-      const item = items.find((candidate) =>
-        (row.sourceItemId && candidate.id === row.sourceItemId)
-        || (!row.sourceItemId && String(candidate.itemName).trim().toLowerCase() === String(row.item).trim().toLowerCase()),
-      );
-      if (item) quantities.set(item.id, (quantities.get(item.id) || 0) + quantity);
-    }
-    for (const item of items) {
-      const added = quantities.get(item.id);
-      if (added) {
-        const current = Number(item.openingQuantity || item.stock || 0) || 0;
-        await saveBusinessItem({ ...item, openingQuantity: String(current + added), stock: String(current + added) });
+  // Always commit to local storage first so transactions and inventory update instantly!
+  const localSaved = savePurchaseBill(bill);
+
+  if (!isDatabaseMode()) return localSaved;
+
+  try {
+    await businessDataApi.save("purchase-bills", localSaved);
+    const changedItems = getInventoryItems();
+    const touchedItemIds = new Set((bill.rows || []).map((row) => row.sourceItemId).filter(Boolean));
+    for (const item of changedItems) {
+      if (touchedItemIds.has(item.id)) {
+        try {
+          await saveBusinessItem(item);
+        } catch {}
       }
     }
-    if (getAppSettings().enableBatchTracking) {
-      const batchItemIds = new Set((bill.rows || []).filter((row) => String(row.batchNo || "").trim()).map((row) => row.sourceItemId).filter(Boolean));
-      for (const item of getInventoryItems()) if (batchItemIds.has(item.id)) await saveBusinessItem(item);
-    }
+  } catch (error) {
+    console.warn("Backend unavailable; saved purchase bill to local storage.", error);
   }
-  return saved;
+
+  return localSaved;
 }
