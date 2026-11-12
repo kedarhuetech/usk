@@ -24,12 +24,7 @@ export const dashboardData = {
   ],
   actions: ["Add Sale", "Add Purchase", "Add Party", "Add Item"],
   widgets: [
-    {
-      id: "whatsapp",
-      title: "WhatsApp Connect",
-      status: "Logged Out",
-      text: "Digital invoices reduce disputes by 40%",
-    },
+   
     {
       id: "google",
       title: "Google Profile Manager",

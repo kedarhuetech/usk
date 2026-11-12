@@ -173,9 +173,11 @@ export default function StockSummaryReport() {
 
         // Opening qty from inventory item (already updated by sales in many flows)
         const openingQty = Number(
-          item.openingQuantity !== undefined && item.openingQuantity !== ""
-            ? item.openingQuantity
-            : item.stock || 0
+          item.initialOpeningQuantity !== undefined && item.initialOpeningQuantity !== ""
+            ? item.initialOpeningQuantity
+            : (item.openingQuantity !== undefined && item.openingQuantity !== ""
+              ? item.openingQuantity
+              : item.stock || 0)
         );
 
         // Current stock = opening + purchased - sold

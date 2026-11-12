@@ -37,14 +37,9 @@ export const sidebarNavigation = [
   {
     id: "parties",
     label: "Parties",
+    path: "/parties/party-details",
     icon: FiUsers,
-    children: [
-      {
-        id: "party-details",
-        label: "Party Details",
-        path: "/parties/party-details",
-      },
-    ],
+    
   },
   {
     id: "items",

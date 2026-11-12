@@ -96,9 +96,11 @@ export default function LowStockSummaryReport() {
         const name = (item.itemName || item.name || "").trim();
         const mv = movements.get(name.toLowerCase()) || { sold: 0, purchased: 0 };
         const openingQty = Number(
-          item.openingQuantity !== undefined && item.openingQuantity !== ""
-            ? item.openingQuantity
-            : item.stock || 0
+          item.initialOpeningQuantity !== undefined && item.initialOpeningQuantity !== ""
+            ? item.initialOpeningQuantity
+            : (item.openingQuantity !== undefined && item.openingQuantity !== ""
+              ? item.openingQuantity
+              : item.stock || 0)
         );
         const stockQty = openingQty + mv.purchased - mv.sold;
         const minStock = Number(item.minimumStock || item.minStock || 0);
