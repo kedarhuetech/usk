@@ -300,8 +300,8 @@ export const DEFAULT_SETTINGS = {
   enableSerialTracking: false,
 
   // Service Reminders
-  serviceRemindersEnabled: false,
-  reminderDaysBefore: 3,
+  serviceRemindersEnabled: true,
+  reminderDaysBefore: 2,
 
   // Accounting
   financialYearStart: "01/04",
@@ -313,6 +313,25 @@ export const DEFAULT_SETTINGS = {
   baseCurrency: null,
   multiCurrencyList: [],
 };
+
+export function resetAppSettings() {
+  if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_SETTINGS };
+  try {
+    window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+    window.localStorage.removeItem("ledgerly:serviceReminderSettings.v1");
+    applyScreenZoom(DEFAULT_SETTINGS.screenZoom || "100%");
+    window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: DEFAULT_SETTINGS }));
+    recordAuditTrail({
+      action: "Settings Reset to Defaults",
+      entity: "Settings",
+      details: "All settings restored to system defaults",
+      user: "Current User",
+    });
+  } catch (error) {
+    console.error("Failed to reset settings in storage", error);
+  }
+  return { ...DEFAULT_SETTINGS };
+}
 
 export function getAppSettings() {
   if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_SETTINGS };
