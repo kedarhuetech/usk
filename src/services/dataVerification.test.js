@@ -1,6 +1,19 @@
 // Tests read-only data verification rules and local storage failures.
 import test from "node:test";
 import assert from "node:assert/strict";
+
+if (typeof globalThis.window === "undefined") {
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => key === "ledgerly:appSettings.v1" ? JSON.stringify({ enableGst: true, compositeScheme: false }) : null,
+      setItem: () => {},
+      removeItem: () => {},
+    },
+  };
+} else if (globalThis.window.localStorage) {
+  globalThis.window.localStorage.setItem("ledgerly:appSettings.v1", JSON.stringify({ enableGst: true, compositeScheme: false }));
+}
+
 import { runDataVerification, verifyBusinessData } from "./dataVerification.js";
 
 const baseTransaction = (overrides = {}) => ({

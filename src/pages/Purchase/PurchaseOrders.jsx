@@ -9,6 +9,7 @@ import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
 import {
   buildTransactionMessage,
@@ -37,6 +38,15 @@ export default function PurchaseOrders() {
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState("");
   const [itemRow, setItemRow] = useState("");
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
+  const [historyModal, setHistoryModal] = useState(null);
   const parties = useMemo(() => getParties(), []);
   const inventory = useMemo(() => getInventoryItems(), []);
   const saveList = (next) => { setOrders(next); localStorage.setItem(KEY, JSON.stringify(next)); };
@@ -49,12 +59,13 @@ export default function PurchaseOrders() {
 
   const save = () => {
     const value = editor.value;
-    if (!value.supplier.trim()) return window.alert("Select or enter a supplier.");
-    if (!value.rows.some((row) => row.item.trim() && Number(row.qty) > 0)) return window.alert("Add at least one item and quantity.");
+    if (!value.supplier.trim()) { toast.error("Select or enter a supplier."); return; }
+    if (!value.rows.some((row) => row.item.trim() && Number(row.qty) > 0)) { toast.error("Add at least one item and quantity."); return; }
     const existingParty = parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.supplier.trim().toLowerCase());
     if (!existingParty) saveParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
     const saved = { ...value, id: value.id || `purchase-order-${Date.now()}`, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
     saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
+    toast.success(editor.mode === "edit" ? "Purchase order updated." : "Purchase order created.");
     setEditor(null);
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
@@ -78,8 +89,24 @@ export default function PurchaseOrders() {
   const action = (name, order) => {
     setMenuId("");
     if (name === "View/Edit") setEditor({ mode: "edit", value: { ...order, rows: order.rows.map((row) => ({ ...row })) } });
-    if (name === "Delete" && window.confirm(`Delete purchase order ${order.number}?`)) saveList(orders.filter((entry) => entry.id !== order.id));
-    if (name === "Duplicate") saveList([{ ...order, id: `purchase-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", history: [], createdAt: new Date().toISOString() }, ...orders]);
+    if (name === "Delete") {
+      setConfirmModal({
+        isOpen: true,
+        title: "Delete Purchase Order",
+        message: `Delete purchase order ${order.number}?`,
+        confirmText: "Delete",
+        confirmColor: "red",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          saveList(orders.filter((entry) => entry.id !== order.id));
+          toast.success(`Purchase order ${order.number} deleted.`);
+        },
+      });
+    }
+    if (name === "Duplicate") {
+      saveList([{ ...order, id: `purchase-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", history: [], createdAt: new Date().toISOString() }, ...orders]);
+      toast.success("Purchase order duplicated.");
+    }
     if (name === "Convert to Purchase") {
       navigate("/purchase-expense/purchase-bills/new", {
         state: {
@@ -89,7 +116,18 @@ export default function PurchaseOrders() {
         },
       });
     }
-    if (name === "View History") window.alert((order.history || []).map((entry) => `${entry.action} — ${new Date(entry.at).toLocaleString()}`).join("\n") || "No history recorded yet.");
+    if (name === "View History") {
+      const historyList = order.history || [];
+      if (!historyList.length) {
+        toast.info("No history recorded yet.");
+      } else {
+        setHistoryModal({
+          isOpen: true,
+          orderNumber: order.number,
+          history: historyList,
+        });
+      }
+    }
     if (["Preview", "Open PDF", "Print"].includes(name)) {
       const rows = (order.rows || []).map((row) => ({
         item: row.item || "Item",

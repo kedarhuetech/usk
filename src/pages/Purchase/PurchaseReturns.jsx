@@ -25,6 +25,8 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const STORAGE_KEY = "ledgerly:purchaseReturns.v1";
 
@@ -76,6 +78,7 @@ const rowAmount = (row) => {
 export default function PurchaseReturns() {
   const [records, setRecords] = useState(readReturns);
   const [editor, setEditor] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState("");
   const [openItemRow, setOpenItemRow] = useState("");
@@ -204,7 +207,7 @@ export default function PurchaseReturns() {
   const save = () => {
     const value = editor.value;
     if (!value.party.trim()) {
-      window.alert("Please enter or select a Party Name.");
+      toast.error("Please enter or select a Party Name.");
       return;
     }
     const total = value.rows.reduce((sum, row) => sum + rowAmount(row), 0);
@@ -223,6 +226,7 @@ export default function PurchaseReturns() {
     try {
       persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
       setEditor(null);
+      toast.success(editor.mode === "edit" ? "Debit note updated." : "Debit note created.");
 
       // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
       try {
@@ -242,7 +246,7 @@ export default function PurchaseReturns() {
           }
         }
       } catch {}
-    } catch (error) { window.alert(error.message || "Could not save this purchase return."); }
+    } catch (error) { toast.error(error.message || "Could not save this purchase return."); }
   };
 
   const printRecord = (record) => {
@@ -563,10 +567,7 @@ export default function PurchaseReturns() {
                         <button
                           onClick={() => {
                             setMenuId("");
-                            if (window.confirm("Delete this debit note?")) {
-                              try { persist(records.filter((r) => r.id !== item.id)); }
-                              catch (error) { window.alert(error.message || "Could not delete this purchase return."); }
-                            }
+                            setDeleteConfirm(item);
                           }}
                           className="block w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-left"
                         >
@@ -899,6 +900,27 @@ export default function PurchaseReturns() {
             </div>
           </div>
         </div>
+      )}
+      {deleteConfirm && (
+        <ConfirmModal
+          isOpen={Boolean(deleteConfirm)}
+          title="Delete Debit Note"
+          message={`Are you sure you want to delete debit note ${deleteConfirm.refNo || ""} for ${deleteConfirm.party || "this party"}? This action cannot be undone.`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          danger={true}
+          onConfirm={() => {
+            try {
+              persist(records.filter((r) => r.id !== deleteConfirm.id));
+              toast.success("Debit note deleted.");
+            } catch (error) {
+              toast.error(error.message || "Could not delete this purchase return.");
+            } finally {
+              setDeleteConfirm(null);
+            }
+          }}
+          onCancel={() => setDeleteConfirm(null)}
+        />
       )}
     </div>
   );

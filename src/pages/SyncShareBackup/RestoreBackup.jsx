@@ -6,6 +6,8 @@ import { previewBackupPayload, restoreBackupPayload } from "../../services/backu
 import { VYAPAR_BACKUP_MAX_BYTES } from "../../services/vyaparBackupParser.js";
 import { importVyaparPreview, previewVyaparImport } from "../../services/vyaparImportService.js";
 import { openVyaparSqlite } from "../../services/vyaparSqliteBrowser.js";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const MAX_USV_BACKUP_BYTES = 50 * 1024 * 1024;
 
@@ -32,6 +34,7 @@ function RestoreBackup() {
   const [working, setWorking] = useState(false);
   const [includeCompanyProfile, setIncludeCompanyProfile] = useState(false);
   const [progress, setProgress] = useState("");
+  const [confirmModalData, setConfirmModalData] = useState(null);
 
   async function selectBackup(event) {
     const file = event.target.files?.[0];
@@ -83,15 +86,33 @@ function RestoreBackup() {
   function restoreUsv() {
     if (!preview || preview.type !== "usv" || working) return;
     const summary = preview.entries.map((entry) => `${entry.category}: ${entry.recordCount}`).join("\n");
-    if (!window.confirm(`Restore USV backup from ${new Date(preview.createdAt).toLocaleString()}?\n\n${summary || "No business records"}\n\nMatching local data will be replaced. Take a fresh backup first if you need to preserve it.`)) return;
+    setConfirmModalData({
+      title: "Restore USV Backup",
+      message: `Restore USV backup from ${new Date(preview.createdAt).toLocaleString()}?\n\n${summary || "No business records"}\n\nMatching local data will be replaced. Take a fresh backup first if you need to preserve it.`,
+      confirmText: "Restore Backup",
+      cancelText: "Cancel",
+      danger: true,
+      onConfirm: () => {
+        setConfirmModalData(null);
+        executeRestoreUsv();
+      },
+      onCancel: () => setConfirmModalData(null),
+    });
+  }
+
+  function executeRestoreUsv() {
     setWorking(true);
     setError("");
     setResult(null);
     try {
       const restored = restoreBackupPayload(preview.payload);
-      setResult(`USV restore completed: ${restored.restoredCount} records saved across ${restored.entries.length} local data stores.`);
+      const msg = `USV restore completed: ${restored.restoredCount} records saved across ${restored.entries.length} local data stores.`;
+      setResult(msg);
+      toast.success(msg);
     } catch (restoreError) {
-      setError(restoreError.message || "Could not restore this backup.");
+      const msg = restoreError.message || "Could not restore this backup.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setWorking(false);
     }
@@ -103,7 +124,21 @@ function RestoreBackup() {
       + preview.receipts.length + preview.payments.length + (includeCompanyProfile && preview.company ? 1 : 0);
     if (!importCount) return;
     const transactionsToImport = preview.salesInvoices.length + preview.purchaseInvoices.length + preview.receipts.length + preview.payments.length;
-    if (!window.confirm(`Import ${preview.items.length} products, ${preview.parties.length} parties, and ${transactionsToImport} verified transactions from ${selectedFile.name}?${includeCompanyProfile ? " The current company profile will be replaced." : " Existing records will be kept; duplicates will be skipped."}\n\nInvalid, incomplete, unsupported, and duplicate records will not be imported.`)) return;
+    setConfirmModalData({
+      title: "Import Vyapar Records",
+      message: `Import ${preview.items.length} products, ${preview.parties.length} parties, and ${transactionsToImport} verified transactions from ${selectedFile.name}?${includeCompanyProfile ? " The current company profile will be replaced." : " Existing records will be kept; duplicates will be skipped."}\n\nInvalid, incomplete, unsupported, and duplicate records will not be imported.`,
+      confirmText: "Import Records",
+      cancelText: "Cancel",
+      danger: false,
+      onConfirm: () => {
+        setConfirmModalData(null);
+        void executeImportVyapar();
+      },
+      onCancel: () => setConfirmModalData(null),
+    });
+  }
+
+  async function executeImportVyapar() {
     setWorking(true);
     setError("");
     setResult(null);
@@ -119,9 +154,13 @@ function RestoreBackup() {
       const saved = Object.values(imported.imported).reduce((sum, count) => sum + count, 0);
       const duplicates = Object.values(imported.duplicates).reduce((sum, count) => sum + count, 0);
       const skipped = imported.skipped.reduce((sum, entry) => sum + entry.count, 0);
-      setResult(`Vyapar import completed: ${saved} records saved, ${duplicates} duplicates skipped, ${imported.invalidRecords.length} invalid or incomplete records skipped, ${skipped} unsupported records skipped.`);
+      const msg = `Vyapar import completed: ${saved} records saved, ${duplicates} duplicates skipped, ${imported.invalidRecords.length} invalid or incomplete records skipped, ${skipped} unsupported records skipped.`;
+      setResult(msg);
+      toast.success(msg);
     } catch (importError) {
-      setError(importError.message || "Could not import the Vyapar records.");
+      const msg = importError.message || "Could not import the Vyapar records.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setWorking(false);
       setProgress("");
@@ -188,6 +227,18 @@ function RestoreBackup() {
         {result && <div role="status" className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><FiCheckCircle className="mt-0.5 shrink-0" />{result}</div>}
         <Card className="flex items-start gap-3 p-4 text-sm text-slate-600"><FiInfo className="mt-0.5 shrink-0 text-blue-700" /><p>USV restore replaces matching backup data stores after confirmation. Vyapar import keeps existing records and skips duplicates. Both use verified local browser storage writes with rollback on failure.</p></Card>
       </div>
+      {confirmModalData && (
+        <ConfirmModal
+          isOpen={Boolean(confirmModalData)}
+          title={confirmModalData.title}
+          message={confirmModalData.message}
+          confirmText={confirmModalData.confirmText}
+          cancelText={confirmModalData.cancelText}
+          danger={confirmModalData.danger}
+          onConfirm={confirmModalData.onConfirm}
+          onCancel={confirmModalData.onCancel}
+        />
+      )}
     </main>
   );
 }

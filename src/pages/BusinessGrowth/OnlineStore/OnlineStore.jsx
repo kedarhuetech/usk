@@ -30,6 +30,7 @@ import {
 } from "../../../services/itemsStorage";
 import { getOnlineStoreState, saveOnlineStoreState } from "../../../services/onlineStoreStorage";
 import { loadGrowthItems, saveGrowthItem, loadGrowthOrders, updateGrowthOrder } from "../../../services/businessGrowthData.js";
+import { toast } from "../../../components/Common/Toast.jsx";
 
 // Formats currency.
 function formatCurrency(value, fallback = "Price not set") {
@@ -120,11 +121,24 @@ function prototypeProductUrl(storeState, item) {
 // This helper handles text logic.
 async function copyText(value) {
   if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(value);
-    return true;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success("Link copied to clipboard!");
+      return true;
+    } catch {}
   }
-
-  window.prompt("Copy this link", value);
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand("copy");
+    toast.success("Link copied to clipboard!");
+  } catch {}
+  document.body.removeChild(textarea);
   return true;
 }
 
@@ -1332,7 +1346,7 @@ function OnlineStore() {
 
   useEffect(() => {
     // Refreshes orders.
-    const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => window.alert(error.message));
+    const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => toast.error(error.message));
     // Refreshes when visible.
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") refreshOrders();
@@ -1363,9 +1377,9 @@ function OnlineStore() {
   const storeOrders = useMemo(() => orders.filter((order) => order.storeId === storeState.prototypeStoreId), [orders, storeState.prototypeStoreId]);
 
   // Refreshes items.
-  const refreshItems = () => loadGrowthItems().then(setItems).catch((error) => window.alert(error.message));
+  const refreshItems = () => loadGrowthItems().then(setItems).catch((error) => toast.error(error.message));
   // Refreshes orders.
-  const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => window.alert(error.message));
+  const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => toast.error(error.message));
 
   // Opens new item.
   const openNewItem = () => {

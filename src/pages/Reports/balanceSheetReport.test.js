@@ -8,35 +8,18 @@ test("BalanceSheetReport file exists and contains valid React export", () => {
   assert.ok(content.includes("export default function BalanceSheetReport"), "Must export default function BalanceSheetReport");
 });
 
-test("BalanceSheetReport communicates clear informational state without fabricated figures", () => {
+test("BalanceSheetReport communicates clear financial state with calculations", () => {
   const content = fs.readFileSync("src/pages/Reports/BalanceSheetReport.jsx", "utf8");
 
-  // Required informational messages
-  assert.ok(
-    content.includes("Balance Sheet Accounting Is Coming Soon"),
-    "Must include 'Balance Sheet Accounting Is Coming Soon' heading"
-  );
-  assert.ok(
-    content.includes("USV is currently building its core business and transaction management features"),
-    "Must explain that core transaction management is being built first"
-  );
-  assert.ok(
-    content.includes("Assets"),
-    "Must explain Assets"
-  );
-  assert.ok(
-    content.includes("Liabilities"),
-    "Must explain Liabilities"
-  );
-  assert.ok(
-    content.includes("Owner's Equity") || content.includes("Owner&apos;s Equity"),
-    "Must explain Owner's Equity"
-  );
+  // Required sections and real calculation integration
+  assert.ok(content.includes("calculateBalanceSheet"), "Must import or use calculateBalanceSheet");
+  assert.ok(content.includes("Current Assets"), "Must include Current Assets section");
+  assert.ok(content.includes("Total Liabilities"), "Must include Total Liabilities section");
+  assert.ok(content.includes("Equity") || content.includes("Owner"), "Must include Equity section");
 
   // Prohibit fabricated / hardcoded balances or dummy rupee figures
   assert.ok(!content.includes("₹ 1,00,000"), "Must not contain fabricated financial amounts");
   assert.ok(!content.includes("₹ 50,000"), "Must not contain fabricated financial amounts");
-  assert.ok(!content.includes("₹ 0.00"), "Must not contain misleading dummy ₹ 0.00 totals");
   assert.ok(!content.includes("dummy"), "Must not contain dummy markers");
 });
 

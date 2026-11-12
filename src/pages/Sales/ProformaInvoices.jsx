@@ -14,6 +14,7 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const STORAGE_KEY = "ledgerly:proformaInvoices.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -44,6 +45,14 @@ export default function ProformaInvoices() {
   const [openMenu, setOpenMenu] = useState("");
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 });
   const [preview, setPreview] = useState(null);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
 
   const firms = useMemo(() => ["All Firms", ...new Set(proformas.map((entry) => entry.firm).filter(Boolean))], [proformas]);
   const users = useMemo(() => ["All Users", ...new Set(proformas.map((entry) => entry.user).filter(Boolean))], [proformas]);
@@ -101,7 +110,18 @@ export default function ProformaInvoices() {
     } catch {}
   };
   const deleteProforma = (entry) => {
-    if (window.confirm(`Delete proforma invoice ${entry.number}?`)) persist(proformas.filter((value) => value.id !== entry.id));
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Proforma Invoice",
+      message: `Delete proforma invoice ${entry.number}?`,
+      confirmText: "Delete",
+      confirmColor: "red",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        persist(proformas.filter((value) => value.id !== entry.id));
+        toast.success(`Proforma invoice ${entry.number} deleted.`);
+      },
+    });
     setOpenMenu("");
   };
 
@@ -120,10 +140,12 @@ export default function ProformaInvoices() {
       return;
     }
     persist(proformas.map((value) => value.id === entry.id ? { ...value, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order" } : value));
+    toast.success("Converted to Sale Order.");
   };
 
   const duplicateProforma = (entry) => {
     persist([{ ...entry, id: `proforma-${Date.now()}`, number: `${entry.number}-COPY`, status: "Open", convertedAt: "", convertedSaleId: "", conversionType: "" }, ...proformas]);
+    toast.success("Proforma invoice duplicated.");
     setOpenMenu("");
   };
 
@@ -191,5 +213,14 @@ export default function ProformaInvoices() {
       {visible.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[900px] border-collapse text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["Date", "Reference no", "Party Name", "Amount", "Balance", "Status", "Actions"].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-3">{heading}{heading !== "Actions" && <FiFilter className="ml-2 inline h-3.5 w-3.5" />}</th>)}</tr></thead><tbody>{visible.map((entry) => <tr key={entry.id} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="px-3 py-4">{entry.date ? new Date(`${entry.date}T00:00:00`).toLocaleDateString("en-GB") : "—"}</td><td className="px-3 py-4 text-right">{entry.number}</td><td className="px-3 py-4 font-medium">{entry.customer || "Cash Sale"}</td><td className="px-3 py-4 text-right">{money(entry.amount)}</td><td className="px-3 py-4 text-right">{String(entry.status || "Open").startsWith("Converted") ? money(0) : money(entry.amount)}</td><td className={`px-3 py-4 font-medium ${String(entry.status || "").startsWith("Converted") ? "text-emerald-600" : "text-amber-600"}`}>{entry.status || "Open"}</td><td className="px-3 py-3"><div className="relative flex items-center gap-1"><button type="button" onClick={(event) => toggleMenu(`convert:${entry.id}`, event, 105)} aria-expanded={openMenu === `convert:${entry.id}`} className="flex items-center gap-2 rounded px-2 py-1.5 font-medium text-blue-600 hover:bg-blue-50">Convert <FiChevronDown /></button>{openMenu === `convert:${entry.id}` && <div style={{ top: menuPosition.top, right: menuPosition.right }} className="fixed z-[100] w-52 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl"><button type="button" onClick={() => convertProforma(entry, "Sale")} className="block w-full rounded-md px-3 py-2.5 text-left hover:bg-blue-50">Convert to Sale</button><button type="button" onClick={() => convertProforma(entry, "Sale Order")} className="block w-full rounded-md px-3 py-2.5 text-left hover:bg-blue-50">Convert to Sale Order</button></div>}<button type="button" aria-label="More proforma actions" onClick={(event) => toggleMenu(entry.id, event)} className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiMoreVertical /></button>{openMenu === entry.id && <div style={{ top: menuPosition.top, right: menuPosition.right }} className="fixed z-[100] max-h-[min(560px,75vh)] w-48 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">{["View/Edit", "Delete", "Duplicate", "Open PDF", "Preview", "Print"].map((action) => <button key={action} type="button" onClick={() => runAction(action, entry)} className={`block w-full rounded-md px-3 py-2.5 text-left hover:bg-blue-50 ${action === "Delete" ? "text-rose-600" : "text-slate-700"}`}>{action}</button>)}</div>}</div></td></tr>)}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-8 text-center"><div className="grid h-32 w-32 place-items-center rounded-full bg-blue-100 text-blue-400"><FiCalendar className="h-14 w-14" /></div><h2 className="mt-6 text-lg font-semibold text-slate-800">No Transactions to show</h2><p className="mt-2 text-sm text-slate-400">You haven't added any transactions yet.</p><Button onClick={() => setEditor({ mode: "new" })} className="mt-6 rounded-full bg-rose-600 px-5 text-white hover:bg-rose-700"><FiPlus /> Add Proforma</Button></div>}
     </Card>
     {preview && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}><section className="max-h-[92vh] w-full max-w-5xl overflow-auto rounded-xl bg-white shadow-2xl"><header className="sticky top-0 flex items-center justify-between border-b bg-white px-6 py-4"><h2 className="text-xl font-bold">Proforma Preview</h2><button type="button" onClick={() => setPreview(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100">×</button></header><div className="p-8"><div className="text-center"><h1 className="text-2xl font-bold">{companyInfo.businessName || "Company"}</h1><p className="mt-1 text-sm text-slate-500">Proforma Invoice</p></div><div className="my-8 flex justify-between gap-5 border-y py-5"><div><p className="text-sm text-slate-500">Proforma #</p><p className="font-semibold">{preview.number}</p><p className="mt-3 text-sm text-slate-500">Customer</p><p className="font-semibold">{preview.customer || "Cash Sale"}</p>{preview.phone && <p>{preview.phone}</p>}</div><div className="text-right"><p className="text-sm text-slate-500">Date</p><p className="font-semibold">{preview.date ? new Date(`${preview.date}T00:00:00`).toLocaleDateString("en-GB") : "—"}</p></div></div><div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-slate-100"><tr>{["#", "Item", "Description", "Qty", "Unit Price", "Amount"].map((heading) => <th key={heading} className="border-b px-3 py-3">{heading}</th>)}</tr></thead><tbody>{(preview.rows || []).map((row, index) => <tr key={row.id || index}><td className="border-b px-3 py-3">{index + 1}</td><td className="border-b px-3 py-3 font-medium">{row.item || "—"}</td><td className="border-b px-3 py-3">{row.description || "—"}</td><td className="border-b px-3 py-3">{row.qty || "—"} {row.unit}</td><td className="border-b px-3 py-3">{money(row.price)}</td><td className="border-b px-3 py-3 text-right">{money(Number(row.qty || 0) * Number(row.price || 0))}</td></tr>)}</tbody></table></div>{preview.terms && <p className="mt-4 whitespace-pre-wrap"><b>Terms &amp; Conditions:</b> {preview.terms}</p>}<p className="mt-6 text-right text-xl font-bold">Total: {money(preview.amount)}</p></div><footer className="sticky bottom-0 flex justify-end gap-3 border-t bg-white px-6 py-4"><Button onClick={() => openDocument(preview)} className="border border-blue-300 text-blue-600">Open PDF</Button><Button onClick={() => openDocument(preview, true)} className="bg-blue-600 text-white">Print</Button><Button onClick={() => setPreview(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }

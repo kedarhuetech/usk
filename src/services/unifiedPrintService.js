@@ -2,6 +2,7 @@
 // Adheres strictly to the user's active theme, theme color, company profile, and print settings.
 import { getAppSettings } from "./appSettingsStorage.js";
 import { getCompanyProfile } from "./companyProfileStorage.js";
+import { toast } from "../components/Common/toastDispatcher.js";
 
 // Converts number to Indian currency words
 export function numberToWords(num) {
@@ -691,7 +692,7 @@ export function buildUnifiedStatementHtml({
 export function openPrintWindow(html, autoPrint = false) {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    window.alert("Please allow pop-ups in your browser to print documents.");
+    toast.warning("Please allow pop-ups in your browser to print documents.");
     return;
   }
   printWindow.document.open();

@@ -24,6 +24,7 @@ import PartyStatementReport from "./PartyStatementReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { toast } from "../../components/Common/Toast.jsx";
 import {
   FiBarChart2,
   FiPrinter,
@@ -644,19 +645,39 @@ function Reports({ defaultReport }) {
     return "text-orange-500";
   };
 
-  const handleShare = (invoiceNo, party, amount) => {
+  const handleShare = async (invoiceNo, party, amount) => {
     const text = `${invoiceNo} | ${party} | ${money(amount)}`;
 
     if (navigator.share) {
-      navigator
-        .share({
+      try {
+        await navigator.share({
           title: `Transaction ${invoiceNo}`,
           text: `${party} - ${money(amount)}`,
-        })
-        .catch(() => { });
-    } else {
-      window.prompt("Copy transaction details", text);
+        });
+        return;
+      } catch {}
     }
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast.success("Transaction details copied to clipboard!");
+        return;
+      } catch {}
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    try {
+      document.execCommand("copy");
+      toast.success("Transaction details copied to clipboard!");
+    } catch {}
+    document.body.removeChild(textarea);
   };
 
   const cell = (content, className = "") => (
