@@ -163,9 +163,11 @@ export async function uploadGoogleDriveBackup(sessionId, payload, { driveFactory
       uploadedAt: response.data.createdTime || new Date().toISOString(),
     };
   } catch (error) {
+    console.error("Google Drive API Error:", error?.response?.data || error.message);
     const apiError = new Error("Google Drive could not upload the backup. Check the connection and try again.", { cause: error });
     apiError.statusCode = Number(error?.code || error?.response?.status) || 502;
-    const apiReason = error?.errors?.[0]?.reason || error?.response?.data?.error?.errors?.[0]?.reason || "";
+    const apiReason = error?.errors?.[0]?.reason || error?.response?.data?.error?.errors?.[0]?.reason || error?.response?.data?.error?.status || "";
+    const rawMsg = error?.response?.data?.error?.message || error?.message || "";
     if (apiError.statusCode === 401 || error?.message?.includes("invalid_grant")) {
       deleteGoogleDriveSession(sessionId);
       apiError.statusCode = 401;
@@ -174,8 +176,10 @@ export async function uploadGoogleDriveBackup(sessionId, payload, { driveFactory
       if (["rateLimitExceeded", "userRateLimitExceeded", "dailyLimitExceeded"].includes(apiReason)) {
         apiError.statusCode = 429;
         apiError.message = "Google Drive is rate-limiting uploads. Wait a moment, then retry.";
+      } else if (apiReason === "accessNotConfigured" || rawMsg.includes("has not been used in project") || rawMsg.includes("is disabled")) {
+        apiError.message = "Google Drive API is disabled in your Google Cloud Console. Click 'Enable' on the Google Drive API page.";
       } else {
-        apiError.message = "Google Drive denied this upload. Reconnect and approve the requested Drive access.";
+        apiError.message = "Google Drive denied this upload. Please disconnect, click 'Sign in with Google' again, and make sure to CHECK the box to allow Google Drive access.";
       }
     } else if (apiError.statusCode === 429) {
       apiError.message = "Google Drive is rate-limiting uploads. Wait a moment, then retry.";

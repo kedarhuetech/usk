@@ -31,10 +31,11 @@ function isCrossSiteClient(req, frontendOrigin = "") {
 
 function cookieOptions(req, maxAge, frontendOrigin = "") {
   const crossSite = isCrossSiteClient(req, frontendOrigin);
+  const secure = isSecureRequest(req);
   return {
     httpOnly: true,
-    sameSite: crossSite ? "none" : "lax",
-    secure: isSecureRequest(req) || crossSite,
+    sameSite: crossSite && secure ? "none" : "lax",
+    secure: secure,
     path: GOOGLE_DRIVE_COOKIE_PATH,
     ...(maxAge ? { maxAge } : {}),
   };
