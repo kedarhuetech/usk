@@ -309,7 +309,8 @@ export default function ItemCategoryWiseProfitAndLoss() {
 
   // App settings for currency symbol & decimal formatting
   const appSettings = useMemo(() => getAppSettings(), []);
-  const currencySymbol = appSettings.currencySymbol || "₹";
+  const rawSym = String(appSettings.currencySymbol || "₹").trim();
+  const currencySymbol = (!appSettings.multiCurrencyEnabled && (rawSym === "$" || rawSym === "USD" || !rawSym)) ? "₹" : (rawSym || "₹");
   const decimals = appSettings.amountDecimalPlaces ?? 2;
 
   const fmtCurrency = useCallback(

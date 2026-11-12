@@ -115,3 +115,55 @@ test("invoice balances ignore stale status and stored balance fields and cap adj
   assert.equal(result.adjustments, 85);
   assert.equal(result.status, "Paid");
 });
+
+test("transactions without partyId map to registered party by name without creating duplicate ghost rows", () => {
+  const registeredParties = [
+    { id: "p-cjp", partyName: "cjp", phone: "9876523487", email: "cjp@test.com" },
+    { id: "p-cust3", partyName: "GSTR3B TEST Customer 03 (Unpaid)", phone: "9876543103", email: "cust03@gstr3b-test.com" },
+  ];
+  const testSales = [
+    { id: "s-1", form: { customer: "cjp" }, totals: { grandTotal: 6402 } },
+    { id: "s-2", form: { customer: "GSTR3B TEST Customer 03 (Unpaid)" }, totals: { grandTotal: 9440 } },
+  ];
+
+  const result = calculatePartyBalances({
+    parties: [{ id: "cash-sale", partyName: "Cash Sale" }, ...registeredParties],
+    sales: testSales,
+  });
+
+  // Must have exactly 3 parties: Cash Sale, cjp, GSTR3B TEST Customer 03 (no ghost duplicates)
+  assert.equal(result.parties.length, 3);
+
+  const cjpRow = result.parties.find((p) => p.partyName === "cjp");
+  assert.ok(cjpRow);
+  assert.equal(cjpRow.id, "p-cjp");
+  assert.equal(cjpRow.phone, "9876523487");
+  assert.equal(cjpRow.email, "cjp@test.com");
+  assert.equal(cjpRow.receivable, 6402);
+
+  const cust3Row = result.parties.find((p) => p.partyName === "GSTR3B TEST Customer 03 (Unpaid)");
+  assert.ok(cust3Row);
+  assert.equal(cust3Row.id, "p-cust3");
+  assert.equal(cust3Row.receivable, 9440);
+
+  // Summary totals must NOT be doubled
+  assert.equal(result.receivable, 6402 + 9440);
+  assert.equal(result.salesReceivable, 6402 + 9440);
+});
+
+test("multiple transactions for an unlisted party consolidate into a single ad-hoc row", () => {
+  const testSales = [
+    { id: "s-10", form: { customer: "Walk-in Buyer" }, totals: { grandTotal: 250 } },
+    { id: "s-11", form: { customer: "Walk-in Buyer" }, totals: { grandTotal: 150 } },
+  ];
+
+  const result = calculatePartyBalances({
+    parties: [],
+    sales: testSales,
+  });
+
+  assert.equal(result.parties.length, 1);
+  assert.equal(result.parties[0].partyName, "Walk-in Buyer");
+  assert.equal(result.parties[0].receivable, 400);
+  assert.equal(result.receivable, 400);
+});

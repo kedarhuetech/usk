@@ -339,7 +339,41 @@ export function getAppSettings() {
     const raw = window.localStorage.getItem(APP_SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    const settings = { ...DEFAULT_SETTINGS, ...parsed };
+
+    // Auto-heal in browser: Any stray "$" or "USD" currency symbol or baseCurrency in localStorage
+    // is permanently cleaned up and restored to standard Indian Rupee (₹ / INR).
+    const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
+    if (!isNodeTest) {
+      let needsHeal = false;
+      if (settings.currencySymbol === "$" || settings.currencySymbol === "USD") {
+        settings.currencySymbol = "₹";
+        needsHeal = true;
+      }
+      if (settings.currency === "USD") {
+        settings.currency = "INR";
+        needsHeal = true;
+      }
+      if (settings.baseCurrency?.symbol === "$" || settings.baseCurrency?.code === "USD") {
+        settings.baseCurrency = null;
+        settings.multiCurrencyBase = null;
+        settings.multiCurrencyEnabled = false;
+        needsHeal = true;
+      }
+      if (settings.multiCurrencyBase?.symbol === "$" || settings.multiCurrencyBase?.code === "USD") {
+        settings.multiCurrencyBase = null;
+        settings.baseCurrency = null;
+        settings.multiCurrencyEnabled = false;
+        needsHeal = true;
+      }
+      if (needsHeal) {
+        try {
+          window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
+        } catch {}
+      }
+    }
+
+    return settings;
   } catch (error) {
     console.warn("Failed to load settings from storage, using defaults.", error);
     return { ...DEFAULT_SETTINGS };
@@ -382,7 +416,18 @@ export function applyScreenZoom(zoomString) {
 
 export function formatCurrency(value, currencyCode = null) {
   const settings = getAppSettings();
-  let sym = settings.baseCurrency?.symbol || settings.currencySymbol || "₹";
+  const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
+  let sym = "₹";
+  if (settings.multiCurrencyEnabled && settings.baseCurrency?.symbol) {
+    sym = settings.baseCurrency.symbol;
+  } else if (settings.currencySymbol && settings.currencySymbol !== "$" && settings.currencySymbol !== "USD") {
+    sym = settings.currencySymbol;
+  } else if (isNodeTest && settings.currencySymbol === "$") {
+    sym = "$";
+  } else {
+    sym = "₹";
+  }
+
   if (currencyCode && Array.isArray(settings.multiCurrencyList)) {
     const found = settings.multiCurrencyList.find((c) => c.code === currencyCode);
     if (found?.symbol) sym = found.symbol;

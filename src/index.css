@@ -835,6 +835,28 @@ html.dark .bg-\[\#ecfeff\] {
 
 /* ── Print Media Protection (Ensure clean paper printouts) ── */
 @media print {
+  /* Hide application shell navigation, topbar, horizontal navbar, sidebars, and back buttons globally */
+  header,
+  nav,
+  aside,
+  [data-print-ignore],
+  .print\:hidden,
+  .print-hidden {
+    display: none !important;
+  }
+
+  /* Unconstrain page heights so print layouts flow naturally across printed pages */
+  html,
+  body,
+  #root,
+  .h-screen,
+  main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background-color: white !important;
+  }
+
   html.dark {
     color-scheme: light !important;
   }

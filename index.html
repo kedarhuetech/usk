@@ -2,6 +2,40 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        try {
+          var raw = localStorage.getItem("ledgerly:appSettings.v1");
+          if (raw) {
+            var data = JSON.parse(raw);
+            var changed = false;
+            if (data.currencySymbol === "$" || data.currencySymbol === "USD") {
+              data.currencySymbol = "\u20B9";
+              changed = true;
+            }
+            if (data.currency === "USD") {
+              data.currency = "INR";
+              changed = true;
+            }
+            if (data.baseCurrency && (data.baseCurrency.symbol === "$" || data.baseCurrency.code === "USD")) {
+              data.baseCurrency = null;
+              data.multiCurrencyBase = null;
+              data.multiCurrencyEnabled = false;
+              changed = true;
+            }
+            if (data.multiCurrencyBase && (data.multiCurrencyBase.symbol === "$" || data.multiCurrencyBase.code === "USD")) {
+              data.multiCurrencyBase = null;
+              data.baseCurrency = null;
+              data.multiCurrencyEnabled = false;
+              changed = true;
+            }
+            if (changed) {
+              localStorage.setItem("ledgerly:appSettings.v1", JSON.stringify(data));
+            }
+          }
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title> USV</title>

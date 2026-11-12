@@ -52,7 +52,8 @@ export function formatDateDisplay(val) {
 export function formatMoney(val) {
   const num = Number(val);
   const settings = getAppSettings();
-  const sym = settings.currencySymbol || "₹";
+  const rawSym = String(settings.currencySymbol || "₹").trim();
+  const sym = (!settings.multiCurrencyEnabled && (rawSym === "$" || rawSym === "USD" || !rawSym)) ? "₹" : (rawSym || "₹");
   const decimals = settings.amountDecimalPlaces ?? 2;
   if (isNaN(num)) return `${sym} ${(0).toFixed(decimals)}`;
   return `${sym} ${num.toLocaleString("en-IN", {
