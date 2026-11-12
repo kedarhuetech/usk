@@ -19,6 +19,8 @@ import {
 } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
+import HsnAutocomplete from "../../components/Common/HsnAutocomplete";
+import { matchGstRateToOption } from "../../services/hsnService.js";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
 import AddItem from "../Items/AddItem";
@@ -969,7 +971,28 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 </td>
                 {appSettings.enableHsnSacCode !== false && (
                   <td className="border-r border-slate-200 p-1">
-                    <CellInput value={row.hsn || ""} onChange={(event) => updateRow(row.id, "hsn", event.target.value)} placeholder="HSN" />
+                    <HsnAutocomplete
+                      compact
+                      showIcon={false}
+                      value={row.hsn || ""}
+                      onChange={(code) => updateRow(row.id, "hsn", code)}
+                      onSelect={(selected) => {
+                        if (!selected) return;
+                        updateRow(row.id, "hsn", selected.code);
+                        if (selected.description && (!row.item || row.item.trim() === "")) {
+                          updateRow(row.id, "item", selected.description);
+                        }
+                        if (selected.gst_rate !== null && selected.gst_rate !== undefined) {
+                          const matchedTax = matchGstRateToOption(selected.gst_rate, saleTaxOptions);
+                          if (matchedTax) updateRow(row.id, "taxRate", matchedTax);
+                        }
+                        if (selected.cess_rate !== null && selected.cess_rate !== undefined && selected.cess_rate > 0) {
+                          updateRow(row.id, "cessPercent", String(selected.cess_rate));
+                        }
+                      }}
+                      placeholder="HSN / SAC"
+                      className="h-8 w-full rounded border border-transparent bg-transparent px-1.5 text-xs text-slate-800 outline-none focus:border-blue-400 focus:bg-white"
+                    />
                   </td>
                 )}
                 {enableBatchTracking && (
