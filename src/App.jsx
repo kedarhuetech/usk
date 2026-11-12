@@ -60,11 +60,13 @@ import {
   PrivacyPolicy,
   TermsOfService,
 } from "./pages/Legal/LegalPages";
+import { ToastContainer } from "./components/Common/Toast";
 
 // Renders the app interface.
 function App() {
   return (
     <AppPasscodeProvider>
+      <ToastContainer />
       <BrowserRouter>
         <Routes>
         <Route path="/store/:storeId" element={<CustomerStorefront />} />

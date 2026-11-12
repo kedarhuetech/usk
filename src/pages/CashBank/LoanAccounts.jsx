@@ -4,6 +4,8 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { calculateLoanOutstanding, calculateLoanEmi, estimateUpcomingEmiDate, formatLoanAmount, loanEmi, summarizeLoans, validateLoan, validateRepayment } from "../../services/loanAccounts";
 import { closeLoan, createLoan, getAllLoans, recordRepayment, updateLoan } from "../../services/loanAccountsRepository";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const today = () => {
   const now = new Date();
@@ -104,6 +106,7 @@ function LoanAccounts() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [selectedId, setSelectedId] = useState("");
+  const [closeConfirmLoan, setCloseConfirmLoan] = useState(null);
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -117,10 +120,25 @@ function LoanAccounts() {
 
   const formSaved = async () => { setShowForm(false); setEditing(null); setNotice(editing ? "Loan details updated." : "Loan account saved in this browser."); await refresh(); };
   const repaySaved = async () => { setNotice("Repayment recorded in the loan register only."); await refresh(); };
-  const markClosed = async () => {
-    if (!selected || !window.confirm(`Mark ${selected.loanName} as closed? The loan and repayment history will be retained.`)) return;
-    try { await closeLoan(selected.id); setNotice("Loan marked closed; history retained."); await refresh(); }
-    catch (closeError) { setError(closeError.message || "Loan could not be closed."); }
+  const markClosed = () => {
+    if (!selected) return;
+    setCloseConfirmLoan(selected);
+  };
+
+  const executeCloseLoan = async (loan) => {
+    try {
+      await closeLoan(loan.id);
+      const msg = `Loan ${loan.loanName} marked closed; history retained.`;
+      setNotice(msg);
+      toast.success(msg);
+      await refresh();
+    } catch (closeError) {
+      const msg = closeError.message || "Loan could not be closed.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setCloseConfirmLoan(null);
+    }
   };
 
   return <main className="min-h-full bg-slate-100 p-4 sm:p-6"><div className="mx-auto max-w-screen-2xl space-y-5">
@@ -132,6 +150,18 @@ function LoanAccounts() {
   </div>
   {showForm && <LoanForm key={editing?.id || "new-loan"} initialLoan={editing} onClose={() => { setShowForm(false); setEditing(null); }} onSaved={formSaved} />}
   {selected && <LoanDetails loan={selected} onClose={() => setSelectedId("")} onRepayment={repaySaved} onCloseLoan={markClosed} />}
+  {closeConfirmLoan && (
+    <ConfirmModal
+      isOpen={Boolean(closeConfirmLoan)}
+      title="Close Loan"
+      message={`Mark "${closeConfirmLoan.loanName}" as closed? The loan and repayment history will be retained.`}
+      confirmText="Mark as Closed"
+      cancelText="Keep Open"
+      danger={false}
+      onConfirm={() => void executeCloseLoan(closeConfirmLoan)}
+      onCancel={() => setCloseConfirmLoan(null)}
+    />
+  )}
   </main>;
 }
 

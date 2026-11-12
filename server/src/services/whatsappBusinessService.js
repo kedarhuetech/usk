@@ -49,16 +49,21 @@ export function normalizeWhatsAppError(error, fallback = "WhatsApp request faile
     userTitle = "WhatsApp permission required";
     message = "You do not have permission to use this WhatsApp Business asset.";
     userMessage = "Ask the business admin for WhatsApp Business access, then reconnect.";
-  } else if (["131026", "131030", "131047", "131051"].includes(metaCode) || subcode === "2494010") {
+  } else if (metaCode === "131047" || text.includes("24 hour") || text.includes("re-engage")) {
+    category = "TEMPLATE_NOT_APPROVED";
+    userTitle = "Approved template required";
+    message = "Customer is outside the 24-hour service window. An approved WhatsApp template is required.";
+    userMessage = "Select an approved WhatsApp campaign template to reach this customer outside the 24-hour window.";
+  } else if (["131026", "131030", "131051"].includes(metaCode) || subcode === "2494010") {
     category = "INVALID_RECIPIENT";
     userTitle = "Invalid or unreachable recipient";
     message = "WhatsApp could not accept this recipient.";
     userMessage = "Check the country code, phone number, and test-recipient eligibility.";
-  } else if (text.includes("template")) {
+  } else if (text.includes("template") || metaCode === "132000" || metaCode === "132001" || metaCode === "132005") {
     category = "TEMPLATE_NOT_APPROVED";
-    userTitle = "Template problem";
-    message = "WhatsApp template is not ready for sending.";
-    userMessage = "Select an approved WhatsApp message template and complete any required variables.";
+    userTitle = "Template not approved or missing";
+    message = "WhatsApp template is not approved or not present in your campaign.";
+    userMessage = "Ensure the template is approved by Meta and present in your campaign templates.";
   }
 
   return {
@@ -463,3 +468,110 @@ export async function sendWhatsAppTemplateMessage({ accessToken, phoneNumberId, 
     acceptedAt: new Date().toISOString(),
   };
 }
+
+export const PREDEFINED_TEMPLATES = {
+  service_reminder: {
+    name: "service_reminder_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\nThis is a friendly reminder from {{2}} regarding your service ({{3}}) scheduled or due on {{4}}.\n\nThank you for choosing us!",
+        example: {
+          body_text: [["Valued Customer", "Our Store", "Vehicle Maintenance", "2026-11-20"]],
+        },
+      },
+    ],
+  },
+  payment_reminder: {
+    name: "payment_due_reminder",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\nYour payment of {{2}} is pending with {{3}}.\nIf you have already made the payment, kindly ignore this message.",
+        example: {
+          body_text: [["Valued Customer", "₹1,500.00", "Our Store"]],
+        },
+      },
+    ],
+  },
+  business_notification: {
+    name: "business_notification",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Hello {{1}},\n\n{{2}}\n\nRegards,\n{{3}}",
+        example: {
+          body_text: [["Valued Customer", "Your requested update has been processed.", "Our Store"]],
+        },
+      },
+    ],
+  },
+};
+
+/**
+ * Sends a request to Meta WhatsApp Graph API to create and approve a message template.
+ * Endpoint: POST /{wabaId}/message_templates
+ */
+export async function requestWhatsAppTemplateApproval({ accessToken, wabaId, template = {} }) {
+  if (!wabaId) throw createWhatsAppError("WhatsApp Business Account (WABA) ID is required to request template approval.", "NO_WABA");
+  if (!accessToken) throw createWhatsAppError("Access token is required to request template approval.", "TOKEN_MISSING");
+
+  const rawName = String(template.name || "service_reminder_alert").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  const cleanName = rawName.replace(/_+/g, "_").slice(0, 512);
+
+  const payload = {
+    name: cleanName,
+    category: String(template.category || "UTILITY").toUpperCase(),
+    language: template.language || "en",
+    components: template.components || [
+      {
+        type: "BODY",
+        text: template.text || "Dear {{1}},\nThis is a friendly reminder from {{2}} regarding {{3}} due on {{4}}.\n\nThank you for choosing us!",
+        example: template.example || {
+          body_text: [["Customer", "Our Store", "Maintenance Service", "2026-11-20"]],
+        },
+      },
+    ],
+  };
+
+  try {
+    let response;
+    try {
+      response = await graphJsonPost(`/${wabaId}/message_templates`, accessToken, payload);
+    } catch (postErr) {
+      if (process.env.WHATSAPP_TEST_ACCESS_TOKEN && accessToken !== process.env.WHATSAPP_TEST_ACCESS_TOKEN) {
+        response = await graphJsonPost(`/${wabaId}/message_templates`, process.env.WHATSAPP_TEST_ACCESS_TOKEN, payload);
+      } else {
+        throw postErr;
+      }
+    }
+
+    return {
+      success: true,
+      id: response?.id || "",
+      name: cleanName,
+      status: response?.status || "PENDING",
+      category: response?.category || payload.category,
+      message: `Template "${cleanName}" submitted to Meta for approval (Status: ${response?.status || "PENDING"}).`,
+    };
+  } catch (error) {
+    const errMsg = String(error.message || "").toLowerCase();
+    if (errMsg.includes("already exists") || errMsg.includes("duplicate")) {
+      return {
+        success: true,
+        alreadyExists: true,
+        name: cleanName,
+        status: "PENDING",
+        message: `Template "${cleanName}" already exists on Meta and is awaiting review or already approved.`,
+      };
+    }
+    throw error;
+  }
+}
+

@@ -24,6 +24,7 @@ import { loadSalesInvoices, saveBusinessSaleInvoice } from "../../services/busin
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentIns, readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const SALE_INVOICE_UI_KEY = transactionStorageKeys.saleInvoiceUi;
 
@@ -246,6 +247,14 @@ function SaleInvoices() {
   const [graphUser, setGraphUser] = useState("All Users");
   const [activeDialog, setActiveDialog] = useState(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
   // Opens add sale.
   const openAddSale = () => navigate("/sales/sale-invoices/new", { state: { from: pathname } });
   // Opens preview.
@@ -365,8 +374,43 @@ function SaleInvoices() {
       navigate("/sales/sale-invoices/new", { state: { from: pathname, editInvoice: invoice } }); return;
     }
     if (action === "Share") { shareInvoice(invoice); return; }
-    if (action === "Cancel Invoice" && !window.confirm("Cancel this invoice? Recorded payments will be preserved.")) return;
-    if (action === "Delete" && !window.confirm("Hide this invoice from the Sale Invoices list in this browser? Its saved invoice will remain unchanged.")) return;
+    if (action === "Cancel Invoice") {
+      setConfirmModal({
+        isOpen: true,
+        title: "Cancel Sale Invoice",
+        message: "Cancel this invoice? Recorded payments will be preserved.",
+        confirmText: "Cancel Invoice",
+        confirmColor: "red",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          const cancelledInvoice = { ...invoice, invoiceStatus: "Cancelled", cancelled: true, status: "Cancelled" };
+          saveBusinessSaleInvoice(cancelledInvoice).then(() => {
+            saveInvoiceUi((current) => {
+              const cancelled = { ...(current.cancelled || {}) };
+              delete cancelled[invoice.id];
+              return { ...current, cancelled, history: recordInvoiceHistory(current, invoice, action) };
+            });
+            toast.success("Invoice cancelled successfully.");
+          }).catch((error) => toast.error(error.message || "Could not cancel this invoice."));
+        },
+      });
+      return;
+    }
+    if (action === "Delete") {
+      setConfirmModal({
+        isOpen: true,
+        title: "Hide Invoice",
+        message: "Hide this invoice from the Sale Invoices list in this browser? Its saved invoice will remain unchanged.",
+        confirmText: "Hide Invoice",
+        confirmColor: "red",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          saveInvoiceUi((current) => ({ ...current, deleted: [...new Set([...(current.deleted || []), invoice.id])], history: recordInvoiceHistory(current, invoice, action) }));
+          toast.success("Invoice hidden from the list.");
+        },
+      });
+      return;
+    }
     if (action === "Repeat Invoice") {
       navigate("/sales/sale-invoices/new", {
         state: { editInvoice: { ...invoice, id: undefined, form: { ...invoice.form, invoiceNumber: String(Number(invoice.invoiceNumber || 1) + 1) } } },
@@ -388,20 +432,10 @@ function SaleInvoices() {
       });
       return;
     }
-    if (action === "Cancel Invoice") {
-      const cancelledInvoice = { ...invoice, invoiceStatus: "Cancelled", cancelled: true, status: "Cancelled" };
-      saveBusinessSaleInvoice(cancelledInvoice).then(() => {
-        saveInvoiceUi((current) => {
-          const cancelled = { ...(current.cancelled || {}) };
-          delete cancelled[invoice.id];
-          return { ...current, cancelled, history: recordInvoiceHistory(current, invoice, action) };
-        });
-      }).catch((error) => window.alert(error.message || "Could not cancel this invoice."));
-    }
-    else if (action === "Delete") saveInvoiceUi((current) => ({ ...current, deleted: [...new Set([...(current.deleted || []), invoice.id])], history: recordInvoiceHistory(current, invoice, action) }));
-    else if (action === "Duplicate") {
+    if (action === "Duplicate") {
       const duplicate = { ...invoice, id: `local-copy-${Date.now()}`, localOnly: true, createdAt: new Date().toISOString(), form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` } };
       saveInvoiceUi((current) => ({ ...current, duplicates: [duplicate, ...(current.duplicates || [])], history: recordInvoiceHistory(current, invoice, action) }));
+      toast.success("Invoice duplicated successfully.");
     } else if (["Generate e-Invoice", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
   };
 
@@ -410,8 +444,8 @@ function SaleInvoices() {
     const text = `Sale invoice ${invoice.form?.invoiceNumber || ""} for ${invoice.form?.customer || "Cash Sale"}: ${formatMoney(invoiceAmount(invoice))}`;
     try {
       if (navigator.share) await navigator.share({ title: "Sale Invoice", text });
-      else if (navigator.clipboard) { await navigator.clipboard.writeText(text); window.alert("Invoice details copied to clipboard."); }
-      else window.alert(text);
+      else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast.success("Invoice details copied to clipboard."); }
+      else toast.info(text);
     } catch { /* Share dialog was closed. */ }
     setRowMenu("");
   };
@@ -461,6 +495,15 @@ function SaleInvoices() {
         records={visibleInvoices}
         totalLabel="Total Sale:"
         totalAmount={totals.amount}
+      />
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        confirmColor={confirmModal.confirmColor}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

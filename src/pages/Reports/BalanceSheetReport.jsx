@@ -3,6 +3,8 @@ import * as XLSX from "xlsx";
 import { FiChevronDown, FiChevronRight, FiInfo, FiPlus, FiPrinter, FiTrash2 } from "react-icons/fi";
 import { balanceSheetRepository } from "../../services/balanceSheetRepository";
 import { balanceSheetAccountGroups, calculateBalanceSheet, validateBalanceSheetAccount } from "../../utils/balanceSheetCalculations";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const fmt = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -25,6 +27,7 @@ export default function BalanceSheetReport() {
   const [expanded, setExpanded] = useState({ assets: true, nonCurrentAssets: true, liabilities: true, nonCurrentLiabilities: true, equity: true });
   const [form, setForm] = useState(null);
   const [editingId, setEditingId] = useState("");
+  const [deleteAccountConfirm, setDeleteAccountConfirm] = useState(null);
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const load = useCallback(async () => { try { setSnapshot(await balanceSheetRepository.load()); } catch (e) { setError(e.message); } }, []);
@@ -36,7 +39,18 @@ export default function BalanceSheetReport() {
   const openCreate = () => { setEditingId(""); setForm(initialForm()); setError(""); };
   const openEdit = (account) => { const stored = snapshot.accounts.find((row) => row.id === account.id); setEditingId(account.id); setForm({ name: account.name, group: account.group, openingBalance: String(stored?.openingBalance ?? account.amount), openingBalanceDate: stored?.openingBalanceDate || todayIso(), balanceDirection: stored?.balanceDirection || "credit" }); setError(""); };
   const save = async (event) => { event.preventDefault(); const data = { ...form, id: editingId || crypto.randomUUID(), name: form.name.trim(), openingBalance: Number(form.openingBalance) }; const validation = validateBalanceSheetAccount(data); if (validation) { setError(validation); return; } try { const accounts = await balanceSheetRepository.saveAccount(data); setSnapshot((old) => ({ ...old, accounts })); setForm(null); setError(""); } catch (e) { setError(e.message); } };
-  const remove = async (account) => { if (!window.confirm(`Delete account “${account.name}”?`)) return; const accounts = await balanceSheetRepository.deleteAccount(account.id); setSnapshot((old) => ({ ...old, accounts })); };
+  const remove = (account) => { setDeleteAccountConfirm(account); };
+  const executeDeleteAccount = async (account) => {
+    try {
+      const accounts = await balanceSheetRepository.deleteAccount(account.id);
+      setSnapshot((old) => ({ ...old, accounts }));
+      toast.success(`Account “${account.name}” deleted.`);
+    } catch (e) {
+      toast.error(e.message || "Could not delete account.");
+    } finally {
+      setDeleteAccountConfirm(null);
+    }
+  };
   const exportExcel = () => { const rows = [["Balance Sheet", `As of ${report.asOfDate || asOfDate}`], [], ["ASSETS", "Amount"], ["Current Assets", report.totalCurrentAssets], ...report.assets.map((row) => [row.name, row.amount]), ["Non-Current Assets", report.totalNonCurrentAssets], ...report.nonCurrentAssets.map((row) => [row.name, row.amount]), ["Total Assets", report.totalAssets], [], ["LIABILITIES", "Amount"], ...report.liabilities.map((row) => [row.name, row.amount]), ...report.nonCurrentLiabilities.map((row) => [row.name, row.amount]), ["Total Liabilities", report.totalLiabilities], [], ["OWNER'S EQUITY", "Amount"], ...report.equity.map((row) => [row.name, row.amount]), ["Total Owner's Equity", report.totalEquity], ["Total Liabilities + Equity", report.totalLiabilitiesAndEquity], ["Difference", report.difference], ...report.warnings.map((warning) => ["Data note", warning])]; const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), "Balance Sheet"); XLSX.writeFile(book, `balance-sheet-${report.asOfDate || asOfDate}.xlsx`); };
   const quickDate = (period) => { const d = new Date(); if (period === "Last Month") { const end = new Date(d.getFullYear(), d.getMonth(), 0); setAsOfDate(`${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`); return; } if (period === "This Year") { setAsOfDate(`${d.getFullYear()}-12-31`); return; } setAsOfDate(todayIso()); };
   const toggle = (key) => setExpanded((old) => ({ ...old, [key]: !old[key] }));
@@ -62,5 +76,17 @@ export default function BalanceSheetReport() {
       </details>
     </main>
     {form && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"><form onSubmit={save} className="w-full max-w-md space-y-4 rounded-xl bg-white p-5 shadow-xl"><div><h2 className="text-lg font-bold">{editingId ? "Edit account" : "Add account / opening balance"}</h2><p className="text-sm text-slate-500">Opening balances are effective from the date entered.</p></div><label className="block text-sm">Account name<input autoFocus value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label><label className="block text-sm">Account type<select value={form.group} onChange={(e) => setForm({ ...form, group: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2">{balanceSheetAccountGroups.map((group) => <option key={group.value} value={group.value}>{group.label}</option>)}</select></label>{form.group === "equity" && <label className="block text-sm">Balance side<select value={form.balanceDirection} onChange={(e) => setForm({ ...form, balanceDirection: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2"><option value="credit">Credit balance (capital / earnings)</option><option value="debit">Debit balance (drawings)</option></select></label>}<label className="block text-sm">Opening balance<input type="number" min="0" step="0.01" value={form.openingBalance} onChange={(e) => setForm({ ...form, openingBalance: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label><label className="block text-sm">Balance date<input type="date" value={form.openingBalanceDate} onChange={(e) => setForm({ ...form, openingBalanceDate: e.target.value })} className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2" /></label>{error && <p role="alert" className="text-sm text-rose-700">{error}</p>}<div className="flex justify-end gap-2"><button type="button" onClick={() => { setForm(null); setError(""); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm">Cancel</button><button type="submit" className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Save account</button></div></form></div>}
+    {deleteAccountConfirm && (
+      <ConfirmModal
+        isOpen={Boolean(deleteAccountConfirm)}
+        title="Delete Account"
+        message={`Delete account “${deleteAccountConfirm.name}”? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        danger={true}
+        onConfirm={() => void executeDeleteAccount(deleteAccountConfirm)}
+        onCancel={() => setDeleteAccountConfirm(null)}
+      />
+    )}
   </div>;
 }

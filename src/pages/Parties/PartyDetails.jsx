@@ -35,6 +35,8 @@ import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { calculateInvoiceSettlement, calculatePartyBalances, transactionMatchesParty } from "../../services/partyBalances";
 import useAppSettings from "../../hooks/useAppSettings";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -506,6 +508,7 @@ function PartyDetails() {
   }, [location.state]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
+  const [deletePartyConfirm, setDeletePartyConfirm] = useState(null);
   const [parties, setParties] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [purchases, setPurchases] = useState([]);
@@ -646,14 +649,12 @@ function PartyDetails() {
     if (!selectedParty) return;
     const blockReason = getPartyDeletionBlockReason(selectedParty);
     if (blockReason) {
-      setLoadError(`Cannot delete ${selectedParty.partyName}. ${blockReason}`);
+      const msg = `Cannot delete ${selectedParty.partyName}. ${blockReason}`;
+      setLoadError(msg);
+      toast.error(msg);
       return;
     }
-    if (!window.confirm(`Delete party "${selectedParty.partyName}"? This party has no linked transactions.`)) return;
-    deleteParty(selectedParty.id);
-    setParties((current) => current.filter((party) => String(party.id) !== String(selectedParty.id)));
-    setSelectedPartyId("cash-sale");
-    setLoadError("");
+    setDeletePartyConfirm(selectedParty);
   };
 
   const partyBalanceResult = useMemo(() => calculatePartyBalances({
@@ -1431,7 +1432,7 @@ function PartyDetails() {
         const handleSendWhatsApp = () => {
           const rawPhone = (selectedParty.phone || "").replace(/[^0-9]/g, "");
           if (!rawPhone) {
-            alert("This party has no phone number entered.");
+            toast.error("This party has no phone number entered.");
             return;
           }
           const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
@@ -1543,6 +1544,25 @@ function PartyDetails() {
           </div>
         );
       })()}
+      {deletePartyConfirm && (
+        <ConfirmModal
+          isOpen={Boolean(deletePartyConfirm)}
+          title="Delete Party"
+          message={`Are you sure you want to delete party "${deletePartyConfirm.partyName}"? This party has no linked transactions.`}
+          confirmText="Delete Party"
+          cancelText="Cancel"
+          danger={true}
+          onConfirm={() => {
+            deleteParty(deletePartyConfirm.id);
+            setParties((current) => current.filter((party) => String(party.id) !== String(deletePartyConfirm.id)));
+            setSelectedPartyId("cash-sale");
+            setLoadError("");
+            toast.success(`Party "${deletePartyConfirm.partyName}" deleted.`);
+            setDeletePartyConfirm(null);
+          }}
+          onCancel={() => setDeletePartyConfirm(null)}
+        />
+      )}
     </div>
   );
 }

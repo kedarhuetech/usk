@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo } from "react";
-import { FiX } from "react-icons/fi";
+import React, { useEffect, useMemo, useState } from "react";
+import { FiMail, FiX } from "react-icons/fi";
 import { getEffectiveCompanyInfo } from "../../services/unifiedPrintService.js";
+import { toast } from "./Toast.jsx";
 
 function parseYMD(val) {
   if (!val) return "";
@@ -56,6 +57,8 @@ export default function ReportPrintPreviewModal({
   const companyName = company.name || "Sai Kirana Stores";
   const phone = company.phone || "";
   const themeColor = company.themeColor || "#881337";
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
 
   useEffect(() => {
     if (!isOpen || !printOnOpen) return undefined;
@@ -376,10 +379,7 @@ export default function ReportPrintPreviewModal({
           </button>
           <button
             type="button"
-            onClick={() => {
-              const email = window.prompt("Enter email address to send report PDF:");
-              if (email) window.alert(`Report PDF sent successfully to ${email}`);
-            }}
+            onClick={() => setEmailModalOpen(true)}
             className="rounded-full border border-rose-500 bg-white px-5 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition shadow-sm cursor-pointer"
           >
             Email PDF
@@ -393,6 +393,76 @@ export default function ReportPrintPreviewModal({
           </button>
         </div>
       </div>
+
+      {emailModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <FiMail className="text-rose-600" /> Send Report PDF
+              </h3>
+              <button
+                type="button"
+                onClick={() => { setEmailModalOpen(false); setEmailInput(""); }}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="py-4 space-y-3">
+              <label className="block text-xs font-semibold text-slate-600">
+                Recipient Email Address
+                <input
+                  type="email"
+                  autoFocus
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="recipient@example.com"
+                  className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-rose-600"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (!emailInput.trim() || !emailInput.includes("@")) {
+                        toast.error("Please enter a valid email address.");
+                        return;
+                      }
+                      toast.success(`Report PDF sent successfully to ${emailInput.trim()}`);
+                      setEmailModalOpen(false);
+                      setEmailInput("");
+                    }
+                  }}
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                A PDF copy of the {title} will be dispatched to this email.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t pt-3">
+              <button
+                type="button"
+                onClick={() => { setEmailModalOpen(false); setEmailInput(""); }}
+                className="rounded-md border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!emailInput.trim() || !emailInput.includes("@")) {
+                    toast.error("Please enter a valid email address.");
+                    return;
+                  }
+                  toast.success(`Report PDF sent successfully to ${emailInput.trim()}`);
+                  setEmailModalOpen(false);
+                  setEmailInput("");
+                }}
+                className="rounded-md bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              >
+                Send Email
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

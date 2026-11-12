@@ -17,6 +17,8 @@ import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewM
 import { transactionTypes } from "../../services/transactionRecordsStorage";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { toast } from "../../components/Common/Toast.jsx";
+import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -72,6 +74,7 @@ export default function AllTransactionsReport() {
   const [menuState, setMenuState] = useState(null);
   const [historyModal, setHistoryModal] = useState(null);
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [deleteConfirmRow, setDeleteConfirmRow] = useState(null);
 
   const menuRef = useRef(null);
 
@@ -154,20 +157,7 @@ export default function AllTransactionsReport() {
     }
 
     if (action === "Delete") {
-      if (!window.confirm(`Delete this ${row.type} transaction (${row.refNo || row.partyName})?`)) {
-        return;
-      }
-      if (row.storageKey) {
-        const currentList = readLocal(row.storageKey);
-        const updated = currentList.filter(
-          (item) => (item.id || item.invoiceId) !== (row.raw.id || row.raw.invoiceId)
-        );
-        try {
-          writeTransactionCollection(row.storageKey, updated);
-          window.dispatchEvent(new Event("ledgerly:business-data-changed"));
-          window.dispatchEvent(new Event("storage"));
-        } catch {}
-      }
+      setDeleteConfirmRow(row);
       return;
     }
 
@@ -798,7 +788,7 @@ export default function AllTransactionsReport() {
                           const text = `${row.type} #${row.refNo} for ${row.partyName}: ${money(row.total)}`;
                           if (navigator.clipboard) {
                             navigator.clipboard.writeText(text);
-                            window.alert("Copied to clipboard!");
+                            toast.success("Copied to clipboard!");
                           }
                         }}
                         title="Share"
@@ -971,6 +961,35 @@ export default function AllTransactionsReport() {
         totalLabel="Total Amount:"
         totalAmount={filtered.reduce((sum, r) => sum + Number(r.total || 0), 0)}
       />
+      {deleteConfirmRow && (
+        <ConfirmModal
+          isOpen={Boolean(deleteConfirmRow)}
+          title="Delete Transaction"
+          message={`Are you sure you want to delete this ${deleteConfirmRow.type} transaction (${deleteConfirmRow.refNo || deleteConfirmRow.partyName})?`}
+          confirmText="Delete"
+          cancelText="Cancel"
+          danger={true}
+          onConfirm={() => {
+            const row = deleteConfirmRow;
+            if (row.storageKey) {
+              const currentList = readLocal(row.storageKey);
+              const updated = currentList.filter(
+                (item) => (item.id || item.invoiceId) !== (row.raw?.id || row.raw?.invoiceId)
+              );
+              try {
+                writeTransactionCollection(row.storageKey, updated);
+                window.dispatchEvent(new Event("ledgerly:business-data-changed"));
+                window.dispatchEvent(new Event("storage"));
+                toast.success(`${row.type} deleted.`);
+              } catch {
+                toast.error(`Could not delete ${row.type}.`);
+              }
+            }
+            setDeleteConfirmRow(null);
+          }}
+          onCancel={() => setDeleteConfirmRow(null)}
+        />
+      )}
     </div>
   );
 }

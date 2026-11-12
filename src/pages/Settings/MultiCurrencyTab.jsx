@@ -12,6 +12,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { STANDARD_CURRENCIES } from "../../constants/multiCurrencyData.js";
+import { ConfirmModal } from "../../components/Common/Toast.jsx";
 
 function getTodayFormatted() {
   const d = new Date();
@@ -26,6 +27,15 @@ export default function MultiCurrencyTab({ settings, update }) {
   const [editingCurrency, setEditingCurrency] = useState(null);
   const [fetchingRate, setFetchingRate] = useState(false);
   const [rateFeedback, setRateFeedback] = useState("");
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    cancelText: "Cancel",
+    tone: "primary",
+    onConfirm: null,
+  });
 
   // Base currency resolution
   const baseCurrency =
@@ -193,19 +203,37 @@ export default function MultiCurrencyTab({ settings, update }) {
   const handleDeleteCurrency = (id) => {
     const target = currencyList.find((c) => c.id === id);
     if (target?.isBase) {
-      // Resetting base currency
-      if (window.confirm("Remove Base Currency and reset Multi-Currency?")) {
-        update("baseCurrency", null);
-        update("multiCurrencyBase", null);
-        update("multiCurrencyEnabled", false);
-        update("multiCurrencyList", []);
-        update("currency", "INR");
-        update("currencySymbol", "₹");
-      }
+      setConfirmModal({
+        isOpen: true,
+        title: "Reset Multi-Currency",
+        message: "Remove Base Currency and reset Multi-Currency configuration to defaults?",
+        confirmText: "Remove & Reset",
+        tone: "danger",
+        onConfirm: () => {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          update("baseCurrency", null);
+          update("multiCurrencyBase", null);
+          update("multiCurrencyEnabled", false);
+          update("multiCurrencyList", []);
+          update("currency", "INR");
+          update("currencySymbol", "₹");
+        },
+      });
       return;
     }
-    const nextList = currencyList.filter((c) => c.id !== id);
-    update("multiCurrencyList", nextList);
+
+    setConfirmModal({
+      isOpen: true,
+      title: "Remove Currency",
+      message: `Remove currency ${target?.code || target?.name || id} from the active currency list?`,
+      confirmText: "Remove",
+      tone: "danger",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        const nextList = currencyList.filter((c) => c.id !== id);
+        update("multiCurrencyList", nextList);
+      },
+    });
   };
 
   return (
@@ -576,6 +604,18 @@ export default function MultiCurrencyTab({ settings, update }) {
           </div>
         </div>
       )}
+
+      {/* Modern Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        tone={confirmModal.tone}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

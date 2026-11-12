@@ -7,6 +7,7 @@ import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
 const CATEGORIES_KEY = "ledgerly:expenseCategories.v1";
@@ -100,6 +101,14 @@ export default function Expenses() {
   const [previewEntry, setPreviewEntry] = useState(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
   const saveRecords = (next) => { setRecords(next); localStorage.setItem(RECORDS_KEY, JSON.stringify(next)); };
   const saveCategories = (next) => { setCategories(next); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(next)); };
   const startNew = () => setEditor({ mode: "new", entry: blankEntry(records.length + 1) });
@@ -125,11 +134,63 @@ export default function Expenses() {
   const total = editor?.entry.rows.reduce((sum, row) => sum + rowAmount(row, editor.entry.gst), 0) || 0;
   const enteredPayments = editor?.entry.payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) || 0;
   const paid = editor ? (enteredPayments || total) : 0;
-  const persistEditor = () => { const entry = editor.entry; if (!entry.category) { window.alert("Choose an expense category first."); return; } const clean = { ...entry, rows: entry.rows.filter(row => row.item.trim()), amount: total, paid, status: paid >= total ? "Paid" : "Unpaid", history: [...(entry.history || []), { action: editor.mode === "new" ? "Created expense" : "Updated expense", at: new Date().toISOString() }] }; if (!clean.rows.length) { window.alert("Add at least one expense item."); return; } saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record)); setSelected(clean.category); setTab("Category"); setEditor(null); };
-  const remove = (entry) => { if (window.confirm(`Delete expense ${entry.number}?`)) saveRecords(records.filter(record => record.id !== entry.id)); setMenuId(""); };
-  const duplicate = (entry) => { const copy = { ...entry, id: crypto.randomUUID(), number: String(records.length + 1), history: [{ action: "Duplicated expense", at: new Date().toISOString() }] }; saveRecords([copy, ...records]); setMenuId(""); };
-  const saveExpenseItem = () => { const draft = itemModal?.draft; if (!draft?.item.trim()) { window.alert("Enter an item name first."); return; } const updatedRow = { ...currentRows.find(row => row.id === itemModal.rowId), ...draft }; setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, ...draft } : row) } })); const nextItems = [updatedRow, ...expenseItems.filter(item => item.item.toLowerCase() !== updatedRow.item.toLowerCase())]; setExpenseItems(nextItems); localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(nextItems)); setItemModal(null); };
-  const addCategory = () => { const name = categoryName.trim(); if (!name) return; if (categories.some(value => value.toLowerCase() === name.toLowerCase())) { window.alert("This category already exists."); return; } saveCategories([...categories, name]); updateEntry("category", name); setSelected(name); setCategoryName(""); setCategoryModal(false); };
+  const persistEditor = () => {
+    const entry = editor.entry;
+    if (!entry.category) { toast.error("Choose an expense category first."); return; }
+    const clean = { ...entry, rows: entry.rows.filter(row => row.item.trim()), amount: total, paid, status: paid >= total ? "Paid" : "Unpaid", history: [...(entry.history || []), { action: editor.mode === "new" ? "Created expense" : "Updated expense", at: new Date().toISOString() }] };
+    if (!clean.rows.length) { toast.error("Add at least one expense item."); return; }
+    saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
+    toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
+    setSelected(clean.category);
+    setTab("Category");
+    setEditor(null);
+  };
+  const remove = (entry) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Expense",
+      message: `Delete expense ${entry.number}?`,
+      confirmText: "Delete",
+      confirmColor: "red",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        saveRecords(records.filter(record => record.id !== entry.id));
+        toast.success(`Expense ${entry.number} deleted.`);
+      },
+    });
+    setMenuId("");
+  };
+  const duplicate = (entry) => {
+    const copy = { ...entry, id: crypto.randomUUID(), number: String(records.length + 1), history: [{ action: "Duplicated expense", at: new Date().toISOString() }] };
+    saveRecords([copy, ...records]);
+    toast.success("Expense duplicated.");
+    setMenuId("");
+  };
+  const saveExpenseItem = () => {
+    const draft = itemModal?.draft;
+    if (!draft?.item.trim()) { toast.error("Enter an item name first."); return; }
+    const updatedRow = { ...currentRows.find(row => row.id === itemModal.rowId), ...draft };
+    setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, ...draft } : row) } }));
+    const nextItems = [updatedRow, ...expenseItems.filter(item => item.item.toLowerCase() !== updatedRow.item.toLowerCase())];
+    setExpenseItems(nextItems);
+    localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(nextItems));
+    toast.success("Expense item saved.");
+    setItemModal(null);
+  };
+  const addCategory = () => {
+    const name = categoryName.trim();
+    if (!name) return;
+    if (categories.some(value => value.toLowerCase() === name.toLowerCase())) {
+      toast.error("This category already exists.");
+      return;
+    }
+    saveCategories([...categories, name]);
+    updateEntry("category", name);
+    setSelected(name);
+    setCategoryName("");
+    setCategoryModal(false);
+    toast.success(`Category "${name}" added.`);
+  };
   const currentRows = editor?.entry.rows || [];
 
   return <main className="flex h-full min-h-0 flex-col gap-1.5 bg-slate-100 p-1.5 text-slate-700">
@@ -146,5 +207,14 @@ export default function Expenses() {
     {itemModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => setItemModal(null)}><div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-bold text-slate-700">{itemModal.mode === "picker" ? "Select Expense Item" : "Add Expense Item"}</h2><button onClick={() => setItemModal(null)} aria-label="Close item picker"><FiX className="h-6 w-6 text-slate-400"/></button></div>{itemModal.mode === "picker" ? <><div className="flex gap-3 border-b p-5"><label className="relative min-w-0 flex-1"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input autoFocus value={itemSearch} onChange={event => setItemSearch(event.target.value)} placeholder="Search items" className="h-11 w-full rounded-md border border-slate-300 pl-10 pr-3 outline-none focus:border-blue-500"/></label><Button onClick={() => setItemModal(current => ({ ...current, mode: "form", draft: { item: "", hsn: "", description: "", price: "", tax: "" } }))} className="shrink-0 bg-blue-600 px-5 text-white"><FiPlus/> Add Item</Button></div><div className="max-h-[55vh] min-h-36 overflow-y-auto p-3">{expenseItems.filter(item => item.item.toLowerCase().includes(itemSearch.toLowerCase())).length ? expenseItems.filter(item => item.item.toLowerCase().includes(itemSearch.toLowerCase())).map(item => <button key={item.item} onClick={() => { setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, item: item.item, description: item.description || "", price: item.price || "", tax: item.tax || "", hsn: item.hsn || "" } : row) } })); setItemModal(null); }} className="flex w-full items-center justify-between rounded-md px-4 py-3 text-left hover:bg-sky-50"><span><span className="block font-medium text-slate-700">{item.item}</span>{item.hsn && <span className="mt-1 block text-xs text-slate-400">HSN/SAC: {item.hsn}</span>}</span><span className="text-slate-500">{money(item.price)}</span></button>) : <div className="grid min-h-36 place-items-center text-slate-400">{itemSearch ? "No matching items" : "No saved expense items yet"}</div>}</div></> : <div className="p-6"><div className="grid grid-cols-2 gap-5"><label className="relative"><span className="absolute -top-2 left-4 bg-white px-1 text-sm text-blue-500">Item Name *</span><input autoFocus value={itemModal.draft.item} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, item: event.target.value } }))} className="h-14 w-full rounded-md border-2 border-blue-500 px-3 outline-none"/></label><input value={itemModal.draft.hsn} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, hsn: event.target.value } }))} placeholder="Item HSN / SAC" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><input value={itemModal.draft.description} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, description: event.target.value } }))} placeholder="Description" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><div className="flex items-center px-3 text-blue-500">Pricing</div><div className="flex h-14 overflow-hidden rounded-md border border-slate-300"><input type="number" min="0" value={itemModal.draft.price} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, price: event.target.value } }))} placeholder="Price" className="min-w-0 flex-1 px-3 outline-none"/><select className="border-l px-3"><option>Tax Excluded</option><option>Tax Included</option></select></div><select value={itemModal.draft.tax} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, tax: event.target.value } }))} className="h-14 rounded-md border border-slate-300 px-3 text-slate-500 outline-none focus:border-blue-500"><option value="">Tax Rate</option><option value="0">None (0%)</option><option value="5">GST 5%</option><option value="12">GST 12%</option><option value="18">GST 18%</option><option value="28">GST 28%</option></select></div><div className="mt-8 flex justify-end gap-3"><Button onClick={() => setItemModal(current => ({ ...current, mode: "picker" }))} className="border px-5">Back</Button><Button onClick={saveExpenseItem} className="bg-blue-600 px-7 py-3 font-semibold text-white">Save</Button></div></div>}</div></div>}    {categoryModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex justify-between"><h2 className="text-lg font-semibold">Add Expense Category</h2><button onClick={() => setCategoryModal(false)}><FiX/></button></div><input autoFocus value={categoryName} onChange={event => setCategoryName(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Category name" className="h-12 w-full rounded border px-3"/><div className="mt-5 flex justify-end gap-3"><Button onClick={() => setCategoryModal(false)} className="border px-4">Cancel</Button><Button onClick={addCategory} className="bg-blue-600 px-5 text-white">Save</Button></div></div></div>}
     {historyEntry && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"><div className="flex justify-between"><h2 className="text-lg font-semibold">Expense History · #{historyEntry.number}</h2><button onClick={() => setHistoryEntry(null)}><FiX/></button></div><div className="mt-5 space-y-3">{(historyEntry.history || []).length ? historyEntry.history.map((event, index) => <p key={index} className="border-b pb-3">{event.action}<span className="block text-sm text-slate-400">{new Date(event.at).toLocaleString()}</span></p>) : <p className="text-slate-500">No history recorded yet.</p>}</div></div></div>}
     {previewEntry && <ExpenseDocument entry={previewEntry} onClose={() => setPreviewEntry(null)}/>}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }

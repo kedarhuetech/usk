@@ -48,6 +48,7 @@ import {
 } from "../../services/auditTrailStorage.js";
 import PrintTab from "./PrintTab";
 import TaxesTab from "./TaxesTab";
+import { toast as toastNotification, ConfirmModal } from "../../components/Common/Toast.jsx";
 import PartyTab from "./PartyTab";
 import TransactionMessageTab from "./TransactionMessageTab";
 import ServiceRemindersTab from "./ServiceRemindersTab.jsx";
@@ -78,6 +79,15 @@ function Settings() {
   const [activeTab, setActiveTab] = useState(() => settingsTabFromSearch(location.search));
   const [settings, setSettings] = useState(getAppSettings);
   const [toast, setToast] = useState("");
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    cancelText: "Cancel",
+    tone: "primary",
+    onConfirm: null,
+  });
   const [selectedZoom, setSelectedZoom] = useState(settings.screenZoom || "100%");
 
   // Modals
@@ -188,15 +198,23 @@ function Settings() {
   const handleRestoreFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (window.confirm("Restoring a backup will merge saved records and reload the page. Continue?")) {
-      try {
-        await restoreBackupData(file);
-        showToast("Data restored! Reloading...");
-        setTimeout(() => window.location.reload(), 1000);
-      } catch (err) {
-        alert("Failed to restore backup: " + err.message);
-      }
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: "Restore Backup Data",
+      message: "Restoring a backup will merge saved records and reload the page. Continue?",
+      confirmText: "Restore & Reload",
+      tone: "emerald",
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        try {
+          await restoreBackupData(file);
+          showToast("Data restored! Reloading...");
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+          toastNotification.error("Failed to restore backup: " + err.message);
+        }
+      },
+    });
   };
 
   return (
@@ -226,11 +244,19 @@ function Settings() {
             <button
               type="button"
               onClick={() => {
-                if (window.confirm("Reset all settings to default values?")) {
-                  const defaults = resetAppSettings();
-                  setSettings(defaults);
-                  showToast("Settings reset to defaults");
-                }
+                setConfirmModal({
+                  isOpen: true,
+                  title: "Reset All Settings",
+                  message: "Reset all settings to default values? This action cannot be undone.",
+                  confirmText: "Reset to Defaults",
+                  tone: "danger",
+                  onConfirm: () => {
+                    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                    const defaults = resetAppSettings();
+                    setSettings(defaults);
+                    showToast("Settings reset to defaults");
+                  },
+                });
               }}
               className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
             >
@@ -504,11 +530,19 @@ function Settings() {
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Restore all records to snapshot from ${snap.date}? Current data will be replaced.`)) {
-                          restoreSnapshot(snap.id);
-                          showToast("Snapshot restored! Reloading...");
-                          setTimeout(() => window.location.reload(), 1000);
-                        }
+                        setConfirmModal({
+                          isOpen: true,
+                          title: "Restore Snapshot",
+                          message: `Restore all records to snapshot from ${snap.date}? Current data will be replaced.`,
+                          confirmText: "Restore Snapshot",
+                          tone: "emerald",
+                          onConfirm: () => {
+                            setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                            restoreSnapshot(snap.id);
+                            showToast("Snapshot restored! Reloading...");
+                            setTimeout(() => window.location.reload(), 1000);
+                          },
+                        });
                       }}
                       className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700"
                     >
@@ -562,11 +596,19 @@ function Settings() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm("Clear all audit logs?")) {
-                      clearAuditTrailLogs();
-                      setAuditLogs([]);
-                      showToast("Audit logs cleared");
-                    }
+                    setConfirmModal({
+                      isOpen: true,
+                      title: "Clear Audit Logs",
+                      message: "Clear all immutable audit trail logs permanently? This cannot be undone.",
+                      confirmText: "Clear Logs",
+                      tone: "danger",
+                      onConfirm: () => {
+                        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+                        clearAuditTrailLogs();
+                        setAuditLogs([]);
+                        showToast("Audit logs cleared");
+                      },
+                    });
                   }}
                   className="text-xs font-semibold text-rose-600 hover:underline"
                 >
@@ -662,6 +704,18 @@ function Settings() {
           </div>
         </div>
       )}
+
+      {/* Modern Confirm Modal (replaces browser confirm) */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        tone={confirmModal.tone}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

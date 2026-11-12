@@ -14,6 +14,7 @@ import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -85,6 +86,14 @@ export default function PaymentIn() {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 });
   const [history, setHistory] = useState(null);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    confirmColor: "red",
+    onConfirm: null,
+  });
 
   const parties = useMemo(() => getParties(), [editor]);
   const visible = useMemo(() => records.filter((entry) => {
@@ -100,12 +109,13 @@ export default function PaymentIn() {
   const newReceipt = () => setEditor({ mode: "new", entry: { number: String(records.length + 1), date: today(), payments: [blankPayment()], description: "", partyId: "", partyName: "", received: "" } });
   const saveReceipt = () => {
     const entry = editor.entry;
-    if (!entry.partyName.trim()) { window.alert("Select or enter a party."); return; }
+    if (!entry.partyName.trim()) { toast.error("Select or enter a party."); return; }
     const amount = (entry.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
-    if (amount <= 0) { window.alert("Enter an amount greater than zero."); return; }
+    if (amount <= 0) { toast.error("Enter an amount greater than zero."); return; }
     const now = new Date().toISOString();
     const saved = { ...entry, id: entry.id || `payment-in-${Date.now()}`, amount, received: amount, paymentType: [...new Set(entry.payments.map((payment) => payment.type))].join(", "), status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || "My Company", user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated receipt" : "Created receipt", at: now }] };
     persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
+    toast.success(editor.mode === "edit" ? "Receipt updated successfully." : "Payment-In receipt created.");
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -138,8 +148,22 @@ export default function PaymentIn() {
     setMenuPosition({ top: rect.bottom + menuHeight > window.innerHeight ? Math.max(8, rect.top - menuHeight) : rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) });
     setOpenMenu(entry.id);
   };
-  const duplicate = (entry) => { const copy = { ...entry, id: `payment-in-${Date.now()}`, number: String(records.length + 1), status: "Unused", linkedInvoiceId: "", history: [{ action: "Duplicated receipt", at: new Date().toISOString() }] }; persist([copy, ...records]); setOpenMenu(""); };
-  const remove = (entry) => { if (window.confirm(`Delete Payment-In receipt ${entry.number}?`)) persist(records.filter((record) => record.id !== entry.id)); setOpenMenu(""); };
+  const duplicate = (entry) => { const copy = { ...entry, id: `payment-in-${Date.now()}`, number: String(records.length + 1), status: "Unused", linkedInvoiceId: "", history: [{ action: "Duplicated receipt", at: new Date().toISOString() }] }; persist([copy, ...records]); toast.success("Receipt duplicated."); setOpenMenu(""); };
+  const remove = (entry) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Payment-In",
+      message: `Delete Payment-In receipt ${entry.number}?`,
+      confirmText: "Delete",
+      confirmColor: "red",
+      onConfirm: () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        persist(records.filter((record) => record.id !== entry.id));
+        toast.success(`Receipt ${entry.number} deleted.`);
+      },
+    });
+    setOpenMenu("");
+  };
   const exportRows = () => {
     const rows = [["Date", "Receipt No", "Party Name", "Total Amount", "Received", "Payment Type", "Status"], ...visible.map((entry) => [entry.date, entry.number, entry.partyName, entry.amount, entry.received, entry.paymentType, entry.status])];
     const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
@@ -169,5 +193,14 @@ export default function PaymentIn() {
       <label className="mt-6 block max-w-[400px] text-slate-500"><textarea value={editor.entry.description} onChange={(event) => updateEntry("description", event.target.value)} placeholder="Description" className="mt-1 h-40 w-full resize-none rounded-md border border-slate-300 p-4 outline-none focus:border-blue-500" /></label><button onClick={() => document.getElementById("payment-attachment")?.click()} className="mt-4 text-2xl text-slate-400" title="Attach image">▧</button><input id="payment-attachment" type="file" accept="image/*" className="hidden" /></div><div className="flex flex-col justify-center"><label className="flex items-center justify-between gap-5 text-slate-500">Received<input value={money(paymentTotal)} readOnly className="h-12 w-64 rounded-md border border-slate-300 bg-slate-50 px-4 text-right text-lg text-slate-800" /></label><p className="mt-2 text-sm text-slate-400">The receipt amount is calculated from its payment methods.</p></div></div></div><footer className="flex flex-wrap items-center justify-between gap-3 border-t px-8 py-4"><Button onClick={() => setLinkOpen(true)} className="bg-emerald-500 text-white hover:bg-emerald-600">LINK PAYMENT</Button><div className="ml-auto flex gap-3"><Button onClick={() => { const html = documentHtml({ ...editor.entry, amount: paymentTotal }); const target = window.open("", "_blank"); if (target) { target.document.write(html); target.document.close(); } }} className="border border-blue-300 text-blue-600">Share <FiChevronDown /></Button><Button onClick={saveReceipt} className="bg-blue-600 px-10 text-white hover:bg-blue-700">Save</Button></div></footer></section></div>}
     {linkOpen && editor && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4"><section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl"><div className="mb-4 flex justify-between"><h3 className="text-lg font-bold">Link Payment</h3><button onClick={() => setLinkOpen(false)}><FiX /></button></div><p className="mb-4 text-sm text-slate-500">Receipt linking will be available when there are unpaid sale invoices for this party. You can save this receipt now and link it later.</p><div className="rounded-lg bg-slate-50 p-4 text-sm">Party: <b>{editor.entry.partyName || "Select a party first"}</b><br />Received: <b>{money(paymentTotal)}</b><br />No local sale-invoice balance is available to link here yet.</div><div className="mt-5 flex justify-end"><Button onClick={() => setLinkOpen(false)} className="bg-blue-600 text-white">Done</Button></div></section></div>}
     {history && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setHistory(null); }}><section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl"><div className="mb-4 flex justify-between"><h3 className="text-lg font-bold">Payment History · Receipt {history.number}</h3><button onClick={() => setHistory(null)}><FiX /></button></div><div className="space-y-3">{(history.history || []).length ? history.history.map((event, index) => <p key={index} className="rounded bg-slate-50 p-3">{event.action}<span className="block text-xs text-slate-500">{new Date(event.at).toLocaleString()}</span></p>) : <p className="text-slate-500">No history recorded yet.</p>}</div><div className="mt-5 flex justify-end"><Button onClick={() => setHistory(null)} className="bg-blue-600 text-white">Close</Button></div></section></div>}
+    <ConfirmModal
+      isOpen={confirmModal.isOpen}
+      title={confirmModal.title}
+      message={confirmModal.message}
+      confirmText={confirmModal.confirmText}
+      confirmColor={confirmModal.confirmColor}
+      onConfirm={confirmModal.onConfirm}
+      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
   </main>;
 }
