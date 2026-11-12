@@ -940,7 +940,7 @@ function PartyDetails() {
                   </svg>
                 </div>
                 <p className="text-xs leading-snug text-slate-700">
-                  Use contacts from your Phone or<br />
+                  Use contacts from your <br />
                   Gmail to <span className="font-bold text-slate-900">quickly create parties.</span>
                 </p>
               </div>

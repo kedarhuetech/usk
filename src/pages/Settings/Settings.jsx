@@ -51,6 +51,8 @@ import TaxesTab from "./TaxesTab";
 import PartyTab from "./PartyTab";
 import TransactionMessageTab from "./TransactionMessageTab";
 import MultiCurrencyTab from "./MultiCurrencyTab";
+import HsnAutocomplete from "../../components/Common/HsnAutocomplete";
+import { matchGstRateToOption } from "../../services/hsnService.js";
 
 const TABS = [
   { id: "general", label: "GENERAL", icon: FiSliders },
@@ -2755,17 +2757,23 @@ function TransactionTab({ settings, update, updateMultiple }) {
                       {/* Col 2: Default SAC */}
                       <div>
                         <label className="block text-[11px] font-semibold text-slate-600">
-                          Default SAC
+                          Default SAC (Service Accounting Code)
                         </label>
                         <div className="relative mt-1">
-                          <input
-                            type="text"
+                          <HsnAutocomplete
+                            type="SAC"
                             value={charge.sac || ""}
-                            onChange={(e) => updateCharge(idx, "sac", e.target.value)}
-                            placeholder="Enter SAC"
-                            className="h-9 w-full rounded-md border border-slate-300 bg-white pl-3 pr-8 text-xs text-slate-800 outline-none focus:border-blue-500"
+                            onChange={(val) => updateCharge(idx, "sac", val)}
+                            onSelect={(selected) => {
+                              updateCharge(idx, "sac", selected.code);
+                              if (selected.gst_rate !== null && (!charge.taxRate || charge.taxRate === "NONE")) {
+                                const matchedRate = matchGstRateToOption(selected.gst_rate, ["GST @ 5%", "GST @ 12%", "GST @ 18%", "GST @ 28%"]);
+                                if (matchedRate) updateCharge(idx, "taxRate", matchedRate);
+                              }
+                            }}
+                            placeholder="Search SAC code / service..."
+                            className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 outline-none focus:border-blue-500"
                           />
-                          <FiSearch className="absolute right-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
                         </div>
                         <p className="mt-1 text-[10px] text-slate-400">
                           Can be changed during transaction

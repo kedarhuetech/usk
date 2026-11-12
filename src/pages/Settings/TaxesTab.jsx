@@ -1,5 +1,7 @@
 import React, { useState } from "react";
-import { FiHelpCircle, FiPlus, FiTrash2, FiX } from "react-icons/fi";
+import { FiHelpCircle, FiPlus, FiTrash2, FiX, FiUploadCloud, FiFileText, FiCheckCircle, FiAlertCircle, FiLoader } from "react-icons/fi";
+import HsnAutocomplete from "../../components/Common/HsnAutocomplete.jsx";
+import { uploadHsnMasterFile, lookupHsnCode } from "../../services/hsnService.js";
 
 function InfoTooltip({ text }) {
   const [visible, setVisible] = useState(false);
@@ -40,6 +42,11 @@ const COMPOSITE_SCHEME_TYPES = [
 
 export default function TaxesTab({ settings, update }) {
   const [showTaxListModal, setShowTaxListModal] = useState(false);
+  const [showHsnModal, setShowHsnModal] = useState(false);
+  const [uploadingHsn, setUploadingHsn] = useState(false);
+  const [hsnUploadResult, setHsnUploadResult] = useState(null);
+  const [testHsnCode, setTestHsnCode] = useState("");
+  const [testHsnDetails, setTestHsnDetails] = useState(null);
   const [taxRates, setTaxRates] = useState(
     () =>
       settings.taxRatesList || [
@@ -59,6 +66,32 @@ export default function TaxesTab({ settings, update }) {
   const [newTaxRate, setNewTaxRate] = useState("");
   const [newTaxCess, setNewTaxCess] = useState("");
   const [addingTax, setAddingTax] = useState(false);
+
+  const handleHsnFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingHsn(true);
+    setHsnUploadResult(null);
+    try {
+      const res = await uploadHsnMasterFile(file);
+      setHsnUploadResult({ success: true, message: res.message, count: res.count });
+    } catch (err) {
+      setHsnUploadResult({ success: false, message: err.message });
+    } finally {
+      setUploadingHsn(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleTestHsnSelect = async (item) => {
+    setTestHsnCode(item.code);
+    try {
+      const details = await lookupHsnCode(item.code);
+      setTestHsnDetails(details);
+    } catch {
+      setTestHsnDetails({ valid: true, data: item });
+    }
+  };
 
   const handleToggle = (key, value) => {
     update(key, value);
@@ -130,17 +163,26 @@ export default function TaxesTab({ settings, update }) {
         </div>
 
         {/* 2. Enable HSN/SAC Code */}
-        <div className="flex items-center">
-          <label className="flex items-center gap-3 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={settings.enableHsnSacCode ?? true}
-              onChange={(e) => handleToggle("enableHsnSacCode", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600 cursor-pointer"
-            />
-            <span className="font-medium text-slate-800">Enable HSN/SAC Code</span>
-          </label>
-          <InfoTooltip text="Shows HSN/SAC code column on invoices and items." />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={settings.enableHsnSacCode ?? true}
+                onChange={(e) => handleToggle("enableHsnSacCode", e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-600 cursor-pointer"
+              />
+              <span className="font-medium text-slate-800">Enable HSN/SAC Code</span>
+            </label>
+            <InfoTooltip text="Shows HSN/SAC code column on invoices and items." />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowHsnModal(true)}
+            className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline flex items-center gap-1 cursor-pointer"
+          >
+            Manage HSN Master / Upload &gt;
+          </button>
         </div>
 
         {/* 3. Additional Cess On Item */}
@@ -244,14 +286,21 @@ export default function TaxesTab({ settings, update }) {
           <InfoTooltip text="Tax Deducted at Source (Sec 194Q) deductible by customer." />
         </div>
 
-        {/* 9. Tax List > Button */}
-        <div className="pt-3">
+        {/* 9. Action Buttons: Tax List & HSN Master */}
+        <div className="pt-3 flex items-center gap-3">
           <button
             type="button"
             onClick={() => setShowTaxListModal(true)}
             className="inline-flex items-center justify-center rounded-lg bg-[#FF5A1F]/10 px-4 py-2 text-xs font-semibold text-[#FF5A1F] border border-[#FF5A1F]/30 hover:bg-[#FF5A1F] hover:text-white hover:border-[#FF5A1F] transition cursor-pointer shadow-xs"
           >
             Tax List &gt;
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowHsnModal(true)}
+            className="inline-flex items-center justify-center rounded-lg bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700 border border-blue-200 hover:bg-blue-600 hover:text-white transition cursor-pointer shadow-xs"
+          >
+            HSN/SAC Master &gt;
           </button>
         </div>
       </div>
@@ -405,6 +454,177 @@ export default function TaxesTab({ settings, update }) {
                 className="rounded-lg bg-blue-600 px-5 py-2 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer shadow-sm"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────── HSN / SAC MASTER & UPLOAD MODAL ─────────────────── */}
+      {showHsnModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">HSN & SAC Master Management</h3>
+                <p className="text-xs text-slate-500">
+                  Self-hosted official GST tariff lookup, bulk import, and instant code inspector
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowHsnModal(false);
+                  setHsnUploadResult(null);
+                  setTestHsnDetails(null);
+                  setTestHsnCode("");
+                }}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 flex-1 overflow-y-auto space-y-6 text-xs text-slate-700">
+              {/* Section 1: Bulk Excel / CSV Upload */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FiUploadCloud className="h-4 w-4 text-blue-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Bulk Import Master File</h4>
+                </div>
+                <p className="text-slate-500 mb-3">
+                  Upload official GST Portal Excel or CSV master list (.xlsx, .xls, .csv). Supports auto-detecting headers like HSN/SAC, Description, and GST Rate with fast batch upsert.
+                </p>
+
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow-xs hover:bg-blue-700 cursor-pointer transition">
+                    {uploadingHsn ? (
+                      <>
+                        <FiLoader className="h-4 w-4 animate-spin" />
+                        <span>Uploading & Processing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FiFileText className="h-4 w-4" />
+                        <span>Choose Excel / CSV File</span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      disabled={uploadingHsn}
+                      onChange={handleHsnFileUpload}
+                      className="sr-only"
+                    />
+                  </label>
+                  <span className="text-[11px] text-slate-400">Max file size: 50 MB</span>
+                </div>
+
+                {hsnUploadResult && (
+                  <div
+                    className={`mt-3 p-3 rounded-lg flex items-start gap-2.5 ${
+                      hsnUploadResult.success
+                        ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                        : "bg-red-50 border border-red-200 text-red-800"
+                    }`}
+                  >
+                    {hsnUploadResult.success ? (
+                      <FiCheckCircle className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <FiAlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
+                    )}
+                    <div>
+                      <p className="font-semibold">{hsnUploadResult.message}</p>
+                      {hsnUploadResult.count && (
+                        <p className="text-[11px] opacity-90 mt-0.5">
+                          {hsnUploadResult.count} HSN/SAC codes are now searchable across your entire workspace.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Live Search & Inspector Test */}
+              <div className="rounded-xl border border-slate-200 p-4 bg-white">
+                <div className="flex items-center gap-2 mb-2">
+                  <FiCheckCircle className="h-4 w-4 text-emerald-600" />
+                  <h4 className="font-bold text-slate-900 text-sm">Test Live HSN & SAC Autocomplete</h4>
+                </div>
+                <p className="text-slate-500 mb-3">
+                  Search Goods (HSN e.g. 8471, 6109, 1006) or Services (SAC e.g. 998314, 9965, 998433), or type any keyword (e.g. transport, software, rice):
+                </p>
+
+                <HsnAutocomplete
+                  value={testHsnCode}
+                  placeholder="Search Goods (HSN) or Services (SAC) by code or name..."
+                  onChange={(code) => setTestHsnCode(code)}
+                  onSelect={handleTestHsnSelect}
+                />
+
+                {testHsnDetails && testHsnDetails.data && (
+                  <div className="mt-4 p-3 rounded-lg border border-slate-200 bg-slate-50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-sm text-slate-900 bg-white border border-slate-200 px-2 py-0.5 rounded shadow-2xs">
+                          {testHsnDetails.data.code}
+                        </span>
+                        <span
+                          className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${
+                            testHsnDetails.data.type === "SAC" || testHsnDetails.data.code.startsWith("99")
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {testHsnDetails.data.type || "HSN"}
+                        </span>
+                        {testHsnDetails.data.gst_rate !== null && (
+                          <span className="text-xs font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                            {testHsnDetails.data.gst_rate}% GST
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <FiCheck className="h-3.5 w-3.5" /> Verified in DB
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                      {testHsnDetails.data.description}
+                    </p>
+
+                    {testHsnDetails.chapterContext && (
+                      <div className="border-t border-slate-200 pt-2 text-[11px] text-slate-500 space-y-1">
+                        {testHsnDetails.chapterContext.chapterCode && (
+                          <p>
+                            <strong className="text-slate-700">Chapter {testHsnDetails.chapterContext.chapterCode}:</strong>{" "}
+                            {testHsnDetails.chapterContext.chapterDescription || "Official GST Chapter"}
+                          </p>
+                        )}
+                        {testHsnDetails.chapterContext.headingCode && (
+                          <p>
+                            <strong className="text-slate-700">Heading {testHsnDetails.chapterContext.headingCode}:</strong>{" "}
+                            {testHsnDetails.chapterContext.headingDescription || "Tariff Heading"}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowHsnModal(false);
+                  setHsnUploadResult(null);
+                  setTestHsnDetails(null);
+                }}
+                className="rounded-lg bg-slate-900 px-5 py-2 text-xs font-bold text-white hover:bg-slate-800 cursor-pointer shadow-sm transition"
+              >
+                Close
               </button>
             </div>
           </div>
