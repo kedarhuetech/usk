@@ -126,18 +126,18 @@ export default function TransactionMessageTab({ settings, update }) {
         message: sampleMsg,
         type: selectedTxnType,
       });
-      if (res.success && res.method === "meta_api") {
-        setTestStatus(`✓ Test message delivered to ${testPhone} via Meta WhatsApp Cloud API!`);
-        toastNotification.success(`✓ Message delivered via Meta WhatsApp Cloud API!`);
+      if (res.success) {
+        setTestStatus(`✓ Test message delivered to ${testPhone} via WhatsApp!`);
+        toastNotification.success(`✓ WhatsApp message delivered successfully!`);
         setTimeout(() => {
           setTestModalOpen(false);
           setTestStatus("");
         }, 3000);
       } else {
-        setTestStatus(`Meta API: ${res.error || "Not connected"}`);
+        setTestStatus(`WhatsApp Delivery: ${res.error || "Unable to deliver"}`);
         if (res.fallbackUrl) {
           toastNotification.info("Opening WhatsApp Web link...", {
-            title: "Meta API Offline",
+            title: "WhatsApp Web",
           });
           window.open(res.fallbackUrl, "_blank");
         } else {
@@ -169,73 +169,40 @@ export default function TransactionMessageTab({ settings, update }) {
         {/* LEFT COLUMN: Settings & Checkboxes */}
         {/* ============================================================ */}
         <div className="space-y-6 lg:border-r lg:pr-8 border-slate-100">
-          {/* 1. Select Message Type (Meta WhatsApp Official) */}
+          {/* 1. Select Message Type */}
           <div className="space-y-2.5">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Select Message Type:
             </h2>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Meta WhatsApp Delivery Button */}
-              <div className={`relative flex items-center justify-between gap-3 rounded-lg border-2 ${metaStatus.connected ? "border-emerald-500 bg-emerald-50/40" : "border-amber-300 bg-amber-50/40"} p-3.5 shadow-xs w-full`}>
+              {/* WhatsApp Delivery Option (Active) */}
+              <div className="flex items-center justify-between gap-3 rounded-lg border-2 border-emerald-500 bg-emerald-50/50 p-3 shadow-xs w-full">
                 <div className="flex items-center gap-3">
-                  <div className={`grid h-8 w-8 place-items-center rounded-lg ${metaStatus.connected ? "bg-emerald-600" : "bg-amber-600"} text-white font-bold text-sm shadow-xs`}>
+                  <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 text-white font-bold text-sm shadow-xs">
                     W
                   </div>
-                  <div className="text-left">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-xs font-bold text-slate-900">Meta WhatsApp Cloud API</p>
-                      {metaStatus.loading ? (
-                        <span className="text-[10px] text-slate-400">Checking...</span>
-                      ) : metaStatus.connected ? (
-                        <>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Connected {metaStatus.phoneNumber ? `(${metaStatus.phoneNumber})` : ""}
-                          </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-medium text-blue-700">
-                            Templates: {metaStatus.approvedCount} Approved{metaStatus.pendingCount > 0 ? `, ${metaStatus.pendingCount} Reviewing` : ""}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                          Offline / Not Connected
-                        </span>
-                      )}
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-slate-900">WhatsApp</p>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Active
+                      </span>
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      {metaStatus.connected
-                        ? "Active Cloud Connection • Invoices and receipts deliver directly to customer WhatsApp phones in the background"
-                        : "Connect Meta WhatsApp in WhatsApp Connect to enable official background cloud delivery without phone QR login"}
+                      Sends invoices, receipts, and order updates directly to customer WhatsApp phones automatically or on click.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  {!metaStatus.connected && !metaStatus.loading && (
-                    <a
-                      href="/parties/whatsapp-connect"
-                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 shadow-xs transition"
-                    >
-                      Connect Meta
-                    </a>
-                  )}
-                  {metaStatus.connected && (
-                    <button
-                      type="button"
-                      onClick={handleRequestTemplateApproval}
-                      disabled={requestingApproval}
-                      title="Request Meta approval for all transaction and reminder templates"
-                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
-                    >
-                      {requestingApproval ? (
-                        <><FiLoader className="h-3 w-3 animate-spin text-emerald-600" /> Requesting All Templates...</>
-                      ) : (
-                        <><FiCheck className="h-3 w-3 text-emerald-600" /> Request All Templates</>
-                      )}
-                    </button>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setTestModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition shadow-2xs cursor-pointer"
+                >
+                  <FiSend className="h-3.5 w-3.5" /> Send Test
+                </button>
               </div>
             </div>
           </div>
@@ -345,7 +312,7 @@ export default function TransactionMessageTab({ settings, update }) {
                 <button
                   type="button"
                   onClick={handleSyncClick}
-                  title="Sync message status with Meta"
+                  title="Sync message status"
                   className="grid h-5 w-5 place-items-center rounded hover:bg-slate-100 text-slate-500 hover:text-blue-600 transition cursor-pointer"
                 >
                   <FiRefreshCw className="h-3 w-3" />
@@ -670,7 +637,7 @@ export default function TransactionMessageTab({ settings, update }) {
                 onClick={() => setTestModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 transition cursor-pointer"
               >
-                <FiSend className="h-3.5 w-3.5" /> Test Send via Meta WhatsApp
+                <FiSend className="h-3.5 w-3.5" /> Send Test WhatsApp Message
               </button>
             </div>
           </div>
@@ -678,7 +645,7 @@ export default function TransactionMessageTab({ settings, update }) {
       </div>
 
       {/* ============================================================ */}
-      {/* MODAL: Test Send via Meta WhatsApp */}
+      {/* MODAL: Test Send WhatsApp Message */}
       {/* ============================================================ */}
       {testModalOpen && (
         <div
@@ -692,7 +659,7 @@ export default function TransactionMessageTab({ settings, update }) {
             onMouseDown={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-              <h3 className="text-sm font-bold text-slate-800">Test Send Meta WhatsApp</h3>
+              <h3 className="text-sm font-bold text-slate-800">Send Test WhatsApp Message</h3>
               <button
                 type="button"
                 onClick={() => setTestModalOpen(false)}
@@ -716,7 +683,7 @@ export default function TransactionMessageTab({ settings, update }) {
                   autoFocus
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Sends current preview template using Meta WhatsApp Cloud API.
+                  Sends current message preview directly to recipient's phone number on WhatsApp.
                 </p>
               </div>
 
@@ -769,7 +736,7 @@ export default function TransactionMessageTab({ settings, update }) {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <FiStar className="h-5 w-5 text-amber-500 fill-amber-400" />
-                <h3 className="text-sm font-bold text-slate-800">Meta Messaging Credits</h3>
+                <h3 className="text-sm font-bold text-slate-800">WhatsApp Messaging Credits</h3>
               </div>
               <button
                 type="button"
@@ -783,7 +750,7 @@ export default function TransactionMessageTab({ settings, update }) {
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-center">
               <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Available Balance</span>
               <p className="mt-1 text-3xl font-extrabold text-amber-900">{settings.txnMsgCredits ?? 100} <span className="text-sm font-semibold text-amber-700">Credits</span></p>
-              <p className="text-xs text-amber-700 mt-0.5">1 Credit = 1 Automated Meta WhatsApp Transaction Invoice</p>
+              <p className="text-xs text-amber-700 mt-0.5">1 Credit = 1 Automated WhatsApp Transaction Message</p>
             </div>
 
             <div className="flex justify-end">

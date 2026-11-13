@@ -150,7 +150,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
       .then((res) => {
         if (res.dispatched > 0) {
           toast.success(
-            `⚡ Automatically sent ${res.dispatched} due service reminder${res.dispatched > 1 ? "s" : ""} via Meta WhatsApp (no clicking required)!`,
+            `⚡ Automatically sent ${res.dispatched} due service reminder${res.dispatched > 1 ? "s" : ""} via WhatsApp!`,
             { duration: 5500 }
           );
           setRecords(getReminderRecords());
@@ -312,25 +312,11 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
       const res = await sendServiceReminderViaMeta(record, company);
       setRecords(getReminderRecords());
       if (res.success) {
-        showNotice(`✓ Reminder delivered to ${record.customerName} via Meta WhatsApp Cloud API!`);
+        showNotice(`✓ Reminder delivered to ${record.customerName} via WhatsApp!`);
       } else {
-        if (res.templateAbsent && res.templateRequested) {
-          toast.info(res.error || "The required template was absent, so an approval request was automatically submitted to Meta.", {
-            title: "Template Sent for Meta Approval",
-            duration: 9000,
-            action: {
-              label: "Open WhatsApp Web Link",
-              onClick: () => {
-                window.open(res.fallbackUrl, "_blank");
-                recordReminderNotification(record.id, "whatsapp", { message: res.message, recipient: record.customerPhone });
-                setRecords(getReminderRecords());
-                toast.info(`WhatsApp chat opened for ${record.customerName}`);
-              },
-            },
-          });
-        } else if (res.fallbackUrl) {
-          toast.error(res.error || "Meta WhatsApp Cloud API could not deliver the message.", {
-            title: "Meta Delivery Failed",
+        if (res.fallbackUrl) {
+          toast.info("Could not deliver via automated WhatsApp. Opening WhatsApp Web link...", {
+            title: "WhatsApp Web Fallback",
             duration: 8500,
             action: {
               label: "Open WhatsApp Web Link",
@@ -343,7 +329,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
             },
           });
         } else {
-          toast.error(res.error || "Failed to send reminder via Meta WhatsApp.");
+          toast.error(res.error || "Failed to send reminder via WhatsApp.");
         }
       }
     } catch (err) {
@@ -362,8 +348,8 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
 
     setConfirmModal({
       isOpen: true,
-      title: "Send Background Reminders",
-      message: `Send ${eligible.length} service reminder${eligible.length > 1 ? "s" : ""} directly via Meta WhatsApp in the background?`,
+      title: "Send Due Reminders",
+      message: `Send ${eligible.length} service reminder${eligible.length > 1 ? "s" : ""} to customer phones via WhatsApp?`,
       confirmText: `Send ${eligible.length} Reminders Now`,
       tone: "emerald",
       onConfirm: async () => {
@@ -385,11 +371,11 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
         setRecords(getReminderRecords());
         setBulkSending(false);
         if (sentCount > 0 && failCount === 0) {
-          toast.success(`Successfully sent ${sentCount} reminders via Meta WhatsApp!`);
+          toast.success(`Successfully sent ${sentCount} reminder${sentCount > 1 ? "s" : ""} via WhatsApp!`);
         } else if (sentCount > 0 && failCount > 0) {
           toast.warning(`Sent ${sentCount} reminders, but ${failCount} failed to deliver.`);
         } else {
-          toast.error(`Could not deliver background reminders. Check your Meta template and phone number setup.`);
+          toast.error(`Could not deliver reminders. Please check customer phone numbers.`);
         }
       },
     });
@@ -531,7 +517,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                     onChange={handleToggleAutoNotify}
                     className="h-4 w-4 rounded accent-emerald-600 cursor-pointer"
                   />
-                  <span>Auto-send due reminders via Meta WhatsApp (No clicking required)</span>
+                  <span>Auto-send due reminders via WhatsApp (No clicking required)</span>
                   <span className="inline-flex items-center gap-1 rounded bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
                     <FiZap className="h-3 w-3 text-emerald-600" /> Automated
                   </span>
@@ -553,17 +539,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 <h4 className="text-sm font-bold text-slate-900">Active Service Due Dates</h4>
-                {metaStatus.connected ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Meta WhatsApp Connected
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                    Meta Offline (Using Web Link)
-                  </span>
-                )}
-                {metaStatus.connected && settings.autoNotifyWhatsApp !== false && (
+                {settings.autoNotifyWhatsApp !== false && (
                   <span
                     className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700"
                     title="Due reminders automatically dispatch in the background without needing to click"
@@ -574,52 +550,30 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Monitors customer service schedules with automatic background dispatch via Meta WhatsApp Cloud API and detailed dispatch history.
+                Monitors customer service schedules with automatic background dispatch to customer WhatsApp phones and detailed dispatch history.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {/* Bulk Send Due Reminders in Background */}
-              {metaStatus.connected && processed.activeAlerts.length > 0 && (
+              {processed.activeAlerts.length > 0 && (
                 <button
                   type="button"
                   onClick={handleSendAllDueMeta}
                   disabled={bulkSending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition disabled:opacity-50"
-                  title="Send all due reminders to customer phones in background via Meta API"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition disabled:opacity-50 cursor-pointer"
+                  title="Send all due reminders to customer phones via WhatsApp"
                 >
                   {bulkSending ? (
-                    <><FiLoader className="h-4 w-4 animate-spin" /> Sending in Background...</>
+                    <><FiLoader className="h-4 w-4 animate-spin" /> Sending Reminders...</>
                   ) : (
-                    <><FiZap className="h-4 w-4" /> Send Due ({processed.activeAlerts.length}) via Meta</>
-                  )}
-                </button>
-              )}
-              {/* Request Meta Template Approval */}
-              {metaStatus.connected && (
-                <button
-                  type="button"
-                  onClick={handleRequestTemplateApproval}
-                  disabled={requestingApproval}
-                  title="Official Meta WhatsApp service reminder template status"
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-xs transition disabled:opacity-50 cursor-pointer ${
-                    metaStatus.serviceTemplateStatus === "APPROVED"
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {requestingApproval ? (
-                    <><FiLoader className="h-4 w-4 animate-spin text-emerald-600" /> Submitting to Meta...</>
-                  ) : metaStatus.serviceTemplateStatus === "APPROVED" ? (
-                    <><FiCheck className="h-4 w-4 text-emerald-600" /> Template Approved</>
-                  ) : (
-                    <><FiCheck className="h-4 w-4 text-amber-600" /> Request Meta Template</>
+                    <><FiZap className="h-4 w-4" /> Send Due Reminders ({processed.activeAlerts.length})</>
                   )}
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => openAddModal(null)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-blue-700 transition cursor-pointer"
               >
                 <FiPlus className="h-4 w-4" /> Add Service Due Date
               </button>
@@ -765,7 +719,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                               <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
                                 <FiCheck className="h-3 w-3" />
-                                {record.lastNotifiedChannel === "meta_whatsapp" ? "Sent via Meta" : "Sent via WhatsApp"}
+                                Sent via WhatsApp
                               </span>
                               <button
                                 type="button"
@@ -784,34 +738,34 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
 
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* Direct Meta WhatsApp Background Send Button */}
-                          {metaStatus.connected && record.customerPhone && (
-                            record.alreadyNotifiedForThisDueDate && record.lastNotifiedChannel === "meta_whatsapp" ? (
+                          {/* WhatsApp Background Send Button */}
+                          {record.customerPhone && (
+                            record.alreadyNotifiedForThisDueDate ? (
                               <button
                                 type="button"
                                 title="Reminder was already sent for this due date. Click to resend if needed."
                                 disabled={sendingId === record.id || bulkSending}
                                 onClick={() => handleSendMetaWhatsApp(record)}
-                                className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition active:scale-98"
+                                className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition active:scale-98 cursor-pointer"
                               >
                                 {sendingId === record.id ? (
                                   <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
                                 ) : (
-                                  <><FiCheck className="h-3 w-3 text-emerald-600" /> Resend Meta</>
+                                  <><FiCheck className="h-3 w-3 text-emerald-600" /> Resend</>
                                 )}
                               </button>
                             ) : (
                               <button
                                 type="button"
-                                title="Send directly to customer phone in background via Meta API"
+                                title="Send reminder directly to customer WhatsApp"
                                 disabled={sendingId === record.id || bulkSending}
                                 onClick={() => handleSendMetaWhatsApp(record)}
-                                className="inline-flex items-center gap-1 rounded border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition active:scale-98"
+                                className="inline-flex items-center gap-1 rounded border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition active:scale-98 cursor-pointer"
                               >
                                 {sendingId === record.id ? (
                                   <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
                                 ) : (
-                                  <><FiZap className="h-3 w-3" /> Send via Meta</>
+                                  <><FiZap className="h-3 w-3" /> Send WhatsApp</>
                                 )}
                               </button>
                             )
@@ -1053,7 +1007,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                   <p className="font-semibold text-slate-800 flex items-center gap-1 mt-0.5">
                     {viewSentModal.lastNotifiedChannel === "meta_whatsapp" ? (
                       <span className="text-emerald-700 font-bold flex items-center gap-1">
-                        <FiZap className="h-3.5 w-3.5 text-emerald-600" /> Meta Cloud API
+                        <FiZap className="h-3.5 w-3.5 text-emerald-600" /> WhatsApp Direct
                       </span>
                     ) : viewSentModal.lastNotifiedChannel === "email" ? (
                       <span className="text-blue-700 font-bold flex items-center gap-1">
@@ -1119,7 +1073,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                       return (
                         <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-slate-600">
                           <span className="font-medium text-slate-800 capitalize">
-                            {item.channel?.replace("_", " ") || "WhatsApp"}
+                            {item.channel === "meta_whatsapp" ? "WhatsApp" : (item.channel?.replace("_", " ") || "WhatsApp")}
                           </span>
                           <span>{item.recipient || viewSentModal.customerPhone}</span>
                           <span className="text-slate-400 text-[10px]">{dateDisplay}</span>
