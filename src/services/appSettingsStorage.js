@@ -303,6 +303,7 @@ export const DEFAULT_SETTINGS = {
   // Service Reminders
   serviceRemindersEnabled: true,
   reminderDaysBefore: 2,
+  serviceRemindersAutoWhatsApp: true,
 
   // Accounting
   financialYearStart: "01/04",
@@ -395,6 +396,23 @@ export function saveAppSettings(updates) {
     window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
     if (updates.screenZoom) {
       applyScreenZoom(updates.screenZoom);
+    }
+    if (
+      updates.serviceRemindersEnabled !== undefined ||
+      updates.reminderDaysBefore !== undefined ||
+      updates.serviceRemindersAutoWhatsApp !== undefined
+    ) {
+      try {
+        const rawReminder = window.localStorage.getItem("ledgerly:serviceReminderSettings.v1");
+        const parsed = rawReminder ? JSON.parse(rawReminder) : {};
+        const updatedReminder = {
+          ...parsed,
+          ...(updates.serviceRemindersEnabled !== undefined ? { enabled: Boolean(updates.serviceRemindersEnabled) } : {}),
+          ...(updates.reminderDaysBefore !== undefined ? { reminderDaysBefore: Number(updates.reminderDaysBefore) } : {}),
+          ...(updates.serviceRemindersAutoWhatsApp !== undefined ? { autoNotifyWhatsApp: Boolean(updates.serviceRemindersAutoWhatsApp) } : {}),
+        };
+        window.localStorage.setItem("ledgerly:serviceReminderSettings.v1", JSON.stringify(updatedReminder));
+      } catch {}
     }
     window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: next }));
     recordAuditTrail({

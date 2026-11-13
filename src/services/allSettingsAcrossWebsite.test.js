@@ -36,6 +36,10 @@ import {
   TRANSACTION_TYPES_CONFIG,
 } from "./transactionMessageService.js";
 import { saveSaleInvoice } from "./salesStorage.js";
+import {
+  getReminderSettings,
+  saveReminderSettings,
+} from "./serviceRemindersStorage.js";
 
 test("1. GENERAL SETTINGS: Currency formatting honors currency symbol and decimal places", () => {
   saveAppSettings({ currencySymbol: "$", amountDecimalPlaces: 3 });
@@ -304,5 +308,61 @@ test("12. MULTI CURRENCY SETTINGS: Custom base currency overrides default symbol
     multiCurrencyEnabled: false,
     baseCurrency: null,
     currencySymbol: "₹",
+  });
+});
+
+test("13. ITEM SETTINGS: Batch tracking, serial tracking, barcode scanning, and item descriptions propagate", () => {
+  saveAppSettings({
+    enableBatchTracking: true,
+    enableSerialTracking: true,
+    enableBarcodeScanning: false,
+    enableItemDescription: false,
+  });
+
+  const settings = getAppSettings();
+  assert.equal(settings.enableBatchTracking, true);
+  assert.equal(settings.enableSerialTracking, true);
+  assert.equal(settings.enableBarcodeScanning, false);
+  assert.equal(settings.enableItemDescription, false);
+
+  // Reset
+  saveAppSettings({
+    enableBatchTracking: false,
+    enableSerialTracking: false,
+    enableBarcodeScanning: true,
+    enableItemDescription: true,
+  });
+});
+
+test("14. SERVICE REMINDERS SETTINGS: Two-way synchronization between appSettings and serviceRemindersStorage", () => {
+  // Test updating via saveReminderSettings propagates to appSettings
+  saveReminderSettings({
+    enabled: true,
+    reminderDaysBefore: 7,
+    autoNotifyWhatsApp: true,
+  });
+
+  const appSettings = getAppSettings();
+  assert.equal(appSettings.serviceRemindersEnabled, true);
+  assert.equal(appSettings.reminderDaysBefore, 7);
+  assert.equal(appSettings.serviceRemindersAutoWhatsApp, true);
+
+  // Test updating via saveAppSettings propagates back to getReminderSettings
+  saveAppSettings({
+    serviceRemindersEnabled: false,
+    reminderDaysBefore: 3,
+    serviceRemindersAutoWhatsApp: false,
+  });
+
+  const reminderSettings = getReminderSettings();
+  assert.equal(reminderSettings.enabled, false);
+  assert.equal(reminderSettings.reminderDaysBefore, 3);
+  assert.equal(reminderSettings.autoNotifyWhatsApp, false);
+
+  // Reset
+  saveReminderSettings({
+    enabled: true,
+    reminderDaysBefore: 2,
+    autoNotifyWhatsApp: true,
   });
 });

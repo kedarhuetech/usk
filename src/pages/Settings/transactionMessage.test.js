@@ -8,6 +8,7 @@ import {
 import {
   TRANSACTION_TYPES_CONFIG,
   buildTransactionMessage,
+  sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
 
 // Mock localStorage if in Node environment
@@ -126,4 +127,55 @@ test("buildTransactionMessage formats other transaction types correctly", () => 
 
   assert.ok(paymentInMsg.includes("Payment-In Receipt: REC-12"));
   assert.ok(paymentInMsg.includes("Invoice Amount: 5000"));
+});
+
+test("sendMetaWhatsAppMessage succeeds with Meta Cloud API when backend is connected", async () => {
+  let requestedBody = null;
+  globalThis.fetch = async (url, options) => {
+    if (url === "/api/whatsapp-business/send") {
+      requestedBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          messageId: "wamid.test_12345",
+        }),
+      };
+    }
+    return { ok: false };
+  };
+
+  const res = await sendMetaWhatsAppMessage({
+    phone: "9876543210",
+    message: "Thank you for shopping with us!",
+    type: "sales",
+  });
+
+  assert.equal(res.success, true);
+  assert.equal(res.method, "meta_api");
+  assert.equal(res.messageId, "wamid.test_12345");
+  assert.equal(requestedBody.recipientPhone, "919876543210");
+});
+
+test("sendMetaWhatsAppMessage reports fallback and accurate error when Meta is offline", async () => {
+  globalThis.fetch = async () => {
+    return {
+      ok: false,
+      status: 401,
+      json: async () => ({
+        success: false,
+        message: "Meta WhatsApp is not connected.",
+      }),
+    };
+  };
+
+  const res = await sendMetaWhatsAppMessage({
+    phone: "9876543210",
+    message: "Test offline message",
+  });
+
+  assert.equal(res.success, false);
+  assert.equal(res.method, "direct_fallback");
+  assert.match(res.error, /Meta WhatsApp is not connected/);
+  assert.match(res.fallbackUrl, /https:\/\/wa\.me\/919876543210/);
 });

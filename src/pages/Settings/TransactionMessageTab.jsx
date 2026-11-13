@@ -1,22 +1,25 @@
 // Implements the Transaction Message settings interface matching USK reference screenshots.
 // Uses Meta WhatsApp Cloud API without requiring personal WhatsApp phone QR login.
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FiCheck,
   FiChevronDown,
   FiChevronRight,
   FiInfo,
+  FiLoader,
   FiPaperclip,
   FiRefreshCw,
   FiSend,
   FiStar,
   FiX,
+  FiZap,
 } from "react-icons/fi";
 import {
   TRANSACTION_TYPES_CONFIG,
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { toast as toastNotification } from "../../components/Common/Toast.jsx";
 
 export default function TransactionMessageTab({ settings, update }) {
   const [selectedTxnType, setSelectedTxnType] = useState("sales");
@@ -26,6 +29,38 @@ export default function TransactionMessageTab({ settings, update }) {
   const [testSending, setTestSending] = useState(false);
   const [testStatus, setTestStatus] = useState("");
   const [creditsModalOpen, setCreditsModalOpen] = useState(false);
+  const [metaStatus, setMetaStatus] = useState({
+    connected: false,
+    loading: true,
+    phoneNumber: "",
+    templates: [],
+    approvedCount: 0,
+    pendingCount: 0,
+  });
+  const [requestingApproval, setRequestingApproval] = useState(false);
+
+  const loadMetaConnection = () => {
+    fetch("/api/whatsapp-business/connection")
+      .then((r) => r.json())
+      .then((data) => {
+        const templates = data.assets?.templates || [];
+        const approvedCount = templates.filter((t) => t.status === "APPROVED").length;
+        const pendingCount = templates.filter((t) => t.status === "PENDING").length;
+        setMetaStatus({
+          connected: Boolean(data.connected || data.testModeConfigured),
+          phoneNumber: data.selection?.phoneNumberId || data.assets?.phoneNumbers?.[0]?.display_phone_number || "",
+          templates,
+          approvedCount,
+          pendingCount,
+          loading: false,
+        });
+      })
+      .catch(() => setMetaStatus({ connected: false, loading: false, phoneNumber: "", templates: [], approvedCount: 0, pendingCount: 0 }));
+  };
+
+  useEffect(() => {
+    loadMetaConnection();
+  }, []);
 
   const txnConfig = TRANSACTION_TYPES_CONFIG[selectedTxnType] || TRANSACTION_TYPES_CONFIG.sales;
 
@@ -44,7 +79,31 @@ export default function TransactionMessageTab({ settings, update }) {
 
   const handleSyncClick = () => {
     setLastSyncedText("just now");
+    loadMetaConnection();
     setTimeout(() => setLastSyncedText("now"), 3000);
+  };
+
+  const handleRequestTemplateApproval = async () => {
+    setRequestingApproval(true);
+    try {
+      const response = await fetch("/api/whatsapp-business/templates/request-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const res = await response.json().catch(() => ({}));
+      if (response.ok && res.success) {
+        toastNotification.success(res.message || "All transaction templates submitted to Meta for approval!", {
+          duration: 7000,
+        });
+        loadMetaConnection();
+      } else {
+        toastNotification.error(res.message || "Could not submit template approval request.");
+      }
+    } catch (err) {
+      toastNotification.error(err.message || "Failed to submit template request.");
+    } finally {
+      setRequestingApproval(false);
+    }
   };
 
   const handleSendTestMessage = async () => {
@@ -62,15 +121,29 @@ export default function TransactionMessageTab({ settings, update }) {
         balance: txnConfig.sampleBalance,
         settings,
       });
-      await sendMetaWhatsAppMessage({
+      const res = await sendMetaWhatsAppMessage({
         phone: testPhone,
         message: sampleMsg,
+        type: selectedTxnType,
       });
-      setTestStatus("Test message sent successfully via Meta WhatsApp!");
-      setTimeout(() => {
-        setTestModalOpen(false);
-        setTestStatus("");
-      }, 2500);
+      if (res.success && res.method === "meta_api") {
+        setTestStatus(`✓ Test message delivered to ${testPhone} via Meta WhatsApp Cloud API!`);
+        toastNotification.success(`✓ Message delivered via Meta WhatsApp Cloud API!`);
+        setTimeout(() => {
+          setTestModalOpen(false);
+          setTestStatus("");
+        }, 3000);
+      } else {
+        setTestStatus(`Meta API: ${res.error || "Not connected"}`);
+        if (res.fallbackUrl) {
+          toastNotification.info("Opening WhatsApp Web link...", {
+            title: "Meta API Offline",
+          });
+          window.open(res.fallbackUrl, "_blank");
+        } else {
+          toastNotification.error(res.error || "Could not deliver message.");
+        }
+      }
     } catch (err) {
       setTestStatus(err.message || "Could not send test message.");
     } finally {
@@ -103,25 +176,66 @@ export default function TransactionMessageTab({ settings, update }) {
             </h2>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Meta WhatsApp Delivery Button - Selected */}
-              <div className="relative flex items-center gap-3 rounded-lg border-2 border-blue-600 bg-blue-50/40 px-4 py-2.5 shadow-xs">
-                <div className="flex items-center gap-2">
-                  {/* Meta / WhatsApp Icon */}
-                  <div className="grid h-7 w-7 place-items-center rounded bg-emerald-600 text-white font-bold text-xs">
+              {/* Meta WhatsApp Delivery Button */}
+              <div className={`relative flex items-center justify-between gap-3 rounded-lg border-2 ${metaStatus.connected ? "border-emerald-500 bg-emerald-50/40" : "border-amber-300 bg-amber-50/40"} p-3.5 shadow-xs w-full`}>
+                <div className="flex items-center gap-3">
+                  <div className={`grid h-8 w-8 place-items-center rounded-lg ${metaStatus.connected ? "bg-emerald-600" : "bg-amber-600"} text-white font-bold text-sm shadow-xs`}>
                     W
                   </div>
                   <div className="text-left">
-                    <p className="text-xs font-bold text-slate-900">Send via Meta WhatsApp</p>
-                    <p className="text-[10px] text-emerald-700 font-semibold">
-                      Official Cloud API • Zero QR Code Login Required
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-bold text-slate-900">Meta WhatsApp Cloud API</p>
+                      {metaStatus.loading ? (
+                        <span className="text-[10px] text-slate-400">Checking...</span>
+                      ) : metaStatus.connected ? (
+                        <>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Connected {metaStatus.phoneNumber ? `(${metaStatus.phoneNumber})` : ""}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                            Templates: {metaStatus.approvedCount} Approved{metaStatus.pendingCount > 0 ? `, ${metaStatus.pendingCount} Reviewing` : ""}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                          Offline / Not Connected
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {metaStatus.connected
+                        ? "Active Cloud Connection • Invoices and receipts deliver directly to customer WhatsApp phones in the background"
+                        : "Connect Meta WhatsApp in WhatsApp Connect to enable official background cloud delivery without phone QR login"}
                     </p>
                   </div>
                 </div>
 
-                {/* Selected Check Badge */}
-                <span className="absolute -top-2 -right-2 grid h-5 w-5 place-items-center rounded-full bg-blue-600 text-white shadow-xs">
-                  <FiCheck className="h-3 w-3 stroke-[3]" />
-                </span>
+                <div className="flex items-center gap-2">
+                  {!metaStatus.connected && !metaStatus.loading && (
+                    <a
+                      href="/parties/whatsapp-connect"
+                      className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 shadow-xs transition"
+                    >
+                      Connect Meta
+                    </a>
+                  )}
+                  {metaStatus.connected && (
+                    <button
+                      type="button"
+                      onClick={handleRequestTemplateApproval}
+                      disabled={requestingApproval}
+                      title="Request Meta approval for all transaction and reminder templates"
+                      className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                    >
+                      {requestingApproval ? (
+                        <><FiLoader className="h-3 w-3 animate-spin text-emerald-600" /> Requesting All Templates...</>
+                      ) : (
+                        <><FiCheck className="h-3 w-3 text-emerald-600" /> Request All Templates</>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
