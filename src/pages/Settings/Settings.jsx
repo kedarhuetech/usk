@@ -2995,9 +2995,25 @@ function ItemTab({ settings, update }) {
             Item-wise Discount
           </label>
 
-          <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
-            Batch/expiry and serial/IMEI controls are hidden in V1. Previously enabled workflows continue using saved settings; existing item and transaction records are retained.
-          </p>
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.enableBatchTracking)}
+              onChange={(e) => update("enableBatchTracking", e.target.checked)}
+              className="h-4 w-4 rounded accent-blue-600"
+            />
+            Batch Tracking (Batch No, Expiry & Manufacturing Dates)
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+            <input
+              type="checkbox"
+              checked={Boolean(settings.enableSerialTracking)}
+              onChange={(e) => update("enableSerialTracking", e.target.checked)}
+              className="h-4 w-4 rounded accent-blue-600"
+            />
+            Serial / IMEI Tracking
+          </label>
         </div>
       </section>
     </div>

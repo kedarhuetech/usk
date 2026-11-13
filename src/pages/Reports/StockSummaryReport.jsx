@@ -145,14 +145,28 @@ export default function StockSummaryReport() {
       });
     });
 
-    // Process open sale orders → reserved qty
+    // Process open & partially converted sale orders → reserved qty
     saleOrders.forEach((so) => {
       const status = (so.status || "").toLowerCase();
-      if (status === "cancelled" || status === "delivered" || status === "closed") return;
+      if (
+        status === "cancelled" ||
+        status === "delivered" ||
+        status === "closed" ||
+        status === "fully converted" ||
+        status === "converted to sale" ||
+        status === "converted"
+      ) {
+        return;
+      }
       (so.rows || []).forEach((r) => {
         const name = (r.item || "").trim();
         if (!name) return;
-        getEntry(name).reservedQty += Math.max(Number(r.qty || r.quantity || 0), 0);
+        const ordered = Number(r.orderedQty ?? r.qty ?? r.quantity ?? 0);
+        const converted = Number(r.convertedQty ?? 0);
+        const remaining = r.remainingQty != null ? Number(r.remainingQty) : Math.max(0, ordered - converted);
+        if (remaining > 0) {
+          getEntry(name).reservedQty += Math.max(remaining, 0);
+        }
       });
     });
 

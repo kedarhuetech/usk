@@ -122,7 +122,11 @@ export default function AllTransactionsReport() {
 
     if (action === "View/Edit") {
       const t = row.type.toLowerCase();
-      if (t.includes("sale") || t.includes("pos")) {
+      if (t === "sale order" || t.includes("sale order")) {
+        navigate("/sales/sale-order", { state: { editOrder: row.raw } });
+      } else if (t === "purchase order" || t.includes("purchase order")) {
+        navigate("/purchase-expense/purchase-order", { state: { editOrder: row.raw } });
+      } else if (t.includes("sale") || t.includes("pos")) {
         navigate("/sales/sale-invoices/new", { state: { editInvoice: row.raw } });
       } else if (t.includes("purchase")) {
         navigate("/purchase-expense/purchase-bills/new", {
@@ -146,7 +150,11 @@ export default function AllTransactionsReport() {
 
     if (action === "Open PDF" || action === "Print") {
       const t = row.type.toLowerCase();
-      if (t.includes("sale") || t.includes("pos")) {
+      if (t.includes("sale order")) {
+        navigate("/sales/sale-order", { state: { printOrder: row.raw, autoPrint: action === "Print" } });
+      } else if (t.includes("purchase order")) {
+        navigate("/purchase-expense/purchase-order", { state: { printOrder: row.raw, autoPrint: action === "Print" } });
+      } else if (t.includes("sale") || t.includes("pos")) {
         navigate("/sales/sale-invoices/preview", {
           state: { invoice: row.raw, printAfterOpen: action === "Print" },
         });

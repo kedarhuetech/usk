@@ -885,6 +885,8 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
       wholesalePrice: wholesaleVisible ? wholesale.price : "",
       wholesaleTaxMode: wholesaleVisible ? wholesale.taxMode : "",
       minimumWholesaleQuantity: wholesaleVisible ? wholesale.minimumQty : "",
+      enableBatchTracking: hasBatchStock || Boolean(form.enableBatchTracking ?? initialItem?.enableBatchTracking),
+      batchTracking: hasBatchStock || Boolean(form.enableBatchTracking ?? initialItem?.enableBatchTracking),
       batches: savedBatchRows,
     };
     try {

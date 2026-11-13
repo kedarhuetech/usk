@@ -8,6 +8,7 @@ import {
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
 const CATEGORIES_KEY = "ledgerly:expenseCategories.v1";
@@ -109,8 +110,8 @@ export default function Expenses() {
     confirmColor: "red",
     onConfirm: null,
   });
-  const saveRecords = (next) => { setRecords(next); localStorage.setItem(RECORDS_KEY, JSON.stringify(next)); };
-  const saveCategories = (next) => { setCategories(next); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(next)); };
+  const saveRecords = (next) => { setRecords(next); localStorage.setItem(RECORDS_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
+  const saveCategories = (next) => { setCategories(next); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
   const startNew = () => setEditor({ mode: "new", entry: blankEntry(records.length + 1) });
   const entriesFor = (name) => records.filter(record => tab === "Category" ? record.category === name : record.rows.some(row => row.item === name));
   const items = [...new Set(records.flatMap(record => record.rows.map(row => row.item).filter(Boolean)))];
@@ -119,7 +120,17 @@ export default function Expenses() {
   const activeName = selected || shownNames[0] || "";
   const selectedRecords = entriesFor(activeName);
   const visible = selectedRecords.filter(record => (!dateFrom || record.date >= dateFrom) && (!dateTo || record.date <= dateTo) && `${record.number} ${record.category} ${record.party} ${record.rows.map(row => row.item).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
-  const summary = useMemo(() => { const selectedRecords = records.filter(record => tab === "Category" ? record.category === activeName : record.rows.some(row => row.item === activeName)); return selectedRecords.reduce((acc, record) => { const total = record.rows.reduce((sum, row) => sum + rowAmount(row, record.gst), 0); const paid = record.payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0); acc.total += total; acc.balance += Math.max(0, total - paid); return acc; }, { total: 0, balance: 0 }); }, [records, tab, activeName]);
+  const summary = useMemo(() => {
+    const selectedRecords = records.filter(record => tab === "Category" ? record.category === activeName : record.rows.some(row => row.item === activeName));
+    return selectedRecords.reduce((acc, record) => {
+      const total = Number(record.amount ?? record.rows.reduce((sum, row) => sum + rowAmount(row, record.gst), 0));
+      const enteredPayments = (record.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+      const paid = Number(record.paid ?? (enteredPayments || (record.status === "Paid" ? total : 0)));
+      acc.total += total;
+      acc.balance += Math.max(0, total - paid);
+      return acc;
+    }, { total: 0, balance: 0 });
+  }, [records, tab, activeName]);
   const editEntry = (entry) => { setEditor({ mode: "edit", entry: { ...entry, rows: entry.rows.map(row => ({ ...row })), payments: entry.payments.map(payment => ({ ...payment })) } }); setMenuId(""); };
 
   useEffect(() => {

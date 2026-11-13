@@ -599,6 +599,8 @@ function PartyDetails() {
         paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
         creditNotes: readLocalList("ledgerly:saleReturns.v1"),
         debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
+        saleOrders: readLocalList("ledgerly:saleOrders.v1"),
+        purchaseOrders: readLocalList("ledgerly:purchaseOrders.v1"),
         saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
       });
     } catch (error) {
@@ -621,6 +623,8 @@ function PartyDetails() {
       paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
       creditNotes: readLocalList("ledgerly:saleReturns.v1"),
       debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
+      saleOrders: readLocalList("ledgerly:saleOrders.v1"),
+      purchaseOrders: readLocalList("ledgerly:purchaseOrders.v1"),
       saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
     });
   }, []);
@@ -733,6 +737,8 @@ function PartyDetails() {
     }),
     ...partyActivity.estimates.filter(belongsToSelectedParty).map((entry) => ({ id: `estimate:${entry.id}`, source: "Estimate/Quotation", number: entry.number || entry.refNo || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
     ...partyActivity.proformas.filter(belongsToSelectedParty).map((entry) => ({ id: `proforma:${entry.id}`, source: "Proforma Invoice", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: String(entry.status || "Open").startsWith("Converted") ? Number(entry.amount || 0) : 0, balance: String(entry.status || "Open").startsWith("Converted") ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
+    ...(partyActivity.saleOrders || []).filter(belongsToSelectedParty).map((entry) => ({ id: `sale-order:${entry.id}`, source: "Sale Order", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: entry.status === "Converted to Sale" ? Number(entry.amount || 0) : 0, balance: entry.status === "Converted to Sale" ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
+    ...(partyActivity.purchaseOrders || []).filter(belongsToSelectedParty).map((entry) => ({ id: `purchase-order:${entry.id}`, source: "Purchase Order", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: entry.status === "Converted to Purchase" ? Number(entry.amount || 0) : 0, balance: entry.status === "Converted to Purchase" ? 0 : Number(entry.amount || 0), status: entry.status || "Open", raw: entry })),
     ...partyActivity.payments.filter(belongsToSelectedParty).map((entry) => { const unallocated = !entry.linkedInvoiceId && !entry.invoiceId && !(entry.allocations || []).length; const advance = unallocated ? Number(entry.amount || 0) : 0; return { id: `payment:${entry.id}`, source: "Payment-In", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.received ?? entry.amount ?? 0), balance: advance, receivableBalance: 0, payableBalance: advance, status: entry.status || "Unused", raw: entry }; }),
     ...partyActivity.paymentsOut.filter(belongsToSelectedParty).map((entry) => { const unallocated = !entry.linkedInvoiceId && !entry.linkedBillId && !entry.invoiceId && !entry.billId && !entry.purchaseId && !entry.linkedCreditNoteId && !(entry.allocations || []).length; const advance = unallocated ? Number(entry.amount || 0) : 0; return { id: `payment-out:${entry.id}`, source: entry.linkedCreditNoteId ? "Credit Note Refund" : "Payment-Out", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.amount || 0), received: Number(entry.amount || 0), balance: advance, receivableBalance: advance, payableBalance: 0, status: entry.status || "Paid", raw: entry }; }),
     ...partyActivity.creditNotes.filter((entry) => entry.type === "Credit Note" && !entry.cancelled && belongsToSelectedParty(entry)).map((entry) => { const credit = Number(entry.customerCreditAmount ?? entry.balance ?? 0); return { id: `credit-note:${entry.id}`, source: "Credit Note", number: entry.number || "—", date: entry.date || entry.createdAt, total: Number(entry.total || 0), received: Number(entry.received || 0), balance: credit, receivableBalance: 0, payableBalance: credit, status: entry.status || "Credit Available", raw: entry }; }),
