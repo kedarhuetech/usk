@@ -1746,11 +1746,9 @@ function EditorHeader({
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate text-[15px] font-bold text-slate-950">{design.name}</h1>
-            {design?.id?.startsWith("image-to-layers-") && (
-              <span className={`shrink-0 text-[11px] font-semibold ${autosaveStatus === "error" ? "text-rose-600" : "text-slate-400"}`} aria-live="polite">
-                {autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Save failed" : "Saved"}
-              </span>
-            )}
+            <span className={`shrink-0 text-[11px] font-semibold ${autosaveStatus === "error" ? "text-rose-600" : autosaveStatus === "saving" ? "text-amber-600" : "text-slate-400"}`} aria-live="polite">
+              {autosaveStatus === "saving" ? "Saving…" : autosaveStatus === "error" ? "Save failed" : "Saved"}
+            </span>
             {quickPersonalizeActive && (
               <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-700">
                 Quick Personalize
@@ -4322,8 +4320,12 @@ function EditorEmptyState({ onBack }) {
 
 // Renders the marketing studio editor loaded interface.
 function MarketingStudioEditorLoaded({ template, onBack }) {
-  const [brandKit, setBrandKit] = useState(() => cloneDesign(defaultBrandKit));
-  const [design, setDesign] = useState(() => (template ? applyBrandKitToDesign(cloneDesign(template), defaultBrandKit) : null));
+  const [brandKit, setBrandKit] = useState(() => (template?.brandKit ? cloneDesign(template.brandKit) : cloneDesign(defaultBrandKit)));
+  const [design, setDesign] = useState(() => {
+    if (!template) return null;
+    if (template.updatedAt) return cloneDesign(template);
+    return applyBrandKitToDesign(cloneDesign(template), defaultBrandKit);
+  });
   const [history, setHistory] = useState({ past: [], future: [] });
   const [selectedId, setSelectedId] = useState("");
   const [activeTool, setActiveTool] = useState(() => (template?.editMode === "quick-personalize" ? "templates" : "text"));
@@ -4354,11 +4356,42 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
   }, [design]);
 
   useEffect(() => {
-    if (!design?.id?.startsWith("image-to-layers-")) return undefined;
+    if (!design?.id) return undefined;
     let active = true;
     setAutosaveStatus("saving");
     const timer = window.setTimeout(() => {
-      saveSessionDesign(design)
+      let thumbnail = design.thumbnail;
+      if (stageRef.current && design.width && design.height) {
+        try {
+          const stage = stageRef.current;
+          const stageScale = stage.scaleX() || 1;
+          const thumbWidth = 240;
+          const thumbScale = (thumbWidth / Math.max(design.width, 1)) / stageScale;
+          const thumbDataUrl = stage.toDataURL({
+            mimeType: "image/jpeg",
+            quality: 0.65,
+            pixelRatio: Math.min(thumbScale, 1),
+            x: 0,
+            y: 0,
+            width: design.width * stageScale,
+            height: design.height * stageScale,
+          });
+          if (thumbDataUrl && thumbDataUrl.startsWith("data:image/")) {
+            thumbnail = thumbDataUrl;
+          }
+        } catch {
+          // ignore potential stage canvas taint
+        }
+      }
+
+      const designToSave = {
+        ...design,
+        brandKit,
+        thumbnail: thumbnail || design.thumbnail || design.elements?.find((el) => el.type === "image")?.src || null,
+        updatedAt: new Date().toISOString(),
+      };
+
+      saveSessionDesign(designToSave)
         .then(() => { if (active) setAutosaveStatus("saved"); })
         .catch((error) => {
           if (!active) return;
@@ -4370,7 +4403,7 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
       active = false;
       window.clearTimeout(timer);
     };
-  }, [design]);
+  }, [design, brandKit]);
 
   useEffect(() => {
     brandKitRef.current = brandKit;
@@ -5426,15 +5459,53 @@ function MarketingStudioEditorLoaded({ template, onBack }) {
 function MarketingStudioEditor() {
   const { templateId } = useParams();
   const navigate = useNavigate();
-  const [savedTemplate, setSavedTemplate] = useState(null);
-  useEffect(() => { getSessionDesignById(templateId).then(setSavedTemplate).catch(() => setSavedTemplate(null)); }, [templateId]);
-  const template = useMemo(() => getTemplateById(templateId) || savedTemplate, [templateId, savedTemplate]);
+  const [loading, setLoading] = useState(true);
+  const [resolvedTemplate, setResolvedTemplate] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getSessionDesignById(templateId)
+      .then((saved) => {
+        if (!active) return;
+        if (saved) {
+          setResolvedTemplate(saved);
+        } else {
+          const builtin = getTemplateById(templateId);
+          setResolvedTemplate(builtin || null);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        const builtin = getTemplateById(templateId);
+        setResolvedTemplate(builtin || null);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [templateId]);
+
   // Handles back.
   const handleBack = () => navigate("/business-growth/marketing-tools");
 
-  if (!template) return <EditorEmptyState onBack={handleBack} />;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF5A1F] border-t-transparent" />
+          <p className="text-sm font-semibold text-slate-600">Loading design...</p>
+        </div>
+      </div>
+    );
+  }
 
-  return <MarketingStudioEditorLoaded key={template.id} template={template} onBack={handleBack} />;
+  if (!resolvedTemplate) return <EditorEmptyState onBack={handleBack} />;
+
+  return <MarketingStudioEditorLoaded key={resolvedTemplate.id} template={resolvedTemplate} onBack={handleBack} />;
 }
 
 export default MarketingStudioEditor;

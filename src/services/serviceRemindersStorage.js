@@ -14,7 +14,7 @@ export const DEFAULT_SERVICE_REMINDER_SETTINGS = Object.freeze({
   reminderDaysBefore: 2, // User requested: "Notify customers: 2 days before service due date"
   defaultMessageTemplate:
     "Dear {customerName}, this is a friendly reminder from {companyName} that your service for {serviceName} is due on {serviceDueDate}. Please contact us to schedule your service.",
-  autoNotifyWhatsApp: false,
+  autoNotifyWhatsApp: true, // User requested: Due reminders automatically get sent with no clicking required
   autoNotifyEmail: false,
 });
 
@@ -66,6 +66,9 @@ export function getReminderSettings() {
     ...DEFAULT_SERVICE_REMINDER_SETTINGS,
     ...parsed,
     enabled: Boolean(parsed.enabled ?? appSettings.serviceRemindersEnabled ?? DEFAULT_SERVICE_REMINDER_SETTINGS.enabled),
+    autoNotifyWhatsApp: parsed.autoNotifyWhatsApp !== undefined
+      ? Boolean(parsed.autoNotifyWhatsApp)
+      : DEFAULT_SERVICE_REMINDER_SETTINGS.autoNotifyWhatsApp,
     reminderDaysBefore: Math.max(
       0,
       Number(parsed.reminderDaysBefore ?? appSettings.reminderDaysBefore ?? DEFAULT_SERVICE_REMINDER_SETTINGS.reminderDaysBefore) || 0
@@ -86,6 +89,9 @@ export function saveReminderSettings(patch = {}) {
 
   if (patch.enabled !== undefined) {
     next.enabled = Boolean(patch.enabled);
+  }
+  if (patch.autoNotifyWhatsApp !== undefined) {
+    next.autoNotifyWhatsApp = Boolean(patch.autoNotifyWhatsApp);
   }
   if (patch.reminderDaysBefore !== undefined) {
     next.reminderDaysBefore = Math.max(0, Math.min(90, Number(patch.reminderDaysBefore) || 0));
@@ -159,6 +165,8 @@ export function getReminderRecords() {
     notes: item.notes || "",
     lastNotifiedAt: item.lastNotifiedAt || null,
     lastNotifiedDueDate: item.lastNotifiedDueDate || null,
+    lastNotifiedChannel: item.lastNotifiedChannel || null,
+    lastNotifiedMessage: item.lastNotifiedMessage || "",
     notificationHistory: Array.isArray(item.notificationHistory) ? item.notificationHistory : [],
     createdAt: item.createdAt || new Date().toISOString(),
     updatedAt: item.updatedAt || new Date().toISOString(),
@@ -208,6 +216,8 @@ export function saveReminderRecord(record = {}) {
     notes: record.notes || "",
     lastNotifiedAt: record.lastNotifiedAt || null,
     lastNotifiedDueDate: record.lastNotifiedDueDate || null,
+    lastNotifiedChannel: record.lastNotifiedChannel || null,
+    lastNotifiedMessage: record.lastNotifiedMessage || "",
     notificationHistory: Array.isArray(record.notificationHistory) ? record.notificationHistory : [],
     createdAt: record.createdAt || now,
     updatedAt: now,

@@ -6,11 +6,13 @@ import {
   buildEmailReminder,
   recordReminderNotification,
   sendServiceReminderViaMeta,
+  autoDispatchDueRemindersViaMeta,
 } from "./serviceRemindersService.js";
 import {
   saveReminderRecord,
   getReminderRecords,
   deleteReminderRecord,
+  saveReminderSettings,
 } from "./serviceRemindersStorage.js";
 
 // Mock localStorage for node environment
@@ -130,4 +132,81 @@ test("5. sendServiceReminderViaMeta handles unapproved/absent template error gra
   assert.equal(result.templateRequested, true);
   assert.match(result.error, /service_reminder_alert was absent/);
   assert.match(result.fallbackUrl, /https:\/\/wa\.me\/919876500000/);
+});
+
+test("6. autoDispatchDueRemindersViaMeta automatically dispatches due reminders without clicking and prevents duplicates", async () => {
+  // Clear memory
+  global.window.localStorage.clear();
+
+  saveReminderSettings({
+    enabled: true,
+    reminderDaysBefore: 2,
+    autoNotifyWhatsApp: true,
+  });
+
+  // Calculate a due soon date (tomorrow)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+  const rec = saveReminderRecord({
+    customerName: "Auto Test Customer",
+    customerPhone: "9876543210",
+    serviceName: "Battery Checkup",
+    serviceDueDate: tomorrowStr,
+    status: "Pending",
+  });
+
+  let dispatchedCount = 0;
+  global.fetch = async (url) => {
+    if (url === "/api/whatsapp-business/connection") {
+      return {
+        ok: true,
+        json: async () => ({
+          connected: true,
+          readiness: { readyToSend: true },
+        }),
+      };
+    }
+    if (url === "/api/whatsapp-business/send") {
+      dispatchedCount++;
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          messageId: `wamid.auto_${Date.now()}`,
+        }),
+      };
+    }
+    return { ok: false };
+  };
+
+  const firstRun = await autoDispatchDueRemindersViaMeta("Sai Kirana Stores");
+  assert.equal(firstRun.success, true);
+  assert.equal(firstRun.dispatched, 1);
+  assert.equal(dispatchedCount, 1);
+
+  // Check that record is stamped with lastNotifiedDueDate
+  const records = getReminderRecords();
+  const updatedRec = records.find((r) => r.id === rec.id);
+  assert.equal(updatedRec.lastNotifiedDueDate, tomorrowStr);
+  assert.equal(updatedRec.lastNotifiedChannel, "meta_whatsapp");
+
+  // Run again immediately - should NOT duplicate or re-dispatch!
+  const secondRun = await autoDispatchDueRemindersViaMeta("Sai Kirana Stores");
+  assert.equal(secondRun.success, true);
+  assert.equal(secondRun.dispatched, 0);
+  assert.equal(dispatchedCount, 1, "Must not resend to customer who was already notified for this due date");
+});
+
+test("7. autoDispatchDueRemindersViaMeta respects autoNotifyWhatsApp disabled setting", async () => {
+  saveReminderSettings({
+    enabled: true,
+    autoNotifyWhatsApp: false,
+  });
+
+  const run = await autoDispatchDueRemindersViaMeta("Sai Kirana Stores");
+  assert.equal(run.success, false);
+  assert.equal(run.reason, "disabled");
+  assert.equal(run.dispatched, 0);
 });
