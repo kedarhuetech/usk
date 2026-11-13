@@ -118,9 +118,14 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
         ...prev,
         enabled: parentSettings.serviceRemindersEnabled ?? prev.enabled,
         reminderDaysBefore: parentSettings.reminderDaysBefore ?? prev.reminderDaysBefore,
+        autoNotifyWhatsApp: parentSettings.serviceRemindersAutoWhatsApp ?? prev.autoNotifyWhatsApp,
       }));
     }
-  }, [parentSettings?.serviceRemindersEnabled, parentSettings?.reminderDaysBefore]);
+  }, [
+    parentSettings?.serviceRemindersEnabled,
+    parentSettings?.reminderDaysBefore,
+    parentSettings?.serviceRemindersAutoWhatsApp,
+  ]);
 
   const processed = useMemo(() => {
     return processServiceReminders({ records, settings });
@@ -182,6 +187,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     const val = e.target.checked;
     const updated = saveReminderSettings({ autoNotifyWhatsApp: val });
     setSettings(updated);
+    if (parentUpdate) parentUpdate("serviceRemindersAutoWhatsApp", val);
     showNotice(val ? "⚡ Auto-send enabled: Due reminders will be sent automatically" : "Auto-send disabled");
   };
 
@@ -286,6 +292,9 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
         toast.success(res.message || "Template approval request submitted to Meta!", {
           title: "Template Request Sent",
           duration: 7000,
+        });
+        checkMetaWhatsAppConnection().then((status) => {
+          setMetaStatus({ ...status, loading: false });
         });
       } else {
         toast.error(res.error || "Could not submit template approval request.");
@@ -591,13 +600,19 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                   type="button"
                   onClick={handleRequestTemplateApproval}
                   disabled={requestingApproval}
-                  title="Send approval request to Meta WhatsApp for service reminder template"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition disabled:opacity-50"
+                  title="Official Meta WhatsApp service reminder template status"
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold shadow-xs transition disabled:opacity-50 cursor-pointer ${
+                    metaStatus.serviceTemplateStatus === "APPROVED"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
                 >
                   {requestingApproval ? (
                     <><FiLoader className="h-4 w-4 animate-spin text-emerald-600" /> Submitting to Meta...</>
+                  ) : metaStatus.serviceTemplateStatus === "APPROVED" ? (
+                    <><FiCheck className="h-4 w-4 text-emerald-600" /> Template Approved</>
                   ) : (
-                    <><FiCheck className="h-4 w-4 text-emerald-600" /> Request Meta Template</>
+                    <><FiCheck className="h-4 w-4 text-amber-600" /> Request Meta Template</>
                   )}
                 </button>
               )}

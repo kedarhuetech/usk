@@ -525,9 +525,107 @@ export const PREDEFINED_TEMPLATES = {
     components: [
       {
         type: "BODY",
-        text: "Hello {{1}},\n\n{{2}}\n\nRegards,\n{{3}}",
+        text: "Hello {{1}},\n\nWe would like to share an important business update regarding your account:\n{{2}}\n\nWarm regards from {{3}}. Please let us know if you need any further assistance.",
         example: {
-          body_text: [["Valued Customer", "Your requested update has been processed.", "Our Store"]],
+          body_text: [["Valued Customer", "Your requested account update has been completed.", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  transaction_invoice: {
+    name: "transaction_invoice_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nThank you for choosing us! Here are your transaction details:\nDocument: {{2}}\nReference Number: {{3}}\nInvoice Amount: {{4}}\nCurrent Balance: {{5}}\n\nThank you for your business with {{6}}. For any assistance, please contact our support team.",
+        example: {
+          body_text: [["Valued Customer", "Sale Invoice", "INV-792", "792.00", "0.00", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  sale_invoice: {
+    name: "sale_invoice_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nThank you for shopping with us! Here are your sale purchase details:\nInvoice Number: {{2}}\nTotal Amount: {{3}}\nBalance Due: {{4}}\n\nThank you for choosing {{5}}. We look forward to serving you again soon!",
+        example: {
+          body_text: [["Valued Customer", "INV-792", "792.00", "0.00", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  purchase_bill: {
+    name: "purchase_bill_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nThis is to confirm that your purchase bill has been recorded with us:\nBill Number: {{2}}\nTotal Bill Amount: {{3}}\nOutstanding Balance: {{4}}\n\nWarm regards from {{5}}. Thank you for your partnership.",
+        example: {
+          body_text: [["Valued Partner", "BILL-301", "1,450.00", "0.00", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  payment_receipt: {
+    name: "payment_receipt_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nWe have successfully received your payment with thanks. Here are your transaction details:\nReceipt Number: {{2}}\nAmount Received: {{3}}\nPayment Mode: {{4}}\n\nThank you for doing business with {{5}}. Please keep this message for your records.",
+        example: {
+          body_text: [["Valued Customer", "REC-101", "1,500.00", "Cash", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  order_booking: {
+    name: "order_booking_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nYour order has been placed and booked successfully. Here are your order details:\nOrder Number: {{2}}\nTotal Order Amount: {{3}}\n\nThank you for your order with {{4}}. We will notify you once it is dispatched.",
+        example: {
+          body_text: [["Valued Customer", "ORD-501", "2,400.00", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  estimate_quotation: {
+    name: "estimate_quotation_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nThank you for your inquiry. Here is the estimate quotation you requested:\nEstimate Number: {{2}}\nQuotation Amount: {{3}}\n\nBest regards from {{4}}. Please contact us to confirm your order.",
+        example: {
+          body_text: [["Valued Customer", "EST-202", "3,500.00", "Sai Kirana Stores"]],
+        },
+      },
+    ],
+  },
+  delivery_challan: {
+    name: "delivery_challan_alert",
+    category: "UTILITY",
+    language: "en",
+    components: [
+      {
+        type: "BODY",
+        text: "Dear {{1}},\n\nYour goods have been dispatched under Delivery Challan with the following details:\nChallan Number: {{2}}\nItems Quantity: {{3}}\n\nThank you for choosing {{4}}. Please inspect the delivery upon receipt.",
+        example: {
+          body_text: [["Valued Customer", "DC-301", "5 Packages", "Sai Kirana Stores"]],
         },
       },
     ],
@@ -625,7 +723,16 @@ export async function requestWhatsAppTemplateApproval({ accessToken, wabaId, tem
     };
   } catch (error) {
     const errMsg = String(error.message || "").toLowerCase();
-    if (errMsg.includes("already exists") || errMsg.includes("duplicate")) {
+    const subcode = String(error.subcode || error.error_subcode || "");
+    const userMsg = String(error.userMessage || "").toLowerCase();
+    const userTitle = String(error.userTitle || "").toLowerCase();
+    if (
+      errMsg.includes("already exists") ||
+      errMsg.includes("duplicate") ||
+      subcode === "2388024" ||
+      userMsg.includes("already exists") ||
+      userTitle.includes("already exists")
+    ) {
       return {
         success: true,
         alreadyExists: true,

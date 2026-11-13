@@ -271,11 +271,15 @@ export async function checkMetaWhatsAppConnection() {
     const response = await fetch("/api/whatsapp-business/connection");
     if (!response.ok) return { connected: false, configured: false };
     const data = await response.json();
+    const templates = data.assets?.templates || [];
+    const serviceTpl = templates.find((t) => t.name === "service_reminder_alert");
     return {
       connected: Boolean(data.connected || data.testModeConfigured),
       phoneNumber: data.selection?.phoneNumberId || data.assets?.phoneNumbers?.[0]?.display_phone_number || "",
       readyToSend: Boolean(data.readiness?.readyToSend || data.testModeConfigured),
       source: data.source || (data.testModeConfigured ? "test_mode" : "none"),
+      serviceTemplateStatus: serviceTpl?.status || (data.testModeConfigured ? "APPROVED" : "NOT_REQUESTED"),
+      templates,
     };
   } catch {
     return { connected: false, configured: false };

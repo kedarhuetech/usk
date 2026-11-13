@@ -444,6 +444,67 @@ router.post("/templates/request-approval", async (req, res) => {
 });
 
 /**
+ * POST /api/whatsapp-business/templates/request-all
+ * Requests Meta approval for all transaction and reminder templates.
+ */
+router.post("/templates/request-all", async (req, res) => {
+  const config = getWhatsAppOAuthConfig();
+  let connection = getWhatsAppConnection();
+
+  if ((!connection.connected || !connection.token?.accessToken) && config.testModeConfigured) {
+    try {
+      connection = await ensureWhatsAppTestConnection();
+    } catch {}
+  }
+
+  if (!connection.connected || !connection.token?.accessToken) {
+    return res.status(401).json({
+      success: false,
+      message: "Meta WhatsApp is not connected. Please connect your Meta account first.",
+    });
+  }
+
+  const wabaId = req.body?.wabaId || connection.selection?.wabaId || connection.assets?.wabas?.[0]?.id || config.testMode?.wabaId;
+  if (!wabaId) {
+    return res.status(400).json({
+      success: false,
+      message: "No WhatsApp Business Account (WABA) ID is available for template submission.",
+    });
+  }
+
+  const results = [];
+  const templatesToRequest = Object.entries(PREDEFINED_TEMPLATES).filter(([key]) => key !== "marketing_promo");
+
+  for (const [key, templateDef] of templatesToRequest) {
+    try {
+      const result = await requestWhatsAppTemplateApproval({
+        accessToken: connection.token.accessToken,
+        wabaId,
+        template: templateDef,
+      });
+      results.push({ key, name: templateDef.name, success: true, ...result });
+    } catch (err) {
+      results.push({ key, name: templateDef.name, success: false, error: err.message });
+    }
+  }
+
+  // Refresh assets from Meta so local connection snapshot reflects new template requests
+  try {
+    const assets = await fetchWhatsAppAssets(connection.token.accessToken, { wabaId });
+    updateWhatsAppConnectionSnapshot({ assets });
+  } catch {}
+
+  const approvedOrSubmitted = results.filter((r) => r.success).length;
+  return res.json({
+    success: true,
+    total: templatesToRequest.length,
+    approvedOrSubmitted,
+    message: `Requested ${approvedOrSubmitted} template(s) with Meta WhatsApp.`,
+    results,
+  });
+});
+
+/**
  * POST /api/whatsapp-business/send
  * Sends an automated message (reminder, transaction, notification) directly via Meta WhatsApp Cloud API.
  */
@@ -596,15 +657,17 @@ router.post("/send", async (req, res) => {
               variables: variables || { body: [message] },
             });
           } else {
-            // No approved template is present: automatically submit service_reminder_alert to Meta for approval!
+            // No approved template is present: automatically submit template to Meta for approval!
             const wabaId = connection.selection?.wabaId || connection.assets?.wabas?.[0]?.id || config.testMode?.wabaId;
+            const isTransactionMsg = req.body?.type === "sales" || req.body?.type === "purchase" || req.body?.templateType === "transaction";
+            const targetPredefined = isTransactionMsg ? PREDEFINED_TEMPLATES.transaction_invoice : PREDEFINED_TEMPLATES.service_reminder;
             let autoApproval = null;
             if (wabaId && connection.token?.accessToken) {
               try {
                 autoApproval = await requestWhatsAppTemplateApproval({
                   accessToken: connection.token.accessToken,
                   wabaId,
-                  template: PREDEFINED_TEMPLATES.service_reminder,
+                  template: targetPredefined,
                 });
               } catch (autoErr) {
                 console.warn("Auto template approval request error:", autoErr.message);
@@ -618,7 +681,7 @@ router.post("/send", async (req, res) => {
               templateStatus: autoApproval?.status || "PENDING",
               error: { category: "TEMPLATE_PENDING_APPROVAL" },
               message: autoApproval?.message
-                ? `Customer is outside the 24-hr window. The required template was absent, so an approval request for "${PREDEFINED_TEMPLATES.service_reminder.name}" was automatically submitted to Meta (Status: ${autoApproval.status}).`
+                ? `Customer is outside the 24-hr window. The required template was absent, so an approval request for "${targetPredefined.name}" was automatically submitted to Meta (Status: ${autoApproval.status}).`
                 : "Cannot send direct message: customer is outside the 24-hour service window, and no approved WhatsApp template is available in your campaign templates.",
             });
           }
