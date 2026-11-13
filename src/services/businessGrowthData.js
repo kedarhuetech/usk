@@ -121,7 +121,20 @@ export async function saveGrowthCampaign(value) {
 }
 export async function deleteGrowthCampaign(id) { return deleteSmartAdsCampaign(id); }
 // Saves growth design.
-export async function saveGrowthDesign(value) { return businessGrowthApi.save("designs", await persistInlineImages(value, "marketing-design", value.id)); }
+export async function saveGrowthDesign(value) {
+  try {
+    const withStoredAssets = await persistInlineImages(value, "marketing-design", value.id);
+    return await businessGrowthApi.save("designs", withStoredAssets);
+  } catch (error) {
+    console.warn("Could not upload inline assets for design, saving directly:", error);
+    try {
+      return await businessGrowthApi.save("designs", value);
+    } catch (saveError) {
+      console.warn("Could not save design to remote backend:", saveError);
+      return value;
+    }
+  }
+}
 // Loads growth designs.
 export async function loadGrowthDesigns() { return normalizePersistedAssetUrls(await businessGrowthApi.list("designs")); }
 // Loads recent image to layers designs.

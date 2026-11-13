@@ -724,20 +724,168 @@ function DiscoveryTabs({ tabs, activeTab, onTabChange }) {
   );
 }
 
+// Renders the live poster preview for a template to ensure exact visual fidelity between gallery cards and the editor.
+function TemplatePreview({ template }) {
+  const thumbnail = template?.thumbnail;
+  const isDirectRaster = thumbnail && (
+    thumbnail.startsWith("data:") ||
+    thumbnail.startsWith("blob:") ||
+    /\.(jpe?g|png|webp|avif)($|\?)/i.test(thumbnail)
+  );
+
+  const elements = template?.elements;
+  const width = template?.width || template?.canvas?.width || 1080;
+  const height = template?.height || template?.canvas?.height || 1080;
+
+  if (elements && elements.length > 0 && !isDirectRaster) {
+    const bgFill = template.background?.fill || "#ffffff";
+    return (
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="max-h-full max-w-full select-none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <rect width={width} height={height} fill={bgFill} />
+        {elements.map((el) => {
+          if (!el || el.hidden) return null;
+          const opacity = el.opacity ?? 1;
+
+          if (el.type === "shape" || el.type === "rect") {
+            if (el.shapeType === "circle") {
+              const r = Math.min(el.width, el.height) / 2;
+              return (
+                <circle
+                  key={el.id}
+                  cx={el.x + el.width / 2}
+                  cy={el.y + el.height / 2}
+                  r={r}
+                  fill={el.fill || "#e2e8f0"}
+                  stroke={el.stroke || "none"}
+                  strokeWidth={el.strokeWidth || 0}
+                  opacity={opacity}
+                />
+              );
+            }
+            return (
+              <rect
+                key={el.id}
+                x={el.x}
+                y={el.y}
+                width={el.width}
+                height={el.height}
+                rx={el.cornerRadius || 0}
+                fill={el.fill || "#e2e8f0"}
+                stroke={el.stroke || "none"}
+                strokeWidth={el.strokeWidth || 0}
+                opacity={opacity}
+              />
+            );
+          }
+
+          if (el.type === "image") {
+            const src = el.src;
+            if (!src) {
+              if (el.binding?.includes("logo")) {
+                return (
+                  <rect
+                    key={el.id}
+                    x={el.x}
+                    y={el.y}
+                    width={el.width}
+                    height={el.height}
+                    rx={el.cornerRadius || 12}
+                    fill="#f8fafc"
+                    stroke={el.borderColor || "#cbd5e1"}
+                    strokeWidth={el.borderWidth || 1}
+                    opacity={opacity}
+                  />
+                );
+              }
+              return null;
+            }
+            return (
+              <image
+                key={el.id}
+                href={src}
+                x={el.x}
+                y={el.y}
+                width={el.width}
+                height={el.height}
+                preserveAspectRatio={el.fit === "contain" ? "xMidYMid meet" : "xMidYMid slice"}
+                opacity={opacity}
+              />
+            );
+          }
+
+          if (el.type === "text") {
+            const text = el.text || "";
+            if (!text) return null;
+            const align = el.align || "left";
+            const x = align === "center" ? el.x + el.width / 2 : align === "right" ? el.x + el.width : el.x;
+            const textAnchor = align === "center" ? "middle" : align === "right" ? "end" : "start";
+            const fontSize = el.fontSize || 24;
+            const y = el.y + fontSize * 0.85;
+
+            return (
+              <text
+                key={el.id}
+                x={x}
+                y={y}
+                fill={el.fill || "#0f172a"}
+                fontFamily={el.fontFamily || "Inter, Arial, sans-serif"}
+                fontSize={fontSize}
+                fontWeight={el.fontWeight || 600}
+                textAnchor={textAnchor}
+                opacity={opacity}
+              >
+                {text.split("\n").map((line, idx) => (
+                  <tspan key={idx} x={x} dy={idx === 0 ? 0 : `${fontSize * 1.15}px`}>
+                    {line}
+                  </tspan>
+                ))}
+              </text>
+            );
+          }
+
+          return null;
+        })}
+      </svg>
+    );
+  }
+
+  return (
+    <img
+      src={thumbnail}
+      alt={template?.thumbnailAlt || template?.title || "Template"}
+      className="max-h-full max-w-full object-contain"
+      loading="lazy"
+    />
+  );
+}
+
 // Renders the template card interface.
 function TemplateCard({ template, className = "" }) {
   const navigate = useNavigate();
 
+  const handleOpen = () => {
+    navigate(`/business-growth/marketing-tools/editor/${template.id}`);
+  };
+
   return (
-    <article className={`flex h-[338px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/30 hover:shadow-md dark:border-[#252B37] dark:bg-[#161922] ${className || "w-[250px] shrink-0 sm:w-[270px]"}`}>
+    <article
+      onClick={handleOpen}
+      className={`group flex h-[338px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/30 hover:shadow-md cursor-pointer dark:border-[#252B37] dark:bg-[#161922] ${className || "w-[250px] shrink-0 sm:w-[270px]"}`}
+    >
       <div className="flex h-[210px] items-center justify-center bg-slate-50 p-3 dark:bg-[#0B0D11]">
-        <div className="flex h-full w-full items-center justify-center rounded-lg border border-slate-100 bg-white/80 p-2.5 dark:border-[#252B37] dark:bg-[#1B1F28]">
-          <img src={template.thumbnail} alt={template.thumbnailAlt} className="max-h-full max-w-full object-contain" loading="lazy" />
+        <div className="flex h-full w-full items-center justify-center rounded-lg border border-slate-100 bg-white/80 p-2.5 dark:border-[#252B37] dark:bg-[#1B1F28] overflow-hidden">
+          <TemplatePreview template={template} />
         </div>
       </div>
       <div className="flex h-[128px] shrink-0 flex-col justify-between border-t border-slate-100 p-3.5 dark:border-[#252B37]">
         <div className="flex items-start justify-between gap-3">
-          <h3 className="line-clamp-2 min-w-0 text-sm font-bold leading-5 text-slate-900 dark:text-slate-100">{template.title || template.name}</h3>
+          <h3 className="line-clamp-2 min-w-0 text-sm font-bold leading-5 text-slate-900 group-hover:text-[#FF5A1F] transition dark:text-slate-100">
+            {template.title || template.name}
+          </h3>
           <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-[#252B37] dark:text-slate-300">
             {template.category}
           </span>
@@ -747,7 +895,10 @@ function TemplateCard({ template, className = "" }) {
           <span className="text-[11px] font-semibold uppercase text-slate-400 dark:text-slate-500">{template.templateType}</span>
           <button
             type="button"
-            onClick={() => navigate(`/business-growth/marketing-tools/editor/${template.id}`)}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpen();
+            }}
             className="inline-flex items-center gap-1 text-sm font-semibold text-[#FF5A1F] hover:text-[#E84E0F] transition"
           >
             Customize
@@ -1117,34 +1268,61 @@ function RecentDesigns() {
   const navigate = useNavigate();
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState("");
 
-  useEffect(() => {
-    let active = true;
+  const refreshDesigns = () => {
     getSessionDesigns()
       .then((saved) => {
-        if (active) {
-          const list = (saved || []).filter((d) => !d.id?.startsWith("image-to-layers-"));
-          setDesigns(list.slice(0, 6));
-        }
+        const list = (saved || [])
+          .filter((d) => !d.id?.startsWith("image-to-layers-"))
+          .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+        setDesigns(list.slice(0, 8));
       })
       .catch(() => {})
       .finally(() => {
-        if (active) setLoading(false);
+        setLoading(false);
       });
-    return () => { active = false; };
+  };
+
+  useEffect(() => {
+    refreshDesigns();
   }, []);
+
+  const handleDelete = async (e, id) => {
+    e.stopPropagation();
+    setDeletingId(id);
+    try {
+      await deleteSessionDesign(id);
+      setDesigns((current) => current.filter((d) => d.id !== id));
+    } finally {
+      setDeletingId("");
+    }
+  };
+
   return (
     <Card className="p-5 shadow-sm">
       <SectionTitle icon={FiClock} title="Recent Designs" description="Drafts and saved designs will appear here after you create them." />
-      {designs.length ? (
+      {loading ? (
+        <p className="rounded-lg bg-slate-50 p-5 text-sm font-semibold text-slate-500">Loading saved designs…</p>
+      ) : designs.length ? (
         <div className="-mx-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex gap-4">
             {designs.map((design) => (
               <article
                 key={design.id}
                 onClick={() => navigate(`/business-growth/marketing-tools/editor/${design.id}`)}
-                className="flex h-[240px] w-[200px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/40 hover:shadow-md dark:bg-[#161922] dark:border-[#252B37]"
+                className="group relative flex h-[240px] w-[200px] shrink-0 cursor-pointer flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-[#FF5A1F]/40 hover:shadow-md dark:bg-[#161922] dark:border-[#252B37]"
               >
+                <button
+                  type="button"
+                  onClick={(e) => handleDelete(e, design.id)}
+                  disabled={deletingId === design.id}
+                  title="Delete draft"
+                  aria-label="Delete draft"
+                  className="absolute top-2 right-2 z-10 hidden rounded-md bg-white/90 p-1.5 text-slate-500 shadow-sm transition hover:bg-rose-50 hover:text-rose-600 group-hover:block dark:bg-slate-800/90 dark:text-slate-300 dark:hover:text-rose-400"
+                >
+                  <FiTrash2 className="h-3.5 w-3.5" />
+                </button>
                 <div className="flex h-[150px] items-center justify-center bg-slate-50 p-2 dark:bg-[#0B0D11]">
                   {design.thumbnail || design.elements?.find((el) => el.type === "image")?.src ? (
                     <img src={design.thumbnail || design.elements?.find((el) => el.type === "image")?.src} alt="" className="max-h-full max-w-full object-contain rounded" />

@@ -131,7 +131,7 @@ router.get("/stock-media/status", (_req, res) => {
 });
 
 router.get("/stock-media", async (req, res) => {
-  const { provider, query, page, perPage, orientation, category } = req.query;
+  const { provider, query, page, perPage, orientation, category, imageType } = req.query;
   try {
     const result = await searchStockMedia({
       provider,
@@ -140,6 +140,7 @@ router.get("/stock-media", async (req, res) => {
       perPage,
       orientation,
       category,
+      imageType,
     });
     res.json({
       success: true,

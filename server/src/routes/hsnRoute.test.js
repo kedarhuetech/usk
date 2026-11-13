@@ -5,11 +5,13 @@ import express from "express";
 import * as xlsx from "xlsx";
 import hsnRoutes from "./hsn.js";
 import { pool } from "../db/mysql.js";
+import { seedDefaultHsnCodes } from "../services/hsnService.js";
 
 let server;
 let baseUrl;
 
 test.before(async () => {
+  await seedDefaultHsnCodes().catch(() => {});
   const app = express();
   app.use(express.json());
   app.use("/api/hsn", hsnRoutes);

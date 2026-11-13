@@ -8,6 +8,7 @@ import {
   saveReminderRecord,
   saveReminderRecords,
 } from "./serviceRemindersStorage.js";
+import { getCompanyProfile } from "./companyProfileStorage.js";
 
 const DAY_IN_MS = 86400000;
 
@@ -239,6 +240,8 @@ export function recordReminderNotification(recordId, channel = "in_app", details
   const historyEntry = {
     channel,
     at: now,
+    timestamp: now,
+    sentAt: now,
     dueDate: target.serviceDueDate,
     message: details.message || target.lastNotifiedMessage || "",
     recipient: details.recipient || target.customerPhone || target.customerEmail || "",
@@ -311,6 +314,10 @@ export async function sendServiceReminderViaMeta(record, companyName = "Sai Kira
             record.serviceName,
             record.serviceDueDate,
           ],
+          "body:1": record.customerName,
+          "body:2": companyName,
+          "body:3": record.serviceName,
+          "body:4": record.serviceDueDate,
         },
         recordId: record.id,
       }),
@@ -391,3 +398,65 @@ export async function requestServiceReminderTemplateApproval() {
     };
   }
 }
+
+/**
+ * Automatically checks and dispatches any service due reminders that have reached their reminder date
+ * and have not yet been notified for this specific due date.
+ * No manual clicking required.
+ */
+export async function autoDispatchDueRemindersViaMeta(companyName = null) {
+  if (!companyName) {
+    try {
+      const p = getCompanyProfile();
+      companyName = p?.businessName || p?.companyName || "Sai Kirana Stores";
+    } catch {
+      companyName = "Sai Kirana Stores";
+    }
+  }
+
+  const settings = getReminderSettings();
+  if (!settings.enabled || settings.autoNotifyWhatsApp === false) {
+    return { success: false, reason: "disabled", dispatched: 0 };
+  }
+
+  const connection = await checkMetaWhatsAppConnection();
+  if (!connection.connected && !connection.readyToSend) {
+    return { success: false, reason: "meta_not_connected", dispatched: 0 };
+  }
+
+  const processed = processServiceReminders({ settings });
+  const eligible = (processed.activeAlerts || []).filter(
+    (r) => r.hasValidPhone && !r.alreadyNotifiedForThisDueDate
+  );
+
+  if (!eligible.length) {
+    return { success: true, dispatched: 0, eligible: 0 };
+  }
+
+  let dispatched = 0;
+  const dispatchedCustomers = [];
+  const errors = [];
+
+  for (const record of eligible) {
+    try {
+      const res = await sendServiceReminderViaMeta(record, companyName);
+      if (res.success) {
+        dispatched++;
+        dispatchedCustomers.push(record.customerName || record.customerPhone);
+      } else {
+        errors.push({ customer: record.customerName, error: res.error });
+      }
+    } catch (err) {
+      console.warn("Auto-dispatch reminder failed for", record.customerName, err);
+      errors.push({ customer: record.customerName, error: err.message });
+    }
+  }
+
+  return {
+    success: true,
+    dispatched,
+    dispatchedCustomers,
+    errors,
+  };
+}
+
