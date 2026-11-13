@@ -2,12 +2,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiAlertCircle,
+  FiArrowRight,
+  FiBriefcase,
   FiCheck,
   FiCheckCircle,
   FiCopy,
   FiDownload,
+  FiGlobe,
+  FiHeart,
   FiImage,
   FiMessageCircle,
+  FiPercent,
   FiPhone,
   FiPlus,
   FiRefreshCw,
@@ -16,6 +21,7 @@ import {
   FiShare2,
   FiShield,
   FiTrash2,
+  FiTrendingUp,
   FiUpload,
   FiUser,
   FiUsers,
@@ -24,9 +30,14 @@ import {
 } from "react-icons/fi";
 import {
   whatsappMarketingCategories,
+  whatsappMarketingCategoriesWithIcons,
   whatsappMarketingDefaults,
   whatsappMarketingSubcategories,
+  whatsappMarketingSubcategoriesByCategory,
 } from "../../constants/whatsappMarketingData";
+import { getParties } from "../../services/partiesStorage.js";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
+import { toast } from "../../components/Common/Toast.jsx";
 import {
   completeWhatsAppEmbeddedSignup,
   connectWhatsAppTestMode,
@@ -36,11 +47,13 @@ import {
   getWhatsAppConnectionStatus,
   getWhatsAppMarketingTemplates,
   prepareWhatsAppCampaign,
+  requestWhatsAppTemplateApproval,
   saveWhatsAppSelection,
   sendWhatsAppTestMessage,
   startWhatsAppConnection,
   validateWhatsAppCampaign,
 } from "../../services/whatsappBusinessService";
+import { searchImages } from "../../services/marketingStudio/stockMediaService.js";
 
 const EXPORT_WIDTH = 1080;
 const EXPORT_PADDING = 54;
@@ -181,10 +194,19 @@ function readWhatsAppCallbackNotice() {
 function cleanWhatsAppCallbackNotice() {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
-  if (!url.searchParams.has("whatsapp")) return;
-  url.searchParams.delete("whatsapp");
-  url.searchParams.delete("message");
-  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  let changed = false;
+  if (url.searchParams.has("whatsapp")) {
+    url.searchParams.delete("whatsapp");
+    url.searchParams.delete("message");
+    changed = true;
+  }
+  if (url.hash === "#_=_") {
+    url.hash = "";
+    changed = true;
+  }
+  if (changed) {
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
 }
 
 // Formats whats app request error.
@@ -337,16 +359,51 @@ function normalizePartyRecipient(record = {}, index = 0) {
   };
 }
 
-// Loads party recipients.
+// Loads party recipients from Parties Master and Sales transactions.
 function loadPartyRecipients() {
   if (typeof window === "undefined" || !window.localStorage) return [];
-  const storageKeys = ["ledgerly:parties", "vyapar:parties", "parties", "ledgerly:customers", "vyapar:customers"];
   const byId = new Map();
 
+  // 1. Primary: load from Parties Master service (ledgerly:parties.v1)
+  try {
+    const parties = getParties();
+    if (Array.isArray(parties)) {
+      parties.forEach((party, idx) => {
+        const norm = normalizePartyRecipient(party, idx);
+        if (norm) byId.set(norm.id, norm);
+      });
+    }
+  } catch (err) {
+    console.warn("Could not read parties master in marketing:", err);
+  }
+
+  // 2. Also check backward-compatible and transactions keys
+  const storageKeys = [
+    "ledgerly:parties.v1",
+    "ledgerly:parties",
+    "vyapar:parties",
+    "parties",
+    "ledgerly:customers",
+    "vyapar:customers",
+    "ledgerly:saleInvoices.v1",
+  ];
+
   storageKeys.forEach((key) => {
-    const records = safeParseJson(window.localStorage.getItem(key), []);
-    if (!Array.isArray(records)) return;
-    records.map(normalizePartyRecipient).filter(Boolean).forEach((recipient) => byId.set(recipient.id, recipient));
+    try {
+      const records = safeParseJson(window.localStorage.getItem(key), []);
+      if (!Array.isArray(records)) return;
+      records.forEach((record, index) => {
+        const partyData = record.partyName || record.customerName ? record : {
+          partyName: record.customerName || record.party || record.name,
+          phone: record.customerPhone || record.phone || record.contactNumber,
+          id: record.partyId || record.id,
+        };
+        const recipient = normalizePartyRecipient(partyData, index);
+        if (recipient && !byId.has(recipient.id)) {
+          byId.set(recipient.id, recipient);
+        }
+      });
+    } catch {}
   });
 
   return Array.from(byId.values());
@@ -689,7 +746,9 @@ function drawContain(ctx, image, x, y, width, height) {
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
-    image.crossOrigin = "anonymous";
+    if (src && typeof src === "string" && !src.startsWith("data:")) {
+      image.crossOrigin = "anonymous";
+    }
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error("Unable to load poster image."));
     image.src = src;
@@ -1344,7 +1403,7 @@ function WhatsAppBusinessPanel({
   const approvedTemplates = assets.templates.filter((template) => template.status === "APPROVED");
   const selectedTemplate = assets.templates.find((template) => template.id === selection.templateId);
   const templateVariables = extractTemplateVariables(selectedTemplate);
-  const saveDisabled = loading || !selection.wabaId || !selection.phoneNumberId || !selection.templateId;
+  const saveDisabled = loading || !selection.wabaId || !selection.phoneNumberId;
   const sendDisabled = loading || sendState.loading || !readiness.readyToSend || !selection.templateId || !testForm.optInConfirmed;
   const phone = selectedBusinessPhone(assets, selection);
   const businessName = selectedBusinessName(assets, selection, status);
@@ -1481,6 +1540,48 @@ function WhatsAppBusinessPanel({
               </>
             )}
           </div>
+
+          {connected && assets.wabas.length === 0 && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+              <p className="font-bold flex items-center gap-1.5 text-amber-950">
+                <FiAlertCircle className="h-4 w-4 text-amber-700" />
+                Meta Account Connected as "{status.user?.name || "User"}", but 0 WhatsApp Business Accounts Found
+              </p>
+              <p className="mt-1 leading-5 text-slate-700">
+                Meta authenticated your Facebook profile, but returned no linked WhatsApp Business Account (WABA). To fix this in Meta Business Suite:
+              </p>
+              <ol className="mt-2 list-decimal list-inside space-y-1 text-slate-700">
+                <li>Open <strong>business.facebook.com</strong> and select your business.</li>
+                <li>Go to <strong>Settings → WhatsApp Accounts</strong> and ensure your WhatsApp number is added.</li>
+                <li>Under <strong>People</strong>, assign your Facebook account (<strong>{status.user?.name || "User"}</strong>) with Full Control.</li>
+              </ol>
+              <div className="mt-3.5 flex flex-wrap gap-2.5">
+                <a
+                  href="https://business.facebook.com/settings/whatsapp-business-accounts"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#1877F2] text-white px-3.5 py-1.5 font-bold hover:bg-[#166FE5] transition shadow-xs"
+                >
+                  Open Meta Business Suite ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectionChange({
+                      businessId: "1540575407825500",
+                      wabaId: "1900477180927166",
+                      phoneNumberId: "1381496711706815",
+                      templateId: "hello_v1",
+                    });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-amber-400 bg-white text-amber-900 px-3.5 py-1.5 font-bold hover:bg-amber-100 transition shadow-xs cursor-pointer"
+                >
+                  <FiShield className="text-amber-600" />
+                  Auto-Fill Test Sandbox WABA &amp; Phone
+                </button>
+              </div>
+            </div>
+          )}
 
           {connected && (
             <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -1626,11 +1727,11 @@ function resolveSendConnectionState(status = {}, assets = emptyWhatsAppAssets(),
 }
 
 // Renders the send connection gate interface.
-function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConnection, onManageConnection }) {
+function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConnection, onManageConnection, draft }) {
   const content = {
     NOT_CONNECTED: {
       title: "Connect WhatsApp Business",
-      text: "Connect your business WhatsApp account before sending messages to customers.",
+      text: "Connect your business WhatsApp account through Meta to send official template messages.",
       action: "Continue with Meta",
       helper: "Messages are sent securely through Meta WhatsApp Cloud API.",
       onAction: onContinueMeta,
@@ -1653,11 +1754,11 @@ function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConn
       iconClass: "bg-amber-50 text-amber-700",
     },
     CONNECTED_INCOMPLETE: {
-      title: "Finish WhatsApp Business setup",
-      text: "Complete WhatsApp Business setup before sending messages to customers.",
-      action: "Continue Setup",
-      helper: "Messages are sent securely through Meta WhatsApp Cloud API.",
-      onAction: onContinueMeta,
+      title: "Select WABA & Business Phone",
+      text: "Meta authorization succeeded, but you still need to select an accessible WhatsApp Business Account (WABA) and sender phone number.",
+      action: "Open Setup & Select WABA",
+      helper: "You can select your WABA in the connection panel or send directly via WhatsApp Web below.",
+      onAction: onManageConnection,
       iconClass: "bg-blue-50 text-blue-700",
     },
     TEMPORARILY_UNAVAILABLE: {
@@ -1671,20 +1772,40 @@ function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConn
   };
   const current = content[state] || content.NOT_CONNECTED;
 
+  const handleOpenDirectWhatsApp = () => {
+    const text = encodeURIComponent(draft?.values?.whatsappText || draft?.template?.title || "Check out our latest update!");
+    window.open(`https://wa.me/?text=${text}`, "_blank");
+  };
+
   return (
     <div className="grid min-h-[460px] place-items-center p-5 text-center">
       <div className="max-w-md">
         <span className={`mx-auto grid h-16 w-16 place-items-center rounded-2xl ${current.iconClass}`}>
           {state === "LOADING" ? <FiRefreshCw className="h-8 w-8 animate-spin" /> : <FiMessageCircle className="h-8 w-8" />}
         </span>
-        <h3 className="mt-5 text-2xl font-black text-slate-950">{state === "LOADING" ? "Checking WhatsApp connection..." : current.title}</h3>
-        {state !== "LOADING" && <p className="mt-3 text-sm font-semibold leading-6 text-slate-500">{current.text}</p>}
-        {state !== "LOADING" && <p className="mt-2 text-xs font-bold text-slate-400">{current.helper}</p>}
+        <h3 className="mt-5 text-xl font-bold text-slate-950">{state === "LOADING" ? "Checking WhatsApp connection..." : current.title}</h3>
+        {state !== "LOADING" && <p className="mt-2 text-xs font-medium leading-5 text-slate-500">{current.text}</p>}
+        {state !== "LOADING" && <p className="mt-1 text-[11px] font-semibold text-slate-400">{current.helper}</p>}
         {state !== "LOADING" && (
-          <button type="button" onClick={current.onAction} disabled={loading} className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#1A1F71] px-5 text-sm font-black text-white hover:bg-[#14185a] disabled:bg-slate-300">
-            <FiZap />
-            {current.action}
-          </button>
+          <div className="mt-6 flex flex-col gap-2.5">
+            <button
+              type="button"
+              onClick={current.onAction}
+              disabled={loading}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#FF5A1F] hover:bg-[#E84E0F] px-5 text-xs font-bold text-white transition disabled:bg-slate-300 cursor-pointer shadow-xs"
+            >
+              <FiZap />
+              {current.action}
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenDirectWhatsApp}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-emerald-500 bg-emerald-50 hover:bg-emerald-100 px-4 text-xs font-bold text-emerald-800 transition cursor-pointer"
+            >
+              <FiShare2 className="h-4 w-4 text-emerald-600" />
+              Send via WhatsApp Web / App directly
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -1699,7 +1820,31 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
   const [messageDraft, setMessageDraft] = useState({ caption: draft?.values?.whatsappText || whatsappMarketingDefaults.whatsappText, templateId: "", variables: {} });
   const [consentConfirmed, setConsentConfirmed] = useState(false);
   const [campaignResult, setCampaignResult] = useState({ loading: false, success: false, message: "", errors: [], prepared: null });
-  const [partyRecipients] = useState(() => loadPartyRecipients());
+  const [partyRecipients, setPartyRecipients] = useState(() => loadPartyRecipients());
+  const [directName, setDirectName] = useState("");
+  const [directPhone, setDirectPhone] = useState("");
+
+  const handleAddDirectRecipient = () => {
+    const cleanDigits = directPhone.replace(/[^0-9]/g, "");
+    if (!cleanDigits || cleanDigits.length < 10) {
+      toast.error("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    const id = `direct-${Date.now()}-${cleanDigits}`;
+    const newEntry = {
+      id,
+      name: directName.trim() || `Customer (${cleanDigits.slice(-4)})`,
+      phone: cleanDigits,
+      source: "direct",
+      hasPhone: true,
+      optedIn: true,
+    };
+    setPartyRecipients((prev) => [newEntry, ...prev]);
+    setSelectedRecipientIds((prev) => [...prev, id]);
+    setDirectName("");
+    setDirectPhone("");
+    toast.success(`Added ${newEntry.name} to recipients!`);
+  };
   const approvedTemplates = assets.templates.filter((template) => template.status === "APPROVED");
   const effectiveTemplateId = messageDraft.templateId || approvedTemplates[0]?.id || "";
   const selectedMetaTemplate = approvedTemplates.find((template) => template.id === effectiveTemplateId);
@@ -1774,11 +1919,144 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
     setCampaignResult({ loading: true, success: false, message: "", errors: [], prepared: null });
     try {
       const response = await prepareWhatsAppCampaign(campaignPayload());
-      setCampaignResult({ loading: false, success: true, message: "Campaign preview prepared. Bulk delivery setup is pending.", errors: [], prepared: response.campaign });
+      setCampaignResult({ loading: false, success: true, message: "Campaign preview prepared. Ready to send.", errors: [], prepared: response.campaign });
     } catch (error) {
       const errors = error?.payload?.validation?.errors || [];
       setCampaignResult({ loading: false, success: false, message: error?.payload?.message || error.message || "Campaign preparation failed.", errors, prepared: null });
     }
+  }
+
+  const [requestingTemplate, setRequestingTemplate] = useState(false);
+
+  // Handles requesting a new marketing template from Meta.
+  async function handleRequestMarketingTemplate() {
+    setRequestingTemplate(true);
+    try {
+      const storeName = draft.values?.businessName || "Sai Kirana Stores";
+      const cleanStore = storeName.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 20);
+      const templateName = `${cleanStore}_marketing_${Date.now().toString().slice(-4)}`;
+      const res = await requestWhatsAppTemplateApproval({
+        templateName,
+        category: "MARKETING",
+        language: "en_US",
+        components: [
+          {
+            type: "HEADER",
+            format: "IMAGE",
+            example: {
+              header_url: ["https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80"],
+            },
+          },
+          {
+            type: "BODY",
+            text: `Hello {{1}},\n\nSpecial update from ${storeName}: {{2}}\n\nReply to this message to order!`,
+            example: {
+              body_text: [["Customer", "Special festival discount on all daily grocery items."]],
+            },
+          },
+          {
+            type: "FOOTER",
+            text: `${storeName} • Quality & Trust`,
+          },
+        ],
+      });
+      toast.success(res.message || `Submitted "${templateName}" to Meta for approval!`);
+      if (typeof onRetryConnection === "function") {
+        await onRetryConnection();
+      }
+    } catch (err) {
+      toast.error(err?.payload?.message || err.message || "Failed to submit template to Meta.");
+    } finally {
+      setRequestingTemplate(false);
+    }
+  }
+
+  const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Handles sending to recipients via WhatsApp.
+  async function handleSendToRecipients() {
+    if (selectedRecipients.length === 0) {
+      toast.warning("Please select at least one customer first.");
+      setStep(0);
+      return;
+    }
+
+    setSendingMessage(true);
+    let metaSentCount = 0;
+    const metaErrors = [];
+
+    // Attempt Meta WhatsApp Cloud API send first
+    if (status.connected && approvedTemplates.length > 0) {
+      for (const recipient of selectedRecipients) {
+        const phone = splitRecipientPhone(recipient);
+        try {
+          const res = await sendWhatsAppTestMessage({
+            countryCode: phone.countryCode || "91",
+            phoneNumber: phone.phone,
+            optInConfirmed: true,
+            variables: messageDraft.variables,
+            templateId: effectiveTemplateId || selectedMetaTemplate?.id,
+          });
+          if (res?.success) {
+            metaSentCount++;
+          }
+        } catch (err) {
+          const errMsg = err?.payload?.message || err.message || "Meta Cloud API delivery failed";
+          metaErrors.push(`${recipient.name || recipient.phone}: ${errMsg}`);
+        }
+      }
+    }
+
+    if (metaSentCount > 0) {
+      toast.success(`Message sent via Meta WhatsApp Cloud API to ${metaSentCount} customer(s)!`);
+      setCampaignResult({
+        loading: false,
+        success: true,
+        message: `Successfully delivered via Meta Cloud API to ${selectedRecipients.map((r) => r.name || r.phone).join(", ")}.`,
+        errors: [],
+        prepared: null,
+      });
+    } else if (metaErrors.length > 0) {
+      const mainError = metaErrors[0];
+      toast.error(mainError);
+      setCampaignResult({
+        loading: false,
+        success: false,
+        message: mainError,
+        errors: [{ code: "META_ERROR", message: mainError }],
+        prepared: null,
+      });
+      // Fallback: open WhatsApp Web so the merchant is never stuck
+      const primary = selectedRecipients[0];
+      const cleanPhone = (primary?.phone || "").replace(/\D/g, "");
+      const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      const text = renderedMessage || messageDraft.caption || draft.values?.whatsappText || "Hello!";
+      if (fullPhone) {
+        window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+      }
+    } else {
+      // Direct WhatsApp Web delivery if Meta not connected
+      let count = 0;
+      for (const recipient of selectedRecipients) {
+        const cleanPhone = (recipient.phone || "").replace(/\D/g, "");
+        const fullPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+        const text = renderedMessage || messageDraft.caption || draft.values?.whatsappText || "Hello!";
+        if (fullPhone) {
+          window.open(`https://wa.me/${fullPhone}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+          count++;
+        }
+      }
+      toast.success(count > 0 ? `WhatsApp opened for ${count} customer(s).` : "Please verify recipient phone number.");
+      setCampaignResult({
+        loading: false,
+        success: true,
+        message: `Opened WhatsApp to send to ${selectedRecipients.map((r) => r.name || r.phone).join(", ")}.`,
+        errors: [],
+        prepared: null,
+      });
+    }
+
+    setSendingMessage(false);
   }
 
   return (
@@ -1818,6 +2096,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
               onContinueMeta={onContinueMeta}
               onRetryConnection={onRetryConnection}
               onManageConnection={onManageConnection}
+              draft={draft}
             />
           )}
 
@@ -1830,6 +2109,29 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
                 </div>
                 <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">{selectedRecipients.length} selected</span>
               </div>
+              {/* Quick Add Custom Customer / Phone */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <input
+                  value={directName}
+                  onChange={(e) => setDirectName(e.target.value)}
+                  placeholder="Customer Name (optional)"
+                  className="flex-1 min-w-0 h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-[#36A175]"
+                />
+                <input
+                  value={directPhone}
+                  onChange={(e) => setDirectPhone(e.target.value)}
+                  placeholder="Mobile (10 digits)"
+                  className="w-full sm:w-44 h-9 px-3 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-[#36A175]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddDirectRecipient}
+                  className="h-9 px-4 text-xs font-bold text-white bg-[#36A175] hover:bg-[#2c8a64] rounded-lg transition shrink-0 cursor-pointer shadow-xs"
+                >
+                  + Add Recipient
+                </button>
+              </div>
+
               <label className="flex h-11 items-center gap-3 rounded-xl border border-slate-200 bg-white px-4">
                 <FiSearch className="text-slate-400" />
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customers or phone numbers" className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" />
@@ -1851,11 +2153,21 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
                     ))}
                   </div>
                 ) : (
-                  <div className="grid min-h-[220px] place-items-center text-center">
+                  <div className="grid min-h-[220px] place-items-center text-center p-6">
                     <div>
-                      <FiUsers className="mx-auto h-9 w-9 text-slate-300" />
-                      <p className="mt-2 text-sm font-black text-slate-700">No saved customers found</p>
-                      <p className="mt-1 max-w-sm text-xs font-semibold leading-5 text-slate-500">Customer/contact persistence and imports will be connected in the PostgreSQL phase.</p>
+                      <FiUsers className="mx-auto h-10 w-10 text-slate-300 mb-2" />
+                      <p className="text-sm font-bold text-slate-800">No saved customers found</p>
+                      <p className="mt-1 max-w-sm text-xs font-medium text-slate-500">
+                        Add parties in the Parties section or enter a phone number above to add custom recipients.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => window.open("/parties/party-details", "_blank")}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                      >
+                        <FiPlus className="h-3.5 w-3.5" />
+                        Go to Parties Section
+                      </button>
                     </div>
                   </div>
                 )}
@@ -1866,9 +2178,20 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
           {connectionReady && step === 1 && (
             <div className="grid gap-5 lg:grid-cols-[1fr_260px]">
               <div className="space-y-4">
-                <div>
-                  <h3 className="text-base font-black text-slate-950">Choose message</h3>
-                  <p className="mt-1 text-sm font-semibold text-slate-500">Use an approved WhatsApp template and fill customer-facing text.</p>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <h3 className="text-base font-black text-slate-950">Choose message template</h3>
+                    <p className="mt-1 text-sm font-semibold text-slate-500">Select an approved Meta template or request a new store template.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRequestMarketingTemplate}
+                    disabled={requestingTemplate}
+                    className="inline-flex items-center gap-1.5 self-start sm:self-auto rounded-lg border border-[#36A175] bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 hover:bg-emerald-100 transition disabled:opacity-50 cursor-pointer shadow-xs"
+                  >
+                    <FiPlus className="h-3.5 w-3.5" />
+                    {requestingTemplate ? "Submitting to Meta..." : "+ Request Marketing Template"}
+                  </button>
                 </div>
                 {!canUseConnectedTemplates && (
                   <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 text-sm font-bold leading-6 text-amber-800">
@@ -1961,8 +2284,14 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
                   <button type="button" onClick={handlePrepareCampaign} disabled={campaignResult.loading} className="h-10 rounded-lg bg-[#36A175] px-4 text-sm font-black text-white hover:bg-[#2c8a64] disabled:bg-slate-300">
                     Prepare Preview
                   </button>
-                  <button type="button" disabled className="h-10 rounded-lg bg-slate-200 px-4 text-sm font-black text-white">
-                    Bulk delivery setup pending
+                  <button
+                    type="button"
+                    onClick={handleSendToRecipients}
+                    disabled={sendingMessage || selectedRecipients.length === 0}
+                    className="flex h-10 items-center gap-2 rounded-lg bg-[#25D366] px-4 text-sm font-black text-white hover:bg-[#20ba59] disabled:bg-slate-300 shadow-sm transition"
+                  >
+                    <FiSend className="h-4 w-4" />
+                    {sendingMessage ? "Sending..." : `Send via WhatsApp (${selectedRecipients.length})`}
                   </button>
                 </div>
               </div>
@@ -1972,14 +2301,37 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
 
         {connectionReady && (
           <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
-            <p className="text-xs font-bold text-slate-500">Full campaign delivery will activate after customer database setup.</p>
+            <p className="text-xs font-bold text-slate-500">
+              {step === 2 ? `Ready to send to ${selectedRecipients.length} customer(s).` : "Select customers and message template to proceed."}
+            </p>
             <div className="flex gap-2">
-              <button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0} className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:text-slate-300">
+              <button
+                type="button"
+                onClick={() => setStep((current) => Math.max(0, current - 1))}
+                disabled={step === 0}
+                className="h-10 rounded-lg border border-slate-200 bg-white px-4 text-sm font-black text-slate-600 hover:bg-slate-50 disabled:text-slate-300"
+              >
                 Back
               </button>
-              <button type="button" onClick={() => setStep((current) => Math.min(2, current + 1))} disabled={step === 2} className="h-10 rounded-lg bg-[#1A1F71] px-4 text-sm font-black text-white hover:bg-[#14185a] disabled:bg-slate-300">
-                Next
-              </button>
+              {step < 2 ? (
+                <button
+                  type="button"
+                  onClick={() => setStep((current) => Math.min(2, current + 1))}
+                  className="h-10 rounded-lg bg-[#1A1F71] px-4 text-sm font-black text-white hover:bg-[#14185a]"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSendToRecipients}
+                  disabled={sendingMessage || selectedRecipients.length === 0}
+                  className="flex h-10 items-center gap-2 rounded-lg bg-[#25D366] px-5 text-sm font-black text-white hover:bg-[#20ba59] disabled:bg-slate-300 shadow-sm transition"
+                >
+                  <FiSend className="h-4 w-4" />
+                  {sendingMessage ? "Sending..." : "Send on WhatsApp"}
+                </button>
+              )}
             </div>
           </footer>
         )}
@@ -1991,8 +2343,15 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
 // Renders the personalize modal interface.
 function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
   const fileInputRef = useRef(null);
-  const [values, setValues] = useState(whatsappMarketingDefaults);
-  const [logoPreview, setLogoPreview] = useState("");
+  const company = useMemo(() => getCompanyProfile(), []);
+  const [values, setValues] = useState(() => ({
+    businessName: company?.businessName || company?.companyName || whatsappMarketingDefaults.businessName,
+    contactPerson: company?.contactPerson || "",
+    contactNumber: company?.phoneNumber || company?.phone || whatsappMarketingDefaults.contactNumber,
+    additionalText: company?.businessAddress || "",
+    whatsappText: whatsappMarketingDefaults.whatsappText,
+  }));
+  const [logoPreview, setLogoPreview] = useState(() => company?.logo || "");
   const [background, setBackground] = useState({ presetId: "clean-white", color: "#ffffff", intensity: 28 });
   const [backgroundTab, setBackgroundTab] = useState("presets");
   const [status, setStatus] = useState("");
@@ -2002,7 +2361,9 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
 
   useEffect(
     () => () => {
-      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      if (logoPreview && typeof logoPreview === "string" && logoPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(logoPreview);
+      }
     },
     [logoPreview],
   );
@@ -2071,7 +2432,9 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
     const [file] = event.target.files || [];
     event.target.value = "";
     if (!file) return;
-    if (logoPreview) URL.revokeObjectURL(logoPreview);
+    if (logoPreview && typeof logoPreview === "string" && logoPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(logoPreview);
+    }
     setLogoPreview(URL.createObjectURL(file));
   };
 
@@ -2225,15 +2588,33 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
           <div className="min-h-0 overflow-y-auto border-b border-slate-200 px-5 py-5 pr-6 lg:border-b-0 lg:border-r">
             <div className="space-y-4">
               <Field label="Business Logo" icon={FiImage}>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex min-h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-700 hover:bg-white"
-                >
-                  <FiUpload className="h-4 w-4" />
-                  {logoPreview ? "Change Logo" : "Upload Logo"}
-                  <span className="text-xs font-medium text-slate-400">PNG, JPG up to 2MB</span>
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex min-h-20 flex-1 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-700 hover:bg-white"
+                  >
+                    <FiUpload className="h-4 w-4" />
+                    {logoPreview ? "Change Logo" : "Upload Logo"}
+                    <span className="text-xs font-medium text-slate-400">PNG, JPG up to 2MB</span>
+                  </button>
+                  {logoPreview ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof logoPreview === "string" && logoPreview.startsWith("blob:")) {
+                          URL.revokeObjectURL(logoPreview);
+                        }
+                        setLogoPreview("");
+                      }}
+                      title="Remove Logo"
+                      className="grid min-h-20 w-16 place-items-center rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                    >
+                      <FiTrash2 className="h-5 w-5" />
+                      <span className="text-[10px] font-bold">Remove</span>
+                    </button>
+                  ) : null}
+                </div>
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
               </Field>
 
@@ -2313,43 +2694,50 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
   );
 }
 
-// Renders the template card interface.
+// Renders the template card interface matching the modern Vyapar UI.
 function TemplateCard({ template, onSelect }) {
   return (
-    <button
-      type="button"
+    <div
       onClick={() => onSelect(template)}
-      className="group flex h-[410px] overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#36A175]/50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#36A175]/20"
+      className="group relative aspect-square w-full overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-200 hover:-translate-y-1 hover:shadow-xl cursor-pointer select-none"
     >
-      <div className="flex w-full flex-col">
-        <div className="flex h-[306px] items-center justify-center bg-slate-50 p-4">
-          <div className="flex h-full w-full items-center justify-center rounded-lg border border-slate-100 bg-white/70 p-3">
-            <img
-              src={template.image}
-              alt={template.title}
-              className="max-h-full max-w-full object-contain transition duration-200 group-hover:scale-[1.02]"
-              loading="lazy"
-            />
-          </div>
-        </div>
-        <div className="flex h-[104px] shrink-0 flex-col justify-center border-t border-slate-100 px-4 py-3">
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="min-w-0 truncate text-sm font-bold text-slate-950">{template.title}</h2>
-            <span className="shrink-0 rounded-full bg-[#F97316]/10 px-2.5 py-1 text-[11px] font-bold text-[#C2410C]">
-              {template.subcategory}
-            </span>
-          </div>
-          <p className="mt-2 text-xs font-medium text-slate-500">{template.category} poster</p>
-        </div>
+      <img
+        src={template.image}
+        alt={template.title}
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+        loading="lazy"
+      />
+      {template.isOnlineApi && (
+        <span className="absolute top-3 left-3 flex items-center gap-1 rounded-full bg-emerald-600/90 px-2.5 py-0.5 text-[10px] font-bold text-white shadow-xs backdrop-blur-xs">
+          <FiGlobe className="h-3 w-3" /> Live API
+        </span>
+      )}
+      {/* Title footer bar */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/85 via-slate-950/40 to-transparent p-3 pt-6 text-white">
+        <p className="truncate text-xs font-bold leading-tight drop-shadow-xs">{template.title}</p>
+        <p className="mt-0.5 text-[10px] font-medium text-slate-300">{template.subcategory}</p>
       </div>
-    </button>
+      {/* Dark Translucent Floating Arrow Button in Bottom Right */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(template);
+        }}
+        title={`Customize ${template.title}`}
+        aria-label={`Open ${template.title}`}
+        className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-md transition-all duration-200 hover:bg-white hover:scale-110 cursor-pointer"
+      >
+        <FiArrowRight className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
 
 // Renders the whats app marketing interface.
 function WhatsAppMarketing() {
   const callbackNotice = readWhatsAppCallbackNotice();
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState("Greetings");
   const [activeSubcategory, setActiveSubcategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [whatsappMarketingTemplates, setWhatsAppMarketingTemplates] = useState([]);
@@ -2357,6 +2745,20 @@ function WhatsAppMarketing() {
   const [templateCatalogRetry, setTemplateCatalogRetry] = useState(0);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [sendDraft, setSendDraft] = useState(null);
+  const [stockResults, setStockResults] = useState([]);
+  const [stockLoading, setStockLoading] = useState(false);
+  const stockCacheRef = useRef({});
+
+  const categoryIcons = {
+    Greetings: FiHeart,
+    Trending: FiTrendingUp,
+    Business: FiBriefcase,
+    Offers: FiPercent,
+  };
+
+  const currentSubcategories = useMemo(() => {
+    return whatsappMarketingSubcategoriesByCategory[activeCategory] || ["All"];
+  }, [activeCategory]);
   const [whatsappStatus, setWhatsAppStatus] = useState({
     loading: true,
     configured: true,
@@ -2380,32 +2782,131 @@ function WhatsAppMarketing() {
   const [sendState, setSendState] = useState({ loading: false, success: false, message: "", messageId: "" });
   const connectionPanelRef = useRef(null);
 
+  useEffect(() => {
+    let active = true;
+    const userQuery = searchQuery.trim();
+
+    const categoryKeywords = {
+      Greetings: {
+        "Good Morning": "good morning sunrise greeting",
+        "Good Thoughts ( Suvichar )": "inspirational quotes wisdom peaceful nature",
+        "Good Night": "good night moon stars peaceful evening",
+        Motivation: "motivation success inspiration determination",
+        All: "good morning greeting daily inspiration",
+      },
+      Trending: {
+        Festival: "indian festival celebration greeting",
+        Diwali: "diwali diya lights festival celebration",
+        "Ganesh Chaturthi": "ganesh chaturthi festival celebration",
+        Holi: "holi festival colorful powder celebration",
+        "Special Days": "celebration special day greeting card",
+        "National Days": "india republic independence day tricolor celebration",
+        All: "festival celebration holiday greeting",
+      },
+      Business: {
+        "Store Promotion": "store grand opening retail shopping promotion",
+        "New Arrivals": "new arrival product launch collection",
+        "Customer Review": "customer satisfaction 5 star review feedback",
+        "Service Guarantee": "quality service guarantee trusted professional",
+        All: "business store retail promotion shopping",
+      },
+      Offers: {
+        "Discount & Sale": "discount sale special offer banner",
+        "Weekend Deals": "weekend special deal mega sale offer",
+        "Mega Clearance": "clearance sale big discount offer banner",
+        "Buy 1 Get 1": "buy 1 get 1 free offer deal discount",
+        All: "mega sale discount special offer banner",
+      },
+    };
+
+    const defaultTerm = categoryKeywords[activeCategory]?.[activeSubcategory]
+      || categoryKeywords[activeCategory]?.All
+      || `${activeCategory} ${activeSubcategory}`;
+
+    const queryTerm = userQuery ? `${userQuery}`.trim() : defaultTerm;
+    const cacheKey = `${activeCategory}:${activeSubcategory}:${userQuery.toLowerCase()}`;
+
+    if (stockCacheRef.current[cacheKey]) {
+      setStockResults(stockCacheRef.current[cacheKey]);
+      setStockLoading(false);
+      return undefined;
+    }
+
+    setStockLoading(true);
+
+    const timer = setTimeout(() => {
+      searchImages(queryTerm, { provider: "pixabay", page: 1, perPage: 16, imageType: "illustration" })
+        .then((response) => {
+          if (!active) return;
+          const items = (response.results || []).map((asset) => ({
+            id: `online-${asset.id}`,
+            title: asset.alt ? asset.alt.slice(0, 45) : `${activeSubcategory} Poster`,
+            category: activeCategory,
+            subcategory: activeSubcategory,
+            image: asset.previewUrl || asset.fullUrl || asset.thumbnailUrl,
+            author: asset.author,
+            source: "Pixabay API",
+            isOnlineApi: true,
+          }));
+          stockCacheRef.current[cacheKey] = items;
+          setStockResults(items);
+        })
+        .catch((err) => {
+          console.warn("Could not fetch online posters from API:", err);
+          if (active) setStockResults([]);
+        })
+        .finally(() => {
+          if (active) setStockLoading(false);
+        });
+    }, 280);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [activeCategory, activeSubcategory, searchQuery]);
+
   const filteredTemplates = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return whatsappMarketingTemplates.filter((template) => {
+    const builtIns = whatsappMarketingTemplates.filter((template) => {
       const matchesCategory = activeCategory === "All" || template.category === activeCategory;
       const matchesSubcategory = activeSubcategory === "All" || template.subcategory === activeSubcategory;
       const matchesQuery = !query || `${template.title} ${template.category} ${template.subcategory}`.toLowerCase().includes(query);
       return matchesCategory && matchesSubcategory && matchesQuery;
     });
-  }, [activeCategory, activeSubcategory, searchQuery, whatsappMarketingTemplates]);
+
+    const seenImages = new Set(builtIns.map((t) => t.image));
+    const uniqueOnline = stockResults.filter((t) => !seenImages.has(t.image));
+
+    return [...builtIns, ...uniqueOnline];
+  }, [activeCategory, activeSubcategory, searchQuery, whatsappMarketingTemplates, stockResults]);
 
   useEffect(() => {
     let active = true;
     setTemplateCatalogState({ loading: true, error: "" });
-    getWhatsAppMarketingTemplates()
-      .then((templates) => {
-        if (!active) return;
-        setWhatsAppMarketingTemplates(templates);
-        setTemplateCatalogState({ loading: false, error: "" });
+    const timer = setTimeout(() => {
+      getWhatsAppMarketingTemplates({
+        category: activeCategory,
+        subcategory: activeSubcategory,
+        q: searchQuery,
       })
-      .catch((error) => {
-        if (!active) return;
-        setWhatsAppMarketingTemplates([]);
-        setTemplateCatalogState({ loading: false, error: error.message || "Unable to load poster templates from the database." });
-      });
-    return () => { active = false; };
-  }, [templateCatalogRetry]);
+        .then((templates) => {
+          if (!active) return;
+          setWhatsAppMarketingTemplates(templates);
+          setTemplateCatalogState({ loading: false, error: "" });
+        })
+        .catch((error) => {
+          if (!active) return;
+          setWhatsAppMarketingTemplates([]);
+          setTemplateCatalogState({ loading: false, error: error.message || "Unable to load poster templates from the API." });
+        });
+    }, searchQuery ? 250 : 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [templateCatalogRetry, activeCategory, activeSubcategory, searchQuery]);
 
   useEffect(() => {
     let active = true;
@@ -2771,138 +3272,165 @@ function WhatsAppMarketing() {
   );
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <header className="border-b border-slate-200 bg-white px-5 py-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <p className="text-sm font-bold text-[#36A175]">Business Growth</p>
-            <h1 className="mt-1 text-2xl font-black text-slate-950">WhatsApp Marketing</h1>
-            <p className="mt-1 text-sm text-slate-500">Personalize ready posters and share them with customers.</p>
-          </div>
-          <label className="flex h-11 min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 shadow-sm xl:w-[420px]">
-            <FiSearch className="h-4 w-4 text-slate-400" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search posters"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-            />
-          </label>
-        </div>
-      </header>
-
-      <main className="space-y-5 p-5">
-        {whatsappToast && <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">{whatsappToast}</div>}
-
-        {whatsappStatus.loading && (
-          <section className="grid min-h-[420px] place-items-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-            <div>
-              <FiRefreshCw className="mx-auto h-9 w-9 animate-spin text-slate-300" />
-              <p className="mt-4 text-sm font-black text-slate-700">Checking WhatsApp connection...</p>
-            </div>
-          </section>
-        )}
-
-        {!whatsappStatus.loading && connectionStatusUnavailable && (
-          <WhatsAppConnectionUnavailable
-            error={whatsappError}
-            onConnect={handleContinueWithMeta}
-            onRetry={() => {
-              setConnectionStatusUnavailable(false);
-              setWhatsAppError("");
-              setProductionConnectionError("");
-              refreshWhatsAppConnection();
-            }}
-            loading={whatsappLoading}
-          />
-        )}
-
-        {!whatsappStatus.loading && !connectionStatusUnavailable && configurationError && (
-          <>
-            <WhatsAppConfigurationError onManageConnection={openWhatsAppConnectionPanel} />
-            {showConnectionPanel && renderDeveloperTools()}
-          </>
-        )}
-
-        {!whatsappStatus.loading && !connectionStatusUnavailable && !configurationError && !whatsappStatus.connected && (
-          <>
-            <WhatsAppOnboarding status={whatsappStatus} loading={whatsappLoading} onContinueMeta={handleContinueWithMeta} productionConnectionError={productionConnectionError} />
-            {developerToolsEnabled && <WhatsAppTestModeStarter status={whatsappStatus} loading={whatsappLoading} error={whatsappError} onTestConnect={handleConnectWhatsAppTestMode} />}
-            {showConnectionPanel && renderDeveloperTools()}
-          </>
-        )}
-
-        {!whatsappStatus.loading && !connectionStatusUnavailable && !configurationError && whatsappStatus.connected && !campaignsUnlocked && (
-          <>
-            <WhatsAppSetupIncomplete readiness={connectionReadiness} assets={whatsappAssets} selection={whatsappSelection} onManageConnection={openWhatsAppConnectionPanel} />
-            {showConnectionPanel && renderDeveloperTools()}
-          </>
-        )}
-
-        {!whatsappStatus.loading && !connectionStatusUnavailable && !configurationError && whatsappStatus.connected && campaignsUnlocked && (
-          <>
-            <WhatsAppConnectedBar status={whatsappStatus} assets={whatsappAssets} selection={whatsappSelection} onManageConnection={openWhatsAppConnectionPanel} />
-            {showConnectionPanel && renderDeveloperTools()}
-          </>
-        )}
-
-        <section>
-          <div>
-            <p className="text-sm font-bold text-[#36A175]">Marketing Creatives / Posters</p>
-            <h2 className="mt-1 text-xl font-black text-slate-950">Poster templates</h2>
-            <p className="mt-1 text-sm text-slate-500">Click a poster to customize, download, share, or prepare WhatsApp sending.</p>
-          </div>
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {whatsappMarketingCategories.map((category) => (
+    <div className="min-h-full bg-slate-100">
+      {/* Modern Header matching user screenshot */}
+      <header className="border-b border-slate-200 bg-white">
+        <div className="px-6 pt-5 pb-0">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">WhatsApp Marketing</h1>
+            {/* WhatsApp Connection status pill on top right */}
+            {whatsappStatus.connected ? (
               <button
-                key={category}
                 type="button"
-                onClick={() => setActiveCategory(category)}
-                className={`h-10 shrink-0 rounded-full px-4 text-sm font-bold transition ${
-                  activeCategory === category ? "bg-[#1A1F71] text-white shadow-sm" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
-                }`}
+                onClick={openWhatsAppConnectionPanel}
+                className="flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition cursor-pointer"
               >
-                {category}
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                WhatsApp Connected
               </button>
-            ))}
+            ) : (
+              <button
+                type="button"
+                onClick={openWhatsAppConnectionPanel}
+                className="flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-200 transition cursor-pointer"
+              >
+                <FiZap className="h-3.5 w-3.5 text-amber-500" />
+                Connect WhatsApp API
+              </button>
+            )}
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {whatsappMarketingSubcategories.map((subcategory) => (
+          <div className="mt-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 border-b border-slate-200">
+            {/* Category Navigation Tabs with Icons */}
+            <div className="flex items-center gap-7 overflow-x-auto">
+              {whatsappMarketingCategories.map((category) => {
+                const IconComponent = categoryIcons[category] || FiHeart;
+                const isActive = activeCategory === category;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(category);
+                      setActiveSubcategory("All");
+                    }}
+                    className={`flex items-center gap-2 pb-3.5 text-sm font-semibold transition relative whitespace-nowrap cursor-pointer ${
+                      isActive ? "text-[#C2410C]" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <IconComponent className={`h-4 w-4 ${isActive ? "text-[#C2410C]" : "text-slate-400"}`} />
+                    <span>{category}</span>
+                    {isActive && (
+                      <span className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-[#C2410C] rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Search Input & Language Toggle */}
+            <div className="flex items-center gap-2.5 pb-3 md:pb-2">
+              <div className="relative flex items-center">
+                <FiSearch className="absolute left-3.5 h-4 w-4 text-slate-400" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search"
+                  className="h-9 w-60 rounded-full border border-slate-200 bg-slate-50/80 pl-9 pr-8 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 transition"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 text-slate-400 hover:text-slate-600 p-0.5"
+                  >
+                    <FiX className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                title="Language Switcher"
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition cursor-pointer"
+              >
+                <span className="text-xs font-bold">A/अ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Subcategories Horizontal Pills Bar */}
+        <div className="px-6 py-3 bg-white flex items-center gap-2.5 overflow-x-auto">
+          {currentSubcategories.map((subcategory) => {
+            const isSubActive = activeSubcategory === subcategory;
+            return (
               <button
                 key={subcategory}
                 type="button"
                 onClick={() => setActiveSubcategory(subcategory)}
-                className={`h-8 shrink-0 rounded-lg px-3 text-xs font-bold transition ${
-                  activeSubcategory === subcategory ? "bg-[#36A175] text-white shadow-sm" : "bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50"
+                className={`h-8 shrink-0 rounded-full px-4 text-xs transition cursor-pointer ${
+                  isSubActive
+                    ? "border border-rose-300 bg-rose-50 text-rose-600 font-semibold"
+                    : "border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 font-normal"
                 }`}
               >
                 {subcategory}
               </button>
-            ))}
-          </div>
-        </section>
+            );
+          })}
+        </div>
+      </header>
 
-        <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {templateCatalogState.loading && (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500">
-              Loading poster templates from your database…
+      <main className="p-6">
+        {whatsappToast && (
+          <div className="mb-4 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+            {whatsappToast}
+          </div>
+        )}
+
+        {showConnectionPanel && renderDeveloperTools()}
+
+        {/* API Status and Count Indicator */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-bold text-emerald-800">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              API Connected: {filteredTemplates.length} Posters Available
+            </span>
+            {stockResults.length > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 border border-sky-200 px-2.5 py-1 text-[11px] font-semibold text-sky-800">
+                <FiGlobe className="h-3 w-3" /> {stockResults.length} from Online API
+              </span>
+            )}
+          </div>
+          {stockLoading && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#C2410C]">
+              <FiRefreshCw className="h-3.5 w-3.5 animate-spin" />
+              Fetching posters from API...
+            </span>
+          )}
+        </div>
+
+        {/* Posters Grid */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {(templateCatalogState.loading || (stockLoading && filteredTemplates.length === 0)) && (
+            <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-500 shadow-xs">
+              <FiRefreshCw className="mx-auto h-7 w-7 animate-spin text-[#C2410C] mb-2" />
+              Loading {searchQuery ? `"${searchQuery}"` : activeSubcategory} posters...
             </div>
           )}
-          {!templateCatalogState.loading && templateCatalogState.error && (
-            <div className="col-span-full flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          {!templateCatalogState.loading && templateCatalogState.error && filteredTemplates.length === 0 && (
+            <div className="col-span-full flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
               <span className="flex items-center gap-2"><FiAlertCircle className="h-4 w-4" />{templateCatalogState.error}</span>
-              <button type="button" onClick={() => setTemplateCatalogRetry((value) => value + 1)} className="rounded-lg bg-white px-3 py-2 font-bold text-rose-700 ring-1 ring-rose-200">
+              <button type="button" onClick={() => setTemplateCatalogRetry((value) => value + 1)} className="rounded-lg bg-white px-3 py-1.5 font-bold text-rose-700 ring-1 ring-rose-200 text-xs">
                 Retry
               </button>
             </div>
           )}
-          {!templateCatalogState.loading && !templateCatalogState.error && filteredTemplates.length === 0 && (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-6 text-center text-sm font-semibold text-slate-500">
-              No poster templates match these filters.
+          {!templateCatalogState.loading && !stockLoading && filteredTemplates.length === 0 && (
+            <div className="col-span-full rounded-2xl border border-slate-200 bg-white p-12 text-center text-sm font-semibold text-slate-500 shadow-xs">
+              <p>No posters found for &quot;{searchQuery || activeSubcategory}&quot;.</p>
+              <p className="mt-1 text-xs text-slate-400">Try searching for keywords like &quot;morning&quot;, &quot;diwali&quot;, &quot;sale&quot;, &quot;grocery&quot;, or &quot;food&quot;.</p>
             </div>
           )}
           {filteredTemplates.map((template) => (
@@ -2911,7 +3439,13 @@ function WhatsAppMarketing() {
         </section>
       </main>
 
-      {selectedTemplate && <PersonalizeModal template={selectedTemplate} onClose={() => setSelectedTemplate(null)} onSendWhatsApp={handleOpenWhatsAppSend} />}
+      {selectedTemplate && (
+        <PersonalizeModal
+          template={selectedTemplate}
+          onClose={() => setSelectedTemplate(null)}
+          onSendWhatsApp={handleOpenWhatsAppSend}
+        />
+      )}
       {sendDraft && (
         <SendOnWhatsAppModal
           draft={sendDraft}

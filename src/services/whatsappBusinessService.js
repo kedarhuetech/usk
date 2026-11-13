@@ -1,4 +1,5 @@
 import { apiRequest, API_BASE_URL } from "./apiClient.js";
+import { defaultWhatsAppMarketingTemplates } from "../constants/whatsappMarketingData.js";
 
 // Reads json response.
 async function readJsonResponse(response, fallbackMessage) {
@@ -61,16 +62,29 @@ export async function getWhatsAppAssets({ businessId, wabaId } = {}) {
   return readJsonResponse(response, "Unable to load WhatsApp Business assets.");
 }
 
-// Gets whats app marketing templates.
-export async function getWhatsAppMarketingTemplates() {
-  const templates = await apiRequest("/business-growth/whatsapp-marketing/templates");
-  // With the same-origin Vite proxy API_BASE_URL is empty; use the page's
-  // origin as the base for relative image paths returned by the backend.
-  const imageBaseUrl = API_BASE_URL || window.location.origin;
-  return (templates || []).map((template) => ({
-    ...template,
-    image: new URL(template.image, imageBaseUrl).toString(),
-  }));
+// Gets whats app marketing templates from API.
+export async function getWhatsAppMarketingTemplates(filters = {}) {
+  try {
+    const params = new URLSearchParams();
+    if (filters.category && filters.category !== "All") params.set("category", filters.category);
+    if (filters.subcategory && filters.subcategory !== "All") params.set("subcategory", filters.subcategory);
+    if (filters.q && filters.q.trim()) params.set("q", filters.q.trim());
+    const queryStr = params.toString() ? `?${params.toString()}` : "";
+    const templates = await apiRequest(`/business-growth/whatsapp-marketing/templates${queryStr}`);
+    const imageBaseUrl = API_BASE_URL || window.location.origin;
+    const remote = (templates || []).map((template) => ({
+      ...template,
+      image: template.image?.startsWith("data:") || template.image?.startsWith("http")
+        ? template.image
+        : new URL(template.image, imageBaseUrl).toString(),
+    }));
+    if (remote.length > 0) {
+      return remote;
+    }
+  } catch (error) {
+    console.warn("Could not load backend marketing templates from API, using defaults:", error);
+  }
+  return defaultWhatsAppMarketingTemplates;
 }
 
 // Gets approved whats app templates.
@@ -151,4 +165,14 @@ export async function sendWhatsAppTestMessage(payload) {
     body: JSON.stringify(payload),
   });
   return readJsonResponse(response, "Unable to send WhatsApp test message.");
+}
+
+// Requests approval for a new WhatsApp template from Meta.
+export async function requestWhatsAppTemplateApproval(payload) {
+  const response = await fetch(`${API_BASE_URL}/api/whatsapp-business/templates/request-approval`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return readJsonResponse(response, "Unable to request template approval from Meta.");
 }

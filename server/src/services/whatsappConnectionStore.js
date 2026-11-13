@@ -1,4 +1,11 @@
 // Implements the backend whatsapp connection store service.
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const STORE_FILE = path.resolve(__dirname, "../../.whatsapp_connection_store.json");
+
 const REQUIRED_WHATSAPP_PERMISSIONS = ["whatsapp_business_management", "whatsapp_business_messaging"];
 
 let whatsappConnection = {
@@ -24,6 +31,25 @@ let whatsappConnection = {
   lastError: "",
   lastTestResult: null,
 };
+
+function persistStore() {
+  try {
+    fs.writeFileSync(STORE_FILE, JSON.stringify(whatsappConnection, null, 2), "utf8");
+  } catch {}
+}
+
+function loadStore() {
+  try {
+    if (fs.existsSync(STORE_FILE)) {
+      const data = JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
+      if (data && typeof data === "object" && data.connected) {
+        whatsappConnection = data;
+      }
+    }
+  } catch {}
+}
+
+loadStore();
 
 // This helper handles assets logic.
 function emptyAssets() {
@@ -153,11 +179,17 @@ function publicConnection() {
 
 // Gets whats app connection.
 export function getWhatsAppConnection() {
+  if (!whatsappConnection.connected) {
+    loadStore();
+  }
   return whatsappConnection;
 }
 
 // Gets whats app public connection.
 export function getWhatsAppPublicConnection() {
+  if (!whatsappConnection.connected) {
+    loadStore();
+  }
   return publicConnection();
 }
 
@@ -171,6 +203,7 @@ export function setWhatsAppConnection(nextConnection) {
     lastError: "",
     connectedAt: nextConnection.connectedAt || new Date().toISOString(),
   };
+  persistStore();
   return publicConnection();
 }
 
@@ -189,6 +222,7 @@ export function setWhatsAppConnectionError(message) {
     lastError: message || "WhatsApp connection failed",
     lastTestResult: null,
   };
+  persistStore();
   return publicConnection();
 }
 
@@ -203,6 +237,7 @@ export function updateWhatsAppConnectionSnapshot({ user, permissions, assets, se
     selection: selection || whatsappConnection.selection,
     lastError: "",
   };
+  persistStore();
   return publicConnection();
 }
 
@@ -218,6 +253,7 @@ export function markWhatsAppReconnectRequired(message) {
     connectedAt: null,
     lastError: message || "WhatsApp token expired. Reconnect WhatsApp Business to continue.",
   };
+  persistStore();
   return publicConnection();
 }
 
@@ -232,6 +268,7 @@ export function saveWhatsAppSelection(selection = {}) {
       templateId: selection.templateId || "",
     },
   };
+  persistStore();
   return publicConnection();
 }
 
@@ -241,6 +278,7 @@ export function saveWhatsAppTestResult(result) {
     ...whatsappConnection,
     lastTestResult: result || null,
   };
+  persistStore();
   return publicConnection();
 }
 
@@ -258,5 +296,6 @@ export function disconnectWhatsAppConnection() {
     lastError: "",
     lastTestResult: null,
   };
+  persistStore();
   return publicConnection();
 }

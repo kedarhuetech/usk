@@ -183,14 +183,28 @@ function encodeCursor(row) {
 
 // This catalog contains shared application-provided posters, not business-owned
 // user records. Keep it available before the tenant-scoped middleware below.
-router.get("/whatsapp-marketing/templates", async (_req, res) => {
+router.get("/whatsapp-marketing/templates", async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      `SELECT id, title, category, subcategory, original_filename, mime_type, size_bytes
+    const { category, subcategory, q } = req.query;
+    let sql = `SELECT id, title, category, subcategory, original_filename, mime_type, size_bytes
        FROM whatsapp_marketing_templates
-       WHERE is_active = 1
-       ORDER BY display_order ASC, id ASC`,
-    );
+       WHERE is_active = 1`;
+    const params = [];
+    if (category && category !== "All") {
+      sql += " AND category = ?";
+      params.push(category);
+    }
+    if (subcategory && subcategory !== "All") {
+      sql += " AND subcategory = ?";
+      params.push(subcategory);
+    }
+    if (q && q.trim()) {
+      sql += " AND (title LIKE ? OR category LIKE ? OR subcategory LIKE ?)";
+      const term = `%${q.trim()}%`;
+      params.push(term, term, term);
+    }
+    sql += " ORDER BY display_order ASC, id ASC";
+    const [rows] = await pool.execute(sql, params);
     const overlays = await loadTemplateOverlays(rows.map((row) => row.id));
     res.json({
       success: true,

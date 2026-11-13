@@ -319,7 +319,11 @@ router.post("/send-test", async (req, res) => {
 
   try {
     const recipient = normalizeRecipient(req.body?.countryCode, req.body?.phoneNumber);
-    const template = selectedTemplate(connection);
+    const requestedTemplateId = req.body?.templateId || req.body?.templateName || connection.selection?.templateId;
+    const template = (requestedTemplateId && (connection.assets?.templates || []).find((t) => t.id === requestedTemplateId || t.name === requestedTemplateId))
+      || selectedTemplate(connection)
+      || (connection.assets?.templates || []).find((t) => t.status === "APPROVED");
+
     if (!template || template.status !== "APPROVED") {
       return res.status(400).json({
         success: false,
@@ -328,17 +332,36 @@ router.post("/send-test", async (req, res) => {
         ...publicWhatsAppBusinessState(config),
       });
     }
+
+    const phoneNumberId = req.body?.phoneNumberId || connection.selection?.phoneNumberId || connection.assets?.phoneNumbers?.[0]?.id;
+    if (!phoneNumberId) {
+      return res.status(400).json({
+        success: false,
+        message: "Select a WhatsApp business phone number before sending.",
+        error: { category: "NO_PHONE_NUMBER" },
+        ...publicWhatsAppBusinessState(config),
+      });
+    }
+
+    // Auto-update selection in memory so next calls remember it
+    if (connection.selection) {
+      connection.selection.templateId = template.id;
+      if (!connection.selection.phoneNumberId) connection.selection.phoneNumberId = phoneNumberId;
+      if (!connection.selection.wabaId && connection.assets?.wabas?.[0]?.id) connection.selection.wabaId = connection.assets.wabas[0].id;
+    }
+
     const result = await sendWhatsAppTemplateMessage({
       accessToken: connection.token.accessToken,
-      phoneNumberId: connection.selection.phoneNumberId,
+      phoneNumberId,
       template,
       recipient,
       variables: req.body?.variables || {},
+      imageUrl: req.body?.imageUrl || "",
     });
     saveWhatsAppTestResult(result);
     return res.json({
       success: true,
-      message: "Accepted by WhatsApp.",
+      message: "Accepted by WhatsApp Meta Cloud API.",
       result,
       ...publicWhatsAppBusinessState(config),
     });

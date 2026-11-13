@@ -1,7 +1,7 @@
 // Service Reminders Settings & Management Tab
 // Allows toggling service due date reminder rules and managing active customer service due dates.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiAlertCircle,
   FiBell,
@@ -39,6 +39,7 @@ import {
   checkMetaWhatsAppConnection,
   formatReminderMessage,
   requestServiceReminderTemplateApproval,
+  autoDispatchDueRemindersViaMeta,
 } from "../../services/serviceRemindersService.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { getParties } from "../../services/partiesStorage.js";
@@ -125,6 +126,37 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     return processServiceReminders({ records, settings });
   }, [records, settings]);
 
+  const autoDispatchingRef = useRef(false);
+
+  // Automatically dispatch due reminders via Meta WhatsApp without requiring clicking
+  useEffect(() => {
+    if (!metaStatus.connected || !settings.enabled || settings.autoNotifyWhatsApp === false) {
+      return;
+    }
+    const unnotified = (processed.activeAlerts || []).filter(
+      (r) => r.hasValidPhone && !r.alreadyNotifiedForThisDueDate
+    );
+    if (!unnotified.length || autoDispatchingRef.current) {
+      return;
+    }
+
+    autoDispatchingRef.current = true;
+    autoDispatchDueRemindersViaMeta(company)
+      .then((res) => {
+        if (res.dispatched > 0) {
+          toast.success(
+            `⚡ Automatically sent ${res.dispatched} due service reminder${res.dispatched > 1 ? "s" : ""} via Meta WhatsApp (no clicking required)!`,
+            { duration: 5500 }
+          );
+          setRecords(getReminderRecords());
+        }
+      })
+      .catch((err) => console.warn("Auto-dispatch reminder check error:", err))
+      .finally(() => {
+        autoDispatchingRef.current = false;
+      });
+  }, [metaStatus.connected, settings.enabled, settings.autoNotifyWhatsApp, processed.activeAlerts, company]);
+
   const showNotice = (msg) => {
     setNotice(msg);
     toast.success(msg);
@@ -144,6 +176,13 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     const updated = saveReminderSettings({ reminderDaysBefore: val });
     setSettings(updated);
     if (parentUpdate) parentUpdate("reminderDaysBefore", val);
+  };
+
+  const handleToggleAutoNotify = (e) => {
+    const val = e.target.checked;
+    const updated = saveReminderSettings({ autoNotifyWhatsApp: val });
+    setSettings(updated);
+    showNotice(val ? "⚡ Auto-send enabled: Due reminders will be sent automatically" : "Auto-send disabled");
   };
 
   const openAddModal = (record = null) => {
@@ -457,20 +496,41 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
           </label>
 
           {settings.enabled && (
-            <div className="ml-6 flex flex-wrap items-center gap-2 text-xs text-slate-700">
-              <span>Notify customers</span>
-              <input
-                type="number"
-                min="1"
-                max="60"
-                value={settings.reminderDaysBefore || 2}
-                onChange={handleChangeDays}
-                className="h-8 w-14 rounded border border-slate-300 text-center font-bold text-slate-800 outline-none focus:border-blue-500"
-              />
-              <span>days before service due date</span>
-              <span className="text-[11px] text-slate-400">
-                (Reminder alerts trigger {settings.reminderDaysBefore || 2} days in advance)
-              </span>
+            <div className="ml-6 space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700">
+                <span>Notify customers</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={settings.reminderDaysBefore || 2}
+                  onChange={handleChangeDays}
+                  className="h-8 w-14 rounded border border-slate-300 text-center font-bold text-slate-800 outline-none focus:border-blue-500"
+                />
+                <span>days before service due date</span>
+                <span className="text-[11px] text-slate-400">
+                  (Reminder alerts trigger {settings.reminderDaysBefore || 2} days in advance)
+                </span>
+              </div>
+
+              {/* Auto-send Due Reminders Option */}
+              <div className="pt-2 border-t border-slate-100">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={settings.autoNotifyWhatsApp !== false}
+                    onChange={handleToggleAutoNotify}
+                    className="h-4 w-4 rounded accent-emerald-600 cursor-pointer"
+                  />
+                  <span>Auto-send due reminders via Meta WhatsApp (No clicking required)</span>
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                    <FiZap className="h-3 w-3 text-emerald-600" /> Automated
+                  </span>
+                </label>
+                <p className="ml-6 text-[11px] text-slate-500 mt-0.5">
+                  When enabled, any service reminder entering its reminder window is automatically dispatched to the customer's WhatsApp without manual clicking.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -482,7 +542,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
           {/* Header & Controls */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-5">
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h4 className="text-sm font-bold text-slate-900">Active Service Due Dates</h4>
                 {metaStatus.connected ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -492,6 +552,15 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                 ) : (
                   <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                     Meta Offline (Using Web Link)
+                  </span>
+                )}
+                {metaStatus.connected && settings.autoNotifyWhatsApp !== false && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700"
+                    title="Due reminders automatically dispatch in the background without needing to click"
+                  >
+                    <FiZap className="h-3 w-3 text-emerald-600" />
+                    Auto-Send Active
                   </span>
                 )}
               </div>
@@ -702,19 +771,35 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                         <div className="flex items-center justify-end gap-1.5">
                           {/* Direct Meta WhatsApp Background Send Button */}
                           {metaStatus.connected && record.customerPhone && (
-                            <button
-                              type="button"
-                              title="Send directly to customer phone in background via Meta API"
-                              disabled={sendingId === record.id || bulkSending}
-                              onClick={() => handleSendMetaWhatsApp(record)}
-                              className="inline-flex items-center gap-1 rounded border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition active:scale-98"
-                            >
-                              {sendingId === record.id ? (
-                                <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
-                              ) : (
-                                <><FiZap className="h-3 w-3" /> Send via Meta</>
-                              )}
-                            </button>
+                            record.alreadyNotifiedForThisDueDate && record.lastNotifiedChannel === "meta_whatsapp" ? (
+                              <button
+                                type="button"
+                                title="Reminder was already sent for this due date. Click to resend if needed."
+                                disabled={sendingId === record.id || bulkSending}
+                                onClick={() => handleSendMetaWhatsApp(record)}
+                                className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition active:scale-98"
+                              >
+                                {sendingId === record.id ? (
+                                  <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
+                                ) : (
+                                  <><FiCheck className="h-3 w-3 text-emerald-600" /> Resend Meta</>
+                                )}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                title="Send directly to customer phone in background via Meta API"
+                                disabled={sendingId === record.id || bulkSending}
+                                onClick={() => handleSendMetaWhatsApp(record)}
+                                className="inline-flex items-center gap-1 rounded border border-emerald-600 bg-emerald-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition active:scale-98"
+                              >
+                                {sendingId === record.id ? (
+                                  <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
+                                ) : (
+                                  <><FiZap className="h-3 w-3" /> Send via Meta</>
+                                )}
+                              </button>
+                            )
                           )}
 
                           {/* WhatsApp Manual Web Link Fallback */}
@@ -969,16 +1054,20 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400">Dispatched At</span>
                   <p className="font-semibold text-slate-800 mt-0.5">
-                    {viewSentModal.lastNotifiedAt ? new Date(viewSentModal.lastNotifiedAt).toLocaleString() : "N/A"}
+                    {viewSentModal.lastNotifiedAt && !isNaN(new Date(viewSentModal.lastNotifiedAt).getTime())
+                      ? new Date(viewSentModal.lastNotifiedAt).toLocaleString()
+                      : "Just now"}
                   </p>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400">Service Due Item</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">{viewSentModal.serviceName}</p>
+                  <p className="font-semibold text-slate-800 mt-0.5">{viewSentModal.serviceName || "Service"}</p>
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-slate-400">Due Date Mentioned</span>
-                  <p className="font-semibold text-rose-600 mt-0.5">{viewSentModal.nextDueDate}</p>
+                  <p className="font-semibold text-rose-600 mt-0.5">
+                    {viewSentModal.serviceDueDate || viewSentModal.lastNotifiedDueDate || viewSentModal.nextDueDate || "—"}
+                  </p>
                 </div>
               </div>
 
@@ -1008,15 +1097,20 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                 <div className="pt-2 border-t border-slate-100">
                   <span className="text-[11px] font-bold text-slate-700 block mb-1.5">Send History ({viewSentModal.notificationHistory.length} events):</span>
                   <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
-                    {viewSentModal.notificationHistory.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-slate-600">
-                        <span className="font-medium text-slate-800 capitalize">
-                          {item.channel?.replace("_", " ") || "WhatsApp"}
-                        </span>
-                        <span>{item.recipient || viewSentModal.customerPhone}</span>
-                        <span className="text-slate-400 text-[10px]">{new Date(item.timestamp).toLocaleString()}</span>
-                      </div>
-                    ))}
+                    {viewSentModal.notificationHistory.map((item, idx) => {
+                      const rawDate = item.at || item.timestamp || item.sentAt || item.date || item.createdAt;
+                      const dateObj = rawDate ? new Date(rawDate) : null;
+                      const dateDisplay = dateObj && !isNaN(dateObj.getTime()) ? dateObj.toLocaleString() : "Recent";
+                      return (
+                        <div key={idx} className="flex items-center justify-between text-[11px] bg-slate-50 border border-slate-200 rounded px-2.5 py-1 text-slate-600">
+                          <span className="font-medium text-slate-800 capitalize">
+                            {item.channel?.replace("_", " ") || "WhatsApp"}
+                          </span>
+                          <span>{item.recipient || viewSentModal.customerPhone}</span>
+                          <span className="text-slate-400 text-[10px]">{dateDisplay}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

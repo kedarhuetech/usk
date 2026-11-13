@@ -199,7 +199,7 @@ async function searchPexels(apiKey, { query, page = 1, perPage = 24, orientation
 }
 
 // Executes Pixabay image search.
-async function searchPixabay(apiKey, { query, page = 1, perPage = 24, orientation = "square" }) {
+async function searchPixabay(apiKey, { query, page = 1, perPage = 24, orientation = "square", imageType = "illustration" }) {
   // Pixabay requires per_page to be an integer between 3 and 200.
   const safePerPage = Math.max(3, Math.min(200, Number(perPage) || 24));
   const safePage = Math.max(1, Number(page) || 1);
@@ -209,7 +209,7 @@ async function searchPixabay(apiKey, { query, page = 1, perPage = 24, orientatio
   url.search = new URLSearchParams({
     key: apiKey,
     q: query || "business",
-    image_type: "photo",
+    image_type: imageType || "illustration",
     safesearch: "true",
     page: String(safePage),
     per_page: String(safePerPage),
@@ -306,7 +306,7 @@ async function searchUnsplash(apiKey, { query, page = 1, perPage = 24, orientati
 }
 
 // Unified search entry point for all supported stock media providers.
-export async function searchStockMedia({ provider = "pexels", query = "", page = 1, perPage = 24, orientation = "square", category = "stock" }) {
+export async function searchStockMedia({ provider = "pexels", query = "", page = 1, perPage = 24, orientation = "square", category = "stock", imageType = "illustration" }) {
   const keys = getStockMediaApiKeys();
   const cleanProvider = String(provider || "pexels").toLowerCase().trim();
   const fallbackQuery = category === "backgrounds" ? "background" : "business";
@@ -329,7 +329,7 @@ export async function searchStockMedia({ provider = "pexels", query = "", page =
       err.statusCode = 400;
       throw err;
     }
-    return searchPixabay(keys.pixabay, { query: cleanQuery, page, perPage, orientation });
+    return searchPixabay(keys.pixabay, { query: cleanQuery, page, perPage, orientation, imageType });
   }
 
   if (cleanProvider === "unsplash") {

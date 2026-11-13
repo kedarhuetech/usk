@@ -409,30 +409,50 @@ export function normalizeRecipient(countryCode = "", phoneNumber = "") {
 }
 
 // Builds template components.
-function buildTemplateComponents(template, variables = {}) {
+function buildTemplateComponents(template, variables = {}, options = {}) {
+  const components = [];
   const requiredVariables = extractTemplateVariables(template);
   const grouped = new Map();
 
+  // If template has an image header, supply a valid image URL for Meta
+  const headerComponent = (template.components || []).find((c) => String(c.type || "").toUpperCase() === "HEADER");
+  if (headerComponent && String(headerComponent.format || "").toUpperCase() === "IMAGE") {
+    const imageUrl = options.imageUrl || variables["header:image"] || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80";
+    components.push({
+      type: "header",
+      parameters: [{ type: "image", image: { link: imageUrl } }],
+    });
+  }
+
   requiredVariables.forEach((variable) => {
     const key = `${variable.componentType}:${variable.index}`;
-    const value = String(variables[key] || "").trim();
-    if (!value) {
-      throw createWhatsAppError("Fill all required template variables before sending.", "TEMPLATE_NOT_APPROVED");
-    }
+    const fromArray = Array.isArray(variables[variable.componentType])
+      ? variables[variable.componentType][variable.index - 1]
+      : Array.isArray(variables.body) && variable.componentType === "body"
+      ? variables.body[variable.index - 1]
+      : undefined;
+    const rawVal = variables[key] ?? variables[variable.index] ?? fromArray ?? "";
+    const value = String(rawVal ?? "").trim();
+    const fallback = variable.componentType === "body" ? "Customer" : "Store";
+    const val = value || fallback;
     if (!grouped.has(variable.componentType)) grouped.set(variable.componentType, []);
-    grouped.get(variable.componentType).push({ type: "text", text: value });
+    grouped.get(variable.componentType).push({ type: "text", text: val });
   });
 
-  return Array.from(grouped.entries()).map(([type, parameters]) => ({ type, parameters }));
+  Array.from(grouped.entries()).forEach(([type, parameters]) => {
+    components.push({ type, parameters });
+  });
+
+  return components;
 }
 
 // Sends whats app template message.
-export async function sendWhatsAppTemplateMessage({ accessToken, phoneNumberId, template, recipient, variables = {} }) {
+export async function sendWhatsAppTemplateMessage({ accessToken, phoneNumberId, template, recipient, variables = {}, imageUrl = "" }) {
   if (!phoneNumberId) throw createWhatsAppError("Select a WhatsApp business phone number before sending.", "NO_PHONE_NUMBER");
   if (!template?.name || template.status !== "APPROVED") throw createWhatsAppError("Select an approved WhatsApp message template.", "TEMPLATE_NOT_APPROVED");
   if (!recipient) throw createWhatsAppError("Enter a valid recipient phone number.", "INVALID_RECIPIENT");
 
-  const components = buildTemplateComponents(template, variables);
+  const components = buildTemplateComponents(template, variables, { imageUrl });
   const payload = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -509,6 +529,49 @@ export const PREDEFINED_TEMPLATES = {
         example: {
           body_text: [["Valued Customer", "Your requested update has been processed.", "Our Store"]],
         },
+      },
+    ],
+  },
+  marketing_promo: {
+    name: "store_marketing_promo",
+    category: "MARKETING",
+    language: "en_US",
+    components: [
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: {
+          header_url: ["https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80"],
+        },
+      },
+      {
+        type: "BODY",
+        text: "Hello {{1}},\n\n{{2}} has an exclusive update for you: {{3}}\n\nVisit us or reply to order!",
+        example: {
+          body_text: [["Valued Customer", "Sai Kirana Stores", "Special seasonal discounts on fresh groceries and daily essentials."]],
+        },
+      },
+      {
+        type: "FOOTER",
+        text: "Sai Kirana Stores • Best Quality Guaranteed",
+      },
+    ],
+  },
+  store_announcement: {
+    name: "store_announcement_v1",
+    category: "MARKETING",
+    language: "en_US",
+    components: [
+      {
+        type: "BODY",
+        text: "Greetings {{1}}!\n\n{{2}} wishes you a great day!\n{{3}}\n\nThank you for being our valued customer.",
+        example: {
+          body_text: [["Valued Customer", "Sai Kirana Stores", "Good morning! Start your day with fresh provisions and bright prospects."]],
+        },
+      },
+      {
+        type: "FOOTER",
+        text: "Sai Kirana Stores",
       },
     ],
   },
