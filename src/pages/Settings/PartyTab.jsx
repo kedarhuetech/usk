@@ -1,4 +1,4 @@
-// Implements the Party Settings Tab interface matching the Vyapar desktop settings.
+// Implements the Party Settings Tab interface matching the USK desktop settings.
 import { useState } from "react";
 import { FiCheck, FiChevronRight, FiInfo, FiX } from "react-icons/fi";
 

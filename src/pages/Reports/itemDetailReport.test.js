@@ -376,3 +376,84 @@ test("8. Dropdown Search Filter is Decoupled from Selected Item Name", () => {
   // Selected item name remains "A4 Premium Copier Paper - 500 Sheets" until user selects another
   assert.equal(selectedItemName, "A4 Premium Copier Paper - 500 Sheets");
 });
+
+test("9. Negative Stock Audit: Thermal Receipt Roll - 80mm & Overall Mathematical Integrity", () => {
+  // Simulating the user's exact reported figures:
+  // Thermal Receipt Roll - 80mm: Opening: 2, Inward: 0, Outward: 6, Adjustments: 0 -> Closing: -4
+  // Overall Summary: Opening: 433, Inward: +311, Outward: -512, Adjustments: +8 -> Closing: 240
+  const items = [
+    { id: "roll-1", itemName: "Thermal Receipt Roll - 80mm", initialOpeningQuantity: 2, unit: "Roll" },
+    { id: "paper-1", itemName: "A4 Paper", initialOpeningQuantity: 431, unit: "Ream" },
+  ];
+
+  const sales = [
+    // 6 Thermal Receipt Rolls sold
+    { id: "s1", invoiceDate: "2026-11-05", rows: [{ itemId: "roll-1", item: "Thermal Receipt Roll - 80mm", qty: 6 }] },
+    // 506 A4 Paper sold (506 + 6 = 512 total outward)
+    { id: "s2", invoiceDate: "2026-11-06", rows: [{ itemId: "paper-1", item: "A4 Paper", qty: 506 }] },
+  ];
+
+  const purchases = [
+    // 311 A4 Paper purchased (0 Thermal Roll purchased)
+    { id: "p1", billDate: "2026-11-10", rows: [{ itemId: "paper-1", item: "A4 Paper", qty: 311 }] },
+  ];
+
+  const adjustments = [
+    // +8 A4 Paper adjustment
+    { itemId: "paper-1", item: "A4 Paper", date: "2026-11-12", quantity: 8 },
+  ];
+
+  // 1. Audit Single Item Ledger for Thermal Receipt Roll - 80mm
+  const rollLedger = calculateItemDetailMovements({
+    selectedItem: items[0],
+    sales,
+    purchases,
+    adjustments,
+    from: "2026-11-01",
+    to: "2026-11-30",
+  });
+
+  assert.equal(rollLedger.periodOpeningQty, 2, "Opening stock is 2");
+  assert.equal(rollLedger.totalPurchaseQty, 0, "Inward is 0");
+  assert.equal(rollLedger.totalSaleQty, 6, "Outward is 6");
+  assert.equal(rollLedger.totalAdjQty, 0, "Adjustments is 0");
+  assert.equal(rollLedger.periodClosingQty, -4, "Closing stock is exactly 2 + 0 - 6 + 0 = -4");
+
+  // 2. Audit All Items Summary
+  const summary = calculateAllItemsSummary({
+    inventoryItems: items,
+    sales,
+    purchases,
+    adjustments,
+    from: "2026-11-01",
+    to: "2026-11-30",
+  });
+
+  assert.equal(summary.totalOpeningQty, 433, "Total Opening: 2 + 431 = 433");
+  assert.equal(summary.totalInwardQty, 311, "Total Inward: +311");
+  assert.equal(summary.totalOutwardQty, 512, "Total Outward: -512");
+  assert.equal(summary.totalAdjQty, 8, "Total Adjustments: +8");
+  assert.equal(summary.totalClosingQty, 240, "Total Closing: 433 + 311 - 512 + 8 = 240");
+
+  // Verify Point 7: Total closing stock equals sum of individual item closing stocks
+  const sumOfIndividualClosings = summary.rows.reduce((sum, r) => sum + r.periodClosingQty, 0);
+  assert.equal(summary.totalClosingQty, sumOfIndividualClosings, "Total closing equals sum of individual closing stocks");
+  assert.equal(sumOfIndividualClosings, 240);
+});
+
+test("10. Table Row UUID does not cause false matches with Item IDs", () => {
+  const targetItem = {
+    id: "item-alpha",
+    itemName: "Alpha Product",
+  };
+
+  // Row has a line UUID that does not match targetItem, but has itemId pointing elsewhere
+  const rowDifferentItem = {
+    id: "item-alpha", // row line id coincidental
+    itemId: "item-beta",
+    item: "Beta Product",
+    qty: 5,
+  };
+
+  assert.ok(!matchesItem(rowDifferentItem, targetItem), "Should reject row when itemId belongs to beta");
+});

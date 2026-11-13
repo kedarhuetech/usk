@@ -202,7 +202,7 @@ export function mapVyaparData(parsed) {
     items.push(item);
     itemsBySourceId.set(String(row.item_id), item);
   }
-  if (unsupportedItemTypes) skipped.push({ category: "Items", count: unsupportedItemTypes, reason: "The Vyapar item type is not a product type currently mapped by USV." });
+  if (unsupportedItemTypes) skipped.push({ category: "Items", count: unsupportedItemTypes, reason: "The Vyapar item type is not a product type currently mapped by USK." });
 
   const parties = [];
   const partyIdsBySourceId = new Map();
@@ -322,7 +322,7 @@ export function mapVyaparData(parsed) {
     const count = parsed.databaseSummary.extraCounts[key] || 0;
     if (count) skipped.push({ category: "Other records", count, reason });
   }
-  if (parsed.extraFirms) skipped.push({ category: "Company profiles", count: parsed.extraFirms, reason: "Only the first company profile is supported in this USV workspace." });
+  if (parsed.extraFirms) skipped.push({ category: "Company profiles", count: parsed.extraFirms, reason: "Only the first company profile is supported in this USK workspace." });
 
   return {
     company,

@@ -379,6 +379,9 @@ function loadPartyRecipients() {
 
   // 2. Also check backward-compatible and transactions keys
   const storageKeys = [
+    "usk:parties.v1",
+    "usk:parties",
+    "usk:customers",
     "ledgerly:parties.v1",
     "ledgerly:parties",
     "vyapar:parties",
@@ -1370,7 +1373,7 @@ function canShowWhatsAppDeveloperTools(status = {}) {
   if (typeof window === "undefined") return false;
   const host = window.location.hostname;
   const params = new URLSearchParams(window.location.search);
-  return host === "localhost" || host === "127.0.0.1" || params.get("whatsappDev") === "1" || window.localStorage?.getItem("vyapar:whatsapp-dev-tools") === "1";
+  return host === "localhost" || host === "127.0.0.1" || params.get("whatsappDev") === "1" || window.localStorage?.getItem("usk:whatsapp-dev-tools") === "1" || window.localStorage?.getItem("vyapar:whatsapp-dev-tools") === "1";
 }
 
 // Renders the whats app business panel interface.
@@ -2694,7 +2697,7 @@ function PersonalizeModal({ template, onClose, onSendWhatsApp }) {
   );
 }
 
-// Renders the template card interface matching the modern Vyapar UI.
+// Renders the template card interface matching the modern USK UI.
 function TemplateCard({ template, onSelect }) {
   return (
     <div

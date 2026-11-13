@@ -49,6 +49,7 @@ function readCookie(req, name) {
 // Clears whats app o auth state cookie.
 function clearWhatsAppOAuthStateCookie(req, res) {
   res.clearCookie(WHATSAPP_OAUTH_STATE_COOKIE, oauthCookieOptions(req));
+  res.clearCookie("vyapar_whatsapp_oauth_state", oauthCookieOptions(req));
 }
 
 // This helper handles redirect logic.
@@ -222,7 +223,7 @@ router.post("/whatsapp/embedded-signup", async (req, res) => {
 
 router.get("/whatsapp/callback", async (req, res) => {
   const { code, state, error, error_description } = req.query;
-  const stateCookie = readCookie(req, WHATSAPP_OAUTH_STATE_COOKIE);
+  const stateCookie = readCookie(req, WHATSAPP_OAUTH_STATE_COOKIE) || readCookie(req, "vyapar_whatsapp_oauth_state");
   clearWhatsAppOAuthStateCookie(req, res);
 
   if (error) {

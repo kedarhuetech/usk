@@ -390,7 +390,7 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
           })}
         </svg>
 
-        {/* Dynamic Badge (Vyapar style, reacts to hover or shows total) */}
+        {/* Dynamic Badge (reacts to hover or shows total) */}
         <div
           onClick={() => navigate("/sales/sale-invoices")}
           className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-emerald-500 px-3.5 py-2 text-center text-xs font-semibold text-white shadow-md cursor-pointer hover:bg-emerald-600 transition"

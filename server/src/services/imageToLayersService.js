@@ -235,7 +235,7 @@ function normalizeLayer(layer, index) {
 export async function createImageToLayersDesignPayload({ dataUrl, fileName }) {
   const { mimeType, buffer } = parseImageDataUrl(dataUrl);
   const jobId = randomUUID();
-  const workDir = path.join(tmpdir(), "vyapar-image-to-layers", jobId);
+  const workDir = path.join(tmpdir(), "usk-image-to-layers", jobId);
   const inputPath = path.join(workDir, `input.${getFileExtension(mimeType)}`);
 
   await mkdir(workDir, { recursive: true });

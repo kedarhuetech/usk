@@ -1,7 +1,7 @@
 // Implements the legal pages page.
 const lastUpdated = "September 26, 2026";
-const appName = "Vyapaar";
-const productionDomain = "https://vyapar-ui.vercel.app";
+const appName = "USK";
+const productionDomain = "https://usk-ui.vercel.app";
 const contactEmail = "Replace with your support email";
 
 // Renders the legal layout interface.
@@ -47,11 +47,11 @@ export function PrivacyPolicy() {
   return (
     <LegalLayout
       title="Privacy Policy"
-      description="This policy explains how Vyapaar handles information when you use its business tools and connect third-party services such as Meta."
+      description="This policy explains how USK handles information when you use its business tools and connect third-party services such as Meta."
     >
       <Section title="Introduction">
         <p>
-          This policy applies to the Vyapaar application, including Business Growth features such as Smart Ads, Online Store, Marketing Studio, WhatsApp Marketing, and Google Profile Manager. It covers information processed through the application and its backend.
+          This policy applies to the USK application, including Business Growth features such as Smart Ads, Online Store, Marketing Studio, WhatsApp Marketing, and Google Profile Manager. It covers information processed through the application and its backend.
         </p>
       </Section>
 
@@ -67,7 +67,7 @@ export function PrivacyPolicy() {
 
       <Section title="Meta/Facebook Integration">
         <p>
-          If you choose to connect Meta, Meta's authorization screen describes the permissions requested. The application uses the resulting access to show eligible business assets and support Smart Ads workflows. Meta may process your information under its own policies. Connecting Meta does not mean that Vyapaar has synchronized or published anything unless you take the relevant action in the app.
+          If you choose to connect Meta, Meta's authorization screen describes the permissions requested. The application uses the resulting access to show eligible business assets and support Smart Ads workflows. Meta may process your information under its own policies. Connecting Meta does not mean that USK has synchronized or published anything unless you take the relevant action in the app.
         </p>
       </Section>
 
@@ -82,7 +82,7 @@ export function PrivacyPolicy() {
 
       <Section title="Storage and Business Association">
         <p>
-          Business Growth records are stored by the backend in MySQL and associated with the business identifier supplied by the application. Uploaded image assets are also stored in MySQL. Keep your business identifier and account access secure. The current application does not use a separate Vyapaar user login for these Business Growth records, so access control depends on the business context and backend configuration in use.
+          Business Growth records are stored by the backend in MySQL and associated with the business identifier supplied by the application. Uploaded image assets are also stored in MySQL. Keep your business identifier and account access secure. The current application does not use a separate USK user login for these Business Growth records, so access control depends on the business context and backend configuration in use.
         </p>
       </Section>
 
@@ -117,7 +117,7 @@ export function PrivacyPolicy() {
       </Section>
 
       <Section title="Children">
-        <p>Vyapaar is a business service and is not intended for children who are not permitted to use it under applicable law.</p>
+        <p>USK is a business service and is not intended for children who are not permitted to use it under applicable law.</p>
       </Section>
 
       <Section title="Changes to This Policy">
@@ -133,7 +133,7 @@ export function PrivacyPolicy() {
 // Renders the terms of service interface.
 export function TermsOfService() {
   return (
-    <LegalLayout title="Terms of Service" description="These terms describe the basic rules for using Vyapar UI and the Smart Ads integration.">
+    <LegalLayout title="Terms of Service" description="These terms describe the basic rules for using USK and the Smart Ads integration.">
       <Section title="Acceptance of Terms">
         <p>By using {appName}, you agree to these terms. If you do not agree, do not use the application or connect Meta/Facebook assets.</p>
       </Section>

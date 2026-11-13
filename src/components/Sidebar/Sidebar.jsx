@@ -180,7 +180,7 @@ function Sidebar() {
         <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#202532] via-[#161922] to-[#0F1117] border border-[#FF5A1F]/30 p-3 text-white shadow-md">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1 text-[11px] font-bold text-white">
-              <span className="text-xs text-amber-300">⚡</span> Vyapar
+              <span className="text-xs text-amber-300">⚡</span> USK
             </span>
             <span className="rounded bg-[#FF5A1F] px-1.5 py-0.5 text-[9px] font-black text-white leading-none">
               Upto 60% OFF

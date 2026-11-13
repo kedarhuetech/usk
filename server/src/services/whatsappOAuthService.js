@@ -6,7 +6,7 @@ import { getMetaOAuthConfig } from "../config/metaOAuth.js";
 import { normalizeMetaError } from "./metaOAuthService.js";
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-export const WHATSAPP_OAUTH_STATE_COOKIE = "vyapar_whatsapp_oauth_state";
+export const WHATSAPP_OAUTH_STATE_COOKIE = "usk_whatsapp_oauth_state";
 const oauthStates = new Map();
 const usedStateDigests = new Map();
 

@@ -1,4 +1,4 @@
-// Implements the vyapar network page.
+// Implements the USK network page.
 import { FiChevronDown, FiFileText, FiSearch } from "react-icons/fi";
 import Card from "../../components/Common/Card";
 
@@ -87,8 +87,8 @@ function InvoicePanel() {
   );
 }
 
-// Renders the vyapar network interface.
-function VyaparNetwork() {
+// Renders the USK network interface.
+function USKNetwork() {
   return (
     <div className="bg-slate-200 p-1">
       <div className="mb-1 bg-white px-6 py-5">
@@ -103,4 +103,4 @@ function VyaparNetwork() {
   );
 }
 
-export default VyaparNetwork;
+export default USKNetwork;

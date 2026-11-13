@@ -19,7 +19,7 @@ import SmartAds from "./pages/BusinessGrowth/SmartAds/SmartAds";
 import WhatsAppMarketing from "./pages/BusinessGrowth/WhatsAppMarketing";
 import Home from "./pages/Home/Home";
 import ItemsDashboard from "./pages/Items/ItemsDashboard";
-import VyaparNetwork from "./pages/Parties/VyaparNetwork";
+import USKNetwork from "./pages/Parties/USKNetwork";
 import PartyDetails from "./pages/Parties/PartyDetails";
 import WhatsAppConnect from "./pages/Parties/WhatsAppConnect";
 import AddPurchase from "./pages/Purchase/AddPurchase";
@@ -87,6 +87,7 @@ function App() {
           <Route path="parties/party-details" element={<PartyDetails />} />
           <Route path="parties/whatsapp-connect" element={<Navigate to="/parties/party-details" replace />} />
           <Route path="parties/business-network" element={<Navigate to="/parties/party-details" replace />} />
+          <Route path="parties/usk-network" element={<USKNetwork />} />
 
           {/* Protected Business Growth Section */}
           <Route element={<BusinessGrowthGuard />}>

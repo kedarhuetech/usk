@@ -18,9 +18,9 @@ Public legal pages support the Meta/Facebook Smart Ads integration and can be op
 
 ## Meta Developer App URLs
 
-- Privacy Policy URL: `https://vyapar-ui.vercel.app/privacy-policy`
-- Terms of Service URL: `https://vyapar-ui.vercel.app/terms`
-- User Data Deletion URL: `https://vyapar-ui.vercel.app/data-deletion`
+- Privacy Policy URL: `https://usk-ui.vercel.app/privacy-policy`
+- Terms of Service URL: `https://usk-ui.vercel.app/terms`
+- User Data Deletion URL: `https://usk-ui.vercel.app/data-deletion`
 
 ## Current Data Note
 

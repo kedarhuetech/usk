@@ -12,7 +12,7 @@ export const PRINT_THEMES = [
   { id: "theme-2", name: "GST Theme 2", desc: "Modern Card Header" },
   { id: "theme-3", name: "GST Theme 3", desc: "Elegant Framed Border" },
   { id: "theme-4", name: "GST Theme 4", desc: "Corporate Minimalist" },
-  { id: "theme-5", name: "GST Theme 5", desc: "Signature Vyapar Magenta" },
+  { id: "theme-5", name: "GST Theme 5", desc: "Signature USK Magenta" },
   { id: "theme-6", name: "GST Theme 6", desc: "Premium Bold Accent" },
   { id: "theme-bos", name: "Bill of Supply", desc: "Non-GST Composition" },
   { id: "theme-classic", name: "Classic Simple", desc: "Monochrome Ledger" },
@@ -1383,7 +1383,7 @@ function LiveThemeRenderer({ themeName, themeColor, settings }) {
     );
   }
 
-  // 8. DEFAULT: GST THEME 5 (Vyapar's Signature Magenta/Maroon Layout from User Screenshots)
+  // 8. DEFAULT: GST THEME 5 (USK's Signature Magenta/Maroon Layout)
   return (
     <div className="mx-auto max-w-xl rounded border border-slate-300 bg-white p-5 shadow-md text-[10.5px] leading-tight text-slate-800 font-sans">
       {/* Document Title: Sale */}

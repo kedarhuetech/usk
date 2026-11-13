@@ -24,7 +24,7 @@ if (typeof window === "undefined" || !window.localStorage) {
   };
 }
 
-test("Transaction Message default settings match Vyapar desktop screenshot", () => {
+test("Transaction Message default settings match USK desktop screenshot", () => {
   const settings = getAppSettings();
 
   // Channel: Meta WhatsApp (No personal QR login)
@@ -34,6 +34,7 @@ test("Transaction Message default settings match Vyapar desktop screenshot", () 
   assert.equal(settings.txnMsgSendToParty, true);
   assert.equal(settings.txnMsgSendUpdateMessage, false);
   assert.equal(settings.txnMsgSendCopyToSelf, false);
+  assert.equal(settings.txnMsgAutoShareUSKNetwork, false);
   assert.equal(settings.txnMsgAutoShareVyaparNetwork, false);
   assert.equal(settings.txnMsgCredits, 100);
 
