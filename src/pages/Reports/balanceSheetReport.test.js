@@ -38,5 +38,9 @@ test("BalanceSheet is registered cleanly in Reports navigation and routing", () 
   assert.ok(appContent.includes('path="reports/balance-sheet"'), "App.jsx must declare reports/balance-sheet route");
 
   // In Topbar.jsx
-  assert.ok(topbarContent.includes('rep === "Balance Sheet" ? "/reports/balance-sheet"'), "Topbar.jsx must link Balance Sheet search to route");
+  assert.ok(
+    topbarContent.includes('rep === "Balance Sheet"') &&
+      topbarContent.includes('"/reports/balance-sheet"'),
+    "Topbar.jsx must link Balance Sheet search to route"
+  );
 });

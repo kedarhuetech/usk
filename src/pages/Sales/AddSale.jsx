@@ -33,7 +33,7 @@ import {
   stateOfSupplyOptions,
 } from "../../constants/salesData";
 import { markOnlineStoreOrderConverted } from "../../services/onlineStoreOrdersStorage";
-import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
+import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import {
   loadBusinessItems,
   loadBusinessParties,
@@ -44,12 +44,12 @@ import {
   saveBusinessSaleInvoice,
 } from "../../services/businessRecords";
 import { getParties } from "../../services/partiesStorage";
-import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
+import { getInventoryItems, saveInventoryItem, isItemBatchTracked } from "../../services/itemsStorage";
 import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
 import { localDateOnly } from "../../services/batchInventoryService.js";
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
-import { readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { readTransactionValue, writeTransactionValue, transactionStorageKeys, fulfillSaleOrder, fulfillPurchaseOrder } from "../../services/transactionRepository.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 import {
@@ -859,8 +859,9 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
               priceMode: (isPurchase ? item.purchasePriceMode : item.priceMode) || row.priceMode,
               taxRate: item.taxRate || row.taxRate,
               sourceItemId: item.id || "",
-              batchNo: (row.batchNo || (item.batches?.[0]?.batchNo || "")),
-              expDate: (row.expDate || (item.batches?.[0]?.expDate || "")),
+              batchNo: isItemBatchTracked(item) ? (row.batchNo || (item.batches?.[0]?.batchNo || "")) : "",
+              expDate: isItemBatchTracked(item) ? (row.expDate || (item.batches?.[0]?.expDate || "")) : "",
+              batchId: isItemBatchTracked(item) ? (row.batchId || (item.batches?.[0]?.id || "")) : "",
             })
           : row
       )
@@ -998,15 +999,89 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 {enableBatchTracking && (
                   <>
                     <td className="border-r border-slate-200 p-1">
-                      {!isPurchase && row.sourceItemId && items.find((item) => item.id === row.sourceItemId)?.batches?.length ? (
-                        <select value={row.batchNo || ""} onChange={(event) => { const batch = items.find((item) => item.id === row.sourceItemId)?.batches?.find((entry) => entry.batchNo === event.target.value); setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, batchNo: batch?.batchNo || "", expDate: batch?.expDate || "" } : entry)); }} className="h-8 w-full rounded border border-slate-300 bg-white px-1 text-xs">
-                          <option value="">Select batch</option>
-                          {items.find((item) => item.id === row.sourceItemId).batches.map((batch) => <option key={batch.id || batch.batchNo} value={batch.batchNo} disabled={Number(batch.openingQty || 0) <= 0 || Boolean(batch.expDate && batch.expDate < localDateOnly())}>{batch.batchNo} · {batch.openingQty || 0} · exp {batch.expDate || "—"}</option>)}
-                        </select>
-                      ) : <CellInput value={row.batchNo || ""} onChange={(event) => updateRow(row.id, "batchNo", event.target.value)} placeholder="Batch No" />}
+                      {(() => {
+                        const matchedItem = items.find(
+                          (item) =>
+                            (row.sourceItemId && item.id === row.sourceItemId) ||
+                            (row.item && String(item.name || item.itemName || "").trim().toLowerCase() === String(row.item).trim().toLowerCase())
+                        );
+                        const isBatchTracked = isItemBatchTracked(matchedItem);
+
+                        if (!isPurchase && isBatchTracked && matchedItem?.batches?.length) {
+                          return (
+                            <select
+                              value={row.batchNo || ""}
+                              onChange={(event) => {
+                                const batch = matchedItem.batches.find(
+                                  (entry) => String(entry.batchNo).toLowerCase() === event.target.value.toLowerCase()
+                                );
+                                setRows((current) =>
+                                  current.map((entry) =>
+                                    entry.id === row.id
+                                      ? {
+                                          ...entry,
+                                          batchNo: batch?.batchNo || "",
+                                          expDate: batch?.expDate || "",
+                                          batchId: batch?.id || "",
+                                        }
+                                      : entry
+                                  )
+                                );
+                              }}
+                              className={`h-8 w-full rounded border px-1 text-xs ${
+                                rowErrors.batchNo
+                                  ? "border-rose-400 bg-rose-50 text-rose-800"
+                                  : "border-slate-300 bg-white"
+                              }`}
+                            >
+                              <option value="">Select batch</option>
+                              {matchedItem.batches.map((batch) => (
+                                <option
+                                  key={batch.id || batch.batchNo}
+                                  value={batch.batchNo}
+                                  disabled={
+                                    Number(batch.openingQty || 0) <= 0 ||
+                                    Boolean(batch.expDate && batch.expDate < localDateOnly())
+                                  }
+                                >
+                                  {batch.batchNo} · {batch.openingQty || 0} · exp {batch.expDate || "—"}
+                                </option>
+                              ))}
+                            </select>
+                          );
+                        }
+
+                        if (!isPurchase && isBatchTracked && (!matchedItem?.batches || matchedItem.batches.length === 0)) {
+                          return (
+                            <div className="flex h-8 items-center px-1.5 text-[11px] font-medium text-rose-600" title="Item is batch-tracked but has no batch stock configured">
+                              No batch stock
+                            </div>
+                          );
+                        }
+
+                        if (!isPurchase && matchedItem && !isBatchTracked) {
+                          return (
+                            <div className="flex h-8 items-center px-1.5 text-[11px] text-slate-400 italic">
+                              Non-batch item
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <CellInput
+                            value={row.batchNo || ""}
+                            onChange={(event) => updateRow(row.id, "batchNo", event.target.value)}
+                            placeholder="Batch No"
+                          />
+                        );
+                      })()}
                     </td>
                     <td className="border-r border-slate-200 p-1">
-                      <CellInput type="date" value={row.expDate || ""} onChange={(event) => updateRow(row.id, "expDate", event.target.value)} />
+                      <CellInput
+                        type="date"
+                        value={row.expDate || ""}
+                        onChange={(event) => updateRow(row.id, "expDate", event.target.value)}
+                      />
                     </td>
                   </>
                 )}
@@ -1480,6 +1555,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const quotationConversion = !isPurchase ? location.state?.quotationConversion || location.state?.proformaConversion || null : null;
   const saleOrderConversions = !isPurchase ? location.state?.saleOrdersConversion || [] : [];
   const saleOrderConversion = saleOrderConversions[0] || null;
+  const conversionItems = location.state?.conversionItems || null;
   const deliveryChallanConversions = !isPurchase ? location.state?.deliveryChallansConversion || [] : [];
   const deliveryChallanConversion = deliveryChallanConversions[0] || null;
   const conversionStorageKey = location.state?.proformaConversion ? "ledgerly:proformaInvoices.v1" : "ledgerly:estimateQuotations.v1";
@@ -1492,27 +1568,125 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const [saleType, setSaleType] = useState(editInvoice?.saleType || "credit");
   const [rows, setRows] = useState(() => {
     if (editInvoice?.rows?.length) return editInvoice.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
-    if (purchaseOrderConversion?.rows?.length) return purchaseOrderConversion.rows.map((row) => ({
-      ...createRow(),
-      item: row.item || "",
-      description: row.description || "",
-      qty: String(row.qty ?? ""),
-      unit: row.unit || "",
-      price: String(row.price ?? ""),
-      priceMode: "Without Tax",
-      discountMode: row.discountType === "amount" ? "amount" : "percent",
-      discountPercent: row.discountType === "amount" ? "" : String(row.discount ?? ""),
-      discountAmount: row.discountType === "amount" ? String(row.discount ?? "") : "",
-      taxRate: row.tax && row.tax !== "NONE" ? String(row.tax) : "NONE",
-      sourceItemId: row.itemId || "",
-    }));
+    if (conversionItems?.length) {
+      const inventory = getInventoryItems();
+      return conversionItems.map((ci) => {
+        const matched = inventory.find((i) =>
+          (ci.itemId && i.id === ci.itemId) ||
+          (ci.sourceItemId && i.id === ci.sourceItemId) ||
+          (ci.item && String(i.itemName || "").trim().toLowerCase() === String(ci.item).trim().toLowerCase())
+        );
+        const resolvedId = matched?.id || ci.itemId || ci.sourceItemId || "";
+        const isBatchTracked = isItemBatchTracked(matched);
+        return {
+          ...createRow(),
+          item: ci.item || "",
+          description: ci.description || "",
+          qty: String(ci.qty ?? ""),
+          unit: ci.unit || "",
+          price: String(ci.price ?? ""),
+          priceMode: "Without Tax",
+          discountMode: ci.discountType === "amount" ? "amount" : "percent",
+          discountPercent: ci.discountType === "amount" ? "" : String(ci.discount ?? ""),
+          discountAmount: ci.discountType === "amount" ? String(ci.discount ?? "") : "",
+          taxRate: ci.tax && ci.tax !== "NONE" ? String(ci.tax) : "NONE",
+          cessPercent: String(ci.cess ?? ""),
+          sourceItemId: resolvedId,
+          sourceOrderId: ci.sourceOrderId || "",
+          sourceOrderNumber: ci.sourceOrderNumber || "",
+          sourceOrderRowId: ci.sourceOrderRowId || "",
+          maxConvertibleQty: ci.maxConvertibleQty != null ? Number(ci.maxConvertibleQty) : null,
+          batchNo: isBatchTracked ? (ci.batchNo || "") : "",
+          expDate: isBatchTracked ? (ci.expDate || "") : "",
+        };
+      });
+    }
+    if (purchaseOrderConversion?.rows?.length) {
+      const inventory = getInventoryItems();
+      const activeRows = purchaseOrderConversion.rows.filter((row) => {
+        const rem = row.remainingQty != null ? Number(row.remainingQty) : Math.max(0, Number(row.orderedQty ?? row.qty ?? 0) - Number(row.convertedQty || 0));
+        return rem > 0;
+      });
+      const rowsToUse = activeRows.length ? activeRows : purchaseOrderConversion.rows;
+      return rowsToUse.map((row) => {
+        const rem = row.remainingQty != null ? Number(row.remainingQty) : Math.max(0, Number(row.orderedQty ?? row.qty ?? 0) - Number(row.convertedQty || 0));
+        const matched = inventory.find((i) =>
+          (row.itemId && i.id === row.itemId) ||
+          (row.sourceItemId && i.id === row.sourceItemId) ||
+          (row.item && String(i.itemName || "").trim().toLowerCase() === String(row.item).trim().toLowerCase())
+        );
+        const resolvedId = matched?.id || row.itemId || row.sourceItemId || "";
+        const isBatchTracked = isItemBatchTracked(matched);
+        return {
+          ...createRow(),
+          item: row.item || "",
+          description: row.description || "",
+          qty: String(rem > 0 ? rem : row.qty ?? ""),
+          unit: row.unit || "",
+          price: String(row.price ?? ""),
+          priceMode: "Without Tax",
+          discountMode: row.discountType === "amount" ? "amount" : "percent",
+          discountPercent: row.discountType === "amount" ? "" : String(row.discount ?? ""),
+          discountAmount: row.discountType === "amount" ? String(row.discount ?? "") : "",
+          taxRate: row.tax && row.tax !== "NONE" ? String(row.tax) : "NONE",
+          cessPercent: String(row.cess ?? ""),
+          sourceItemId: resolvedId,
+          sourceOrderId: purchaseOrderConversion.id,
+          sourceOrderNumber: purchaseOrderConversion.number,
+          sourceOrderRowId: row.id,
+          maxConvertibleQty: rem,
+          batchNo: isBatchTracked ? (row.batchNo || "") : "",
+          expDate: isBatchTracked ? (row.expDate || "") : "",
+        };
+      });
+    }
     if (quotationConversion?.rows?.length) return quotationConversion.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
-    if (saleOrderConversions.some((order) => order.rows?.length)) return saleOrderConversions.flatMap((order) => (order.rows || []).map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" })));
+    if (saleOrderConversions.some((order) => order.rows?.length)) {
+      const inventory = getInventoryItems();
+      return saleOrderConversions.flatMap((order) => {
+        const activeRows = (order.rows || []).filter((row) => {
+          const rem = row.remainingQty != null ? Number(row.remainingQty) : Math.max(0, Number(row.orderedQty ?? row.qty ?? 0) - Number(row.convertedQty || 0));
+          return rem > 0;
+        });
+        const rowsToUse = activeRows.length ? activeRows : (order.rows || []);
+        return rowsToUse.map((row) => {
+          const rem = row.remainingQty != null ? Number(row.remainingQty) : Math.max(0, Number(row.orderedQty ?? row.qty ?? 0) - Number(row.convertedQty || 0));
+          const matched = inventory.find((i) =>
+            (row.itemId && i.id === row.itemId) ||
+            (row.sourceItemId && i.id === row.sourceItemId) ||
+            (row.item && String(i.itemName || "").trim().toLowerCase() === String(row.item).trim().toLowerCase())
+          );
+          const resolvedId = matched?.id || row.itemId || row.sourceItemId || "";
+          const isBatchTracked = isItemBatchTracked(matched);
+          return {
+            ...createRow(),
+            item: row.item || "",
+            description: row.description || "",
+            qty: String(rem > 0 ? rem : row.qty ?? ""),
+            unit: row.unit || "",
+            price: String(row.price ?? ""),
+            priceMode: "Without Tax",
+            discountMode: row.discountType === "amount" ? "amount" : "percent",
+            discountPercent: row.discountType === "amount" ? "" : String(row.discount ?? ""),
+            discountAmount: row.discountType === "amount" ? String(row.discount ?? "") : "",
+            taxRate: row.tax && row.tax !== "NONE" ? String(row.tax) : "NONE",
+            cessPercent: String(row.cess ?? ""),
+            sourceItemId: resolvedId,
+            sourceOrderId: order.id,
+            sourceOrderNumber: order.number,
+            sourceOrderRowId: row.id,
+            maxConvertibleQty: rem,
+            batchNo: isBatchTracked ? (row.batchNo || "") : "",
+            expDate: isBatchTracked ? (row.expDate || "") : "",
+          };
+        });
+      });
+    }
     if (deliveryChallanConversions.some((challan) => challan.rows?.length)) return deliveryChallanConversions.flatMap((challan) => (challan.rows || []).map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" })));
     if (!onlineOrderConversion?.items?.length) return [createRow(), createRow()];
     return onlineOrderConversion.items.map(createRowFromOrderItem);
   });
-  const [items, setItems] = useState(() => (quotationConversion || saleOrderConversions.length || deliveryChallanConversions.length) ? getInventoryItems().map(saleItemFromInventory) : []);
+  const [items, setItems] = useState(() => (quotationConversion || saleOrderConversions.length || deliveryChallanConversions.length || conversionItems?.length) ? getInventoryItems().map(saleItemFromInventory) : []);
   const [parties, setParties] = useState(() => getParties().map(partyOption).filter((party) => party.name));
   const [addItemRowId, setAddItemRowId] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
@@ -1665,9 +1839,40 @@ function AddSale({ mode = "sale", localOnly = false }) {
       const rowErrors = {};
       if (row.item.trim() && toNumber(row.qty) <= 0) rowErrors.qty = "Qty is required";
       if (row.qty !== "" && toNumber(row.qty) < 0) rowErrors.qty = "Invalid qty";
+      if (row.maxConvertibleQty != null && toNumber(row.qty) > Number(row.maxConvertibleQty)) {
+        rowErrors.qty = `Cannot exceed remaining (${row.maxConvertibleQty})`;
+      }
       if (row.price !== "" && toNumber(row.price) < 0) rowErrors.price = "Invalid price";
       if (row.discountPercent !== "" && (toNumber(row.discountPercent) < 0 || toNumber(row.discountPercent) > 100)) rowErrors.discountPercent = "Invalid discount";
       if (row.discountAmount !== "" && toNumber(row.discountAmount) < 0) rowErrors.discountAmount = "Invalid discount";
+
+      // Batch tracking validation for sales
+      if (!isPurchase && appSettings.enableBatchTracking && row.item.trim() && toNumber(row.qty) > 0) {
+        const matchedItem = items.find(
+          (item) =>
+            (row.sourceItemId && item.id === row.sourceItemId) ||
+            (row.item && String(item.name || item.itemName || "").trim().toLowerCase() === String(row.item).trim().toLowerCase())
+        );
+        if (matchedItem && isItemBatchTracked(matchedItem)) {
+          if (!(matchedItem.batches || []).length) {
+            rowErrors.batchNo = `Batch tracking is enabled, but ${matchedItem.name || row.item} has no batch stock. Add stock with a batch before selling.`;
+          } else if (!row.batchNo || !String(row.batchNo).trim()) {
+            rowErrors.batchNo = `Select a valid batch for ${matchedItem.name || row.item}.`;
+          } else {
+            const batch = (matchedItem.batches || []).find(
+              (b) => String(b.batchNo || "").trim().toLowerCase() === String(row.batchNo).trim().toLowerCase()
+            );
+            if (!batch) {
+              rowErrors.batchNo = `Select a valid batch for ${matchedItem.name || row.item}.`;
+            } else if (batch.expDate && batch.expDate < localDateOnly()) {
+              rowErrors.batchNo = `Batch ${batch.batchNo} has expired.`;
+            } else if (Number(batch.openingQty ?? batch.quantity ?? 0) < Number(row.qty)) {
+              rowErrors.batchNo = `Batch ${batch.batchNo} has only ${batch.openingQty || 0} in stock.`;
+            }
+          }
+        }
+      }
+
       if (Object.keys(rowErrors).length) nextErrors.rows[row.id] = rowErrors;
     });
 
@@ -1689,6 +1894,26 @@ function AddSale({ mode = "sale", localOnly = false }) {
     totals,
     business,
     files,
+    saleOrderIds: [
+      ...new Set([
+        ...saleOrderConversions.map((o) => o.id),
+        ...rows.map((r) => r.sourceOrderId),
+      ].filter(Boolean)),
+    ],
+    saleOrderNumbers: [
+      ...new Set([
+        ...saleOrderConversions.map((o) => o.number),
+        ...rows.map((r) => r.sourceOrderNumber),
+      ].filter(Boolean)),
+    ],
+    purchaseOrderId:
+      purchaseOrderConversion?.id ||
+      rows.find((r) => r.sourceOrderId)?.sourceOrderId ||
+      undefined,
+    purchaseOrderNumber:
+      purchaseOrderConversion?.number ||
+      rows.find((r) => r.sourceOrderNumber)?.sourceOrderNumber ||
+      undefined,
     sourceOnlineOrderId: onlineOrderConversion?.id || "",
     createdAt: new Date().toISOString(),
   });
@@ -1714,6 +1939,92 @@ function AddSale({ mode = "sale", localOnly = false }) {
     setToast(`Ready for a fresh ${config.title.toLowerCase()}.`);
   };
 
+  const finalizeOrderConversions = (savedDoc) => {
+    const docId = savedDoc?.id || transactionId;
+    const docNum = savedDoc?.invoiceNumber || form.invoiceNumber;
+    const docDate = savedDoc?.date || form.invoiceDate;
+
+    // 1. Purchase Order Fulfillment
+    const targetPoId =
+      purchaseOrderConversion?.id ||
+      rows.find((r) => r.sourceOrderId)?.sourceOrderId;
+
+    if (targetPoId) {
+      try {
+        const poFulfilledRows = rows
+          .filter((r) => r.item.trim() && toNumber(r.qty) > 0)
+          .map((r) => ({
+            sourceOrderRowId: r.sourceOrderRowId,
+            rowId: r.sourceOrderRowId,
+            item: r.item,
+            qty: toNumber(r.qty),
+            price: toNumber(r.price),
+          }));
+        fulfillPurchaseOrder(targetPoId, poFulfilledRows, {
+          id: docId,
+          invoiceNumber: docNum,
+          date: docDate,
+        });
+      } catch (err) {
+        console.error("Failed to fulfill purchase order:", err);
+      }
+    }
+
+    // 2. Sale Order Fulfillment
+    const targetSoIds = [
+      ...new Set([
+        ...saleOrderConversions.map((o) => o.id),
+        ...rows.map((r) => r.sourceOrderId),
+      ].filter(Boolean)),
+    ];
+
+    if (targetSoIds.length) {
+      try {
+        targetSoIds.forEach((soId) => {
+          const soFulfilledRows = rows
+            .filter(
+              (r) =>
+                r.item.trim() &&
+                toNumber(r.qty) > 0 &&
+                (!r.sourceOrderId || r.sourceOrderId === soId)
+            )
+            .map((r) => ({
+              sourceOrderRowId: r.sourceOrderRowId,
+              rowId: r.sourceOrderRowId,
+              item: r.item,
+              qty: toNumber(r.qty),
+              price: toNumber(r.price),
+            }));
+          fulfillSaleOrder(soId, soFulfilledRows, {
+            id: docId,
+            invoiceNumber: docNum,
+            date: docDate,
+          });
+        });
+      } catch (err) {
+        console.error("Failed to fulfill sale order:", err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (
+      purchaseOrderConversion?.status === "Converted to Purchase" ||
+      purchaseOrderConversion?.status === "Fully Converted"
+    ) {
+      setToast("Notice: This purchase order has already been fully converted to a purchase bill.");
+    } else if (
+      saleOrderConversions.length > 0 &&
+      saleOrderConversions.every(
+        (order) =>
+          order.status === "Converted to Sale" ||
+          order.status === "Fully Converted"
+      )
+    ) {
+      setToast("Notice: The selected sale order(s) have already been fully converted to a sale invoice.");
+    }
+  }, [purchaseOrderConversion, saleOrderConversions]);
+
   // Saves sale.
   const saveSale = async () => {
     if (!validate()) {
@@ -1730,13 +2041,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     if (isPurchase && localOnlyPurchase) {
       const saved = savePurchaseBillLocally(invoice);
-      if (purchaseOrderConversion?.id) {
-        const orderKey = "ledgerly:purchaseOrders.v1";
-        const sourceOrders = JSON.parse(window.localStorage.getItem(orderKey) || "[]");
-        window.localStorage.setItem(orderKey, JSON.stringify(sourceOrders.map((order) => order.id === purchaseOrderConversion.id
-          ? { ...order, status: "Converted to Purchase", convertedAt: new Date().toISOString(), convertedPurchaseId: saved.id, history: [...(order.history || []), { action: "Converted to Purchase", at: new Date().toISOString(), purchaseBillId: saved.id }] }
-          : order)));
-      }
+      finalizeOrderConversions(saved);
       sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
       setToast(purchaseOrderConversion ? "Purchase bill created from the purchase order." : "Purchase bill saved in this browser.");
       navigate(returnPath);
@@ -1757,9 +2062,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
     if (saleOrderConversions.length) {
       try {
         const savedInvoice = saveSaleInvoiceLocally({ ...invoice, saleOrderIds: saleOrderConversions.map((order) => order.id) });
-        const key = "ledgerly:saleOrders.v1";
-        const sourceOrders = JSON.parse(window.localStorage.getItem(key) || "[]");
-        window.localStorage.setItem(key, JSON.stringify(sourceOrders.map((order) => saleOrderConversions.some((source) => source.id === order.id) ? { ...order, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id, history: [...(order.history || []), { action: "Converted to Sale", at: new Date().toISOString(), saleInvoiceId: savedInvoice.id }] } : order)));
+        finalizeOrderConversions(savedInvoice);
         setToast("Sale invoice created from the selected sale order(s).");
         navigate(returnPath);
       } catch (error) {
@@ -1812,6 +2115,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       savedInvoice = isPurchase
         ? await saveBusinessPurchaseBill(invoice)
         : await saveBusinessSaleInvoice(invoice);
+      finalizeOrderConversions(savedInvoice);
       if (onlineOrderConversion?.id && !onlineOrderConversion.convertedToSale) {
         await markOnlineStoreOrderConverted(onlineOrderConversion.id, {
           saleId: savedInvoice.id,
@@ -1869,6 +2173,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       let invoice;
       try {
         invoice = localOnlyPurchase ? savePurchaseBillLocally(buildInvoice()) : await saveBusinessPurchaseBill(buildInvoice());
+        finalizeOrderConversions(invoice);
       } catch (error) {
         setToast(error.message || "Could not save purchase bill to MySQL.");
         return;
@@ -1900,11 +2205,13 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (!validate()) return;
       try {
         const invoice = buildInvoice();
+        let savedInvoice;
         if (isPurchase) {
-          if (localOnlyPurchase) savePurchaseBillLocally(invoice);
-          else await saveBusinessPurchaseBill(invoice);
+          if (localOnlyPurchase) savedInvoice = savePurchaseBillLocally(invoice);
+          else savedInvoice = await saveBusinessPurchaseBill(invoice);
         }
-        else await saveBusinessSaleInvoice(invoice);
+        else savedInvoice = await saveBusinessSaleInvoice(invoice);
+        finalizeOrderConversions(savedInvoice);
         resetSale();
       } catch (error) {
         setToast(error.message || `Could not save ${config.title.toLowerCase()} to MySQL.`);

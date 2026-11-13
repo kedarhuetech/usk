@@ -106,6 +106,14 @@ function normalizeSerialNumbers(serials) {
   return cleaned;
 }
 
+// Determines if an inventory item is configured for batch tracking.
+export function isItemBatchTracked(item = {}) {
+  if (!item || String(item.type || "product").toLowerCase() === "service") return false;
+  if (item.enableBatchTracking === true || item.batchTracking === true) return true;
+  if (item.enableBatchTracking === false || item.batchTracking === false) return false;
+  return Array.isArray(item.batches) && item.batches.some((b) => b && (String(b.batchNo || "").trim() || Number(b.openingQty || b.quantity || 0) > 0));
+}
+
 // Makes the inventory item value consistent.
 export function normalizeInventoryItem(itemForm = {}) {
   const type = itemType(itemForm);
@@ -120,6 +128,11 @@ export function normalizeInventoryItem(itemForm = {}) {
   const hsn = itemForm.hsn || itemForm.sac || "";
   const wholesale = itemForm.wholesale || null;
   const batches = filledBatches(itemForm.batches || []);
+  const isBatchTracked = itemForm.enableBatchTracking !== undefined
+    ? Boolean(itemForm.enableBatchTracking)
+    : itemForm.batchTracking !== undefined
+    ? Boolean(itemForm.batchTracking)
+    : batches.length > 0;
   const batchTotal = batchOpeningTotal(batches);
   const manualOpeningQuantity = hasValue(itemForm.openingQuantity)
     ? String(itemForm.openingQuantity)
@@ -178,6 +191,8 @@ export function normalizeInventoryItem(itemForm = {}) {
     asOfDate: itemForm.asOfDate || "",
     location: itemForm.location || "",
     minimumStock: itemForm.minimumStock || "",
+    enableBatchTracking: isBatchTracked,
+    batchTracking: isBatchTracked,
     batches,
     image: imageUrl,
     imageUrl,
@@ -269,6 +284,9 @@ export function applyBatchRowsToInventory(rows = [], direction, { allowCreate = 
   const nextItems = items.map((item) => {
     const matchedRows = rows.filter((row) => saleRowItemId(row) === item.id || (!saleRowItemId(row) && normalizedName(row.item) === normalizedName(item.itemName)));
     if (!matchedRows.length || itemType(item) === "service") return item;
+    const hasBatchRows = matchedRows.some((r) => String(r.batchNo || "").trim());
+    const isBatchItem = isItemBatchTracked(item) || (item.batches || []).length > 0 || hasBatchRows;
+    if (!isBatchItem) return item;
     const batchTotal = (item.batches || []).reduce((sum, batch) => sum + Math.max(toNumber(batch.openingQty ?? batch.quantity), 0), 0);
     const aggregate = Math.max(toNumber(hasValue(item.openingQuantity) ? item.openingQuantity : item.stock), 0);
     if (direction === "reduce" && Math.abs(batchTotal - aggregate) > 1e-9) throw new Error(`Batch stock for ${item.itemName} does not reconcile with aggregate stock (${batchTotal} batch / ${aggregate} total). Review historical stock before moving this item.`);

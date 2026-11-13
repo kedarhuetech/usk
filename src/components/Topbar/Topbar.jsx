@@ -26,6 +26,8 @@ import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
+import { getSaleOrders, getPurchaseOrders } from "../../services/transactionRepository.js";
+import { isReportVisible } from "../../config/reportVisibility.js";
 
 const navItems = ["Company", "Help"];
 const transactionRoutes = [
@@ -38,6 +40,7 @@ const reportList = [
   "Purchase Report",
   "Day Book",
   "All Transactions",
+  "Sale/Purchase Orders",
   "Profit And Loss",
   "Bill Wise Profit",
   "Cash Flow",
@@ -265,15 +268,72 @@ export default function Topbar({ onRefresh }) {
       // Ignore storage error
     }
 
+    // 5b. Search Sale Orders
+    try {
+      const saleOrders = getSaleOrders();
+      saleOrders.forEach((so) => {
+        const num = String(so.orderNumber || so.orderNo || so.invoiceNumber || "");
+        const customer = so.customer || so.partyName || "";
+        if (
+          num.toLowerCase().includes(query) ||
+          customer.toLowerCase().includes(query)
+        ) {
+          results.push({
+            type: "Sale Order",
+            icon: FiFileText,
+            title: `Sale Order #${num || "—"}`,
+            subtitle: `${customer || "Customer"} · ₹${so.totalAmount || so.totals?.grandTotal || 0} (${so.status || "Open"})`,
+            path: "/sales/sale-order",
+            state: { editOrder: so },
+          });
+        }
+      });
+    } catch {
+      // Ignore storage error
+    }
+
+    // 5c. Search Purchase Orders
+    try {
+      const purchaseOrders = getPurchaseOrders();
+      purchaseOrders.forEach((po) => {
+        const num = String(po.orderNumber || po.orderNo || po.invoiceNumber || "");
+        const supplier = po.partyName || po.supplier || po.customer || "";
+        if (
+          num.toLowerCase().includes(query) ||
+          supplier.toLowerCase().includes(query)
+        ) {
+          results.push({
+            type: "Purchase Order",
+            icon: FiShoppingCart,
+            title: `Purchase Order #${num || "—"}`,
+            subtitle: `${supplier || "Supplier"} · ₹${po.totalAmount || po.totals?.finalTotal || 0} (${po.status || "Open"})`,
+            path: "/purchase-expense/purchase-order",
+            state: { editOrder: po },
+          });
+        }
+      });
+    } catch {
+      // Ignore storage error
+    }
+
     // 6. Search Reports
-    reportList.forEach((rep) => {
+    reportList.filter(isReportVisible).forEach((rep) => {
       if (rep.toLowerCase().includes(query)) {
         results.push({
           type: "Report",
           icon: FiBarChart2,
           title: rep,
           subtitle: "View financial & GST report",
-          path: rep === "Bill Wise Profit" ? "/reports/bill-wise-profit" : rep === "Balance Sheet" ? "/reports/balance-sheet" : rep === "GSTR 3 B" ? "/reports/gstr-3b" : "/reports",
+          path:
+            rep === "Bill Wise Profit"
+              ? "/reports/bill-wise-profit"
+              : rep === "Balance Sheet"
+              ? "/reports/balance-sheet"
+              : rep === "GSTR 3 B"
+              ? "/reports/gstr-3b"
+              : rep === "Sale/Purchase Orders"
+              ? "/reports/sale-purchase-orders"
+              : "/reports",
         });
       }
     });

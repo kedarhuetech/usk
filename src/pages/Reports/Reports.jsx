@@ -21,10 +21,15 @@ import BatchExpiryReport from "./BatchExpiryReport";
 import LoanStatementReport from "./LoanStatementReport";
 import PartyWiseProfitAndLoss from "./PartyWiseProfitAndLoss";
 import PartyStatementReport from "./PartyStatementReport";
+import SalePurchaseOrdersReport from "./SalePurchaseOrdersReport";
+import ExpenseReport from "./ExpenseReport";
+import GSTRateReport from "./GSTRateReport";
+import GSTReport from "./GSTReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { toast } from "../../components/Common/Toast.jsx";
+import { isReportGroupVisible, isReportVisible } from "../../config/reportVisibility.js";
 import {
   FiBarChart2,
   FiPrinter,
@@ -165,6 +170,7 @@ const receivedOf = (row) =>
 
 const partyOf = (row) =>
   row.form?.customer ||
+  row.customer ||
   row.form?.party ||
   row.supplier ||
   row.party ||
@@ -225,6 +231,10 @@ function Reports({ defaultReport }) {
     if (location.pathname.includes("item-detail")) return "Item Detail";
     if (location.pathname.includes("loan-statement")) return "Loan Statement";
     if (location.pathname.includes("balance-sheet")) return "Balance Sheet";
+    if (location.pathname.includes("gst-rate-report")) return "GST Rate Report";
+    if (location.pathname.includes("gst-report")) return "GST Report";
+    if (location.pathname.includes("expense-category-report")) return "Expense Category Report";
+    if (location.pathname.includes("expense")) return "Expense";
     return "Sale";
   };
 
@@ -272,6 +282,16 @@ function Reports({ defaultReport }) {
       setActiveReport("Loan Statement");
     } else if (location.pathname.includes("party-statement")) {
       setActiveReport("Party Statement");
+    } else if (location.pathname.includes("sale-purchase-orders") || location.pathname.includes("sale-purchase-order")) {
+      setActiveReport("Sale/Purchase Orders");
+    } else if (location.pathname.includes("gst-rate-report")) {
+      setActiveReport("GST Rate Report");
+    } else if (location.pathname.includes("gst-report")) {
+      setActiveReport("GST Report");
+    } else if (location.pathname.includes("expense-category-report")) {
+      setActiveReport("Expense Category Report");
+    } else if (location.pathname.includes("expense")) {
+      setActiveReport("Expense");
     }
   }, [defaultReport, location.pathname]);
   const [search, setSearch] = useState("");
@@ -378,6 +398,31 @@ function Reports({ defaultReport }) {
       ].includes(activeReport)
     ) {
       return allLocalTransactions;
+    }
+
+    if (
+      [
+        "Sale/Purchase Orders",
+        "Sale/ Purchase Orders",
+        "Sale/ Purchase Order report",
+      ].includes(activeReport)
+    ) {
+      return allLocalTransactions.filter((row) =>
+        ["Sale Order", "Purchase Order"].includes(row.reportType)
+      );
+    }
+
+    if (
+      [
+        "Expense",
+        "Expense Category Report",
+        "Expense report",
+      ].includes(activeReport)
+    ) {
+      return localList("ledgerly:expenses.v1").map((row) => ({
+        ...row,
+        reportType: "Expense",
+      }));
     }
 
     if (
@@ -620,6 +665,12 @@ function Reports({ defaultReport }) {
       const settlement = calculateInvoiceSettlement(row, { kind: row.reportType === "Purchase" ? "purchase" : "sale", payments: row.reportType === "Purchase" ? paymentOuts : paymentIns });
       return settlement.paymentStatus;
     }
+    if (row.reportType === "Sale Order" || row.reportType === "Purchase Order") {
+      if (row.status === "Converted to Sale" || row.status === "Converted to Purchase") return row.status;
+      const d = row.dueDate || row.date;
+      if (row.status === "Open" && d && new Date(`${d}T23:59:59`) < new Date()) return "Order Overdue";
+      return row.status || "Open";
+    }
     if (
       ["Cancelled", "Unused", "Unpaid", "Partial", "Paid"].includes(
         row.status
@@ -692,13 +743,13 @@ function Reports({ defaultReport }) {
     <div className="flex h-full min-h-0 overflow-hidden bg-[#eaf0f6] text-[#263b57]">
       {/* Report sidebar */}
       <aside className="hidden h-full min-h-0 w-[248px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white md:block print:hidden">
-        {reportGroups.map((group) => (
+        {reportGroups.filter((group) => isReportGroupVisible(group.heading)).map((group) => (
           <section key={group.heading}>
             <h2 className="sticky top-0 z-10 bg-[#eff8f7] px-3 py-3 text-sm font-medium text-slate-500">
               {group.heading}
             </h2>
 
-            {group.reports.map((report) => (
+            {group.reports.filter(isReportVisible).map((report) => (
               <button
                 key={report}
                 type="button"
@@ -741,6 +792,14 @@ function Reports({ defaultReport }) {
                     navigate("/reports/item-detail", { replace: true });
                   } else if (report === "Loan Statement") {
                     navigate("/reports/loan-statement", { replace: true });
+                  } else if (report === "Expense") {
+                    navigate("/reports/expense", { replace: true });
+                  } else if (report === "Expense Category Report") {
+                    navigate("/reports/expense-category-report", { replace: true });
+                  } else if (report === "GST Rate Report") {
+                    navigate("/reports/gst-rate-report", { replace: true });
+                  } else if (report === "GST Report") {
+                    navigate("/reports/gst-report", { replace: true });
                   } else {
                     navigate("/reports", { replace: true });
                   }
@@ -839,6 +898,26 @@ function Reports({ defaultReport }) {
       ) : activeReport === "Loan Statement" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <LoanStatementReport />
+        </div>
+      ) : activeReport === "Sale/Purchase Orders" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <SalePurchaseOrdersReport />
+        </div>
+      ) : activeReport === "Expense" || activeReport === "Expense Category Report" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <ExpenseReport
+            initialTab={
+              activeReport === "Expense Category Report" ? "category" : "transactions"
+            }
+          />
+        </div>
+      ) : activeReport === "GST Rate Report" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <GSTRateReport />
+        </div>
+      ) : activeReport === "GST Report" ? (
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <GSTReport />
         </div>
       ) : (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden p-1.5">

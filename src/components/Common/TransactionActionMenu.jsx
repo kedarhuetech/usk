@@ -196,7 +196,15 @@ export default function TransactionActionMenu({
 
     // 1. View / Edit
     if (action === "View/Edit") {
-      if (source === "Sale") {
+      if (source === "Sale Order") {
+        navigate("/sales/sale-order", {
+          state: { from: location.pathname, editOrder: raw },
+        });
+      } else if (source === "Purchase Order") {
+        navigate("/purchase-expense/purchase-order", {
+          state: { from: location.pathname, editOrder: raw },
+        });
+      } else if (source === "Sale") {
         navigate("/sales/sale-invoices/new", {
           state: { from: location.pathname, editInvoice: raw },
         });
@@ -257,7 +265,11 @@ export default function TransactionActionMenu({
         } catch {}
       };
 
-      if (source === "Sale") {
+      if (source === "Sale Order") {
+        filterStorage("ledgerly:saleOrders.v1");
+      } else if (source === "Purchase Order") {
+        filterStorage("ledgerly:purchaseOrders.v1");
+      } else if (source === "Sale") {
         deleteSaleInvoice(rawId);
         filterStorage("ledgerly:sales.v1");
       } else if (source === "Purchase") {
@@ -318,7 +330,11 @@ export default function TransactionActionMenu({
         } catch {}
       };
 
-      if (source === "Sale") {
+      if (source === "Sale Order") {
+        filterStorage("ledgerly:saleOrders.v1");
+      } else if (source === "Purchase Order") {
+        filterStorage("ledgerly:purchaseOrders.v1");
+      } else if (source === "Sale") {
         const copy = {
           ...raw,
           id: copyId,
@@ -365,7 +381,11 @@ export default function TransactionActionMenu({
 
     // 4. Open PDF & Preview
     if (action === "Open PDF" || action === "Preview") {
-      if (source === "Sale") {
+      if (source === "Sale Order") {
+        filterStorage("ledgerly:saleOrders.v1");
+      } else if (source === "Purchase Order") {
+        filterStorage("ledgerly:purchaseOrders.v1");
+      } else if (source === "Sale") {
         navigate("/sales/sale-invoices/preview", {
           state: { invoice: raw, printAfterOpen: false },
         });
@@ -378,7 +398,11 @@ export default function TransactionActionMenu({
 
     // 5. Print
     if (action === "Print") {
-      if (source === "Sale") {
+      if (source === "Sale Order") {
+        filterStorage("ledgerly:saleOrders.v1");
+      } else if (source === "Purchase Order") {
+        filterStorage("ledgerly:purchaseOrders.v1");
+      } else if (source === "Sale") {
         navigate("/sales/sale-invoices/preview", {
           state: { invoice: raw, printAfterOpen: true },
         });

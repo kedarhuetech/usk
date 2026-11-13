@@ -1,4 +1,4 @@
-import { applySaleInvoiceStockUpdate, applyBatchRowsToInventory, inventoryItemsStorageKey } from "./itemsStorage.js";
+import { applySaleInvoiceStockUpdate, applyBatchRowsToInventory, inventoryItemsStorageKey, isItemBatchTracked } from "./itemsStorage.js";
 import { batchMovementStorageKey, localDateOnly, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { getAppSettings } from "./appSettingsStorage.js";
@@ -67,12 +67,21 @@ export function saveSaleInvoice(invoice) {
     normalized = { ...normalized, rows: (normalized.rows || []).map((row) => {
       const item = inventory.find((entry) => entry.id === (row.sourceItemId || row.itemId) || String(entry.itemName || "").trim().toLowerCase() === String(row.item || "").trim().toLowerCase());
       if (!item || item.type === "service" || !Number(row.qty ?? row.quantity)) return row;
+      const batchTracked = isItemBatchTracked(item);
+      if (!batchTracked) {
+        return row;
+      }
       if (!(item.batches || []).length) throw new Error(`Batch tracking is enabled, but ${item.itemName} has no batch stock. Add stock with a batch before selling.`);
-      const batch = (item.batches || []).find((entry) => String(entry.batchNo).toLowerCase() === String(row.batchNo || "").toLowerCase());
+      const rawBatchNo = String(row.batchNo || "").trim();
+      if (!rawBatchNo) throw new Error(`Select a valid batch for ${item.itemName}.`);
+      const batch = (item.batches || []).find((entry) => String(entry.batchNo || "").trim().toLowerCase() === rawBatchNo.toLowerCase());
       if (!batch) throw new Error(`Select a valid batch for ${item.itemName}.`);
       const today = localDateOnly();
       if (batch.expDate && batch.expDate < today) throw new Error(`Batch ${batch.batchNo} for ${item.itemName} has expired.`);
-      return { ...row, batchNo: batch.batchNo, expDate: batch.expDate || "" };
+      const available = Number(batch.openingQty ?? batch.quantity ?? 0);
+      const reqQty = Number(row.qty ?? row.quantity ?? 0);
+      if (reqQty > available) throw new Error(`Batch ${batch.batchNo} for ${item.itemName} has only ${available} in stock (requested: ${reqQty}).`);
+      return { ...row, batchNo: batch.batchNo, expDate: batch.expDate || "", batchId: batch.id || "" };
     }) };
   }
   const existing = readInvoices();
@@ -137,22 +146,43 @@ export function saveSaleInvoice(invoice) {
 
   const wasCancelled = Boolean(existingInvoice?.cancelled || existingInvoice?.invoiceStatus === "Cancelled" || existingInvoice?.status === "Cancelled");
   const isCancelled = Boolean(normalized.cancelled || normalized.invoiceStatus === "Cancelled" || normalized.status === "Cancelled");
-  const batchMode = normalized.transactionType === "sale" && Boolean(appSettings.enableBatchTracking || existingInvoice?.batchStockAdjustedAt);
-  if (batchMode && existingInvoice && !wasCancelled && existingInvoice.batchStockAdjustedAt) {
-    const reversalRows = existingInvoice.batchAllocationRows || existingInvoice.rows || [];
-    if (reversalRows.some((row) => Number(row.qty ?? row.quantity) > 0 && !row.batchNo)) throw new Error("This historical sale has no batch allocation and cannot be safely edited while batch tracking is enabled.");
-    if (existingInvoice.batchMovementId) reverseBatchMovement(existingInvoice.batchMovementId, "sale");
-    else applyBatchRowsToInventory(reversalRows, "add", { allowCreate: false });
-  } else if (batchMode && existingInvoice && existingInvoice.stockAdjustedAt && !wasCancelled && !existingInvoice.batchStockAdjustedAt) {
-    throw new Error("This historical sale has no recorded batch allocation and cannot be safely edited while batch tracking is enabled.");
+  const hasBatchRows = (normalized.rows || []).some((r) => r.batchNo && String(r.batchNo).trim() && Number(r.qty ?? r.quantity) > 0);
+  const hadBatchRows = (existingInvoice?.batchAllocationRows || existingInvoice?.rows || []).some((r) => r.batchNo && String(r.batchNo).trim() && Number(r.qty ?? r.quantity) > 0);
+  const batchMode = normalized.transactionType === "sale" && Boolean(existingInvoice?.batchStockAdjustedAt || (appSettings.enableBatchTracking && (hasBatchRows || hadBatchRows)));
+
+  if (existingInvoice && !wasCancelled) {
+    if (existingInvoice.batchStockAdjustedAt) {
+      const reversalRows = existingInvoice.batchAllocationRows || existingInvoice.rows || [];
+      if (existingInvoice.batchMovementId) reverseBatchMovement(existingInvoice.batchMovementId, "sale");
+      else applyBatchRowsToInventory(reversalRows, "add", { allowCreate: false });
+    } else if (existingInvoice.stockAdjustedAt) {
+      const invItems = JSON.parse(window.localStorage.getItem(inventoryItemsStorageKey) || "[]");
+      const restored = invItems.map((item) => {
+        const matching = (existingInvoice.rows || []).filter((r) => r.sourceItemId === item.id || (!r.sourceItemId && (r.item || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()));
+        if (!matching.length) return item;
+        const addQty = matching.reduce((s, r) => s + Math.max(0, Number(r.qty ?? r.quantity ?? 0)), 0);
+        const cur = Number(item.openingQuantity ?? item.stock ?? 0);
+        return { ...item, openingQuantity: String(cur + addQty), stock: String(cur + addQty) };
+      });
+      window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(restored));
+    }
   }
-  if (batchMode && !isCancelled && (!existingInvoice || wasCancelled || existingInvoice.batchStockAdjustedAt)) {
+
+  if (batchMode && !isCancelled && (!existingInvoice || wasCancelled || existingInvoice.batchStockAdjustedAt || existingInvoice.stockAdjustedAt)) {
     const batchMovementId = `${normalized.id}:${Date.now()}:${crypto.randomUUID()}`;
-    moveBatchRows(normalized.rows || [], "reduce", { referenceId: batchMovementId, sourceType: "sale" });
-    normalized = { ...normalized, batchMovementId, batchStockAdjustedAt: new Date().toISOString(), batchStockRestoredAt: "", batchAllocationRows: (normalized.rows || []).map((row) => ({ ...row })) };
+    const batchRows = (normalized.rows || []).filter((r) => r.batchNo && String(r.batchNo).trim() && Number(r.qty ?? r.quantity) > 0);
+    if (batchRows.length > 0) {
+      moveBatchRows(batchRows, "reduce", { referenceId: batchMovementId, sourceType: "sale" });
+      normalized = { ...normalized, batchMovementId, batchStockAdjustedAt: new Date().toISOString(), batchStockRestoredAt: "", batchAllocationRows: batchRows.map((row) => ({ ...row })) };
+    }
+    const nonBatchRows = (normalized.rows || []).filter((r) => (!r.batchNo || !String(r.batchNo).trim()) && Number(r.qty ?? r.quantity) > 0);
+    if (nonBatchRows.length > 0) {
+      applySaleInvoiceStockUpdate({ ...normalized, rows: nonBatchRows });
+      normalized = { ...normalized, stockAdjustedAt: new Date().toISOString() };
+    }
   } else if (batchMode && isCancelled && existingInvoice && !wasCancelled && existingInvoice.batchStockAdjustedAt) {
     normalized = { ...normalized, batchStockRestoredAt: new Date().toISOString() };
-  } else if (!batchMode && shouldAdjustStock) {
+  } else if (!batchMode && (shouldAdjustStock || (existingInvoice?.stockAdjustedAt && !isCancelled))) {
     applySaleInvoiceStockUpdate(normalized);
     normalized = {
       ...normalized,
@@ -196,7 +226,17 @@ export function deleteSaleInvoice(invoiceId) {
   const invoices = readInvoices();
   const target = invoices.find((invoice) => invoice.id === invoiceId || invoice.invoiceId === invoiceId);
   try {
-    if (getAppSettings().enableBatchTracking && target?.stockAdjustedAt && !target.batchStockAdjustedAt) throw new Error("This historical sale has no batch allocation. It cannot be safely deleted while batch tracking is enabled.");
+    if (target?.stockAdjustedAt && !target.batchStockAdjustedAt) {
+      const inventory = JSON.parse(window.localStorage.getItem(inventoryItemsStorageKey) || "[]");
+      const updated = inventory.map((item) => {
+        const rows = (target.rows || []).filter((r) => r.sourceItemId === item.id || (!r.sourceItemId && (r.item || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()));
+        if (!rows.length) return item;
+        const addQty = rows.reduce((s, r) => s + Math.max(0, Number(r.qty ?? r.quantity ?? 0)), 0);
+        const cur = Number(item.openingQuantity ?? item.stock ?? 0);
+        return { ...item, openingQuantity: String(cur + addQty), stock: String(cur + addQty) };
+      });
+      window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(updated));
+    }
     if (target?.batchStockAdjustedAt && !target.batchStockRestoredAt) {
       if (target.batchMovementId) reverseBatchMovement(target.batchMovementId, "sale");
       else applyBatchRowsToInventory(target.batchAllocationRows || target.rows || [], "add");
