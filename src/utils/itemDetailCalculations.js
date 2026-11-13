@@ -58,7 +58,7 @@ export function matchesItem(row, targetItem) {
   const targetId = String(targetItem.id || "").trim();
   const targetCode = String(targetItem.itemCode || targetItem.code || "").trim().toLowerCase();
 
-  const rowItemId = String(row.sourceItemId || row.itemId || row.id || "").trim();
+  const rowItemId = String(row.sourceItemId || row.itemId || row.inventoryItemId || "").trim();
   if (targetId && rowItemId && rowItemId === targetId) {
     return true;
   }
@@ -361,8 +361,8 @@ export function calculateAllItemsSummary({
 
   const findItem = (row) => {
     if (!row) return null;
-    const rowId = String(row.sourceItemId || row.itemId || row.id || "").trim();
-    if (rowId && byId.has(rowId)) return byId.get(rowId);
+    const rowItemId = String(row.sourceItemId || row.itemId || row.inventoryItemId || "").trim();
+    if (rowItemId && byId.has(rowItemId)) return byId.get(rowItemId);
     const rowName = String(row.item || row.itemName || row.name || "").trim().toLowerCase();
     if (rowName && byName.has(rowName)) return byName.get(rowName);
     const rowCode = String(row.itemCode || row.code || "").trim().toLowerCase();

@@ -256,7 +256,7 @@ export function SignatureBlock({ companyName, signature, color, appSettings = {}
 
 // ─────────────────── THEME RENDERERS ───────────────────
 
-// 1. GST Theme 5 - Vyapar Signature Magenta Layout (Default)
+// 1. GST Theme 5 - USK Signature Magenta Layout (Default)
 export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#881337";
   const docTitle = appSettings.compositeScheme

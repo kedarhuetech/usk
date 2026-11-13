@@ -1,4 +1,4 @@
-// Implements the Transaction Message settings interface matching Vyapar reference screenshots.
+// Implements the Transaction Message settings interface matching USK reference screenshots.
 // Uses Meta WhatsApp Cloud API without requiring personal WhatsApp phone QR login.
 import { useEffect, useState } from "react";
 import {
@@ -305,20 +305,23 @@ export default function TransactionMessageTab({ settings, update }) {
                 </span>
               </label>
 
-              {/* Auto Share Invoices on USV Network */}
+              {/* Auto Share Invoices on USK Network */}
               <label className="flex cursor-pointer items-center justify-between gap-2 hover:text-slate-900">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={settings.txnMsgAutoShareVyaparNetwork ?? false}
-                    onChange={(e) => update("txnMsgAutoShareVyaparNetwork", e.target.checked)}
+                    checked={settings.txnMsgAutoShareUSKNetwork ?? settings.txnMsgAutoShareVyaparNetwork ?? false}
+                    onChange={(e) => {
+                      update("txnMsgAutoShareUSKNetwork", e.target.checked);
+                      update("txnMsgAutoShareVyaparNetwork", e.target.checked);
+                    }}
                     className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
                   />
-                  <span>Auto Share Invoices on USV Network</span>
+                  <span>Auto Share Invoices on USK Network</span>
                 </div>
                 <span
                   className="grid h-3.5 w-3.5 place-items-center rounded-full bg-slate-100 text-[9px] font-bold text-slate-400 cursor-help"
-                  title="Share invoices digitally across USV business network"
+                  title="Share invoices digitally across USK business network"
                 >
                   i
                 </span>

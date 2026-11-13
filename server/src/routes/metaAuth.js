@@ -49,6 +49,7 @@ function readCookie(req, name) {
 // Clears meta o auth state cookie.
 function clearMetaOAuthStateCookie(req, res) {
   res.clearCookie(META_OAUTH_STATE_COOKIE, oauthCookieOptions(req));
+  res.clearCookie("vyapar_meta_oauth_state", oauthCookieOptions(req));
 }
 
 // This helper handles ads redirect logic.
@@ -77,7 +78,7 @@ router.get("/meta", (req, res) => {
 router.get("/meta/callback", async (req, res) => {
   console.log("[DEBUG metaAuth] GET /api/auth/meta/callback entered. Query params:", req.query);
   const { code, state, error, error_description } = req.query;
-  const stateCookie = readCookie(req, META_OAUTH_STATE_COOKIE);
+  const stateCookie = readCookie(req, META_OAUTH_STATE_COOKIE) || readCookie(req, "vyapar_meta_oauth_state");
   clearMetaOAuthStateCookie(req, res);
 
   if (error) {

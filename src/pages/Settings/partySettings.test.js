@@ -21,7 +21,7 @@ if (typeof window === "undefined" || !window.localStorage) {
   };
 }
 
-test("Party settings exist with correct defaults matching Vyapar desktop", () => {
+test("Party settings exist with correct defaults matching USK desktop", () => {
   const settings = getAppSettings();
 
   // Column 1: Party Settings

@@ -140,7 +140,7 @@ export const DEFAULT_SETTINGS = {
   // Transaction -> Billing Type
   billingType: "Full Sale", // "Lite Sale" or "Full Sale"
 
-  // Print (Matching Vyapar Desktop)
+  // Print (Matching USK Desktop)
   printActiveTab: "regular",
   printSubTab: "layout",
   selectedTheme: "GST Theme 5",
@@ -200,7 +200,7 @@ export const DEFAULT_SETTINGS = {
   printBankDetails: true,
   printGstSummary: true,
 
-  // Taxes & GST (Matching Vyapar GST Settings)
+  // Taxes & GST (Matching USK GST Settings)
   enableGst: true,
   enableHsnSacCode: true,
   additionalCessOnItem: true,
@@ -225,7 +225,7 @@ export const DEFAULT_SETTINGS = {
     { id: "tax-28-cess12", name: "GST @ 28% + Cess 12%", rate: 28, igst: 28, cgst: 14, sgst: 14, cess: 12, isDefault: false },
   ],
 
-  // Transaction Message (Matching Vyapar Desktop & Meta WhatsApp Cloud)
+  // Transaction Message (Matching USK Desktop & Meta WhatsApp Cloud)
   messageChannelType: "meta", // Meta WhatsApp Cloud API (no personal QR/login required)
   sendSmsOnSale: false,
   sendWhatsappOnSale: true,
@@ -235,6 +235,7 @@ export const DEFAULT_SETTINGS = {
   txnMsgSendToParty: true,
   txnMsgSendUpdateMessage: false,
   txnMsgSendCopyToSelf: false,
+  txnMsgAutoShareUSKNetwork: false,
   txnMsgAutoShareVyaparNetwork: false,
   txnMsgCredits: 100,
 
@@ -341,6 +342,12 @@ export function getAppSettings() {
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
     const settings = { ...DEFAULT_SETTINGS, ...parsed };
+    if (settings.txnMsgAutoShareUSKNetwork === undefined) {
+      settings.txnMsgAutoShareUSKNetwork = parsed.txnMsgAutoShareUSKNetwork ?? parsed.txnMsgAutoShareVyaparNetwork ?? false;
+    }
+    if (settings.txnMsgAutoShareVyaparNetwork === undefined) {
+      settings.txnMsgAutoShareVyaparNetwork = settings.txnMsgAutoShareUSKNetwork;
+    }
 
     // Auto-heal in browser: Any stray "$" or "USD" currency symbol or baseCurrency in localStorage
     // is permanently cleaned up and restored to standard Indian Rupee (₹ / INR).
@@ -580,7 +587,7 @@ export function exportBackupData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Vyapar_Backup_${dateStr}.json`;
+  a.download = `USK_Backup_${dateStr}.json`;
   a.click();
   URL.revokeObjectURL(url);
 

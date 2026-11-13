@@ -4,7 +4,7 @@ import { Buffer } from "node:buffer";
 import { getMetaOAuthConfig, META_AUTH_SCOPES } from "../config/metaOAuth.js";
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-export const META_OAUTH_STATE_COOKIE = "vyapar_meta_oauth_state";
+export const META_OAUTH_STATE_COOKIE = "usk_meta_oauth_state";
 const oauthStates = new Map();
 const usedStateDigests = new Map();
 

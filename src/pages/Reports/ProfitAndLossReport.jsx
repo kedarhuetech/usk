@@ -131,7 +131,7 @@ export default function ProfitAndLossReport() {
   const [view, setView] = useState("Accounting"); // Default to Accounting as user is focused here
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Accounting view expand/collapse state: matching exactly Vyapar defaults
+  // Accounting view expand/collapse state: standard accounting defaults
   const [openSections, setOpenSections] = useState(() => ({
     incomes: true,
     saleAccounts: true,

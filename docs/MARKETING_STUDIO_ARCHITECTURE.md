@@ -16,7 +16,7 @@ Do not implement future phases early unless explicitly requested.
 
 # 2. Core Product Goal
 
-Marketing Studio is a business-focused creative tool inside the existing `vyapar-ui` application.
+Marketing Studio is a business-focused creative tool inside the existing `usk-ui` application.
 
 It should allow a business owner to:
 

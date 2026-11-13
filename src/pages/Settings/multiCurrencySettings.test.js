@@ -21,7 +21,7 @@ if (typeof window === "undefined" || !window.localStorage) {
   };
 }
 
-test("Multi Currency default settings match Vyapar/USV desktop empty state", () => {
+test("Multi Currency default settings match USK desktop empty state", () => {
   const settings = getAppSettings();
 
   assert.equal(settings.multiCurrencyEnabled, false);

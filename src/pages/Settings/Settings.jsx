@@ -1273,10 +1273,10 @@ function GeneralTab({
 // TRANSACTION TAB
 // -------------------------------------------------------------
 // -------------------------------------------------------------
-// TRANSACTION TAB (Matches Vyapar layout with 3 columns & modals)
+// TRANSACTION TAB (Matches USK layout with 3 columns & modals)
 // -------------------------------------------------------------
 
-// Renders the PrefixDropdown component matching Vyapar screenshot
+// Renders the PrefixDropdown component matching USK desktop layout
 function PrefixDropdown({ label, value, onChange, firmName = "sai kirana stores", docCode }) {
   const [open, setOpen] = useState(false);
   const [customText, setCustomText] = useState("");
@@ -1461,7 +1461,7 @@ function TransactionTab({ settings, update, updateMultiple }) {
 
   return (
     <div className="space-y-6">
-      {/* 3-Column Layout matching Vyapar screenshot */}
+      {/* 3-Column Layout matching USK desktop layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* =========================================
             COLUMN 1: Transaction Header & More Features
@@ -2158,7 +2158,7 @@ function TransactionTab({ settings, update, updateMultiple }) {
       )}
 
       {/* ========================================================
-          MODAL: Additional Fields Setup (Matches Vyapar Screenshots)
+          MODAL: Additional Fields Setup (Matches USK Desktop Layout)
           ======================================================== */}
       {additionalFieldsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-2 sm:p-4">
@@ -2688,7 +2688,7 @@ function TransactionTab({ settings, update, updateMultiple }) {
       )}
 
       {/* ========================================================
-          MODAL: Additional Charges (Matches Vyapar Screenshot)
+          MODAL: Additional Charges (Matches USK Desktop Layout)
           ======================================================== */}
       {additionalChargesModal && (() => {
         const setup = settings.additionalChargesSetup || {

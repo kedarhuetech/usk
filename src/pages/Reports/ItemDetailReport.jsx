@@ -792,7 +792,11 @@ export default function ItemDetailReport() {
               Total Inward (Purchased)
             </p>
             <p className="mt-1 text-2xl font-black text-sky-700">
-              +{isAllMode ? allItemsSummary.totalInwardQty : movements.totalPurchaseQty}
+              {(isAllMode ? allItemsSummary.totalInwardQty : movements.totalPurchaseQty) > 0
+                ? `+${isAllMode ? allItemsSummary.totalInwardQty : movements.totalPurchaseQty}`
+                : (isAllMode ? allItemsSummary.totalInwardQty : movements.totalPurchaseQty) < 0
+                ? `${isAllMode ? allItemsSummary.totalInwardQty : movements.totalPurchaseQty}`
+                : "0"}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-400">
               Inward stock received
@@ -810,7 +814,11 @@ export default function ItemDetailReport() {
               Total Outward (Sold)
             </p>
             <p className="mt-1 text-2xl font-black text-rose-600">
-              -{isAllMode ? allItemsSummary.totalOutwardQty : movements.totalSaleQty}
+              {(isAllMode ? allItemsSummary.totalOutwardQty : movements.totalSaleQty) > 0
+                ? `-${isAllMode ? allItemsSummary.totalOutwardQty : movements.totalSaleQty}`
+                : (isAllMode ? allItemsSummary.totalOutwardQty : movements.totalSaleQty) < 0
+                ? `+${Math.abs(isAllMode ? allItemsSummary.totalOutwardQty : movements.totalSaleQty)}`
+                : "0"}
             </p>
             <p className="mt-0.5 text-[11px] text-slate-400">
               Outward stock dispatched
@@ -1070,10 +1078,18 @@ export default function ItemDetailReport() {
                           {row.displayDate}
                         </td>
                         <td className="px-5 py-2.5 text-right font-medium text-rose-600">
-                          {row.saleQty > 0 ? `-${row.saleQty}` : "0"}
+                          {row.saleQty !== 0
+                            ? row.saleQty > 0
+                              ? `-${row.saleQty}`
+                              : `+${Math.abs(row.saleQty)}`
+                            : "0"}
                         </td>
                         <td className="px-5 py-2.5 text-right font-medium text-sky-700">
-                          {row.purchaseQty > 0 ? `+${row.purchaseQty}` : "0"}
+                          {row.purchaseQty !== 0
+                            ? row.purchaseQty > 0
+                              ? `+${row.purchaseQty}`
+                              : `-${Math.abs(row.purchaseQty)}`
+                            : "0"}
                         </td>
                         <td className="px-5 py-2.5 text-right font-medium text-amber-700">
                           {row.adjQty !== 0
@@ -1103,10 +1119,18 @@ export default function ItemDetailReport() {
                       Total Movement ({sortedRows.length} Days)
                     </td>
                     <td className="px-5 py-3 text-right text-rose-600 font-bold">
-                      -{movements.totalSaleQty}
+                      {movements.totalSaleQty !== 0
+                        ? movements.totalSaleQty > 0
+                          ? `-${movements.totalSaleQty}`
+                          : `+${Math.abs(movements.totalSaleQty)}`
+                        : "0"}
                     </td>
                     <td className="px-5 py-3 text-right text-sky-700 font-bold">
-                      +{movements.totalPurchaseQty}
+                      {movements.totalPurchaseQty !== 0
+                        ? movements.totalPurchaseQty > 0
+                          ? `+${movements.totalPurchaseQty}`
+                          : `-${Math.abs(movements.totalPurchaseQty)}`
+                        : "0"}
                     </td>
                     <td className="px-5 py-3 text-right text-amber-700 font-bold">
                       {movements.totalAdjQty >= 0
