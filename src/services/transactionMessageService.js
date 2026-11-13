@@ -149,21 +149,23 @@ export function buildTransactionMessage({
 
 /**
  * Sends a transaction message via Meta WhatsApp Cloud API.
- * Uses official Meta endpoint with fallback to WhatsApp direct URL when testing without live backend.
+ * Returns delivery status and fallback URL if Meta is offline.
  */
 export async function sendMetaWhatsAppMessage({
   phone,
   message,
   mediaUrl = null,
+  type = "sales",
+  openFallback = false,
 }) {
   const cleanPhone = String(phone || "").replace(/[^0-9]/g, "");
-  if (!cleanPhone) {
-    throw new Error("Recipient phone number is required.");
+  if (!cleanPhone || cleanPhone.length < 7) {
+    return { success: false, error: "Recipient phone number is missing or invalid." };
   }
   const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+  const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
 
   try {
-    // Attempt official backend Meta WhatsApp Cloud API
     const response = await fetch("/api/whatsapp-business/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -171,23 +173,42 @@ export async function sendMetaWhatsAppMessage({
         recipientPhone: formattedPhone,
         message,
         mediaUrl,
+        type,
         channel: "meta",
       }),
     });
 
-    if (response.ok) {
-      const result = await response.json().catch(() => ({}));
-      return { success: true, method: "meta_api", result };
+    const result = await response.json().catch(() => ({}));
+    if (response.ok && result.success) {
+      return {
+        success: true,
+        method: "meta_api",
+        messageId: result.messageId || "wamid.sent",
+        result,
+      };
     }
-  } catch {
-    // Backend offline / development fallback
-  }
 
-  // Direct WhatsApp dispatch fallback for testing/browser usage
-  const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
-  if (typeof window !== "undefined") {
-    window.open(waUrl, "_blank");
-  }
+    if (openFallback && typeof window !== "undefined") {
+      window.open(waUrl, "_blank");
+    }
 
-  return { success: true, method: "direct_fallback", url: waUrl };
+    return {
+      success: false,
+      method: "direct_fallback",
+      error: result.message || "Meta WhatsApp is not connected or template pending approval.",
+      templateAbsent: result.templateAbsent || false,
+      templateRequested: result.templateRequested || false,
+      fallbackUrl: waUrl,
+    };
+  } catch (err) {
+    if (openFallback && typeof window !== "undefined") {
+      window.open(waUrl, "_blank");
+    }
+    return {
+      success: false,
+      method: "direct_fallback",
+      error: err.message || "Could not reach backend Meta service.",
+      fallbackUrl: waUrl,
+    };
+  }
 }

@@ -54,6 +54,7 @@ export function getReminderSettings() {
     ...DEFAULT_SERVICE_REMINDER_SETTINGS,
     enabled: appSettings.serviceRemindersEnabled ?? DEFAULT_SERVICE_REMINDER_SETTINGS.enabled,
     reminderDaysBefore: appSettings.reminderDaysBefore ?? DEFAULT_SERVICE_REMINDER_SETTINGS.reminderDaysBefore,
+    autoNotifyWhatsApp: appSettings.serviceRemindersAutoWhatsApp ?? DEFAULT_SERVICE_REMINDER_SETTINGS.autoNotifyWhatsApp,
   };
 
   if (!canUseStorage()) return fallback;
@@ -68,7 +69,7 @@ export function getReminderSettings() {
     enabled: Boolean(parsed.enabled ?? appSettings.serviceRemindersEnabled ?? DEFAULT_SERVICE_REMINDER_SETTINGS.enabled),
     autoNotifyWhatsApp: parsed.autoNotifyWhatsApp !== undefined
       ? Boolean(parsed.autoNotifyWhatsApp)
-      : DEFAULT_SERVICE_REMINDER_SETTINGS.autoNotifyWhatsApp,
+      : (appSettings.serviceRemindersAutoWhatsApp ?? DEFAULT_SERVICE_REMINDER_SETTINGS.autoNotifyWhatsApp),
     reminderDaysBefore: Math.max(
       0,
       Number(parsed.reminderDaysBefore ?? appSettings.reminderDaysBefore ?? DEFAULT_SERVICE_REMINDER_SETTINGS.reminderDaysBefore) || 0
@@ -109,6 +110,7 @@ export function saveReminderSettings(patch = {}) {
   saveAppSettings({
     serviceRemindersEnabled: next.enabled,
     reminderDaysBefore: next.reminderDaysBefore,
+    serviceRemindersAutoWhatsApp: next.autoNotifyWhatsApp,
   });
 
   notifyChanges("settings");
@@ -131,6 +133,7 @@ export function resetReminderSettings() {
   saveAppSettings({
     serviceRemindersEnabled: defaults.enabled,
     reminderDaysBefore: defaults.reminderDaysBefore,
+    serviceRemindersAutoWhatsApp: defaults.autoNotifyWhatsApp,
   });
 
   notifyChanges("settings");
