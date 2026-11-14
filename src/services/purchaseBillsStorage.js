@@ -3,6 +3,8 @@ import { applyBatchRowsToInventory, applyPurchaseBillStockUpdate, inventoryItems
 import { batchMovementStorageKey, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
+import { transactionsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const PURCHASE_BILLS_KEY = transactionStorageKeys.purchases;
 
@@ -65,6 +67,17 @@ export function savePurchaseBill(value) {
     const next = [bill, ...currentBills.filter((entry) => entry.id !== bill.id && entry.invoiceId !== bill.invoiceId)];
     if (canUseStorage()) writeTransactionCollection(PURCHASE_BILLS_KEY, next);
     notifyBusinessDataChanged();
+    if (isDatabaseMode()) {
+      transactionsDb.save({
+        ...bill,
+        transactionType: "purchase",
+        documentNumber: bill.billNumber || bill.invoiceNumber || "1",
+        transactionDate: bill.billDate || bill.date,
+        totalAmount: bill.totalAmount || bill.totals?.finalTotal || 0,
+        paidAmount: bill.paidAmount || bill.totals?.paidAmount || 0,
+        balanceAmount: bill.balanceAmount || bill.totals?.balanceDue || 0,
+      }).catch((err) => console.warn("[MySQL] Background purchase sync notice:", err.message));
+    }
     return bill;
   } catch (error) {
     for (const [key, stored] of before) {

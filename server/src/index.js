@@ -17,10 +17,17 @@ import whatsappAuthRoutes from "./routes/whatsappAuth.js";
 import whatsappBusinessRoutes from "./routes/whatsappBusiness.js";
 import whatsappWebhookRoutes from "./routes/whatsappWebhook.js";
 import businessGrowthRoutes from "./routes/businessGrowth.js";
-import partiesRoutes from "./routes/parties.js";
+import partiesRoutes from "./routes/partiesRouter.js";
+import itemsRoutes from "./routes/itemsRouter.js";
+import transactionsRoutes from "./routes/transactionsRouter.js";
+import serviceRemindersRoutes from "./routes/serviceRemindersRouter.js";
+import bankAccountsRoutes from "./routes/bankAccountsRouter.js";
+import settingsRoutes from "./routes/settingsRouter.js";
+import migrationRoutes from "./routes/migrationRouter.js";
 import hsnRoutes from "./routes/hsn.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
+import { initializeDatabaseSchema } from "./db/initSchema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
@@ -51,12 +58,18 @@ app.use("/api/meta/ads", metaAdsRoutes);
 app.use("/api/whatsapp-business", whatsappBusinessRoutes);
 app.use("/api/whatsapp", whatsappWebhookRoutes);
 app.use("/api/parties", partiesRoutes);
+app.use("/api/items", itemsRoutes);
+app.use("/api/transactions", transactionsRoutes);
+app.use("/api/service-reminders", serviceRemindersRoutes);
+app.use("/api/bank-accounts", bankAccountsRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/migration", migrationRoutes);
 app.use("/api/hsn", hsnRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
-    res.json({ success: true, message: "Vyapaar backend and MySQL are connected." });
+    res.json({ success: true, message: "USK backend and MySQL are connected." });
   } catch {
     res.status(503).json({ success: false, message: "Backend is running but MySQL is unavailable." });
   }
@@ -68,9 +81,14 @@ app.use((error, req, res, next) => {
   return res.status(400).json({ success: false, message: "Invalid request." });
 });
 
-const server = app.listen(PORT, () => {
-  console.log(`Usv backend running on port ${PORT}`);
-  seedDefaultHsnCodes().catch((err) => console.warn("Auto-seed HSN warning:", err.message));
+const server = app.listen(PORT, async () => {
+  console.log(`USK backend running on port ${PORT}`);
+  try {
+    await initializeDatabaseSchema();
+    await seedDefaultHsnCodes();
+  } catch (err) {
+    console.warn("Startup initialization warning:", err.message);
+  }
 });
 
 server.on("error", (error) => {

@@ -2,8 +2,8 @@
 // Controls whether transactions and inventory records are stored in browser LocalStorage
 // or persisted to the backend MySQL database.
 //
-// Default: "local" (instant, reliable, zero server requirement).
-// Easily switch to Database later:
+// Default: "database" (centralized MySQL backend with high-performance indexing and ACID transactions).
+// Easily switch or inspect:
 // - Call setStorageMode("database")
 // - Or set VITE_STORAGE_MODE=database in your .env
 // - Or run window.__setStorageMode("database") in the browser DevTools console.
@@ -15,7 +15,7 @@ export function getStorageMode() {
     const saved = window.localStorage.getItem(STORAGE_MODE_KEY);
     if (saved === "database" || saved === "local") return saved;
   }
-  return (typeof import.meta !== "undefined" && import.meta.env?.VITE_STORAGE_MODE) || "local";
+  return (typeof import.meta !== "undefined" && import.meta.env?.VITE_STORAGE_MODE) || "database";
 }
 
 export function setStorageMode(mode) {
