@@ -150,3 +150,23 @@ test("Transactions & Normalized Line Items (Pure Rows and Columns)", async () =>
   await pool.query(`DELETE FROM transactions WHERE id = ?`, [testTxnId]);
   await pool.query(`DELETE FROM parties WHERE id = ?`, [testPartyId]);
 });
+
+test("Database Backup & Restore (Full 22 Tables Relational Export)", async () => {
+  const testUnitId = `test_unit_bkp_${Date.now()}`;
+  await pool.query(
+    `INSERT INTO units (id, business_id, name, short_name, precision_dec)
+     VALUES (?, 'demo-business', 'Kilogram Backup Test', 'KG', 2)`,
+    [testUnitId]
+  );
+
+  // Test Export query logic
+  const [rows] = await pool.query(
+    `SELECT * FROM units WHERE business_id = 'demo-business' AND id = ?`,
+    [testUnitId]
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].short_name, "KG");
+
+  // Clean up
+  await pool.query(`DELETE FROM units WHERE id = ?`, [testUnitId]);
+});

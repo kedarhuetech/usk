@@ -32,6 +32,7 @@ import onlineStoreRoutes from "./routes/onlineStoreRouter.js";
 import smartAdsRoutes from "./routes/smartAdsRouter.js";
 import auditTrailRoutes from "./routes/auditTrailRouter.js";
 import reportsRoutes from "./routes/reportsRouter.js";
+import backupRoutes from "./routes/backupRouter.js";
 import hsnRoutes from "./routes/hsn.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
@@ -80,6 +81,7 @@ app.use("/api/online-store", onlineStoreRoutes);
 app.use("/api/smart-ads", smartAdsRoutes);
 app.use("/api/audit-trail", auditTrailRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/backup", backupRoutes);
 app.use("/api/hsn", hsnRoutes);
 
 app.get("/api/health", async (_req, res) => {
