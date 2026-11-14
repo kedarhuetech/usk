@@ -1,6 +1,8 @@
 // Manages application settings, configuration persistence, and auto-backup snapshots.
 import { getCompanyProfile } from "./companyProfileStorage.js";
 import { recordAuditTrail } from "./auditTrailStorage.js";
+import { settingsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 export const APP_SETTINGS_KEY = "ledgerly:appSettings.v1";
 export const APP_SETTINGS_UPDATED_EVENT = "ledgerly:app-settings-updated";
@@ -421,6 +423,9 @@ export function saveAppSettings(updates) {
       details: Object.keys(updates).join(", "),
       user: "Current User",
     });
+    if (isDatabaseMode()) {
+      settingsDb.saveSettings(updates).catch((err) => console.warn("[MySQL] Background settings sync notice:", err.message));
+    }
   } catch (error) {
     console.error("Failed to save settings to storage", error);
   }

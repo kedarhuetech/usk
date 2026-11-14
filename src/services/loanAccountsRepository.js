@@ -1,4 +1,6 @@
 import { calculateLoanOutstanding, validateLoan, validateRepayment } from "./loanAccounts.js";
+import { cashBankDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 export const LOAN_ACCOUNTS_STORAGE_KEY = "usv.loanAccounts.v1";
 
@@ -48,6 +50,20 @@ export async function createLoan(loan) {
   const now = new Date().toISOString();
   const saved = { ...normalized, id, repayments: [], statusHistory: [event(normalized.status)], createdAt: now, updatedAt: now };
   writeLoans([saved, ...loans]);
+  if (isDatabaseMode()) {
+    cashBankDb.saveLoanAccount({
+      id: saved.id,
+      accountName: saved.loanName,
+      lenderName: saved.lenderName,
+      accountNumber: saved.id.slice(0, 8),
+      loanType: saved.repaymentFrequency || "Term Loan",
+      principalAmount: parseFloat(saved.originalAmount) || 0,
+      currentBalance: parseFloat(saved.originalAmount) || 0,
+      interestRate: parseFloat(saved.annualInterestRate) || 0,
+      termMonths: parseInt(saved.tenureMonths, 10) || 12,
+      emiAmount: parseFloat(saved.emiOverride || 0),
+    }).catch((err) => console.warn("[MySQL] Loan account background sync:", err.message));
+  }
   return saved;
 }
 

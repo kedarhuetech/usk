@@ -6,6 +6,7 @@ import App from './App.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
 import { ensureLocalTestData } from './services/localTransactionTestData.js'
 import { applyScreenZoom, checkAndRunAutoBackup, getAppSettings } from './services/appSettingsStorage.js'
+import './services/databaseRepository.js'
 
 ensureLocalTestData();
 try {

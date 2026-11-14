@@ -1,5 +1,7 @@
 // Provides the units storage application service.
 import { units as defaultUnits } from "../constants/itemsData";
+import { unitsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const CUSTOM_UNITS_KEY = "ledgerly:customUnits.v1";
 const UNIT_CONVERSIONS_KEY = "ledgerly:unitConversions.v1";
@@ -27,6 +29,9 @@ export function addCustomUnit(value) {
   const current = readList(CUSTOM_UNITS_KEY);
   if (!getUnits().some((unit) => unit.toLowerCase() === name.toLowerCase())) {
     window.localStorage.setItem(CUSTOM_UNITS_KEY, JSON.stringify([...current, name]));
+    if (isDatabaseMode()) {
+      unitsDb.save({ name, shortName: name }).catch((err) => console.warn("[MySQL] Units background sync:", err.message));
+    }
   }
   return getUnits();
 }

@@ -1,3 +1,6 @@
+import { itemsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
+
 const INVENTORY_ITEMS_KEY = "ledgerly:inventoryItems.v1";
 export const csvImportedItemsStorageKey = "ledgerly:itemsCsvImports.v1";
 export const itemUiOverridesStorageKey = "ledgerly:itemsUiOverrides.v1";
@@ -311,6 +314,9 @@ export function saveInventoryItem(itemForm) {
     : [...existingItems, item];
 
   writeItems(nextItems);
+  if (isDatabaseMode()) {
+    itemsDb.save(item).catch((err) => console.warn("[MySQL] Background item sync notice:", err.message));
+  }
   return item;
 }
 
@@ -334,6 +340,9 @@ export function deleteInventoryItem(itemOrId) {
   const itemId = target?.id || itemOrId;
   const nextItems = readItems().filter((item) => item.id !== itemId && !(target && sameInventoryItemIdentity(item, target)));
   writeItems(nextItems);
+  if (isDatabaseMode() && itemId) {
+    itemsDb.remove(itemId).catch((err) => console.warn("[MySQL] Background item delete notice:", err.message));
+  }
   return nextItems;
 }
 

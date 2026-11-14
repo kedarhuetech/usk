@@ -1,4 +1,7 @@
 // Provides the company profile storage application service.
+import { settingsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
+
 const COMPANY_PROFILE_KEY = "ledgerly:companyProfile.v1";
 export const companyProfileUpdatedEvent = "ledgerly:company-profile-updated";
 
@@ -74,6 +77,9 @@ export function saveCompanyProfile(profile) {
   if (canUseStorage()) {
     window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
     window.dispatchEvent(new CustomEvent(companyProfileUpdatedEvent, { detail: nextProfile }));
+  }
+  if (isDatabaseMode()) {
+    settingsDb.saveCompanyProfile(nextProfile).catch((err) => console.warn("[MySQL] Background company profile sync notice:", err.message));
   }
   return nextProfile;
 }

@@ -4,6 +4,8 @@
 // without modifying UI components or business logic.
 
 import { getAppSettings, saveAppSettings } from "./appSettingsStorage.js";
+import { serviceRemindersDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 export const SERVICE_REMINDER_SETTINGS_KEY = "ledgerly:serviceReminderSettings.v1";
 export const SERVICE_REMINDER_RECORDS_KEY = "ledgerly:serviceReminderRecords.v1";
@@ -232,6 +234,9 @@ export function saveReminderRecord(record = {}) {
     : [normalized, ...current];
 
   saveReminderRecords(next);
+  if (isDatabaseMode()) {
+    serviceRemindersDb.save(normalized).catch((err) => console.warn("[MySQL] Background reminder sync notice:", err.message));
+  }
   return normalized;
 }
 
@@ -246,5 +251,8 @@ export function deleteReminderRecord(id) {
   const current = getReminderRecords();
   const next = current.filter((r) => r.id !== id);
   saveReminderRecords(next);
+  if (isDatabaseMode() && id) {
+    serviceRemindersDb.remove(id).catch((err) => console.warn("[MySQL] Background reminder delete notice:", err.message));
+  }
   return next;
 }

@@ -1,4 +1,6 @@
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { partiesDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const PARTIES_KEY = "ledgerly:parties.v1";
 const linkedPartySources = [
@@ -54,6 +56,9 @@ export function saveParty(party) {
   if (typeof window !== "undefined" && window.localStorage) {
     window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   }
+  if (isDatabaseMode()) {
+    partiesDb.save(saved).catch((err) => console.warn("[MySQL] Background party sync notice:", err.message));
+  }
   notifyBusinessDataChanged();
   return saved;
 }
@@ -63,6 +68,9 @@ export function deleteParty(partyId) {
   if (typeof window === "undefined" || !window.localStorage) return;
   const next = readParties().filter((entry) => String(entry.id) !== String(partyId));
   window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
+  if (isDatabaseMode()) {
+    partiesDb.remove(partyId).catch((err) => console.warn("[MySQL] Background party delete notice:", err.message));
+  }
   notifyBusinessDataChanged();
 }
 

@@ -4,6 +4,8 @@ import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { recordAuditTrail } from "./auditTrailStorage.js";
 import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
+import { transactionsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const SALE_INVOICES_KEY = transactionStorageKeys.sales;
 
@@ -196,6 +198,17 @@ export function saveSaleInvoice(invoice) {
     throw new Error("The invoice could not be verified after saving.");
   }
   notifyBusinessDataChanged();
+  if (isDatabaseMode()) {
+    transactionsDb.save({
+      ...normalized,
+      transactionType: "sale",
+      documentNumber: normalized.invoiceNumber,
+      transactionDate: normalized.invoiceDate || normalized.date,
+      totalAmount: normalized.totals?.finalTotal || normalized.totalAmount || 0,
+      paidAmount: normalized.totals?.receivedAmount || normalized.paidAmount || 0,
+      balanceAmount: normalized.totals?.balanceDue || normalized.balanceAmount || 0,
+    }).catch((err) => console.warn("[MySQL] Background sale sync notice:", err.message));
+  }
   recordAuditTrail({
     action: existingInvoice ? "Sale Invoice Updated" : "Sale Invoice Created",
     entity: "Sales",
@@ -248,6 +261,9 @@ export function deleteSaleInvoice(invoiceId) {
     throw error;
   }
   notifyBusinessDataChanged();
+  if (isDatabaseMode() && invoiceId) {
+    transactionsDb.remove(invoiceId).catch((err) => console.warn("[MySQL] Background sale delete notice:", err.message));
+  }
   recordAuditTrail({
     action: "Sale Invoice Deleted",
     entity: "Sales",

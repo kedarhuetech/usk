@@ -1,4 +1,6 @@
 import { businessGrowthApi } from "./apiClient.js";
+import { smartAdsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const BUSINESS_SCOPE = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
 const STORAGE_KEY = `usk.smartAds.v1:${BUSINESS_SCOPE}`;
@@ -134,6 +136,22 @@ function upsertCampaign(campaign) {
   if (index < 0) store.campaigns.unshift(normalized);
   else store.campaigns[index] = { ...store.campaigns[index], ...normalized, createdAt: store.campaigns[index].createdAt || normalized.createdAt };
   writeStore(store);
+  if (isDatabaseMode()) {
+    smartAdsDb.save({
+      id: normalized.id,
+      campaignId: normalized.meta?.campaignId || normalized.id,
+      campaignName: normalized.name,
+      platform: "meta",
+      objective: normalized.objective,
+      dailyBudget: parseFloat(normalized.budget?.dailyBudget) || 0,
+      status: normalized.status,
+      startDate: normalized.budget?.startDate || null,
+      endDate: normalized.budget?.endDate || null,
+      impressions: parseInt(normalized.analytics?.reach || 0, 10),
+      clicks: parseInt(normalized.analytics?.clicks || 0, 10),
+      spend: parseFloat(normalized.analytics?.spend || 0),
+    }).catch((err) => console.warn("[MySQL] Smart Ads background sync:", err.message));
+  }
   return normalized;
 }
 

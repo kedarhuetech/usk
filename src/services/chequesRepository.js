@@ -1,4 +1,6 @@
 import { initialChequeStatus, validateCheque, validateChequeStatusChange } from "./cheques.js";
+import { cashBankDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 export const CHEQUE_STORAGE_KEY = "usv.cheques.v1";
 
@@ -61,6 +63,20 @@ export async function createCheque(cheque) {
   };
   if (records.some((record) => record.id === saved.id)) throw new Error("This cheque was already saved.");
   writeRecords([saved, ...records]);
+  if (isDatabaseMode()) {
+    cashBankDb.saveCheque({
+      id: saved.id,
+      partyId: saved.partyId || null,
+      partyName: saved.partyName || "Party",
+      chequeNumber: saved.chequeNumber || "",
+      bankName: saved.bankName || "",
+      amount: parseFloat(saved.amount) || 0,
+      chequeDate: saved.chequeDate || new Date().toISOString().slice(0, 10),
+      chequeType: (saved.type || "received").toLowerCase(),
+      status: (saved.status || "pending").toLowerCase(),
+      notes: saved.notes || "",
+    }).catch((err) => console.warn("[MySQL] Cheque background sync:", err.message));
+  }
   return saved;
 }
 
