@@ -1,5 +1,7 @@
 import { getSaleInvoices } from "./salesStorage.js";
 import { getPurchaseBills } from "./purchaseBillsStorage.js";
+import { cashBankDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 // Persistence is isolated here so this browser-local store can be replaced by
 // an API adapter later without changing the Cash in Hand page or calculations.
@@ -123,6 +125,16 @@ export function saveCashAdjustment(adjustment) {
   if (duplicate) return duplicate;
   const saved = { ...adjustment, createdAt: new Date().toISOString() };
   window.localStorage.setItem(CASH_ADJUSTMENTS_STORAGE_KEY, JSON.stringify([saved, ...existing]));
+  if (isDatabaseMode()) {
+    cashBankDb.saveCashInHand({
+      id: saved.id,
+      entryDate: (saved.createdAt || new Date().toISOString()).slice(0, 10),
+      entryType: Number(saved.difference || 0) >= 0 ? "in" : "out",
+      amount: Math.abs(Number(saved.difference || 0)),
+      description: saved.reason || "Cash Adjustment",
+      referenceType: "adjustment",
+    }).catch((err) => console.warn("[MySQL] Cash adjustment background sync:", err.message));
+  }
   return saved;
 }
 

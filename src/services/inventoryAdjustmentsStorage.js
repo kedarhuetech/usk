@@ -1,6 +1,8 @@
 const ADJUSTMENTS_KEY = "ledgerly:inventoryAdjustments.v1";
 import { getInventoryItems, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { batchMovementStorageKey, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
+import { inventoryAdjustmentsDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 // Reads adjustments.
 function readAdjustments() {
@@ -32,6 +34,17 @@ export function saveInventoryAdjustment(adjustment) {
   }
   const next = existing ? adjustments.map((item) => item.id === entry.id ? entry : item) : [ ...adjustments, entry ];
   window.localStorage.setItem(ADJUSTMENTS_KEY, JSON.stringify(next));
+  if (isDatabaseMode()) {
+    inventoryAdjustmentsDb.save({
+      id: entry.id,
+      itemId: entry.itemId,
+      itemName: entry.itemName || "Item",
+      adjustmentType: entry.direction === "add" ? "add" : "reduce",
+      quantity: parseFloat(entry.quantity) || 0,
+      reason: entry.reason || "",
+      adjustmentDate: (entry.createdAt || new Date().toISOString()).slice(0, 10),
+    }).catch((err) => console.warn("[MySQL] Adjustment background sync:", err.message));
+  }
   return entry;
   } catch (error) {
     for (const [key, value] of before) { if (value == null) window.localStorage.removeItem(key); else window.localStorage.setItem(key, value); }
