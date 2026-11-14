@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrendingUp } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import Button from "../../components/Common/Button";
@@ -15,6 +15,8 @@ import {
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const STORAGE_KEY = "ledgerly:proformaInvoices.v1";
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -22,10 +24,34 @@ const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padSt
 const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const endOfMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
+function normalizeProforma(item) {
+  return {
+    ...item,
+    id: item.id,
+    number: item.documentNumber || item.number || "",
+    customer: item.customer || item.partyName || item.customerName || item.party || "Cash Sale",
+    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    amount: Number(item.amount ?? item.totalAmount ?? 0),
+    status: item.status || "Open",
+    phone: item.phone || item.partyPhone || "",
+    billingAddress: item.billingAddress || "",
+    shippingAddress: item.shippingAddress || "",
+    description: item.description || item.notes || "",
+    terms: item.terms || "",
+    rows: (item.rows || item.items || []).map((r) => ({
+      item: r.item || r.itemName || r.name || "",
+      description: r.description || "",
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "",
+      price: Number(r.price ?? r.unitPrice ?? 0),
+    })),
+  };
+}
+
 function readProformas() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved : [];
+    return Array.isArray(saved) ? saved.map(normalizeProforma) : [];
   } catch { return []; }
 }
 
@@ -71,9 +97,31 @@ export default function ProformaInvoices() {
     return result;
   }, { amount: 0, converted: 0, open: 0 });
 
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchProformas() {
+      try {
+        const list = await transactionsDb.listByType("proforma");
+        if (isMounted && Array.isArray(list) && list.length > 0) {
+          setProformas(list.map(normalizeProforma));
+        }
+      } catch {}
+    }
+    fetchProformas();
+    const onDataChanged = () => fetchProformas();
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+      return () => {
+        isMounted = false;
+        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+      };
+    }
+  }, []);
+
   const persist = (next) => {
     setProformas(next);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    notifyBusinessDataChanged();
   };
   const setDatePreset = (value) => {
     setPreset(value);
@@ -90,6 +138,24 @@ export default function ProformaInvoices() {
     const saved = { ...value, id: value.id || `proforma-${Date.now()}` };
     persist(editor.mode === "edit" ? proformas.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...proformas]);
     setEditor(null);
+
+    // Save directly to MySQL transactions table
+    transactionsDb.save({
+      ...saved,
+      transactionType: "proforma",
+      type: "proforma",
+      documentNumber: saved.number,
+      transactionDate: saved.date,
+      partyName: saved.customer,
+      totalAmount: Number(saved.amount || 0),
+      items: (saved.rows || []).map((r) => ({
+        itemName: r.item,
+        description: r.description,
+        quantity: Number(r.qty || 1),
+        unitPrice: Number(r.price || 0),
+        totalAmount: Number(r.qty || 1) * Number(r.price || 0),
+      })),
+    }).catch((err) => console.warn("[Proforma] MySQL save notice:", err.message));
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -119,6 +185,7 @@ export default function ProformaInvoices() {
       onConfirm: () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         persist(proformas.filter((value) => value.id !== entry.id));
+        transactionsDb.remove(entry.id).catch(() => {});
         toast.success(`Proforma invoice ${entry.number} deleted.`);
       },
     });

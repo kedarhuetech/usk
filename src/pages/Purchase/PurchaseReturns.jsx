@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   FiCalendar,
   FiChevronDown,
@@ -27,6 +27,8 @@ import {
 } from "../../services/transactionMessageService.js";
 import { toast } from "../../components/Common/Toast.jsx";
 import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const STORAGE_KEY = "ledgerly:purchaseReturns.v1";
 
@@ -60,10 +62,37 @@ const freshRow = () => ({
   batchNo: "",
 });
 
+function normalizePurchaseReturn(item) {
+  return {
+    ...item,
+    id: item.id,
+    refNo: item.documentNumber || item.refNo || item.number || "",
+    party: item.party || item.partyName || item.supplierName || "",
+    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : today()),
+    total: Number(item.total ?? item.totalAmount ?? 0),
+    received: Number(item.received ?? item.paidAmount ?? 0),
+    balance: Number(item.balance ?? item.balanceAmount ?? 0),
+    type: item.type === "Purchase Return" ? "Purchase Return" : "Debit Note",
+    status: item.status || "Debit",
+    rows: (item.rows || item.items || []).map((r) => ({
+      id: r.id || crypto.randomUUID(),
+      item: r.item || r.itemName || r.name || "",
+      description: r.description || "",
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "NONE",
+      price: Number(r.price ?? r.unitPrice ?? 0),
+      discount: Number(r.discount ?? 0),
+      tax: r.tax || "NONE",
+      sourceItemId: r.sourceItemId || "",
+      batchNo: r.batchNo || "",
+    })),
+  };
+}
+
 function readReturns() {
   try {
     const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value.map(normalizePurchaseReturn) : [];
   } catch {
     return [];
   }
@@ -128,6 +157,27 @@ export default function PurchaseReturns() {
     [filtered]
   );
 
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchReturns() {
+      try {
+        const list = await transactionsDb.listByType("debit_note");
+        if (isMounted && Array.isArray(list) && list.length > 0) {
+          setRecords(list.map(normalizePurchaseReturn));
+        }
+      } catch {}
+    }
+    fetchReturns();
+    const onDataChanged = () => fetchReturns();
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+      return () => {
+        isMounted = false;
+        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+      };
+    }
+  }, []);
+
   const persist = (next) => {
     const rollbackKeys = [STORAGE_KEY, "ledgerly:inventoryItems.v1", "ledgerly:batchMovements.v1"];
     const before = Object.fromEntries(rollbackKeys.map((key) => [key, localStorage.getItem(key)]));
@@ -156,6 +206,7 @@ export default function PurchaseReturns() {
     }
     setRecords(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    notifyBusinessDataChanged();
     } catch (error) {
       for (const [key, value] of Object.entries(before)) { if (value == null) localStorage.removeItem(key); else localStorage.setItem(key, value); }
       throw error;
@@ -226,6 +277,28 @@ export default function PurchaseReturns() {
     try {
       persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
       setEditor(null);
+
+      // Save directly to MySQL transactions table
+      transactionsDb.save({
+        ...saved,
+        transactionType: "debit_note",
+        type: "debit_note",
+        documentNumber: saved.refNo,
+        transactionDate: saved.date,
+        partyName: saved.party,
+        totalAmount: Number(saved.total || 0),
+        paidAmount: Number(saved.received || 0),
+        balanceAmount: Number(saved.balance || 0),
+        items: (saved.rows || []).map((r) => ({
+          itemName: r.item,
+          quantity: Number(r.qty || 1),
+          unitPrice: Number(r.price || 0),
+          discountPercent: Number(r.discount || 0),
+          taxPercent: Number(r.tax || 0),
+          totalAmount: rowAmount(r),
+        })),
+      }).catch((err) => console.warn("[DebitNote] MySQL save notice:", err.message));
+
       toast.success(editor.mode === "edit" ? "Debit note updated." : "Debit note created.");
 
       // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
@@ -912,6 +985,7 @@ export default function PurchaseReturns() {
           onConfirm={() => {
             try {
               persist(records.filter((r) => r.id !== deleteConfirm.id));
+              transactionsDb.remove(deleteConfirm.id).catch(() => {});
               toast.success("Debit note deleted.");
             } catch (error) {
               toast.error(error.message || "Could not delete this purchase return.");

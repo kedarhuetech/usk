@@ -9,6 +9,7 @@ import {
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
 const CATEGORIES_KEY = "ledgerly:expenseCategories.v1";
@@ -19,7 +20,42 @@ const today = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const makeRow = () => ({ id: crypto.randomUUID(), item: "", description: "", qty: "", price: "", discount: "", tax: "" });
 const makePayment = () => ({ id: crypto.randomUUID(), type: "Cash", amount: "" });
-function read(key, fallback) { try { const data = JSON.parse(localStorage.getItem(key) || "null"); return data ?? fallback; } catch { return fallback; } }
+
+function normalizeExpense(item) {
+  return {
+    ...item,
+    id: item.id,
+    number: item.documentNumber || item.number || "",
+    category: item.category || item.notes || "General",
+    party: item.party || item.partyName || "",
+    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : today()),
+    amount: Number(item.amount ?? item.totalAmount ?? 0),
+    paid: Number(item.paid ?? item.paidAmount ?? item.totalAmount ?? 0),
+    status: item.status || "Paid",
+    gst: Boolean(item.gst),
+    rows: (item.rows || item.items || []).map((r) => ({
+      id: r.id || crypto.randomUUID(),
+      item: r.item || r.itemName || r.name || "Expense Item",
+      description: r.description || "",
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      price: Number(r.price ?? r.unitPrice ?? 0),
+      discount: Number(r.discount ?? 0),
+      tax: r.tax || "",
+    })),
+    payments: item.payments || [{ id: crypto.randomUUID(), type: item.paymentMode || "Cash", amount: Number(item.paidAmount ?? item.totalAmount ?? 0) }],
+    history: item.history || [],
+  };
+}
+
+function read(key, fallback) {
+  try {
+    const data = JSON.parse(localStorage.getItem(key) || "null");
+    if (key === RECORDS_KEY && Array.isArray(data)) return data.map(normalizeExpense);
+    return data ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
 const rowAmount = (row, gst) => { const base = (Number(row.qty) || 0) * (Number(row.price) || 0); const discounted = base - base * (Number(row.discount) || 0) / 100; return discounted + (gst ? discounted * (Number(row.tax) || 0) / 100 : 0); };
 const blankEntry = (number) => ({ id: crypto.randomUUID(), number: String(number), date: today(), category: "", party: "", gst: false, rows: [makeRow(), makeRow()], payments: [makePayment()], roundOff: true, description: "", status: "Paid", history: [] });
 
@@ -134,6 +170,27 @@ export default function Expenses() {
   const editEntry = (entry) => { setEditor({ mode: "edit", entry: { ...entry, rows: entry.rows.map(row => ({ ...row })), payments: entry.payments.map(payment => ({ ...payment })) } }); setMenuId(""); };
 
   useEffect(() => {
+    let isMounted = true;
+    async function fetchExpenses() {
+      try {
+        const list = await transactionsDb.listByType("expense");
+        if (isMounted && Array.isArray(list) && list.length > 0) {
+          setRecords(list.map(normalizeExpense));
+        }
+      } catch {}
+    }
+    fetchExpenses();
+    const onDataChanged = () => fetchExpenses();
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+      return () => {
+        isMounted = false;
+        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+      };
+    }
+  }, []);
+
+  useEffect(() => {
     if (location.state?.editExpense) {
       editEntry(location.state.editExpense);
     }
@@ -151,6 +208,30 @@ export default function Expenses() {
     const clean = { ...entry, rows: entry.rows.filter(row => row.item.trim()), amount: total, paid, status: paid >= total ? "Paid" : "Unpaid", history: [...(entry.history || []), { action: editor.mode === "new" ? "Created expense" : "Updated expense", at: new Date().toISOString() }] };
     if (!clean.rows.length) { toast.error("Add at least one expense item."); return; }
     saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
+
+    // Save directly to MySQL transactions table
+    transactionsDb.save({
+      ...clean,
+      transactionType: "expense",
+      type: "expense",
+      documentNumber: clean.number,
+      transactionDate: clean.date,
+      partyName: clean.party || clean.category,
+      totalAmount: Number(clean.amount || 0),
+      paidAmount: Number(clean.paid || 0),
+      balanceAmount: Math.max(0, Number(clean.amount || 0) - Number(clean.paid || 0)),
+      notes: clean.category,
+      items: (clean.rows || []).map((r) => ({
+        itemName: r.item,
+        description: r.description,
+        quantity: Number(r.qty || 1),
+        unitPrice: Number(r.price || 0),
+        discountPercent: Number(r.discount || 0),
+        taxPercent: Number(r.tax || 0),
+        totalAmount: rowAmount(r, clean.gst),
+      })),
+    }).catch((err) => console.warn("[Expense] MySQL save notice:", err.message));
+
     toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
     setSelected(clean.category);
     setTab("Category");
@@ -166,6 +247,7 @@ export default function Expenses() {
       onConfirm: () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         saveRecords(records.filter(record => record.id !== entry.id));
+        transactionsDb.remove(entry.id).catch(() => {});
         toast.success(`Expense ${entry.number} deleted.`);
       },
     });
