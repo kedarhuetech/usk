@@ -359,6 +359,137 @@ export const settingsDb = {
 };
 
 // ============================================================================
+// 7. DASHBOARD DATABASE API (Aggregated KPIs)
+// ============================================================================
+
+export const dashboardDb = {
+  async getSummary() {
+    return apiRequest("/dashboard/summary");
+  },
+};
+
+// ============================================================================
+// 8. CASH & BANK DATABASE API
+// ============================================================================
+
+export const cashBankDb = {
+  async getCashInHand() {
+    return apiRequest("/cash-bank/cash-in-hand");
+  },
+  async saveCashInHand(entry) {
+    return apiRequest("/cash-bank/cash-in-hand", { method: "POST", body: JSON.stringify(entry) });
+  },
+  async getCheques() {
+    return apiRequest("/cash-bank/cheques");
+  },
+  async saveCheque(cheque) {
+    return apiRequest("/cash-bank/cheques", { method: "POST", body: JSON.stringify(cheque) });
+  },
+  async removeCheque(id) {
+    return apiRequest(`/cash-bank/cheques/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+  async getLoanAccounts() {
+    return apiRequest("/cash-bank/loan-accounts");
+  },
+  async saveLoanAccount(loan) {
+    return apiRequest("/cash-bank/loan-accounts", { method: "POST", body: JSON.stringify(loan) });
+  },
+  async removeLoanAccount(id) {
+    return apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+};
+
+// ============================================================================
+// 9. UNITS & ADJUSTMENTS DATABASE API
+// ============================================================================
+
+export const unitsDb = {
+  async listAll() {
+    const res = await apiRequest("/units");
+    return res?.data || [];
+  },
+  async save(unit) {
+    return apiRequest("/units", { method: "POST", body: JSON.stringify(unit) });
+  },
+  async remove(id) {
+    return apiRequest(`/units/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+};
+
+export const inventoryAdjustmentsDb = {
+  async listAll() {
+    const res = await apiRequest("/inventory-adjustments");
+    return res?.data || [];
+  },
+  async save(adjustment) {
+    return apiRequest("/inventory-adjustments", { method: "POST", body: JSON.stringify(adjustment) });
+  },
+};
+
+// ============================================================================
+// 10. ONLINE STORE & SMART ADS DATABASE API
+// ============================================================================
+
+export const onlineStoreDb = {
+  async getSettings() {
+    const res = await apiRequest("/online-store/settings");
+    return res?.data || {};
+  },
+  async saveSettings(settings) {
+    return apiRequest("/online-store/settings", { method: "POST", body: JSON.stringify(settings) });
+  },
+  async getOrders() {
+    const res = await apiRequest("/online-store/orders");
+    return res?.data || [];
+  },
+  async saveOrder(order) {
+    return apiRequest("/online-store/orders", { method: "POST", body: JSON.stringify(order) });
+  },
+};
+
+export const smartAdsDb = {
+  async listAll() {
+    const res = await apiRequest("/smart-ads");
+    return res?.data || [];
+  },
+  async save(campaign) {
+    return apiRequest("/smart-ads", { method: "POST", body: JSON.stringify(campaign) });
+  },
+  async remove(id) {
+    return apiRequest(`/smart-ads/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+};
+
+// ============================================================================
+// 11. AUDIT TRAIL & REPORTS DATABASE API
+// ============================================================================
+
+export const auditTrailDb = {
+  async listAll() {
+    const res = await apiRequest("/audit-trail");
+    return res?.data || [];
+  },
+  async log(action) {
+    return apiRequest("/audit-trail", { method: "POST", body: JSON.stringify(action) });
+  },
+};
+
+export const reportsDb = {
+  async getProfitAndLoss(startDate, endDate) {
+    const params = new URLSearchParams();
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    return apiRequest(`/reports/profit-and-loss?${params.toString()}`);
+  },
+  async getBalanceSheet() {
+    return apiRequest("/reports/balance-sheet");
+  },
+  async getStockSummary() {
+    return apiRequest("/reports/stock-summary");
+  },
+};
+
+// ============================================================================
 // 7. AUTOMATIC ONE-TIME MIGRATION TO MYSQL
 // ============================================================================
 
@@ -425,3 +556,4 @@ if (typeof window !== "undefined") {
     autoMigrateLocalDataToMySQL().catch(() => {});
   }, 100);
 }
+

@@ -1,5 +1,9 @@
 /**
  * Settings & Company Profile API Router
+ * 
+ * Strict Relational Architecture (ZERO JSON Data Types):
+ * - App Settings: Key-Value pairs stored with pure TEXT values.
+ * - Company Profile: Stored with pure SQL columns for bank info, contact, address, and legal tax identifiers.
  */
 
 import { Router } from "express";
@@ -9,7 +13,7 @@ const router = Router();
 
 /**
  * GET /api/settings
- * Retrieves all app settings for the active business
+ * Retrieves all app settings for active business
  */
 router.get("/", async (req, res) => {
   try {
@@ -36,7 +40,7 @@ router.get("/", async (req, res) => {
 
 /**
  * POST /api/settings
- * Updates settings keys in batch
+ * Batch updates settings keys
  */
 router.post("/", async (req, res) => {
   try {
@@ -44,18 +48,18 @@ router.post("/", async (req, res) => {
     const body = req.body || {};
 
     for (const [key, val] of Object.entries(body)) {
-      const jsonVal = JSON.stringify(val);
+      const textVal = typeof val === "object" ? JSON.stringify(val) : String(val ?? "");
       await pool.query(
         `INSERT INTO app_settings (business_id, setting_key, setting_value)
          VALUES (?, ?, ?)
          ON DUPLICATE KEY UPDATE
            setting_value = VALUES(setting_value),
            updated_at = CURRENT_TIMESTAMP`,
-        [businessId, key, jsonVal]
+        [businessId, key, textVal]
       );
     }
 
-    return res.json({ success: true, message: "Settings saved successfully." });
+    return res.json({ success: true, message: "Settings saved successfully in pure relational table." });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -63,7 +67,7 @@ router.post("/", async (req, res) => {
 
 /**
  * GET /api/settings/company-profile
- * Fetches company profile
+ * Fetches company profile with pure relational columns
  */
 router.get("/company-profile", async (req, res) => {
   try {
@@ -84,29 +88,38 @@ router.get("/company-profile", async (req, res) => {
     }
 
     const row = rows[0];
-    let bankDetails = {};
-    let metadata = {};
-    try {
-      bankDetails = typeof row.bank_details === "string" ? JSON.parse(row.bank_details) : row.bank_details || {};
-      metadata = typeof row.metadata === "string" ? JSON.parse(row.metadata) : row.metadata || {};
-    } catch {}
-
     return res.json({
       success: true,
       data: {
         businessId: row.business_id,
         companyName: row.company_name,
         businessName: row.company_name,
+        tradeName: row.trade_name || "",
         phone: row.phone || "",
         email: row.email || "",
         gstin: row.gstin || "",
-        address: row.address || "",
+        pan: row.pan || "",
+        streetAddress: row.street_address || "",
+        address: row.street_address || "",
+        city: row.city || "",
         state: row.state || "",
         pincode: row.pincode || "",
+        country: row.country || "India",
+        bankName: row.bank_name || "",
+        accountNumber: row.account_number || "",
+        ifscCode: row.ifsc_code || "",
+        branchName: row.branch_name || "",
+        upiId: row.upi_id || "",
         signatureUrl: row.signature_url || "",
         logoUrl: row.logo_url || "",
-        bankDetails,
-        metadata,
+        termsAndConditions: row.terms_and_conditions || "",
+        bankDetails: {
+          bankName: row.bank_name || "",
+          accountNumber: row.account_number || "",
+          ifscCode: row.ifsc_code || "",
+          branchName: row.branch_name || "",
+          upiId: row.upi_id || "",
+        },
       },
     });
   } catch (err) {
@@ -116,7 +129,7 @@ router.get("/company-profile", async (req, res) => {
 
 /**
  * POST /api/settings/company-profile
- * Updates company profile
+ * Saves company profile in pure SQL columns
  */
 router.post("/company-profile", async (req, res) => {
   try {
@@ -124,42 +137,69 @@ router.post("/company-profile", async (req, res) => {
     const body = req.body || {};
 
     const companyName = (body.companyName || body.businessName || "Sai Kirana Stores").trim();
+    const tradeName = body.tradeName || null;
     const phone = body.phone || null;
     const email = body.email || null;
     const gstin = body.gstin || null;
-    const address = body.address || null;
+    const pan = body.pan || null;
+    const streetAddress = body.streetAddress || body.address || null;
+    const city = body.city || null;
     const state = body.state || null;
     const pincode = body.pincode || null;
-    const signatureUrl = body.signatureUrl || body.signature_url || null;
-    const logoUrl = body.logoUrl || body.logo_url || null;
-    const bankDetails = JSON.stringify(body.bankDetails || {});
-    const metadata = JSON.stringify(body.metadata || {});
+    const country = body.country || "India";
+
+    // Extract bank columns
+    const bankDetails = body.bankDetails || {};
+    const bankName = body.bankName || bankDetails.bankName || null;
+    const accountNumber = body.accountNumber || bankDetails.accountNumber || null;
+    const ifscCode = body.ifscCode || bankDetails.ifscCode || null;
+    const branchName = body.branchName || bankDetails.branchName || null;
+    const upiId = body.upiId || bankDetails.upiId || null;
+
+    const signatureUrl = body.signatureUrl || null;
+    const logoUrl = body.logoUrl || null;
+    const termsAndConditions = body.termsAndConditions || null;
 
     await pool.query(
       `INSERT INTO company_profiles (
-        business_id, company_name, phone, email, gstin, address,
-        state, pincode, signature_url, logo_url, bank_details, metadata
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        business_id, company_name, trade_name, phone, email, gstin, pan,
+        street_address, city, state, pincode, country,
+        bank_name, account_number, ifsc_code, branch_name, upi_id,
+        signature_url, logo_url, terms_and_conditions
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         company_name = VALUES(company_name),
+        trade_name = VALUES(trade_name),
         phone = VALUES(phone),
         email = VALUES(email),
         gstin = VALUES(gstin),
-        address = VALUES(address),
+        pan = VALUES(pan),
+        street_address = VALUES(street_address),
+        city = VALUES(city),
         state = VALUES(state),
         pincode = VALUES(pincode),
+        country = VALUES(country),
+        bank_name = VALUES(bank_name),
+        account_number = VALUES(account_number),
+        ifsc_code = VALUES(ifsc_code),
+        branch_name = VALUES(branch_name),
+        upi_id = VALUES(upi_id),
         signature_url = VALUES(signature_url),
         logo_url = VALUES(logo_url),
-        bank_details = VALUES(bank_details),
-        metadata = VALUES(metadata),
+        terms_and_conditions = VALUES(terms_and_conditions),
         updated_at = CURRENT_TIMESTAMP`,
       [
-        businessId, companyName, phone, email, gstin, address,
-        state, pincode, signatureUrl, logoUrl, bankDetails, metadata
+        businessId, companyName, tradeName, phone, email, gstin, pan,
+        streetAddress, city, state, pincode, country,
+        bankName, accountNumber, ifscCode, branchName, upiId,
+        signatureUrl, logoUrl, termsAndConditions
       ]
     );
 
-    return res.json({ success: true, message: "Company profile updated successfully." });
+    return res.json({
+      success: true,
+      message: "Company profile saved successfully in pure relational rows and columns.",
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
