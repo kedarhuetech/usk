@@ -12,10 +12,10 @@ import { pool, businessIdFromRequest } from "../db/mysql.js";
 const router = Router();
 
 /**
- * GET /api/dashboard/summary
+ * GET /api/dashboard and GET /api/dashboard/summary
  * Retrieves overall financial and inventory KPIs
  */
-router.get("/summary", async (req, res) => {
+const getSummary = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const today = new Date().toISOString().slice(0, 10);
@@ -121,7 +121,10 @@ router.get("/summary", async (req, res) => {
     console.error("[Dashboard GET Error]", err);
     return res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.get("/", getSummary);
+router.get("/summary", getSummary);
 
 export default router;
 

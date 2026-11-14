@@ -168,5 +168,96 @@ router.get("/stock-summary", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/reports/daybook
+ * Daily register of all incoming and outgoing transactions
+ */
+router.get("/daybook", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const [rows] = await pool.query(
+      `SELECT id, transaction_type, document_number, transaction_date, party_name,
+              total_amount, paid_amount, balance_amount, payment_mode
+       FROM transactions
+       WHERE business_id = ? AND transaction_date = ?
+       ORDER BY created_at ASC`,
+      [businessId, date]
+    );
+
+    return res.json({ success: true, date, data: rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * GET /api/reports/cash-flow
+ * Inflow vs Outflow statement
+ */
+router.get("/cash-flow", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const startDate = req.query.startDate || "2000-01-01";
+    const endDate = req.query.endDate || "2099-12-31";
+
+    const [inflows] = await pool.query(
+      `SELECT COALESCE(SUM(paid_amount), 0) AS totalInflow
+       FROM transactions
+       WHERE business_id = ? AND transaction_type IN ('sale', 'payment_in', 'pos')
+         AND transaction_date BETWEEN ? AND ?`,
+      [businessId, startDate, endDate]
+    );
+
+    const [outflows] = await pool.query(
+      `SELECT COALESCE(SUM(paid_amount), 0) AS totalOutflow
+       FROM transactions
+       WHERE business_id = ? AND transaction_type IN ('purchase', 'payment_out', 'expense')
+         AND transaction_date BETWEEN ? AND ?`,
+      [businessId, startDate, endDate]
+    );
+
+    const totalInflow = parseFloat(inflows[0]?.totalInflow) || 0;
+    const totalOutflow = parseFloat(outflows[0]?.totalOutflow) || 0;
+
+    return res.json({
+      success: true,
+      data: {
+        totalInflow,
+        totalOutflow,
+        netCashFlow: totalInflow - totalOutflow,
+        startDate,
+        endDate,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * GET /api/reports/all-transactions
+ * Master audit of all business transactions
+ */
+router.get("/all-transactions", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const [rows] = await pool.query(
+      `SELECT id, transaction_type, document_number, transaction_date, party_name,
+              total_amount, paid_amount, balance_amount, payment_mode, payment_status
+       FROM transactions
+       WHERE business_id = ?
+       ORDER BY transaction_date DESC, created_at DESC
+       LIMIT ?`,
+      [businessId, limit]
+    );
+
+    return res.json({ success: true, count: rows.length, data: rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 export default router;
 

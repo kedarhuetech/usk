@@ -72,6 +72,7 @@ export async function initializeDatabaseSchema() {
       await addCol("parties", "shipping_state VARCHAR(100)");
       await addCol("parties", "shipping_pincode VARCHAR(20)");
       await addCol("parties", "balance_type VARCHAR(20) DEFAULT 'to_receive'");
+      await addCol("parties", "is_active TINYINT(1) DEFAULT 1");
 
       await addCol("inventory_items", "barcode VARCHAR(100)");
       await addCol("inventory_items", "item_type VARCHAR(32) DEFAULT 'product'");

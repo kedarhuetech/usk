@@ -125,5 +125,44 @@ router.post("/restore", async (req, res) => {
   }
 });
 
+/**
+ * GET /api/backup/verify
+ * Validates database integrity and ensures 0 JSON columns across all 22 production tables
+ */
+router.get("/verify", async (_req, res) => {
+  try {
+    const [jsonCols] = await pool.query(
+      `SELECT TABLE_NAME, COLUMN_NAME 
+       FROM information_schema.COLUMNS 
+       WHERE TABLE_SCHEMA = 'vyapaar' AND DATA_TYPE = 'json'`
+    );
+
+    const [tables] = await pool.query("SHOW TABLES");
+    const existingTableNames = tables.map((t) => Object.values(t)[0]);
+
+    const tableStatuses = {};
+    for (const tbl of BACKUP_TABLES) {
+      if (existingTableNames.includes(tbl)) {
+        const [cnt] = await pool.query(`SELECT COUNT(*) AS c FROM \`${tbl}\``);
+        tableStatuses[tbl] = { exists: true, rowCount: cnt[0]?.c || 0 };
+      } else {
+        tableStatuses[tbl] = { exists: false, rowCount: 0 };
+      }
+    }
+
+    return res.json({
+      success: true,
+      zeroJsonEnforced: jsonCols.length === 0,
+      jsonColumnsFound: jsonCols.length,
+      tablesCount: existingTableNames.length,
+      expectedTablesCount: BACKUP_TABLES.length,
+      tableStatuses,
+    });
+  } catch (err) {
+    console.error("[Backup Verify Error]", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 export default router;
 

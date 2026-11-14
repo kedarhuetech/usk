@@ -203,6 +203,32 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * GET /api/transactions/stats
+ * Aggregates summary statistics by transaction type
+ */
+router.get("/stats", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const [stats] = await pool.query(
+      `SELECT transaction_type,
+              COUNT(*) AS count,
+              COALESCE(SUM(total_amount), 0) AS total_amount,
+              COALESCE(SUM(paid_amount), 0) AS paid_amount,
+              COALESCE(SUM(balance_amount), 0) AS balance_amount
+       FROM transactions
+       WHERE business_id = ?
+       GROUP BY transaction_type`,
+      [businessId]
+    );
+
+    return res.json({ success: true, data: stats });
+  } catch (err) {
+    console.error("[Transactions Stats Error]", err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
  * GET /api/transactions/:id
  * Fetches single transaction with its normalized transaction_items rows
  */

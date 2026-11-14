@@ -12,10 +12,10 @@ import { pool, businessIdFromRequest } from "../db/mysql.js";
 const router = Router();
 
 /**
- * GET /api/settings
+ * GET /api/settings and GET /api/settings/app
  * Retrieves all app settings for active business
  */
-router.get("/", async (req, res) => {
+const getAppSettings = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const [rows] = await pool.query(
@@ -36,7 +36,10 @@ router.get("/", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.get("/", getAppSettings);
+router.get("/app", getAppSettings);
 
 /**
  * POST /api/settings

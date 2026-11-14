@@ -46,6 +46,39 @@ router.get("/", async (req, res) => {
 });
 
 /**
+ * GET /api/smart-ads/metrics
+ * Summarizes impressions, clicks, spend and active campaign counts
+ */
+router.get("/metrics", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const [rows] = await pool.query(
+      `SELECT COUNT(*) AS totalCampaigns,
+              COUNT(CASE WHEN status = 'active' THEN 1 END) AS activeCampaigns,
+              COALESCE(SUM(impressions), 0) AS totalImpressions,
+              COALESCE(SUM(clicks), 0) AS totalClicks,
+              COALESCE(SUM(spend), 0) AS totalSpend
+       FROM smart_ads
+       WHERE business_id = ?`,
+      [businessId]
+    );
+
+    return res.json({
+      success: true,
+      data: {
+        totalCampaigns: rows[0]?.totalCampaigns || 0,
+        activeCampaigns: rows[0]?.activeCampaigns || 0,
+        totalImpressions: parseInt(rows[0]?.totalImpressions, 10) || 0,
+        totalClicks: parseInt(rows[0]?.totalClicks, 10) || 0,
+        totalSpend: parseFloat(rows[0]?.totalSpend) || 0,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
  * POST /api/smart-ads
  */
 router.post("/", async (req, res) => {
