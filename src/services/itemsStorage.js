@@ -304,6 +304,11 @@ export function getInventoryItems() {
   return readItems().map((item) => normalizeInventoryItem(item));
 }
 
+// Live fetch directly from MySQL database backend
+export async function fetchInventoryItemsFromDb() {
+  return await itemsDb.listAll();
+}
+
 // Saves inventory item.
 export function saveInventoryItem(itemForm) {
   const item = normalizeInventoryItem(itemForm);

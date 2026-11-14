@@ -28,6 +28,7 @@ import Input from "../../components/Common/Input";
 import ImportPartiesModal from "./ImportPartiesModal";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { deleteParty, getPartyDeletionBlockReason, getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
+import { loadBusinessParties } from "../../services/businessRecords";
 import { buildUnifiedStatementHtml } from "../../services/unifiedPrintService.js";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
@@ -603,6 +604,11 @@ function PartyDetails() {
         purchaseOrders: readLocalList("ledgerly:purchaseOrders.v1"),
         saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
       });
+
+      // Live fetch directly from MySQL database
+      loadBusinessParties().then((list) => {
+        if (Array.isArray(list) && list.length > 0) setParties(list);
+      }).catch(() => {});
     } catch (error) {
       setLoadError(error.message || "Could not load saved parties from this browser.");
     }
@@ -612,6 +618,11 @@ function PartyDetails() {
     setParties(getParties());
     setInvoices(getSaleInvoices());
     setPurchases(getPurchaseBills());
+
+    // Live fetch directly from MySQL database
+    loadBusinessParties().then((list) => {
+      if (Array.isArray(list) && list.length > 0) setParties(list);
+    }).catch(() => {});
     const readLocalList = (key) => {
       try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
       catch { return []; }

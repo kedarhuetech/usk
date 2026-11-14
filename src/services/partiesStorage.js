@@ -44,9 +44,14 @@ function recordMatchesParty(record, party) {
   return Boolean(partyName && recordName && partyName === recordName);
 }
 
-// Gets parties.
+// Gets parties from active cache.
 export function getParties() {
   return readParties();
+}
+
+// Live fetch directly from MySQL database backend
+export async function fetchPartiesFromDb() {
+  return await partiesDb.listAll();
 }
 
 // Saves party.
