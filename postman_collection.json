@@ -1,0 +1,1737 @@
+{
+  "info": {
+    "name": "USK Vyapaar Production API Collection",
+    "description": "Complete Postman collection for all 130+ APIs across all modules in USK Vyapaar ERP. Includes parameterized requests, sample bodies, and relational MySQL endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "samplePartyId",
+      "value": "party_1",
+      "type": "string"
+    },
+    {
+      "key": "sampleItemId",
+      "value": "item_1",
+      "type": "string"
+    },
+    {
+      "key": "sampleTxnId",
+      "value": "txn_1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. System & Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Verifies server and MySQL pool connectivity."
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Dashboard & Analytics",
+      "item": [
+        {
+          "name": "Get Dashboard Summary (Root)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            },
+            "description": "Aggregates overall financial and inventory KPIs."
+          }
+        },
+        {
+          "name": "Get Dashboard Summary (Alias)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "summary"
+              ]
+            },
+            "description": "Direct summary endpoint."
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Parties (Customers & Suppliers)",
+      "item": [
+        {
+          "name": "Get All Parties",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/parties?type=all&page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "all"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists all parties with live balance."
+          }
+        },
+        {
+          "name": "Get Party By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/parties/{{samplePartyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties",
+                "{{samplePartyId}}"
+              ]
+            },
+            "description": "Retrieves single party profile."
+          }
+        },
+        {
+          "name": "Get Party Statement / Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/parties/{{samplePartyId}}/statement?startDate=2024-01-01&endDate=2026-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties",
+                "{{samplePartyId}}",
+                "statement"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2024-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-12-31"
+                }
+              ]
+            },
+            "description": "Chronological transaction statement for this party."
+          }
+        },
+        {
+          "name": "Create / Update Party",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"party_sample_101\",\n  \"party_name\": \"Apex Enterprises Pvt Ltd\",\n  \"party_type\": \"customer\",\n  \"phone\": \"9876543210\",\n  \"email\": \"contact@apex.com\",\n  \"gstin\": \"27AAAAA0000A1Z5\",\n  \"pan\": \"AAAAA0000A\",\n  \"opening_balance\": 5000,\n  \"balance_type\": \"to_receive\",\n  \"credit_limit\": 100000,\n  \"billing_street\": \"123 Commercial Plaza, M.G. Road\",\n  \"billing_city\": \"Mumbai\",\n  \"billing_state\": \"Maharashtra\",\n  \"billing_pincode\": \"400001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/parties",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties"
+              ]
+            },
+            "description": "Creates or updates a party record."
+          }
+        },
+        {
+          "name": "Delete Party",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/parties/{{samplePartyId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties",
+                "{{samplePartyId}}"
+              ]
+            },
+            "description": "Deletes a party record."
+          }
+        },
+        {
+          "name": "Send OTP to Party",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/parties/send-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties",
+                "send-otp"
+              ]
+            },
+            "description": "Sends portal login OTP."
+          }
+        },
+        {
+          "name": "Verify Party OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/parties/verify-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "parties",
+                "verify-otp"
+              ]
+            },
+            "description": "Validates OTP code."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Items & Inventory Master",
+      "item": [
+        {
+          "name": "Get All Inventory Items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items?page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lists inventory items with stock counts."
+          }
+        },
+        {
+          "name": "Get Item By ID (With Batches)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items/{{sampleItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items",
+                "{{sampleItemId}}"
+              ]
+            },
+            "description": "Retrieves item and child batch rows."
+          }
+        },
+        {
+          "name": "Create / Update Inventory Item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"item_sample_101\",\n  \"name\": \"Premium Cotton Shirt\",\n  \"item_code\": \"SHIRT-001\",\n  \"item_type\": \"product\",\n  \"category\": \"Apparel\",\n  \"unit\": \"PCS\",\n  \"hsn_code\": \"6205\",\n  \"gst_rate\": 5,\n  \"sale_price\": 1299,\n  \"purchase_price\": 650,\n  \"current_stock\": 40,\n  \"min_stock\": 10,\n  \"opening_stock\": 40,\n  \"batches\": [\n    {\n      \"batch_number\": \"BATCH-A1\",\n      \"expiry_date\": \"2027-12-31\",\n      \"quantity\": 40,\n      \"sale_price\": 1299,\n      \"purchase_price\": 650\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/items",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items"
+              ]
+            },
+            "description": "Creates or updates an item and its batch child table."
+          }
+        },
+        {
+          "name": "Delete Inventory Item",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/items/{{sampleItemId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "items",
+                "{{sampleItemId}}"
+              ]
+            },
+            "description": "Deletes an inventory item."
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Units of Measurement",
+      "item": [
+        {
+          "name": "Get All Units",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/units",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "units"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Update Unit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"unit_box\",\n  \"name\": \"Boxes\",\n  \"short_name\": \"BOX\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/units",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "units"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Unit",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/units/unit_box",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "units",
+                "unit_box"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Stock Adjustments",
+      "item": [
+        {
+          "name": "Get Stock Adjustments Log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory-adjustments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory-adjustments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record Stock Adjustment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"item_id\": \"item_sample_101\",\n  \"adjustment_type\": \"REDUCE\",\n  \"quantity\": 2,\n  \"reason\": \"Damage during inspection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory-adjustments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "inventory-adjustments"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Transactions (Sales, Purchases, POS, Payments)",
+      "item": [
+        {
+          "name": "Get Transactions (Paginated / Filtered)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions?type=sale_invoice&page=1&limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "sale_invoice"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "startDate",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "endDate",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Fetches transactions with child line items."
+          }
+        },
+        {
+          "name": "Get Transaction Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions",
+                "stats"
+              ]
+            },
+            "description": "Summary totals grouped by transaction type."
+          }
+        },
+        {
+          "name": "Get Single Transaction Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/{{sampleTxnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions",
+                "{{sampleTxnId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Save Transaction (ACID Multi-Table)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"inv_sample_9001\",\n  \"transaction_type\": \"sale\",\n  \"document_number\": \"INV-2026-001\",\n  \"transaction_date\": \"2026-11-14\",\n  \"party_id\": \"party_sample_101\",\n  \"party_name\": \"Apex Enterprises Pvt Ltd\",\n  \"party_phone\": \"9876543210\",\n  \"subtotal\": 2598,\n  \"tax_amount\": 129.9,\n  \"total_amount\": 2727.9,\n  \"paid_amount\": 2727.9,\n  \"balance_amount\": 0,\n  \"payment_mode\": \"Cash\",\n  \"payment_status\": \"Completed\",\n  \"items\": [\n    {\n      \"item_id\": \"item_sample_101\",\n      \"item_name\": \"Premium Cotton Shirt\",\n      \"hsn_code\": \"6205\",\n      \"quantity\": 2,\n      \"unit_price\": 1299,\n      \"tax_rate\": 5,\n      \"tax_amount\": 129.9,\n      \"total_amount\": 2727.9\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions"
+              ]
+            },
+            "description": "Inserts invoice header, items child rows, updates stock and balances atomically."
+          }
+        },
+        {
+          "name": "Delete Transaction",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/transactions/{{sampleTxnId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transactions",
+                "{{sampleTxnId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08. Service Reminders & Vehicles",
+      "item": [
+        {
+          "name": "Get Service Reminders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/service-reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "service-reminders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Update Service Reminder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_name\": \"Rahul Verma\",\n  \"contact_number\": \"9823456789\",\n  \"vehicle_number\": \"MH-02-CD-5678\",\n  \"service_type\": \"Annual Maintenance\",\n  \"due_date\": \"2026-12-01\",\n  \"status\": \"Pending\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/service-reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "service-reminders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Service Reminder",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/service-reminders/rem_1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "service-reminders",
+                "rem_1"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Cash & Bank Management",
+      "item": [
+        {
+          "name": "Get Bank Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bank-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bank-accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Bank Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_name\": \"HDFC Primary Current\",\n  \"bank_name\": \"HDFC Bank\",\n  \"account_number\": \"50200012345678\",\n  \"ifsc_code\": \"HDFC0001234\",\n  \"branch_name\": \"Fort, Mumbai\",\n  \"opening_balance\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bank-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bank-accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Bank Account",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bank-accounts/acc_1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bank-accounts",
+                "acc_1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Cash In Hand Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cash-bank/cash-in-hand",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cash-bank",
+                "cash-in-hand"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record Cash In Hand Adjustment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1000,\n  \"type\": \"cash_in\",\n  \"description\": \"Daily register opening float\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cash-bank/cash-in-hand",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cash-bank",
+                "cash-in-hand"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Cheques",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cash-bank/cheques",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cash-bank",
+                "cheques"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Update Cheque",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cheque_number\": \"450123\",\n  \"bank_name\": \"SBI\",\n  \"party_name\": \"Apex Enterprises\",\n  \"amount\": 15000,\n  \"cheque_date\": \"2026-11-20\",\n  \"status\": \"received\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cash-bank/cheques",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cash-bank",
+                "cheques"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Loan Accounts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cash-bank/loan-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cash-bank",
+                "loan-accounts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Loan Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_name\": \"Business Working Capital Loan\",\n  \"lender_bank\": \"ICICI Bank\",\n  \"loan_account_number\": \"LN-9876\",\n  \"principal_amount\": 500000,\n  \"current_balance\": 450000,\n  \"interest_rate\": 9.5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/cash-bank/loan-accounts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cash-bank",
+                "loan-accounts"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Financial & Tax Reports",
+      "item": [
+        {
+          "name": "Profit & Loss Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/profit-and-loss?startDate=2026-01-01&endDate=2026-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "profit-and-loss"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-12-31"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Balance Sheet",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/balance-sheet",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "balance-sheet"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stock Summary & Valuation Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/stock-summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "stock-summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Daybook Register",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/daybook?date=2026-11-14",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "daybook"
+              ],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "2026-11-14"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cash Flow Statement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/cash-flow?startDate=2026-01-01&endDate=2026-12-31",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "cash-flow"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-12-31"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "All Transactions Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/reports/all-transactions?limit=100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "reports",
+                "all-transactions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Online Store & Orders",
+      "item": [
+        {
+          "name": "Get Online Store Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/online-store/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "online-store",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save Online Store Settings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"store_name\": \"Apex Fashion Hub\",\n  \"subdomain\": \"apexfashion\",\n  \"minimum_order\": 500,\n  \"delivery_fee\": 50,\n  \"is_store_active\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/online-store/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "online-store",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Online Store Orders",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/online-store/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "online-store",
+                "orders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Update Store Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_number\": \"ORD-501\",\n  \"customer_name\": \"Priya Sharma\",\n  \"customer_phone\": \"9811223344\",\n  \"shipping_address\": \"Flat 4B, Sunshine Apts, Bandra, Mumbai\",\n  \"total_amount\": 1349,\n  \"order_status\": \"placed\",\n  \"items\": [\n    {\n      \"item_id\": \"item_sample_101\",\n      \"item_name\": \"Premium Cotton Shirt\",\n      \"quantity\": 1,\n      \"unit_price\": 1299,\n      \"total_amount\": 1299\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/online-store/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "online-store",
+                "orders"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Smart Ads Campaigns",
+      "item": [
+        {
+          "name": "Get All Smart Ads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/smart-ads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "smart-ads"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Smart Ads Performance Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/smart-ads/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "smart-ads",
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Update Smart Ad",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"campaignName\": \"Winter Festive Sale 2026\",\n  \"platform\": \"meta\",\n  \"objective\": \"CONVERSIONS\",\n  \"dailyBudget\": 500,\n  \"status\": \"active\",\n  \"targetAudience\": \"Men 18-45 interested in fashion\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/smart-ads",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "smart-ads"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Smart Ad",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/smart-ads/ad_1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "smart-ads",
+                "ad_1"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Settings & Company Profile",
+      "item": [
+        {
+          "name": "Get App Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save App Settings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currency\": \"INR\",\n  \"invoicePrefix\": \"INV-\",\n  \"taxEnabled\": true,\n  \"autoSendWhatsApp\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Company Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/company-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "company-profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save Company Profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"USK Retailers & Traders\",\n  \"trade_name\": \"USK Store\",\n  \"phone\": \"9876543210\",\n  \"email\": \"info@uskretail.com\",\n  \"gstin\": \"27AAAAA0000A1Z5\",\n  \"pan\": \"AAAAA0000A\",\n  \"street_address\": \"Shop 12, Commercial Market\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"bank_name\": \"HDFC Bank\",\n  \"account_number\": \"50200012345678\",\n  \"ifsc_code\": \"HDFC0001234\",\n  \"branch_name\": \"Fort\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/settings/company-profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "settings",
+                "company-profile"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Database Backup & Restore",
+      "item": [
+        {
+          "name": "Export Full Database Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/backup/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup",
+                "export"
+              ]
+            },
+            "description": "Dumps all 22 relational tables into a JSON download."
+          }
+        },
+        {
+          "name": "Verify Database Health & 0 JSON Columns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/backup/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup",
+                "verify"
+              ]
+            },
+            "description": "Confirms all 22 production tables exist and zero JSON columns are present."
+          }
+        },
+        {
+          "name": "Restore Database From Backup Snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"format\": \"vyapaar-mysql-backup\",\n  \"tables\": {\n    \"parties\": [],\n    \"inventory_items\": [],\n    \"transactions\": []\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/backup/restore",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "backup",
+                "restore"
+              ]
+            },
+            "description": "Atomically restores database snapshot."
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. HSN Tax Engine",
+      "item": [
+        {
+          "name": "Search HSN / SAC Codes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hsn/search?q=cotton",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "hsn",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "cotton"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Exact HSN Code Lookup",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/hsn/6205",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "hsn",
+                "6205"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Calculate GST (Intra/Inter State)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hsnCode\": \"6205\",\n  \"taxableAmount\": 1000,\n  \"sellerState\": \"Maharashtra\",\n  \"buyerState\": \"Maharashtra\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/hsn/calculate-tax",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "hsn",
+                "calculate-tax"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. Audit Trail & Activity Log",
+      "item": [
+        {
+          "name": "Get Audit Trail Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-trail?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit-trail"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Record Audit Log Entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"CREATE_INVOICE\",\n  \"entity_type\": \"invoice\",\n  \"entity_id\": \"inv_sample_9001\",\n  \"details\": \"Created Sale Invoice INV-2026-001 for ₹2727.90\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/audit-trail",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "audit-trail"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. WhatsApp Business & Cloud API",
+      "item": [
+        {
+          "name": "Get WhatsApp Connection Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/whatsapp-business/connection",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "whatsapp-business",
+                "connection"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Approved Message Templates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/whatsapp-business/templates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "whatsapp-business",
+                "templates"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Direct Transactional WhatsApp Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientPhone\": \"919876543210\",\n  \"templateName\": \"payment_reminder\",\n  \"parameters\": {\n    \"customerName\": \"Rahul\",\n    \"amount\": \"2500\",\n    \"dueDate\": \"2026-11-20\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/whatsapp-business/send",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "whatsapp-business",
+                "send"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send WhatsApp Test Message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"919876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/whatsapp-business/send-test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "whatsapp-business",
+                "send-test"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. Meta Ads Management",
+      "item": [
+        {
+          "name": "Get Meta Ad Campaigns",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/meta/ads/campaigns",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "meta",
+                "ads",
+                "campaigns"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Meta Account Eligibility",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/meta/ads/account-eligibility",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "meta",
+                "ads",
+                "account-eligibility"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Meta Ads Insights",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/meta/ads/insights",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "meta",
+                "ads",
+                "insights"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "19. Google Drive Cloud Backup",
+      "item": [
+        {
+          "name": "Get Google Drive Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/google-drive/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "google-drive",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Backup to Google Drive",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"backupData\": \"{\\\"format\\\":\\\"vyapaar-mysql-backup\\\"}\",\n  \"filename\": \"vyapaar_backup_snapshot.usvbackup\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/google-drive/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "google-drive",
+                "upload"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

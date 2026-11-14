@@ -15,6 +15,8 @@
 
 import { apiRequest } from "./apiClient.js";
 import { getStorageMode, setStorageMode } from "./dataStorageConfig.js";
+import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { transactionStorageKeys } from "./transactionRepository.js";
 
 // Storage keys for local caching & migration
 const PARTIES_KEY = "ledgerly:parties.v1";
@@ -76,9 +78,10 @@ export const partiesDb = {
   async listAll() {
     try {
       const res = await apiRequest("/parties?limit=200");
-      if (res?.data && Array.isArray(res.data)) {
-        writeLocal(PARTIES_KEY, res.data);
-        return res.data;
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list) && list.length > 0) {
+        writeLocal(PARTIES_KEY, list);
+        return list;
       }
       return readLocal(PARTIES_KEY, []);
     } catch (err) {
@@ -145,9 +148,10 @@ export const itemsDb = {
   async listAll() {
     try {
       const res = await apiRequest("/items?limit=200");
-      if (res?.data && Array.isArray(res.data)) {
-        writeLocal(INVENTORY_ITEMS_KEY, res.data);
-        return res.data;
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list) && list.length > 0) {
+        writeLocal(INVENTORY_ITEMS_KEY, list);
+        return list;
       }
       return readLocal(INVENTORY_ITEMS_KEY, []);
     } catch (err) {
@@ -215,9 +219,38 @@ export const transactionsDb = {
   async listByType(type) {
     try {
       const res = await apiRequest(`/transactions?type=${encodeURIComponent(type)}&limit=200`);
-      return res?.data || [];
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      return list;
     } catch (err) {
       console.warn(`[MySQL] Falling back to local cache for ${type} transactions:`, err.message);
+      return [];
+    }
+  },
+
+  /**
+   * Fetches all transactions from MySQL and updates corresponding client stores
+   */
+  async listAll() {
+    try {
+      const res = await apiRequest("/transactions?limit=200");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list) && list.length > 0) {
+        const sales = list.filter((t) => t.transactionType === "sale" || t.transactionType === "pos" || t.type === "sale" || t.type === "pos");
+        const purchases = list.filter((t) => t.transactionType === "purchase" || t.type === "purchase");
+        const paymentIns = list.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in");
+        const paymentOuts = list.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out");
+        const expenses = list.filter((t) => t.transactionType === "expense" || t.type === "expense");
+
+        if (sales.length > 0) writeLocal(SALE_INVOICES_KEY, sales);
+        if (purchases.length > 0) writeLocal(PURCHASE_BILLS_KEY, purchases);
+        if (paymentIns.length > 0) writeLocal(transactionStorageKeys.paymentIns, paymentIns);
+        if (paymentOuts.length > 0) writeLocal(transactionStorageKeys.paymentOuts, paymentOuts);
+        if (expenses.length > 0) writeLocal(transactionStorageKeys.expenses, expenses);
+        return list;
+      }
+      return [];
+    } catch (err) {
+      console.warn("[MySQL] Falling back to local cache for transactions:", err.message);
       return [];
     }
   },
@@ -261,9 +294,10 @@ export const serviceRemindersDb = {
   async listAll() {
     try {
       const res = await apiRequest("/service-reminders?limit=200");
-      if (res?.data && Array.isArray(res.data)) {
-        writeLocal(SERVICE_REMINDERS_KEY, res.data);
-        return res.data;
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list) && list.length > 0) {
+        writeLocal(SERVICE_REMINDERS_KEY, list);
+        return list;
       }
       return readLocal(SERVICE_REMINDERS_KEY, []);
     } catch (err) {
@@ -298,9 +332,10 @@ export const bankAccountsDb = {
   async listAll() {
     try {
       const res = await apiRequest("/bank-accounts");
-      if (res?.data && Array.isArray(res.data)) {
-        writeLocal(BANK_ACCOUNTS_KEY, res.data);
-        return res.data;
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list) && list.length > 0) {
+        writeLocal(BANK_ACCOUNTS_KEY, list);
+        return list;
       }
       return readLocal(BANK_ACCOUNTS_KEY, []);
     } catch (err) {
@@ -326,9 +361,10 @@ export const settingsDb = {
   async getSettings() {
     try {
       const res = await apiRequest("/settings");
-      if (res?.data) {
-        writeLocal(SETTINGS_KEY, res.data);
-        return res.data;
+      const data = res?.data ?? res;
+      if (data && typeof data === "object") {
+        writeLocal(SETTINGS_KEY, data);
+        return data;
       }
       return readLocal(SETTINGS_KEY, {});
     } catch (err) {
@@ -343,9 +379,10 @@ export const settingsDb = {
   async getCompanyProfile() {
     try {
       const res = await apiRequest("/settings/company-profile");
-      if (res?.data) {
-        writeLocal(COMPANY_PROFILE_KEY, res.data);
-        return res.data;
+      const data = res?.data ?? res;
+      if (data && typeof data === "object") {
+        writeLocal(COMPANY_PROFILE_KEY, data);
+        return data;
       }
       return readLocal(COMPANY_PROFILE_KEY, {});
     } catch (err) {
@@ -548,12 +585,44 @@ export async function autoMigrateLocalDataToMySQL() {
   }
 }
 
-// Auto-run migration check on client boot
+/**
+ * Actively syncs and hydrates all client stores directly from MySQL
+ */
+export async function syncAllFromDatabase() {
+  if (typeof window === "undefined") return;
+  try {
+    console.log("[MySQL Live Engine] Actively fetching live collections from MySQL database...");
+    const results = await Promise.allSettled([
+      partiesDb.listAll(),
+      itemsDb.listAll(),
+      transactionsDb.listAll(),
+      serviceRemindersDb.listAll(),
+      bankAccountsDb.listAll(),
+      settingsDb.getSettings(),
+      settingsDb.getCompanyProfile(),
+    ]);
+
+    console.log("[MySQL Live Engine] ✓ Synchronized fresh state from MySQL backend.");
+    notifyBusinessDataChanged();
+    return results;
+  } catch (err) {
+    console.warn("[MySQL Live Engine] Initial hydration notice:", err.message);
+  }
+}
+
+// Auto-run migration check and live MySQL hydration on client boot
 if (typeof window !== "undefined") {
-  // Enforce database mode as the primary production storage mode
   setStorageMode("database");
-  setTimeout(() => {
-    autoMigrateLocalDataToMySQL().catch(() => {});
-  }, 100);
+  setTimeout(async () => {
+    await autoMigrateLocalDataToMySQL().catch(() => {});
+    await syncAllFromDatabase().catch(() => {});
+  }, 50);
+
+  // Re-sync when browser window regains focus to keep tabs/devices in sync
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("focus", () => {
+      syncAllFromDatabase().catch(() => {});
+    });
+  }
 }
 
