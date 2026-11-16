@@ -38,7 +38,6 @@ const transactionRoutes = [
 const reportList = [
   "Sale Report",
   "Purchase Report",
-  "Day Book",
   "All Transactions",
   "Sale/Purchase Orders",
   "Profit And Loss",

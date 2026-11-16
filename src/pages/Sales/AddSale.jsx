@@ -338,6 +338,14 @@ function extractEditForm(editDoc, fallback = {}) {
     fallback.customer ??
     "";
 
+  const partyId =
+    editDoc.form?.partyId ??
+    editDoc.partyId ??
+    editDoc.party_id ??
+    editDoc.customerId ??
+    fallback.partyId ??
+    "";
+
   const phone =
     editDoc.form?.phone ??
     editDoc.partyPhone ??
@@ -408,6 +416,7 @@ function extractEditForm(editDoc, fallback = {}) {
   return {
     ...fallback,
     customer,
+    partyId,
     phone,
     billingAddress,
     shippingAddress,
@@ -558,7 +567,16 @@ function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty, ap
 
 // Converts a saved party into the fields used by transaction forms.
 function partyOption(party) {
-  return { id: party.id, name: party.partyName || party.name || "", phone: party.phone || "", balance: party.openingBalance || 0 };
+  return {
+    ...party,
+    id: party.id,
+    name: party.partyName || party.name || "",
+    partyName: party.partyName || party.name || "",
+    phone: party.phone || "",
+    balance: party.openingBalance || party.balance || 0,
+    billingAddress: party.billingAddress || party.address || "",
+    shippingAddress: party.shippingAddress || "",
+  };
 }
 
 // Renders the transaction tabs interface.
@@ -643,9 +661,17 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             onChange={(value) => {
               setField("customer", value);
               setField("partyBalance", "");
+              const matched = parties.find(
+                (p) => String(p.partyName || p.name || "").trim().toLowerCase() === String(value || "").trim().toLowerCase()
+              );
+              setField("partyId", matched?.id || "");
+              setField("partyName", matched?.partyName || matched?.name || value);
             }}
             onSelect={(party) => {
-              setField("customer", party.partyName || party.name || "");
+              const pName = party.partyName || party.name || "";
+              setField("customer", pName);
+              setField("partyId", party.id || "");
+              setField("partyName", pName);
               setField("phone", party.phone || "");
               setField("partyBalance", party.balance || "");
               if (party.billingAddress || party.address) {
@@ -2113,38 +2139,125 @@ function AddSale({ mode = "sale", localOnly = false }) {
   };
 
   // Builds invoice.
-  const buildInvoice = () => ({
-    id: transactionId,
-    saleType,
-    transactionType: config.type,
-    form,
-    rows: rows.map((row, index) => ({ ...row, index: index + 1, calculated: calculateRow(row) })),
-    totals,
-    business,
-    files,
-    saleOrderIds: [
-      ...new Set([
-        ...saleOrderConversions.map((o) => o.id),
-        ...rows.map((r) => r.sourceOrderId),
-      ].filter(Boolean)),
-    ],
-    saleOrderNumbers: [
-      ...new Set([
-        ...saleOrderConversions.map((o) => o.number),
-        ...rows.map((r) => r.sourceOrderNumber),
-      ].filter(Boolean)),
-    ],
-    purchaseOrderId:
-      purchaseOrderConversion?.id ||
-      rows.find((r) => r.sourceOrderId)?.sourceOrderId ||
-      undefined,
-    purchaseOrderNumber:
-      purchaseOrderConversion?.number ||
-      rows.find((r) => r.sourceOrderNumber)?.sourceOrderNumber ||
-      undefined,
-    sourceOnlineOrderId: onlineOrderConversion?.id || "",
-    createdAt: new Date().toISOString(),
-  });
+  const buildInvoice = () => {
+    const isGenuineCash =
+      saleType === "cash" &&
+      (!form.customer || form.customer.trim().toLowerCase() === "cash sale");
+
+    const resolvedParty = parties.find(
+      (p) =>
+        (form.partyId && String(p.id) === String(form.partyId)) ||
+        (form.customer &&
+          String(p.name || p.partyName || "").trim().toLowerCase() ===
+            String(form.customer).trim().toLowerCase())
+    );
+
+    const finalPartyId = isGenuineCash ? null : (form.partyId || resolvedParty?.id || null);
+    const finalPartyName = isGenuineCash
+      ? "Cash Sale"
+      : (form.customer || form.partyName || resolvedParty?.name || resolvedParty?.partyName || "");
+
+    const mappedRows = rows.map((row, index) => {
+      const matchedItem = items.find(
+        (i) =>
+          (row.sourceItemId && String(i.id) === String(row.sourceItemId)) ||
+          (row.item &&
+            String(i.name || i.itemName || "").trim().toLowerCase() ===
+              String(row.item).trim().toLowerCase())
+      );
+      const resolvedItemId = row.sourceItemId || row.itemId || matchedItem?.id || "";
+      const resolvedItemName = row.item || matchedItem?.name || matchedItem?.itemName || `Item ${index + 1}`;
+      const calculated = calculateRow(row);
+      const qtyNum = toNumber(row.qty);
+      const priceNum = toNumber(row.price);
+
+      return {
+        ...row,
+        index: index + 1,
+        item: resolvedItemName,
+        name: resolvedItemName,
+        itemName: resolvedItemName,
+        itemId: resolvedItemId,
+        sourceItemId: resolvedItemId,
+        qty: row.qty,
+        quantity: qtyNum,
+        price: row.price,
+        unitPrice: priceNum,
+        calculated,
+      };
+    });
+
+    const docNumber = form.invoiceNumber || "1";
+    const docDate = form.invoiceDate || currentLocalDate();
+    const totalAmount = totals.finalTotal || totals.grandTotal || 0;
+    const paidAmount = receivedEnabled
+      ? (Number(receivedAmount) || 0)
+      : (saleType === "cash" ? totalAmount : 0);
+    const balanceAmount = Math.max(0, totalAmount - paidAmount);
+    const paymentMode = form.paymentType || (saleType === "cash" ? "Cash" : "Credit");
+
+    return {
+      id: transactionId,
+      saleType,
+      transactionType: config.type,
+      partyId: finalPartyId,
+      partyName: finalPartyName,
+      customer: finalPartyName,
+      customerName: finalPartyName,
+      phone: form.phone || resolvedParty?.phone || "",
+      partyPhone: form.phone || resolvedParty?.phone || "",
+      partyGstin: form.gstin || resolvedParty?.gstin || "",
+      invoiceNumber: docNumber,
+      documentNumber: docNumber,
+      invoiceDate: docDate,
+      transactionDate: docDate,
+      date: docDate,
+      dueDate: form.dueDate || null,
+      billingAddress: form.billingAddress || resolvedParty?.billingAddress || resolvedParty?.address || "",
+      shippingAddress: form.shippingAddress || form.billingAddress || "",
+      paymentMode,
+      paymentType: paymentMode,
+      totalAmount,
+      subtotal: totals.subtotal || totalAmount,
+      paidAmount,
+      balanceAmount,
+      form: {
+        ...form,
+        customer: finalPartyName,
+        partyId: finalPartyId,
+        partyName: finalPartyName,
+        invoiceNumber: docNumber,
+        invoiceDate: docDate,
+      },
+      rows: mappedRows,
+      items: mappedRows,
+      totals,
+      business,
+      files,
+      saleOrderIds: [
+        ...new Set([
+          ...saleOrderConversions.map((o) => o.id),
+          ...rows.map((r) => r.sourceOrderId),
+        ].filter(Boolean)),
+      ],
+      saleOrderNumbers: [
+        ...new Set([
+          ...saleOrderConversions.map((o) => o.number),
+          ...rows.map((r) => r.sourceOrderNumber),
+        ].filter(Boolean)),
+      ],
+      purchaseOrderId:
+        purchaseOrderConversion?.id ||
+        rows.find((r) => r.sourceOrderId)?.sourceOrderId ||
+        undefined,
+      purchaseOrderNumber:
+        purchaseOrderConversion?.number ||
+        rows.find((r) => r.sourceOrderNumber)?.sourceOrderNumber ||
+        undefined,
+      sourceOnlineOrderId: onlineOrderConversion?.id || "",
+      createdAt: new Date().toISOString(),
+    };
+  };
 
   // Opens preview.
   const openPreview = (printAfterOpen = false) => {

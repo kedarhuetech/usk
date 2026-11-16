@@ -23,7 +23,7 @@ import Card from "../../components/Common/Card";
 import { loadSalesInvoices, saveBusinessSaleInvoice } from "../../services/businessRecords";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentIns, readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
-import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { notifyBusinessDataChanged, businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const SALE_INVOICE_UI_KEY = transactionStorageKeys.saleInvoiceUi;
@@ -51,7 +51,7 @@ function endOfMonth(date) { return new Date(date.getFullYear(), date.getMonth() 
 
 // This helper handles date logic.
 function invoiceDate(invoice) {
-  const value = invoice.form?.invoiceDate || invoice.createdAt;
+  const value = invoice.form?.invoiceDate || invoice.invoiceDate || invoice.transactionDate || invoice.date || invoice.createdAt;
   if (!value) return null;
   const s = String(value).trim();
   const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
@@ -84,9 +84,20 @@ function formatMoney(value) {
   return `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
+// Resolves party display name.
+function invoicePartyName(invoice) {
+  return (
+    invoice.form?.customer ||
+    invoice.partyName ||
+    invoice.customer ||
+    invoice.customerName ||
+    (invoice.saleType === "cash" ? "Cash Sale" : "—")
+  );
+}
+
 // This helper handles amount logic.
 function invoiceAmount(invoice) {
-  return Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? 0);
+  return Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? invoice.totalAmount ?? invoice.total ?? invoice.amount ?? 0);
 }
 
 // This helper handles store logic.
@@ -120,7 +131,7 @@ function downloadCsv(rows) {
   // Handles result.
   const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
   const content = [["Date", "Invoice No", "Party Name", "Transaction", "Payment Type", "Amount", "Balance", "Status"], ...rows.map((invoice) => [
-    formatDate(invoiceDate(invoice)), invoice.form?.invoiceNumber || invoice.invoiceNumber || "", invoice.form?.customer || "Cash Sale", "Sale", invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit"), invoiceAmount(invoice), invoiceBalance(invoice), invoiceStatus(invoice),
+    formatDate(invoiceDate(invoice)), invoice.form?.invoiceNumber || invoice.invoiceNumber || "", invoicePartyName(invoice), "Sale", invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit"), invoiceAmount(invoice), invoiceBalance(invoice), invoiceStatus(invoice),
   ])].map((row) => row.map(quote).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob([`\uFEFF${content}`], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a"); link.href = url; link.download = "sale-invoices.csv"; link.click(); URL.revokeObjectURL(url);
@@ -308,11 +319,23 @@ function SaleInvoices() {
     let active = true;
     // Refreshes result.
     const refresh = async () => {
-      try { const rows = await loadSalesInvoices(); if (active) setInvoices(rows.filter((invoice) => invoice.transactionType !== "purchase")); }
-      catch (error) { console.error("Could not load sale invoices:", error); }
+      try {
+        const rows = await loadSalesInvoices();
+        if (active) setInvoices(rows.filter((invoice) => invoice.transactionType !== "purchase"));
+      } catch (error) {
+        console.error("Could not load sale invoices:", error);
+      }
     };
-    refresh(); window.addEventListener("focus", refresh);
-    return () => { active = false; window.removeEventListener("focus", refresh); };
+    refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener(businessDataChangedEvent, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(businessDataChangedEvent, refresh);
+      window.removeEventListener("storage", refresh);
+    };
   }, []);
 
   const shownInvoices = useMemo(() => [
@@ -329,7 +352,7 @@ function SaleInvoices() {
   const visibleInvoices = useMemo(() => shownInvoices.filter((invoice) => {
     const date = invoiceDate(invoice);
     const inSelectedPeriod = isInDateRange(date ? isoDate(date) : null, dateFrom, dateTo);
-    const party = invoice.form?.customer || "Cash Sale";
+    const party = invoicePartyName(invoice);
     const number = invoice.form?.invoiceNumber || invoice.invoiceNumber || "";
     return inSelectedPeriod
       && (store === "All Stores" || store === invoiceStore(invoice))
@@ -441,7 +464,7 @@ function SaleInvoices() {
 
   // Handles invoice.
   const shareInvoice = async (invoice) => {
-    const text = `Sale invoice ${invoice.form?.invoiceNumber || ""} for ${invoice.form?.customer || "Cash Sale"}: ${formatMoney(invoiceAmount(invoice))}`;
+    const text = `Sale invoice ${invoice.form?.invoiceNumber || invoice.invoiceNumber || ""} for ${invoicePartyName(invoice)}: ${formatMoney(invoiceAmount(invoice))}`;
     try {
       if (navigator.share) await navigator.share({ title: "Sale Invoice", text });
       else if (navigator.clipboard) { await navigator.clipboard.writeText(text); toast.success("Invoice details copied to clipboard."); }
@@ -476,10 +499,10 @@ function SaleInvoices() {
           const amount = invoiceAmount(invoice); const balance = invoiceBalance(invoice); const cancelled = Boolean(invoice.cancelled || invoice.status === "Cancelled");
           const paymentType = invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit");
           const status = invoiceStatus(invoice);
-          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoice.form?.invoiceNumber || invoice.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{invoice.form?.customer || "Cash Sale"}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
+          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoice.form?.invoiceNumber || invoice.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{invoicePartyName(invoice)}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
         })}</tbody></table></div> : <EmptyState onAddSale={openAddSale} />}
       </Card>
-      {activeDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveDialog(null); }}><section className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{activeDialog.type === "edit" ? "View / Edit Invoice" : activeDialog.type}</h2><p className="mt-1 text-sm text-slate-500">Invoice {activeDialog.invoice.form?.invoiceNumber || activeDialog.invoice.invoiceNumber || "—"} · {activeDialog.invoice.form?.customer || "Cash Sale"}</p></div><button type="button" aria-label="Close" onClick={() => setActiveDialog(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header>
+      {activeDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveDialog(null); }}><section className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{activeDialog.type === "edit" ? "View / Edit Invoice" : activeDialog.type}</h2><p className="mt-1 text-sm text-slate-500">Invoice {activeDialog.invoice.form?.invoiceNumber || activeDialog.invoice.invoiceNumber || "—"} · {invoicePartyName(activeDialog.invoice)}</p></div><button type="button" aria-label="Close" onClick={() => setActiveDialog(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header>
         {activeDialog.type === "Generate e-Invoice" && <div className="space-y-4 p-5"><p className="text-sm text-slate-600">Create a demo e-invoice record for {formatMoney(invoiceAmount(activeDialog.invoice))}. This does not submit to a government portal.</p>{activeDialog.generated && <p role="status" className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">Demo e-invoice generated: {activeDialog.reference}</p>}<div className="flex justify-end gap-2"><Button onClick={() => setActiveDialog(null)} className="bg-slate-100 text-slate-700">Close</Button>{!activeDialog.generated && <Button onClick={() => { const reference = `DEMO-${Date.now()}`; saveInvoiceUi((current) => ({ ...current, eInvoices: { ...(current.eInvoices || {}), [activeDialog.invoice.id]: reference }, history: recordInvoiceHistory(current, activeDialog.invoice, "Demo e-Invoice generated") })); setActiveDialog((current) => ({ ...current, generated: true, reference })); }} className="bg-blue-600 text-white">Generate Demo e-Invoice</Button>}</div></div>}
         
         {activeDialog.type === "Payment History" && <div className="space-y-3 p-5 text-sm text-slate-700"><div className="flex justify-between border-b pb-3"><span>Invoice total</span><b>{formatMoney(invoiceAmount(activeDialog.invoice))}</b></div><div className="flex justify-between border-b pb-3"><span>Received</span><b className="text-emerald-600">{formatMoney(invoiceReceived(activeDialog.invoice))}</b></div><div className="flex justify-between"><span>Balance</span><b className="text-rose-600">{formatMoney(invoiceBalance(activeDialog.invoice))}</b></div><p className="text-xs text-slate-500">Payment entries are shown from this invoice’s saved received amount.</p></div>}

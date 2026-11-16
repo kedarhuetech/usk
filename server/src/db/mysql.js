@@ -24,6 +24,7 @@ export const pool = mysql.createPool({
   connectionLimit: Math.max(1, Number.parseInt(process.env.DB_CONNECTION_LIMIT || "10", 10) || 10),
   queueLimit: 0,
   charset: "utf8mb4",
+  dateStrings: true,
 });
 
 // This helper handles id from request logic.

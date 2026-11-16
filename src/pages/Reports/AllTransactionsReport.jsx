@@ -37,10 +37,20 @@ function parseYMD(val) {
   if (!val) return "";
   if (typeof val === "string") {
     const s = val.trim();
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
+      const [y, m, d] = s.split("-");
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
     const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
     const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
     if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
+    if (s.includes("T") || s.includes("Z") || s.includes(" ")) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+    }
     const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
   }
@@ -230,9 +240,9 @@ export default function AllTransactionsReport() {
         const status = settlement.paymentStatus;
         return {
           id: r.id || `sale-${Math.random()}`,
-          date: r.form?.invoiceDate || r.date || r.createdAt?.slice(0, 10) || "",
+          date: parseYMD(r.form?.invoiceDate || r.invoiceDate || r.transactionDate || r.date || r.createdAt) || "",
           refNo: r.form?.invoiceNumber || r.invoiceNumber || "—",
-          partyName: r.form?.customer || r.partyName || r.customer || "Cash Sale",
+          partyName: r.form?.customer || r.partyName || r.customer || (r.saleType === "cash" ? "Cash Sale" : "—"),
           category: r.category || r.form?.category || "—",
           type: isCancelled ? "Sale (Cancelled)" : "Sale",
           total,
@@ -251,7 +261,7 @@ export default function AllTransactionsReport() {
         const status = settlement.paymentStatus;
         return {
           id: r.id || `purch-${Math.random()}`,
-          date: r.form?.invoiceDate || r.date || r.createdAt?.slice(0, 10) || "",
+          date: parseYMD(r.form?.billDate || r.form?.invoiceDate || r.billDate || r.invoiceDate || r.date || r.createdAt) || "",
           refNo: r.form?.invoiceNumber || r.invoiceNumber || "—",
           partyName: r.form?.customer || r.partyName || r.supplier || "Cash Purchase",
           category: r.category || "—",

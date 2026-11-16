@@ -276,16 +276,120 @@ export const transactionsDb = {
    * Atomically saves a transaction and adjusts stock & balances in MySQL
    */
   async save(transaction) {
-    try {
-      const res = await apiRequest("/transactions", {
-        method: "POST",
-        body: JSON.stringify(transaction),
-      });
-      return res?.data || transaction;
-    } catch (err) {
-      console.warn("[MySQL] Failed to save transaction to backend:", err.message);
-      return transaction;
-    }
+    const isGenuineCash =
+      transaction.saleType === "cash" &&
+      (!transaction.form?.customer && !transaction.customer && !transaction.partyName && !transaction.customerName);
+
+    const partyName =
+      transaction.partyName ||
+      transaction.customer ||
+      transaction.form?.customer ||
+      transaction.customerName ||
+      (isGenuineCash ? "Cash Sale" : (transaction.saleType === "cash" ? "Cash Sale" : null));
+
+    const partyId =
+      transaction.partyId ||
+      transaction.party_id ||
+      transaction.form?.partyId ||
+      transaction.customerId ||
+      null;
+
+    const phone =
+      transaction.partyPhone ||
+      transaction.phone ||
+      transaction.form?.phone ||
+      null;
+
+    const invoiceNumber = String(
+      transaction.documentNumber ||
+      transaction.invoiceNumber ||
+      transaction.form?.invoiceNumber ||
+      "1"
+    );
+
+    const transactionDate =
+      transaction.transactionDate ||
+      transaction.invoiceDate ||
+      transaction.form?.invoiceDate ||
+      transaction.date ||
+      new Date().toISOString().slice(0, 10);
+
+    const totalAmount = Number(
+      transaction.totalAmount ??
+      transaction.totals?.finalTotal ??
+      transaction.total ??
+      0
+    );
+
+    const paidAmount = Number(
+      transaction.paidAmount ??
+      transaction.totals?.received ??
+      (transaction.saleType === "cash" ? totalAmount : 0)
+    );
+
+    const balanceAmount = Number(
+      transaction.balanceAmount ??
+      transaction.totals?.balance ??
+      Math.max(0, totalAmount - paidAmount)
+    );
+
+    const rawRows = transaction.items || transaction.rows || [];
+    const items = rawRows.map((r, idx) => ({
+      id: r.id || `line-${Date.now()}-${idx}`,
+      itemId: r.itemId || r.sourceItemId || null,
+      sourceItemId: r.sourceItemId || r.itemId || null,
+      name: r.item || r.name || r.itemName || "Item",
+      itemName: r.item || r.name || r.itemName || "Item",
+      itemCode: r.itemCode || r.code || null,
+      hsnCode: r.hsnCode || r.hsn || null,
+      batchNo: r.batchNo || null,
+      serialNo: r.serialNo || null,
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      quantity: Number(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "PCS",
+      price: Number(r.price ?? r.unitPrice ?? 0),
+      unitPrice: Number(r.price ?? r.unitPrice ?? 0),
+      purchasePrice: Number(r.purchasePrice ?? 0),
+      discountPercent: Number(r.discountPercent || 0),
+      discountAmount: Number(r.discountAmount || 0),
+      taxRate: Number(r.taxRate || 0),
+      taxAmount: Number(r.taxAmount || 0),
+      amount: Number(r.amount ?? r.totalAmount ?? (Number(r.qty ?? 1) * Number(r.price ?? 0))),
+      totalAmount: Number(r.amount ?? r.totalAmount ?? (Number(r.qty ?? 1) * Number(r.price ?? 0))),
+    }));
+
+    const payload = {
+      ...transaction,
+      id: transaction.id || transaction.invoiceId,
+      transactionType: transaction.transactionType || "sale",
+      documentNumber: invoiceNumber,
+      invoiceNumber,
+      transactionDate,
+      invoiceDate: transactionDate,
+      partyId,
+      partyName,
+      customer: partyName,
+      customerName: partyName,
+      partyPhone: phone,
+      phone,
+      billingAddress: transaction.billingAddress || transaction.form?.billingAddress || null,
+      shippingAddress: transaction.shippingAddress || transaction.form?.shippingAddress || null,
+      subtotal: Number(transaction.subtotal ?? transaction.totals?.subtotal ?? totalAmount),
+      totalAmount,
+      total: totalAmount,
+      amount: totalAmount,
+      paidAmount,
+      balanceAmount,
+      paymentMode: transaction.paymentMode || transaction.paymentType || transaction.form?.paymentType || (transaction.saleType === "cash" ? "Cash" : "Credit"),
+      items,
+      rows: items,
+    };
+
+    const res = await apiRequest("/transactions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res?.data || payload;
   },
 
   /**
