@@ -37,6 +37,7 @@ import hsnRoutes from "./routes/hsn.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
 import { initializeDatabaseSchema } from "./db/initSchema.js";
+import { syncTransactionsFromGrowth } from "../scripts/syncTransactionsFromGrowth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
@@ -104,6 +105,7 @@ const server = app.listen(PORT, async () => {
   try {
     await initializeDatabaseSchema();
     await seedDefaultHsnCodes();
+    await syncTransactionsFromGrowth();
   } catch (err) {
     console.warn("Startup initialization warning:", err.message);
   }

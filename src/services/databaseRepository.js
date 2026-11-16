@@ -283,6 +283,7 @@ export const transactionsDb = {
     const partyName =
       transaction.partyName ||
       transaction.customer ||
+      transaction.party ||
       transaction.form?.customer ||
       transaction.customerName ||
       (isGenuineCash ? "Cash Sale" : (transaction.saleType === "cash" ? "Cash Sale" : null));
@@ -310,6 +311,7 @@ export const transactionsDb = {
     const transactionDate =
       transaction.transactionDate ||
       transaction.invoiceDate ||
+      transaction.billDate ||
       transaction.form?.invoiceDate ||
       transaction.date ||
       new Date().toISOString().slice(0, 10);
@@ -333,7 +335,9 @@ export const transactionsDb = {
       Math.max(0, totalAmount - paidAmount)
     );
 
-    const rawRows = transaction.items || transaction.rows || [];
+    const rawRows = (Array.isArray(transaction.items) && transaction.items.length)
+      ? transaction.items
+      : (Array.isArray(transaction.rows) ? transaction.rows : []);
     const items = rawRows.map((r, idx) => ({
       id: r.id || `line-${Date.now()}-${idx}`,
       itemId: r.itemId || r.sourceItemId || null,
@@ -343,7 +347,7 @@ export const transactionsDb = {
       itemCode: r.itemCode || r.code || null,
       hsnCode: r.hsnCode || r.hsn || null,
       batchNo: r.batchNo || null,
-      serialNo: r.serialNo || null,
+      serialNo: Array.isArray(r.serialNumbers) ? r.serialNumbers.join(",") : (r.serialNo || r.serial || null),
       qty: Number(r.qty ?? r.quantity ?? 1),
       quantity: Number(r.qty ?? r.quantity ?? 1),
       unit: r.unit || "PCS",
@@ -364,6 +368,7 @@ export const transactionsDb = {
       transactionType: transaction.transactionType || "sale",
       documentNumber: invoiceNumber,
       invoiceNumber,
+      billNumber: transaction.billNumber || invoiceNumber,
       transactionDate,
       invoiceDate: transactionDate,
       partyId,
@@ -398,7 +403,41 @@ export const transactionsDb = {
   async getById(id) {
     try {
       const res = await apiRequest(`/transactions/${encodeURIComponent(id)}`);
-      return res?.data || res;
+      const doc = res?.data || res;
+      if (!doc) return null;
+      const rawItems = doc.items || doc.rows || [];
+      const rows = rawItems.map((r) => ({
+        ...r,
+        item: r.item || r.name || r.itemName || r.item_name || "",
+        qty: r.qty != null ? String(r.qty) : (r.quantity != null ? String(r.quantity) : "1"),
+        price: r.price != null ? String(r.price) : (r.unitPrice != null ? String(r.unitPrice) : (r.unit_price != null ? String(r.unit_price) : "0")),
+        sourceItemId: r.sourceItemId || r.itemId || r.item_id || "",
+      }));
+      const party = doc.partyName || doc.customerName || doc.party || doc.customer || doc.form?.customer || "Cash Sale";
+      const phone = doc.partyPhone || doc.phone || doc.mobile || doc.form?.phone || "";
+      const form = {
+        customer: party,
+        phone,
+        billingAddress: doc.billingAddress || doc.form?.billingAddress || "",
+        shippingAddress: doc.shippingAddress || doc.form?.shippingAddress || "",
+        invoiceNumber: String(doc.documentNumber || doc.invoiceNumber || doc.form?.invoiceNumber || "1"),
+        invoiceDate: doc.transactionDate || doc.invoiceDate || doc.form?.invoiceDate || "",
+        paymentType: doc.paymentMode || doc.paymentType || doc.form?.paymentType || "Cash",
+        ...(doc.form || {}),
+        customer: party || doc.form?.customer || "Cash Sale",
+        phone: phone || doc.form?.phone || "",
+      };
+      return {
+        ...doc,
+        partyName: party,
+        customerName: party,
+        customer: party,
+        partyPhone: phone,
+        phone,
+        items: rawItems,
+        rows,
+        form,
+      };
     } catch (err) {
       console.warn(`[MySQL] Failed to fetch transaction ${id}:`, err.message);
       return null;

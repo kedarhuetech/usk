@@ -254,17 +254,19 @@ function normalizeEditRows(editDoc) {
   if (!Array.isArray(candidateRows) || candidateRows.length === 0) return [];
 
   return candidateRows.map((row, idx) => {
+    const rawDiscPercent = row.discountPercent ?? row.discount_percent;
     const discPercent =
-      row.discountPercent != null && row.discountPercent !== "" && Number(row.discountPercent) !== 0
-        ? String(row.discountPercent)
+      rawDiscPercent != null && rawDiscPercent !== "" && Number(rawDiscPercent) !== 0
+        ? String(rawDiscPercent)
         : "";
+    const rawDiscAmount = row.discountAmount ?? row.discount_amount ?? row.discount;
     const discAmount =
-      row.discountAmount != null && row.discountAmount !== "" && Number(row.discountAmount) !== 0
-        ? String(row.discountAmount)
-        : (row.discount != null && row.discount !== "" && Number(row.discount) !== 0 ? String(row.discount) : "");
+      rawDiscAmount != null && rawDiscAmount !== "" && Number(rawDiscAmount) !== 0
+        ? String(rawDiscAmount)
+        : "";
     const discountMode = row.discountMode || (discAmount && !discPercent ? "amount" : "percent");
 
-    const rawTaxRate = row.taxRate != null && row.taxRate !== "" ? row.taxRate : (row.tax != null ? row.tax : "NONE");
+    const rawTaxRate = row.taxRate != null && row.taxRate !== "" ? row.taxRate : (row.tax_rate != null ? row.tax_rate : (row.tax != null ? row.tax : "NONE"));
     let taxRate = "NONE";
     if (rawTaxRate && rawTaxRate !== "NONE" && rawTaxRate !== "None" && rawTaxRate !== 0 && rawTaxRate !== "0") {
       const numTax = typeof rawTaxRate === "number" ? rawTaxRate : parseFloat(String(rawTaxRate).replace(/[^0-9.]/g, ""));
@@ -279,7 +281,7 @@ function normalizeEditRows(editDoc) {
 
     const serials = Array.isArray(row.serialNumbers)
       ? row.serialNumbers
-      : (row.serialNo ? [row.serialNo] : []);
+      : (row.serialNo || row.serial_no ? [row.serialNo || row.serial_no] : []);
 
     const qty =
       row.qty != null && row.qty !== ""
@@ -291,13 +293,15 @@ function normalizeEditRows(editDoc) {
         ? String(row.price)
         : (row.unitPrice != null && row.unitPrice !== ""
           ? String(row.unitPrice)
-          : (row.rate != null && row.rate !== "" ? String(row.rate) : ""));
+          : (row.unit_price != null && row.unit_price !== ""
+            ? String(row.unit_price)
+            : (row.rate != null && row.rate !== "" ? String(row.rate) : "0")));
 
     return {
       ...createRow(),
       ...row,
       id: row.id || `edit-row-${idx}-${Date.now()}`,
-      item: row.item || row.itemName || row.name || "",
+      item: row.item || row.itemName || row.item_name || row.name || "",
       description: row.description || "",
       qty,
       unit: row.unit || "PCS",
@@ -307,15 +311,15 @@ function normalizeEditRows(editDoc) {
       discountAmount: discAmount,
       discountMode,
       taxRate,
-      hsn: row.hsn || row.hsnCode || "",
+      hsn: row.hsn || row.hsnCode || row.hsn_code || "",
       cessPercent:
         row.cessPercent != null && row.cessPercent !== "" && Number(row.cessPercent) !== 0
           ? String(row.cessPercent)
-          : (row.cessRate != null && Number(row.cessRate) !== 0 ? String(row.cessRate) : ""),
+          : (row.cessRate != null && Number(row.cessRate) !== 0 ? String(row.cessRate) : (row.cess_rate != null && Number(row.cess_rate) !== 0 ? String(row.cess_rate) : "")),
       cessAmount:
         row.cessAmount != null && row.cessAmount !== "" && Number(row.cessAmount) !== 0
           ? String(row.cessAmount)
-          : "",
+          : (row.cess_amount != null && Number(row.cess_amount) !== 0 ? String(row.cess_amount) : ""),
       sourceItemId: row.sourceItemId || row.itemId || row.item_id || "",
       batchNo: row.batchNo || row.batch_no || "",
       expDate: row.expDate || row.exp_date || "",
@@ -328,15 +332,19 @@ function normalizeEditRows(editDoc) {
 function extractEditForm(editDoc, fallback = {}) {
   if (!editDoc) return fallback;
 
-  const customer =
-    editDoc.form?.customer ??
-    editDoc.partyName ??
-    editDoc.customerName ??
-    editDoc.supplierName ??
-    editDoc.party ??
-    editDoc.customer ??
-    fallback.customer ??
+  const rawCustomer =
+    editDoc.partyName ||
+    editDoc.party_name ||
+    editDoc.customerName ||
+    editDoc.customer_name ||
+    editDoc.supplierName ||
+    editDoc.party ||
+    editDoc.customer ||
+    editDoc.form?.customer ||
+    editDoc.form?.partyName ||
+    fallback.customer ||
     "";
+  const customer = typeof rawCustomer === "string" ? rawCustomer.trim() : String(rawCustomer || "");
 
   const partyId =
     editDoc.form?.partyId ??
@@ -346,75 +354,86 @@ function extractEditForm(editDoc, fallback = {}) {
     fallback.partyId ??
     "";
 
-  const phone =
-    editDoc.form?.phone ??
-    editDoc.partyPhone ??
-    editDoc.phone ??
-    editDoc.mobile ??
-    fallback.phone ??
+  const rawPhone =
+    editDoc.partyPhone ||
+    editDoc.party_phone ||
+    editDoc.phone ||
+    editDoc.customerPhone ||
+    editDoc.customer_phone ||
+    editDoc.mobile ||
+    editDoc.form?.phone ||
+    fallback.phone ||
     "";
+  const phone = typeof rawPhone === "string" ? rawPhone.trim() : String(rawPhone || "");
 
   const billingAddress =
-    editDoc.form?.billingAddress ??
-    editDoc.billingAddress ??
-    fallback.billingAddress ??
+    editDoc.billingAddress ||
+    editDoc.billing_address ||
+    editDoc.form?.billingAddress ||
+    fallback.billingAddress ||
     "";
 
   const shippingAddress =
-    editDoc.form?.shippingAddress ??
-    editDoc.shippingAddress ??
-    billingAddress ??
-    fallback.shippingAddress ??
+    editDoc.shippingAddress ||
+    editDoc.shipping_address ||
+    editDoc.form?.shippingAddress ||
+    billingAddress ||
+    fallback.shippingAddress ||
     "";
 
   const invoiceNumber =
-    editDoc.form?.invoiceNumber ??
-    editDoc.documentNumber ??
-    editDoc.invoiceNumber ??
-    editDoc.billNumber ??
-    editDoc.number ??
-    fallback.invoiceNumber ??
+    editDoc.documentNumber ||
+    editDoc.document_number ||
+    editDoc.invoiceNumber ||
+    editDoc.invoice_number ||
+    editDoc.billNumber ||
+    editDoc.number ||
+    editDoc.form?.invoiceNumber ||
+    fallback.invoiceNumber ||
     "1";
 
   const rawDate =
-    editDoc.form?.invoiceDate ??
-    editDoc.transactionDate ??
-    editDoc.invoiceDate ??
-    editDoc.billDate ??
-    editDoc.date ??
-    fallback.invoiceDate ??
+    editDoc.transactionDate ||
+    editDoc.transaction_date ||
+    editDoc.invoiceDate ||
+    editDoc.billDate ||
+    editDoc.date ||
+    editDoc.form?.invoiceDate ||
+    fallback.invoiceDate ||
     currentLocalDate();
   const invoiceDate = typeof rawDate === "string" ? rawDate.slice(0, 10) : String(rawDate);
 
   const stateOfSupply =
-    editDoc.form?.stateOfSupply ??
-    editDoc.stateOfSupply ??
-    editDoc.state ??
-    fallback.stateOfSupply ??
+    editDoc.stateOfSupply ||
+    editDoc.state ||
+    editDoc.form?.stateOfSupply ||
+    fallback.stateOfSupply ||
     "None";
 
   const paymentType =
-    editDoc.form?.paymentType ??
-    editDoc.paymentMode ??
-    editDoc.paymentType ??
-    fallback.paymentType ??
+    editDoc.paymentMode ||
+    editDoc.paymentType ||
+    editDoc.payment_mode ||
+    editDoc.form?.paymentType ||
+    fallback.paymentType ||
     "Cash";
 
   const description =
-    editDoc.form?.description ??
-    editDoc.description ??
-    editDoc.notes ??
-    fallback.description ??
+    editDoc.description ||
+    editDoc.notes ||
+    editDoc.form?.description ||
+    fallback.description ||
     "";
 
   const terms =
-    editDoc.form?.terms ??
-    editDoc.terms ??
-    fallback.terms ??
+    editDoc.terms ||
+    editDoc.form?.terms ||
+    fallback.terms ||
     "";
 
   return {
     ...fallback,
+    ...(editDoc.form || {}),
     customer,
     partyId,
     phone,
@@ -423,14 +442,15 @@ function extractEditForm(editDoc, fallback = {}) {
     invoiceNumber: String(invoiceNumber),
     invoiceDate,
     stateOfSupply,
-    partyBalance: editDoc.form?.partyBalance || editDoc.partyBalance || fallback.partyBalance || "",
-    showTerms: Boolean(terms),
-    termsTitle: editDoc.form?.termsTitle || fallback.termsTitle || "",
+    paymentType,
+    description,
     terms,
+    partyBalance: editDoc.partyBalance || editDoc.form?.partyBalance || fallback.partyBalance || "",
+    showTerms: Boolean(terms),
+    termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
     showDescription: Boolean(description),
     description,
     paymentType,
-    ...(editDoc.form || {}),
   };
 }
 
@@ -500,16 +520,17 @@ function TextArea({ error, className = "", ...props }) {
 function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty, appSettings }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
-  const query = value.toLowerCase();
-  const filtered = parties.filter((party) => `${party.name} ${party.phone}`.toLowerCase().includes(query));
-  const exactMatch = parties.some((party) => (party.partyName || party.name || "").trim().toLowerCase() === value.trim().toLowerCase());
+  const safeVal = String(value || "");
+  const query = safeVal.toLowerCase();
+  const filtered = parties.filter((party) => `${party.name || party.partyName || ""} ${party.phone || ""}`.toLowerCase().includes(query));
+  const exactMatch = parties.some((party) => (party.partyName || party.name || "").trim().toLowerCase() === safeVal.trim().toLowerCase());
   useDismiss(open, rootRef, () => setOpen(false));
 
   return (
     <div ref={rootRef} className="relative">
       <TextInput
         error={error}
-        value={value}
+        value={safeVal}
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           onChange(event.target.value);
@@ -1962,31 +1983,28 @@ function AddSale({ mode = "sale", localOnly = false }) {
     if (!editInvoice?.id) return;
     let active = true;
 
-    const candidateRows = editInvoice.rows || editInvoice.items || editInvoice.lineItems || [];
-    if (!candidateRows.length) {
-      transactionsDb.getById(editInvoice.id)
-        .then((fullDoc) => {
-          if (!active || !fullDoc) return;
-          const mappedRows = normalizeEditRows(fullDoc);
-          if (mappedRows.length > 0) {
-            setRows(mappedRows);
-          }
-          setForm((current) => extractEditForm(fullDoc, current));
-          if (fullDoc.paymentMode || fullDoc.paymentType) {
-            setSaleType(String(fullDoc.paymentMode || fullDoc.paymentType).toLowerCase() === "cash" ? "cash" : "credit");
-          }
-          const rawRec = fullDoc.paidAmount ?? fullDoc.receivedAmount ?? fullDoc.totals?.received;
-          if (rawRec != null && Number(rawRec) > 0) {
-            setReceivedEnabled(true);
-            setReceivedAmount(String(rawRec));
-          }
-          const rawRound = fullDoc.roundOff ?? fullDoc.round_off ?? fullDoc.totals?.roundOffAmount;
-          if (rawRound != null && Number(rawRound) !== 0) {
-            setRoundOffValue(String(rawRound));
-          }
-        })
-        .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
-    }
+    transactionsDb.getById(editInvoice.id)
+      .then((fullDoc) => {
+        if (!active || !fullDoc) return;
+        const mappedRows = normalizeEditRows(fullDoc);
+        if (mappedRows.length > 0) {
+          setRows(mappedRows);
+        }
+        setForm((current) => extractEditForm(fullDoc, current));
+        if (fullDoc.paymentMode || fullDoc.paymentType) {
+          setSaleType(String(fullDoc.paymentMode || fullDoc.paymentType).toLowerCase() === "cash" ? "cash" : "credit");
+        }
+        const rawRec = fullDoc.paidAmount ?? fullDoc.receivedAmount ?? fullDoc.totals?.received;
+        if (rawRec != null && Number(rawRec) > 0) {
+          setReceivedEnabled(true);
+          setReceivedAmount(String(rawRec));
+        }
+        const rawRound = fullDoc.roundOff ?? fullDoc.round_off ?? fullDoc.totals?.roundOffAmount;
+        if (rawRound != null && Number(rawRound) !== 0) {
+          setRoundOffValue(String(rawRound));
+        }
+      })
+      .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
 
     return () => { active = false; };
   }, [editInvoice?.id]);
