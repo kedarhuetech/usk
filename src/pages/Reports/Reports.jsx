@@ -28,6 +28,8 @@ import GSTReport from "./GSTReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords.js";
+import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { toast } from "../../components/Common/Toast.jsx";
 import { isReportGroupVisible, isReportVisible } from "../../config/reportVisibility.js";
 import {
@@ -317,15 +319,36 @@ function Reports({ defaultReport }) {
   const isAllTransactions = activeReport === "All Transactions";
   const isPurchase = ["Purchase", "Purchase Bills"].includes(activeReport);
 
-  const sales = useMemo(
-    () => readLocal(transactionStorageKeys.sales),
-    []
-  );
+  const [sales, setSales] = useState(() => readLocal(transactionStorageKeys.sales));
+  const [purchases, setPurchases] = useState(() => readLocal(transactionStorageKeys.purchases));
 
-  const purchases = useMemo(
-    () => readLocal(transactionStorageKeys.purchases),
-    []
-  );
+  useEffect(() => {
+    let active = true;
+    const reload = () => {
+      setSales(readLocal(transactionStorageKeys.sales));
+      setPurchases(readLocal(transactionStorageKeys.purchases));
+    };
+
+    loadSalesInvoices()
+      .then((records) => {
+        if (active && Array.isArray(records) && records.length) setSales(records);
+      })
+      .catch(() => {});
+
+    loadPurchaseBills()
+      .then((records) => {
+        if (active && Array.isArray(records) && records.length) setPurchases(records);
+      })
+      .catch(() => {});
+
+    window.addEventListener(businessDataChangedEvent, reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      active = false;
+      window.removeEventListener(businessDataChangedEvent, reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, []);
 
   const paymentIns = useMemo(() => readLocal(transactionStorageKeys.paymentIns), []);
   const paymentOuts = useMemo(() => readLocal(transactionStorageKeys.paymentOuts), []);
@@ -1529,7 +1552,7 @@ function Reports({ defaultReport }) {
                               `font-medium ${statusClass(status)}`
                             )}
                             {cell(
-                              type === "Sale" && (
+                              (type === "Sale" || type === "Sale Invoices" || row.transactionType === "sale" || row.transactionType === "pos") && (
                                 <button
                                   type="button"
                                   onClick={() =>
