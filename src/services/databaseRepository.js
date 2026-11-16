@@ -277,9 +277,46 @@ export const transactionsDb = {
    */
   async save(transaction) {
     try {
+      const partyName = (transaction.partyName || transaction.customerName || transaction.party || transaction.customer || transaction.form?.customer || "").trim();
+      const partyPhone = (transaction.partyPhone || transaction.phone || transaction.customerPhone || transaction.form?.phone || "").trim();
+      const billingAddress = transaction.billingAddress || transaction.form?.billingAddress || "";
+      const shippingAddress = transaction.shippingAddress || transaction.form?.shippingAddress || billingAddress || "";
+      const documentNumber = String(transaction.documentNumber || transaction.invoiceNumber || transaction.billNumber || transaction.number || transaction.form?.invoiceNumber || "0").trim();
+      const transactionDate = transaction.transactionDate || transaction.invoiceDate || transaction.billDate || transaction.date || transaction.form?.invoiceDate || new Date().toISOString().slice(0, 10);
+      const rawRows = Array.isArray(transaction.rows) && transaction.rows.length ? transaction.rows : (Array.isArray(transaction.items) ? transaction.items : []);
+      const items = rawRows.map((r) => ({
+        ...r,
+        item: r.item || r.name || r.itemName || "Item",
+        name: r.name || r.item || r.itemName || "Item",
+        itemName: r.itemName || r.item || r.name || "Item",
+        itemId: r.sourceItemId || r.itemId || r.item_id || null,
+        sourceItemId: r.sourceItemId || r.itemId || r.item_id || null,
+        qty: r.qty ?? r.quantity ?? 1,
+        quantity: r.quantity ?? r.qty ?? 1,
+        price: r.price ?? r.unitPrice ?? 0,
+        unitPrice: r.unitPrice ?? r.price ?? 0,
+      }));
+
+      const payload = {
+        ...transaction,
+        partyName,
+        customerName: partyName,
+        customer: partyName,
+        partyPhone,
+        phone: partyPhone,
+        billingAddress,
+        shippingAddress,
+        documentNumber,
+        invoiceNumber: documentNumber,
+        transactionDate,
+        invoiceDate: transactionDate,
+        items,
+        rows: rawRows,
+      };
+
       const res = await apiRequest("/transactions", {
         method: "POST",
-        body: JSON.stringify(transaction),
+        body: JSON.stringify(payload),
       });
       return res?.data || transaction;
     } catch (err) {
@@ -294,7 +331,41 @@ export const transactionsDb = {
   async getById(id) {
     try {
       const res = await apiRequest(`/transactions/${encodeURIComponent(id)}`);
-      return res?.data || res;
+      const doc = res?.data || res;
+      if (!doc) return null;
+      const rawItems = doc.items || doc.rows || [];
+      const rows = rawItems.map((r) => ({
+        ...r,
+        item: r.item || r.name || r.itemName || "",
+        qty: r.qty != null ? String(r.qty) : (r.quantity != null ? String(r.quantity) : "1"),
+        price: r.price != null ? String(r.price) : (r.unitPrice != null ? String(r.unitPrice) : "0"),
+        sourceItemId: r.sourceItemId || r.itemId || "",
+      }));
+      const party = doc.partyName || doc.customerName || doc.party || doc.customer || doc.form?.customer || "";
+      const phone = doc.partyPhone || doc.phone || doc.mobile || doc.form?.phone || "";
+      const form = {
+        customer: party,
+        phone,
+        billingAddress: doc.billingAddress || doc.form?.billingAddress || "",
+        shippingAddress: doc.shippingAddress || doc.form?.shippingAddress || "",
+        invoiceNumber: String(doc.documentNumber || doc.invoiceNumber || doc.form?.invoiceNumber || "1"),
+        invoiceDate: doc.transactionDate || doc.invoiceDate || doc.form?.invoiceDate || "",
+        paymentType: doc.paymentMode || doc.paymentType || doc.form?.paymentType || "Cash",
+        ...(doc.form || {}),
+        customer: party || doc.form?.customer || "",
+        phone: phone || doc.form?.phone || "",
+      };
+      return {
+        ...doc,
+        partyName: party,
+        customerName: party,
+        customer: party,
+        partyPhone: phone,
+        phone,
+        items: rawItems,
+        rows,
+        form,
+      };
     } catch (err) {
       console.warn(`[MySQL] Failed to fetch transaction ${id}:`, err.message);
       return null;

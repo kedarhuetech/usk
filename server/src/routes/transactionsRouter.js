@@ -107,9 +107,12 @@ router.get("/", async (req, res) => {
         itemsMap.get(item.transaction_id).push({
           id: item.id,
           itemId: item.item_id,
+          sourceItemId: item.item_id,
+          item: item.item_name,
           name: item.item_name,
           itemName: item.item_name,
           itemCode: item.item_code || "",
+          hsn: item.hsn_code || "",
           hsnCode: item.hsn_code || "",
           batchNo: item.batch_no || "",
           serialNo: item.serial_no || "",
@@ -181,6 +184,19 @@ router.get("/", async (req, res) => {
       notes: row.notes || "",
       terms: row.terms || "",
       items: itemsMap.get(row.id) || [],
+      rows: itemsMap.get(row.id) || [],
+      customer: row.party_name || "",
+      customerPhone: row.party_phone || "",
+      form: {
+        customer: row.party_name || "",
+        partyName: row.party_name || "",
+        phone: row.party_phone || "",
+        billingAddress: row.billing_address || "",
+        shippingAddress: row.shipping_address || "",
+        invoiceNumber: row.document_number,
+        invoiceDate: row.transaction_date,
+        paymentType: row.payment_mode || "Cash",
+      },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -257,9 +273,12 @@ router.get("/:id", async (req, res) => {
     const items = itemRows.map((item) => ({
       id: item.id,
       itemId: item.item_id,
+      sourceItemId: item.item_id,
+      item: item.item_name,
       name: item.item_name,
       itemName: item.item_name,
       itemCode: item.item_code || "",
+      hsn: item.hsn_code || "",
       hsnCode: item.hsn_code || "",
       batchNo: item.batch_no || "",
       serialNo: item.serial_no || "",
@@ -318,6 +337,23 @@ router.get("/:id", async (req, res) => {
         notes: row.notes || "",
         terms: row.terms || "",
         items,
+        rows: items,
+        customer: row.party_name || "",
+        customerName: row.party_name || "",
+        party: row.party_name || "",
+        customerPhone: row.party_phone || "",
+        phone: row.party_phone || "",
+        paymentType: row.payment_mode || "Cash",
+        form: {
+          customer: row.party_name || "",
+          partyName: row.party_name || "",
+          phone: row.party_phone || "",
+          billingAddress: row.billing_address || "",
+          shippingAddress: row.shipping_address || "",
+          invoiceNumber: row.document_number,
+          invoiceDate: row.transaction_date,
+          paymentType: row.payment_mode || "Cash",
+        },
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
@@ -341,26 +377,65 @@ router.post("/", async (req, res) => {
 
     const id = body.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const transactionType = (body.transactionType || body.type || "sale").toLowerCase();
-    const documentNumber = (body.documentNumber || body.invoiceNumber || body.billNumber || body.number || "0").trim();
-    const transactionDate = body.transactionDate || body.invoiceDate || body.billDate || body.date || new Date().toISOString().slice(0, 10);
+    const documentNumber = String(
+      body.documentNumber ||
+      body.invoiceNumber ||
+      body.billNumber ||
+      body.number ||
+      body.form?.invoiceNumber ||
+      body.form?.billNumber ||
+      "0"
+    ).trim();
+    const transactionDate =
+      body.transactionDate ||
+      body.invoiceDate ||
+      body.billDate ||
+      body.date ||
+      body.form?.invoiceDate ||
+      body.form?.billDate ||
+      new Date().toISOString().slice(0, 10);
     const dueDate = body.dueDate || null;
     const partyId = body.partyId || body.party_id || null;
-    const partyName = body.partyName || body.party || body.customerName || body.supplierName || null;
-    const partyPhone = body.partyPhone || body.phone || body.mobile || null;
-    const partyGstin = body.partyGstin || body.gstin || null;
-    const billingAddress = typeof body.billingAddress === "object" ? JSON.stringify(body.billingAddress) : (body.billingAddress || null);
-    const shippingAddress = typeof body.shippingAddress === "object" ? JSON.stringify(body.shippingAddress) : (body.shippingAddress || null);
+    const partyName =
+      body.partyName ||
+      body.customerName ||
+      body.supplierName ||
+      body.party ||
+      body.customer ||
+      body.form?.customer ||
+      body.form?.partyName ||
+      body.form?.party ||
+      null;
+    const partyPhone =
+      body.partyPhone ||
+      body.phone ||
+      body.mobile ||
+      body.customerPhone ||
+      body.form?.phone ||
+      null;
+    const partyGstin = body.partyGstin || body.gstin || body.form?.gstin || null;
+    const billingAddress =
+      body.billingAddress ||
+      body.form?.billingAddress ||
+      (typeof body.billing_address === "object" ? JSON.stringify(body.billing_address) : body.billing_address) ||
+      null;
+    const shippingAddress =
+      body.shippingAddress ||
+      body.form?.shippingAddress ||
+      (typeof body.shipping_address === "object" ? JSON.stringify(body.shipping_address) : body.shipping_address) ||
+      billingAddress ||
+      null;
 
-    const subtotal = parseFloat(body.subtotal ?? body.totalAmount ?? body.amount ?? 0) || 0;
-    const discountPercent = parseFloat(body.discountPercent ?? body.discount_percent ?? 0) || 0;
-    const discountAmount = parseFloat(body.discountAmount ?? body.discount ?? 0) || 0;
-    const taxAmount = parseFloat(body.taxAmount ?? body.tax ?? 0) || 0;
-    const roundOff = parseFloat(body.roundOff ?? body.round_off ?? 0) || 0;
-    const totalAmount = parseFloat(body.totalAmount ?? body.total ?? body.amount ?? 0) || 0;
-    const paidAmount = parseFloat(body.paidAmount ?? body.receivedAmount ?? body.paid ?? 0) || 0;
-    const balanceAmount = parseFloat(body.balanceAmount ?? body.balance ?? (totalAmount - paidAmount)) || 0;
+    const subtotal = parseFloat(body.subtotal ?? body.totalAmount ?? body.amount ?? body.totals?.subtotal ?? body.totals?.taxableAmount ?? 0) || 0;
+    const discountPercent = parseFloat(body.discountPercent ?? body.discount_percent ?? body.totals?.discountPercent ?? 0) || 0;
+    const discountAmount = parseFloat(body.discountAmount ?? body.discount ?? body.totals?.discount ?? 0) || 0;
+    const taxAmount = parseFloat(body.taxAmount ?? body.tax ?? body.totals?.totalTax ?? body.totals?.tax ?? 0) || 0;
+    const roundOff = parseFloat(body.roundOff ?? body.round_off ?? body.totals?.roundOffAmount ?? 0) || 0;
+    const totalAmount = parseFloat(body.totalAmount ?? body.total ?? body.amount ?? body.totals?.finalTotal ?? body.totals?.grandTotal ?? 0) || 0;
+    const paidAmount = parseFloat(body.paidAmount ?? body.receivedAmount ?? body.paid ?? body.totals?.received ?? 0) || 0;
+    const balanceAmount = parseFloat(body.balanceAmount ?? body.balance ?? body.totals?.balance ?? (totalAmount - paidAmount)) || 0;
 
-    const paymentMode = body.paymentMode || body.paymentType || "Cash";
+    const paymentMode = body.paymentMode || body.paymentType || body.form?.paymentType || "Cash";
     const paymentStatus = body.status || (balanceAmount <= 0.001 ? "Paid" : (paidAmount > 0 ? "Partial" : "Unpaid"));
     const paymentRefNo = body.paymentRefNo || body.refNo || null;
     const cashTendered = parseFloat(body.cashTendered ?? body.tendered ?? 0) || 0;
@@ -426,33 +501,39 @@ router.post("/", async (req, res) => {
     // 2. Clear existing line items for update and re-insert into transaction_items table (pure rows & columns)
     await conn.query(`DELETE FROM transaction_items WHERE business_id = ? AND transaction_id = ?`, [businessId, id]);
 
-    const items = Array.isArray(body.items) ? body.items : [];
-    for (const item of items) {
-      const lineId = item.id || `line_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const itemId = item.itemId || item.sourceItemId || item.inventoryItemId || null;
-      const itemName = (item.name || item.itemName || "Item").trim();
-      const itemCode = item.itemCode || item.code || null;
-      const hsnCode = item.hsnCode || item.hsn || null;
-      const batchNo = item.batchNo || item.batch || null;
-      const serialNo = item.serialNo || item.serial || null;
+    const rawItems = Array.isArray(body.items) && body.items.length
+      ? body.items
+      : (Array.isArray(body.rows) && body.rows.length ? body.rows : (Array.isArray(body.lineItems) ? body.lineItems : []));
+    let itemIdx = 0;
+    for (const item of rawItems) {
+      itemIdx++;
+      const lineId = item.id || `${id}_item_${itemIdx}_${Math.random().toString(36).substring(2, 6)}`;
+      const itemId = item.itemId || item.sourceItemId || item.inventoryItemId || item.item_id || null;
+      const itemName = (item.item || item.itemName || item.name || "Item").trim();
+      const itemCode = item.itemCode || item.code || item.item_code || null;
+      const hsnCode = item.hsnCode || item.hsn || item.hsn_code || null;
+      const batchNo = item.batchNo || item.batch || item.batch_no || null;
+      const serialNo = Array.isArray(item.serialNumbers)
+        ? item.serialNumbers.join(",")
+        : (item.serialNo || item.serial || null);
       const quantity = parseFloat(item.qty ?? item.quantity ?? 1) || 1;
       const freeQty = parseFloat(item.freeQty ?? 0) || 0;
       const unit = item.unit || "PCS";
-      const unitPrice = parseFloat(item.price ?? item.unitPrice ?? 0) || 0;
-      const purchasePrice = parseFloat(item.purchasePrice ?? 0) || 0;
-      const itemDiscountPercent = parseFloat(item.discountPercent ?? 0) || 0;
-      const itemDiscountAmount = parseFloat(item.discountAmount ?? 0) || 0;
-      const itemTaxRate = parseFloat(item.taxRate ?? item.tax ?? 0) || 0;
-      const itemTaxAmount = parseFloat(item.taxAmount ?? 0) || 0;
-      const cgstRate = parseFloat(item.cgstRate ?? 0) || 0;
-      const cgstAmount = parseFloat(item.cgstAmount ?? 0) || 0;
-      const sgstRate = parseFloat(item.sgstRate ?? 0) || 0;
-      const sgstAmount = parseFloat(item.sgstAmount ?? 0) || 0;
+      const unitPrice = parseFloat(item.price ?? item.unitPrice ?? item.rate ?? 0) || 0;
+      const purchasePrice = parseFloat(item.purchasePrice ?? item.purchase_price ?? 0) || 0;
+      const itemDiscountPercent = parseFloat(item.discountPercent ?? item.discount_percent ?? (item.discountMode !== "amount" ? item.discount : 0) ?? 0) || 0;
+      const itemDiscountAmount = parseFloat(item.discountAmount ?? item.discount_amount ?? (item.discountMode === "amount" ? item.discount : 0) ?? 0) || 0;
+      const itemTaxRate = parseFloat(item.taxRate ?? item.tax_rate ?? (item.tax && item.tax !== "NONE" ? String(item.tax).replace(/[^0-9.]/g, "") : 0) ?? 0) || 0;
+      const itemTaxAmount = parseFloat(item.taxAmount ?? item.tax_amount ?? 0) || 0;
+      const cgstRate = parseFloat(item.cgstRate ?? (itemTaxRate / 2) ?? 0) || 0;
+      const cgstAmount = parseFloat(item.cgstAmount ?? (itemTaxAmount / 2) ?? 0) || 0;
+      const sgstRate = parseFloat(item.sgstRate ?? (itemTaxRate / 2) ?? 0) || 0;
+      const sgstAmount = parseFloat(item.sgstAmount ?? (itemTaxAmount / 2) ?? 0) || 0;
       const igstRate = parseFloat(item.igstRate ?? 0) || 0;
       const igstAmount = parseFloat(item.igstAmount ?? 0) || 0;
-      const cessRate = parseFloat(item.cessRate ?? 0) || 0;
+      const cessRate = parseFloat(item.cessRate ?? item.cessPercent ?? 0) || 0;
       const cessAmount = parseFloat(item.cessAmount ?? 0) || 0;
-      const itemTotalAmount = parseFloat(item.amount ?? item.totalAmount ?? (quantity * unitPrice)) || 0;
+      const itemTotalAmount = parseFloat(item.calculated?.amount ?? item.amount ?? item.totalAmount ?? (quantity * unitPrice - itemDiscountAmount)) || 0;
 
       await conn.query(
         `INSERT INTO transaction_items (

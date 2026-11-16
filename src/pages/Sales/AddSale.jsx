@@ -297,7 +297,7 @@ function normalizeEditRows(editDoc) {
       ...createRow(),
       ...row,
       id: row.id || `edit-row-${idx}-${Date.now()}`,
-      item: row.item || row.itemName || row.name || "",
+      item: row.item || row.itemName || row.item_name || row.name || "",
       description: row.description || "",
       qty,
       unit: row.unit || "PCS",
@@ -307,7 +307,7 @@ function normalizeEditRows(editDoc) {
       discountAmount: discAmount,
       discountMode,
       taxRate,
-      hsn: row.hsn || row.hsnCode || "",
+      hsn: row.hsn || row.hsnCode || row.hsn_code || "",
       cessPercent:
         row.cessPercent != null && row.cessPercent !== "" && Number(row.cessPercent) !== 0
           ? String(row.cessPercent)
@@ -328,85 +328,100 @@ function normalizeEditRows(editDoc) {
 function extractEditForm(editDoc, fallback = {}) {
   if (!editDoc) return fallback;
 
-  const customer =
-    editDoc.form?.customer ??
-    editDoc.partyName ??
-    editDoc.customerName ??
-    editDoc.supplierName ??
-    editDoc.party ??
-    editDoc.customer ??
-    fallback.customer ??
+  const rawCustomer =
+    editDoc.partyName ||
+    editDoc.party_name ||
+    editDoc.customerName ||
+    editDoc.customer_name ||
+    editDoc.supplierName ||
+    editDoc.party ||
+    editDoc.customer ||
+    editDoc.form?.customer ||
+    editDoc.form?.partyName ||
+    fallback.customer ||
     "";
+  const customer = typeof rawCustomer === "string" ? rawCustomer.trim() : String(rawCustomer || "");
 
-  const phone =
-    editDoc.form?.phone ??
-    editDoc.partyPhone ??
-    editDoc.phone ??
-    editDoc.mobile ??
-    fallback.phone ??
+  const rawPhone =
+    editDoc.partyPhone ||
+    editDoc.party_phone ||
+    editDoc.phone ||
+    editDoc.customerPhone ||
+    editDoc.customer_phone ||
+    editDoc.mobile ||
+    editDoc.form?.phone ||
+    fallback.phone ||
     "";
+  const phone = typeof rawPhone === "string" ? rawPhone.trim() : String(rawPhone || "");
 
   const billingAddress =
-    editDoc.form?.billingAddress ??
-    editDoc.billingAddress ??
-    fallback.billingAddress ??
+    editDoc.billingAddress ||
+    editDoc.billing_address ||
+    editDoc.form?.billingAddress ||
+    fallback.billingAddress ||
     "";
 
   const shippingAddress =
-    editDoc.form?.shippingAddress ??
-    editDoc.shippingAddress ??
-    billingAddress ??
-    fallback.shippingAddress ??
+    editDoc.shippingAddress ||
+    editDoc.shipping_address ||
+    editDoc.form?.shippingAddress ||
+    billingAddress ||
+    fallback.shippingAddress ||
     "";
 
   const invoiceNumber =
-    editDoc.form?.invoiceNumber ??
-    editDoc.documentNumber ??
-    editDoc.invoiceNumber ??
-    editDoc.billNumber ??
-    editDoc.number ??
-    fallback.invoiceNumber ??
+    editDoc.documentNumber ||
+    editDoc.document_number ||
+    editDoc.invoiceNumber ||
+    editDoc.invoice_number ||
+    editDoc.billNumber ||
+    editDoc.number ||
+    editDoc.form?.invoiceNumber ||
+    fallback.invoiceNumber ||
     "1";
 
   const rawDate =
-    editDoc.form?.invoiceDate ??
-    editDoc.transactionDate ??
-    editDoc.invoiceDate ??
-    editDoc.billDate ??
-    editDoc.date ??
-    fallback.invoiceDate ??
+    editDoc.transactionDate ||
+    editDoc.transaction_date ||
+    editDoc.invoiceDate ||
+    editDoc.billDate ||
+    editDoc.date ||
+    editDoc.form?.invoiceDate ||
+    fallback.invoiceDate ||
     currentLocalDate();
   const invoiceDate = typeof rawDate === "string" ? rawDate.slice(0, 10) : String(rawDate);
 
   const stateOfSupply =
-    editDoc.form?.stateOfSupply ??
-    editDoc.stateOfSupply ??
-    editDoc.state ??
-    fallback.stateOfSupply ??
+    editDoc.stateOfSupply ||
+    editDoc.state ||
+    editDoc.form?.stateOfSupply ||
+    fallback.stateOfSupply ||
     "None";
 
   const paymentType =
-    editDoc.form?.paymentType ??
-    editDoc.paymentMode ??
-    editDoc.paymentType ??
-    fallback.paymentType ??
+    editDoc.paymentMode ||
+    editDoc.paymentType ||
+    editDoc.payment_mode ||
+    editDoc.form?.paymentType ||
+    fallback.paymentType ||
     "Cash";
 
   const description =
-    editDoc.form?.description ??
-    editDoc.description ??
-    editDoc.notes ??
-    fallback.description ??
+    editDoc.description ||
+    editDoc.notes ||
+    editDoc.form?.description ||
+    fallback.description ||
     "";
 
   const terms =
-    editDoc.form?.terms ??
-    editDoc.terms ??
-    fallback.terms ??
+    editDoc.terms ||
+    editDoc.form?.terms ||
+    fallback.terms ||
     "";
 
   return {
     ...fallback,
+    ...(editDoc.form || {}),
     customer,
     phone,
     billingAddress,
@@ -414,14 +429,13 @@ function extractEditForm(editDoc, fallback = {}) {
     invoiceNumber: String(invoiceNumber),
     invoiceDate,
     stateOfSupply,
-    partyBalance: editDoc.form?.partyBalance || editDoc.partyBalance || fallback.partyBalance || "",
+    partyBalance: editDoc.partyBalance || editDoc.form?.partyBalance || fallback.partyBalance || "",
     showTerms: Boolean(terms),
-    termsTitle: editDoc.form?.termsTitle || fallback.termsTitle || "",
+    termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
     terms,
     showDescription: Boolean(description),
     description,
     paymentType,
-    ...(editDoc.form || {}),
   };
 }
 
@@ -1936,31 +1950,28 @@ function AddSale({ mode = "sale", localOnly = false }) {
     if (!editInvoice?.id) return;
     let active = true;
 
-    const candidateRows = editInvoice.rows || editInvoice.items || editInvoice.lineItems || [];
-    if (!candidateRows.length) {
-      transactionsDb.getById(editInvoice.id)
-        .then((fullDoc) => {
-          if (!active || !fullDoc) return;
-          const mappedRows = normalizeEditRows(fullDoc);
-          if (mappedRows.length > 0) {
-            setRows(mappedRows);
-          }
-          setForm((current) => extractEditForm(fullDoc, current));
-          if (fullDoc.paymentMode || fullDoc.paymentType) {
-            setSaleType(String(fullDoc.paymentMode || fullDoc.paymentType).toLowerCase() === "cash" ? "cash" : "credit");
-          }
-          const rawRec = fullDoc.paidAmount ?? fullDoc.receivedAmount ?? fullDoc.totals?.received;
-          if (rawRec != null && Number(rawRec) > 0) {
-            setReceivedEnabled(true);
-            setReceivedAmount(String(rawRec));
-          }
-          const rawRound = fullDoc.roundOff ?? fullDoc.round_off ?? fullDoc.totals?.roundOffAmount;
-          if (rawRound != null && Number(rawRound) !== 0) {
-            setRoundOffValue(String(rawRound));
-          }
-        })
-        .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
-    }
+    transactionsDb.getById(editInvoice.id)
+      .then((fullDoc) => {
+        if (!active || !fullDoc) return;
+        const mappedRows = normalizeEditRows(fullDoc);
+        if (mappedRows.length > 0) {
+          setRows(mappedRows);
+        }
+        setForm((current) => extractEditForm(fullDoc, current));
+        if (fullDoc.paymentMode || fullDoc.paymentType) {
+          setSaleType(String(fullDoc.paymentMode || fullDoc.paymentType).toLowerCase() === "cash" ? "cash" : "credit");
+        }
+        const rawRec = fullDoc.paidAmount ?? fullDoc.receivedAmount ?? fullDoc.totals?.received;
+        if (rawRec != null && Number(rawRec) > 0) {
+          setReceivedEnabled(true);
+          setReceivedAmount(String(rawRec));
+        }
+        const rawRound = fullDoc.roundOff ?? fullDoc.round_off ?? fullDoc.totals?.roundOffAmount;
+        if (rawRound != null && Number(rawRound) !== 0) {
+          setRoundOffValue(String(rawRound));
+        }
+      })
+      .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
 
     return () => { active = false; };
   }, [editInvoice?.id]);
@@ -2113,38 +2124,79 @@ function AddSale({ mode = "sale", localOnly = false }) {
   };
 
   // Builds invoice.
-  const buildInvoice = () => ({
-    id: transactionId,
-    saleType,
-    transactionType: config.type,
-    form,
-    rows: rows.map((row, index) => ({ ...row, index: index + 1, calculated: calculateRow(row) })),
-    totals,
-    business,
-    files,
-    saleOrderIds: [
-      ...new Set([
-        ...saleOrderConversions.map((o) => o.id),
-        ...rows.map((r) => r.sourceOrderId),
-      ].filter(Boolean)),
-    ],
-    saleOrderNumbers: [
-      ...new Set([
-        ...saleOrderConversions.map((o) => o.number),
-        ...rows.map((r) => r.sourceOrderNumber),
-      ].filter(Boolean)),
-    ],
-    purchaseOrderId:
-      purchaseOrderConversion?.id ||
-      rows.find((r) => r.sourceOrderId)?.sourceOrderId ||
-      undefined,
-    purchaseOrderNumber:
-      purchaseOrderConversion?.number ||
-      rows.find((r) => r.sourceOrderNumber)?.sourceOrderNumber ||
-      undefined,
-    sourceOnlineOrderId: onlineOrderConversion?.id || "",
-    createdAt: new Date().toISOString(),
-  });
+  const buildInvoice = () => {
+    const customer = (form.customer || "").trim();
+    const phone = (form.phone || "").trim();
+    const billingAddress = form.billingAddress || "";
+    const shippingAddress = form.shippingAddress || billingAddress || "";
+    const docNumber = String(form.invoiceNumber || "1").trim();
+    const txnDate = form.invoiceDate || currentLocalDate();
+    const paymentMode = saleType === "cash" ? "Cash" : "Credit";
+    const mappedRows = rows.map((row, index) => ({ ...row, index: index + 1, calculated: calculateRow(row) }));
+    const items = mappedRows.map((r) => ({
+      ...r,
+      item: r.item || r.name || r.itemName || "Item",
+      name: r.item || r.name || r.itemName || "Item",
+      itemName: r.item || r.name || r.itemName || "Item",
+      itemId: r.sourceItemId || r.itemId || null,
+      sourceItemId: r.sourceItemId || r.itemId || null,
+      qty: r.qty ?? 1,
+      quantity: r.qty ?? 1,
+      price: r.price ?? 0,
+      unitPrice: r.price ?? 0,
+    }));
+
+    return {
+      id: transactionId,
+      saleType,
+      transactionType: config.type,
+      partyName: customer,
+      customerName: customer,
+      party: customer,
+      customer,
+      partyPhone: phone,
+      phone,
+      customerPhone: phone,
+      billingAddress,
+      shippingAddress,
+      documentNumber: docNumber,
+      invoiceNumber: docNumber,
+      billNumber: docNumber,
+      transactionDate: txnDate,
+      invoiceDate: txnDate,
+      billDate: txnDate,
+      paymentMode,
+      paymentType: paymentMode,
+      items,
+      rows: mappedRows,
+      form,
+      totals,
+      business,
+      files,
+      saleOrderIds: [
+        ...new Set([
+          ...saleOrderConversions.map((o) => o.id),
+          ...rows.map((r) => r.sourceOrderId),
+        ].filter(Boolean)),
+      ],
+      saleOrderNumbers: [
+        ...new Set([
+          ...saleOrderConversions.map((o) => o.number),
+          ...rows.map((r) => r.sourceOrderNumber),
+        ].filter(Boolean)),
+      ],
+      purchaseOrderId:
+        purchaseOrderConversion?.id ||
+        rows.find((r) => r.sourceOrderId)?.sourceOrderId ||
+        undefined,
+      purchaseOrderNumber:
+        purchaseOrderConversion?.number ||
+        rows.find((r) => r.sourceOrderNumber)?.sourceOrderNumber ||
+        undefined,
+      sourceOnlineOrderId: onlineOrderConversion?.id || "",
+      createdAt: new Date().toISOString(),
+    };
+  };
 
   // Opens preview.
   const openPreview = (printAfterOpen = false) => {
