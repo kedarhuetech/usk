@@ -15,6 +15,7 @@ import {
   FiMessageSquare,
   FiPhone,
   FiPlus,
+  FiRotateCcw,
   FiSend,
   FiTrash2,
   FiUser,
@@ -132,20 +133,27 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
   }, [records, settings]);
 
   const autoDispatchingRef = useRef(false);
+  const hasCheckedAutoDispatchRef = useRef(false);
 
   // Automatically dispatch due reminders via Meta WhatsApp without requiring clicking
   useEffect(() => {
     if (!metaStatus.connected || !settings.enabled || settings.autoNotifyWhatsApp === false) {
       return;
     }
+    if (hasCheckedAutoDispatchRef.current || autoDispatchingRef.current) {
+      return;
+    }
+
     const unnotified = (processed.activeAlerts || []).filter(
       (r) => r.hasValidPhone && !r.alreadyNotifiedForThisDueDate
     );
-    if (!unnotified.length || autoDispatchingRef.current) {
+    if (!unnotified.length) {
       return;
     }
 
     autoDispatchingRef.current = true;
+    hasCheckedAutoDispatchRef.current = true;
+
     autoDispatchDueRemindersViaMeta(company)
       .then((res) => {
         if (res.dispatched > 0) {
@@ -160,7 +168,7 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
       .finally(() => {
         autoDispatchingRef.current = false;
       });
-  }, [metaStatus.connected, settings.enabled, settings.autoNotifyWhatsApp, processed.activeAlerts, company]);
+  }, [metaStatus.connected, settings.enabled, settings.autoNotifyWhatsApp, company]);
 
   const showNotice = (msg) => {
     setNotice(msg);
@@ -694,11 +702,11 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                       </td>
 
                       <td className="px-4 py-3 text-slate-600">
-                        {record.serviceDate || "—"}
+                        {record.serviceDate ? String(record.serviceDate).slice(0, 10) : "—"}
                       </td>
 
                       <td className="px-4 py-3 font-semibold text-slate-900">
-                        {record.serviceDueDate || "—"}
+                        {record.serviceDueDate ? String(record.serviceDueDate).slice(0, 10) : "—"}
                         {record.daysUntilDue !== null && (
                           <div className="text-[10px] font-normal text-slate-500">
                             {record.daysUntilDue > 0
@@ -743,15 +751,15 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                             record.alreadyNotifiedForThisDueDate ? (
                               <button
                                 type="button"
-                                title="Reminder was already sent for this due date. Click to resend if needed."
+                                title="Reminder was already delivered for this due date. Click to resend if needed."
                                 disabled={sendingId === record.id || bulkSending}
                                 onClick={() => handleSendMetaWhatsApp(record)}
-                                className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50 transition active:scale-98 cursor-pointer"
+                                className="inline-flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 transition active:scale-98 cursor-pointer"
                               >
                                 {sendingId === record.id ? (
                                   <><FiLoader className="h-3 w-3 animate-spin" /> Sending...</>
                                 ) : (
-                                  <><FiCheck className="h-3 w-3 text-emerald-600" /> Resend</>
+                                  <><FiRotateCcw className="h-3 w-3 text-slate-500" /> Resend</>
                                 )}
                               </button>
                             ) : (
@@ -791,18 +799,6 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
                           >
                             <FiMail className="h-3 w-3" /> Email
                           </button>
-
-                          {/* Mark Complete */}
-                          {record.status !== "Completed" && (
-                            <button
-                              type="button"
-                              title="Mark Completed"
-                              onClick={() => handleMarkCompleted(record)}
-                              className="rounded border border-slate-200 p-1 text-slate-500 hover:bg-slate-100 hover:text-emerald-600 transition"
-                            >
-                              <FiCheck className="h-3.5 w-3.5" />
-                            </button>
-                          )}
 
                           {/* Edit */}
                           <button

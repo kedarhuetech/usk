@@ -11,6 +11,17 @@ import { pool, businessIdFromRequest } from "../db/mysql.js";
 
 const router = Router();
 
+function formatSqlDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const d = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return String(val).slice(0, 10);
+}
+
 /**
  * GET /api/service-reminders
  * Retrieves service reminder records with normalized history rows
@@ -94,13 +105,13 @@ router.get("/", async (req, res) => {
       customerEmail: row.customer_email || "",
       serviceName: row.service_name,
       service: row.service_name,
-      serviceDate: row.service_date,
-      serviceDueDate: row.service_due_date,
-      dueDate: row.service_due_date,
+      serviceDate: formatSqlDate(row.service_date),
+      serviceDueDate: formatSqlDate(row.service_due_date),
+      dueDate: formatSqlDate(row.service_due_date),
       status: row.status || "Active",
       lastNotifiedAt: row.last_notified_at,
       lastNotifiedChannel: row.last_notified_channel,
-      lastNotifiedDueDate: row.last_notified_due_date,
+      lastNotifiedDueDate: formatSqlDate(row.last_notified_due_date),
       notes: row.notes || "",
       notificationHistory: historyMap.get(row.id) || [],
       createdAt: row.created_at,
@@ -147,8 +158,8 @@ router.post("/", async (req, res) => {
     const customerPhone = body.customerPhone || body.phone || null;
     const customerEmail = body.customerEmail || body.email || null;
     const serviceName = body.serviceName || body.service || "Maintenance Service";
-    const serviceDate = body.serviceDate || new Date().toISOString().slice(0, 10);
-    const serviceDueDate = body.serviceDueDate || body.dueDate;
+    const serviceDate = formatSqlDate(body.serviceDate) || formatSqlDate(new Date());
+    const serviceDueDate = formatSqlDate(body.serviceDueDate || body.dueDate);
     if (!serviceDueDate) {
       await conn.rollback();
       return res.status(400).json({ success: false, message: "Service due date is required." });
@@ -157,7 +168,7 @@ router.post("/", async (req, res) => {
     const status = body.status || "Active";
     const lastNotifiedAt = body.lastNotifiedAt ? new Date(body.lastNotifiedAt) : null;
     const lastNotifiedChannel = body.lastNotifiedChannel || null;
-    const lastNotifiedDueDate = body.lastNotifiedDueDate || null;
+    const lastNotifiedDueDate = formatSqlDate(body.lastNotifiedDueDate);
     const notes = body.notes || null;
 
     // 1. Upsert reminder header
@@ -217,7 +228,9 @@ router.post("/", async (req, res) => {
         customerName,
         customerPhone,
         serviceName,
+        serviceDate,
         serviceDueDate,
+        lastNotifiedDueDate,
         status,
       },
     });

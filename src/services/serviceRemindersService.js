@@ -55,7 +55,7 @@ export function calculateReminderDate(serviceDueDateStr, daysBefore = 2) {
  * Evaluates a single service reminder record against current settings and date.
  */
 export function evaluateReminderStatus(record, settings = getReminderSettings(), today = localDateString()) {
-  const dueDate = record.serviceDueDate?.slice(0, 10) || "";
+  const dueDate = record.serviceDueDate ? String(record.serviceDueDate).slice(0, 10) : "";
   const daysBefore = Math.max(0, Number(settings?.reminderDaysBefore ?? 2));
   const reminderDate = calculateReminderDate(dueDate, daysBefore);
   const daysUntilDue = getCalendarDayDifference(today, dueDate);
@@ -82,10 +82,31 @@ export function evaluateReminderStatus(record, settings = getReminderSettings(),
   const hasContact = hasValidPhone || hasValidEmail;
 
   // Duplicate Prevention:
-  // Eligible if reminders are enabled, service is not completed/cancelled,
-  // today has reached or passed reminderDate, and this specific due date hasn't been notified yet.
-  const isDateReached = today >= reminderDate;
-  const alreadyNotifiedForThisDueDate = record.lastNotifiedDueDate === dueDate;
+  // Normalize lastNotifiedDueDate
+  const cleanLastNotifiedDueDate = record.lastNotifiedDueDate
+    ? String(record.lastNotifiedDueDate).slice(0, 10)
+    : "";
+
+  // Check notification history for any delivered/sent record matching this due date
+  const hasDeliveredHistory = Array.isArray(record.notificationHistory) && record.notificationHistory.some((h) => {
+    const hStatus = String(h?.status || "").toUpperCase();
+    const isSentOrDelivered = hStatus === "DELIVERED" || hStatus === "SENT" || hStatus === "SUCCESS";
+    if (!isSentOrDelivered) return false;
+
+    const hDueDate = h?.dueDate ? String(h.dueDate).slice(0, 10) : "";
+    if (hDueDate && dueDate) {
+      return hDueDate === dueDate;
+    }
+    return true;
+  });
+
+  const alreadyNotifiedForThisDueDate = Boolean(
+    (cleanLastNotifiedDueDate && dueDate && cleanLastNotifiedDueDate === dueDate) ||
+    hasDeliveredHistory ||
+    (record.lastNotifiedAt && (cleanLastNotifiedDueDate === dueDate || !cleanLastNotifiedDueDate))
+  );
+
+  const isDateReached = Boolean(reminderDate && today >= reminderDate);
   const isEligibleForNotification =
     Boolean(settings?.enabled) &&
     status !== "Completed" &&
@@ -236,13 +257,14 @@ export function recordReminderNotification(recordId, channel = "in_app", details
   const target = records.find((r) => r.id === recordId);
   if (!target) return null;
 
+  const cleanDueDate = target.serviceDueDate ? String(target.serviceDueDate).slice(0, 10) : "";
   const now = new Date().toISOString();
   const historyEntry = {
     channel,
     at: now,
     timestamp: now,
     sentAt: now,
-    dueDate: target.serviceDueDate,
+    dueDate: cleanDueDate,
     message: details.message || target.lastNotifiedMessage || "",
     recipient: details.recipient || target.customerPhone || target.customerEmail || "",
     status: details.status || "SENT",
@@ -252,7 +274,7 @@ export function recordReminderNotification(recordId, channel = "in_app", details
   const updated = {
     ...target,
     lastNotifiedAt: now,
-    lastNotifiedDueDate: target.serviceDueDate,
+    lastNotifiedDueDate: cleanDueDate,
     lastNotifiedMessage: details.message || target.lastNotifiedMessage || "",
     lastNotifiedChannel: channel,
     notificationHistory: [...(target.notificationHistory || []), historyEntry],
@@ -403,10 +425,13 @@ export async function requestServiceReminderTemplateApproval() {
   }
 }
 
+// Session-level dispatch lock to guarantee no reminder is automatically dispatched twice for the same due date
+const sessionDispatchedReminders = new Set();
+
 /**
  * Automatically checks and dispatches any service due reminders that have reached their reminder date
  * and have not yet been notified for this specific due date.
- * No manual clicking required.
+ * Guarantees one-time delivery per due date.
  */
 export async function autoDispatchDueRemindersViaMeta(companyName = null) {
   if (!companyName) {
@@ -429,9 +454,13 @@ export async function autoDispatchDueRemindersViaMeta(companyName = null) {
   }
 
   const processed = processServiceReminders({ settings });
-  const eligible = (processed.activeAlerts || []).filter(
-    (r) => r.hasValidPhone && !r.alreadyNotifiedForThisDueDate
-  );
+  const eligible = (processed.activeAlerts || []).filter((r) => {
+    if (!r.hasValidPhone || r.alreadyNotifiedForThisDueDate) return false;
+    const cleanDueDate = r.serviceDueDate ? String(r.serviceDueDate).slice(0, 10) : "";
+    const sessionKey = `${r.id}_${cleanDueDate}`;
+    if (sessionDispatchedReminders.has(sessionKey)) return false;
+    return true;
+  });
 
   if (!eligible.length) {
     return { success: true, dispatched: 0, eligible: 0 };
@@ -442,15 +471,23 @@ export async function autoDispatchDueRemindersViaMeta(companyName = null) {
   const errors = [];
 
   for (const record of eligible) {
+    const cleanDueDate = record.serviceDueDate ? String(record.serviceDueDate).slice(0, 10) : "";
+    const sessionKey = `${record.id}_${cleanDueDate}`;
+    // Lock key immediately to prevent duplicate dispatch during in-flight network requests
+    sessionDispatchedReminders.add(sessionKey);
+
     try {
       const res = await sendServiceReminderViaMeta(record, companyName);
       if (res.success) {
         dispatched++;
         dispatchedCustomers.push(record.customerName || record.customerPhone);
       } else {
+        // If delivery failed, remove from session lock so it can be retried
+        sessionDispatchedReminders.delete(sessionKey);
         errors.push({ customer: record.customerName, error: res.error });
       }
     } catch (err) {
+      sessionDispatchedReminders.delete(sessionKey);
       console.warn("Auto-dispatch reminder failed for", record.customerName, err);
       errors.push({ customer: record.customerName, error: err.message });
     }
