@@ -7,6 +7,7 @@ import {
   recordReminderNotification,
   sendServiceReminderViaMeta,
   autoDispatchDueRemindersViaMeta,
+  evaluateReminderStatus,
 } from "./serviceRemindersService.js";
 import {
   saveReminderRecord,
@@ -209,4 +210,56 @@ test("7. autoDispatchDueRemindersViaMeta respects autoNotifyWhatsApp disabled se
   assert.equal(run.success, false);
   assert.equal(run.reason, "disabled");
   assert.equal(run.dispatched, 0);
+});
+
+test("8. evaluateReminderStatus accurately normalizes ISO timestamp due dates and prevents duplicate dispatch", () => {
+  const settings = { enabled: true, reminderDaysBefore: 2 };
+  const today = "2026-11-16";
+
+  // Case A: Record has ISO due date "2026-11-13T18:30:00.000Z" and was already notified
+  const recordA = {
+    id: "rec-iso-1",
+    customerName: "kedar",
+    customerPhone: "8128634099",
+    serviceDueDate: "2026-11-13T18:30:00.000Z",
+    lastNotifiedDueDate: "2026-11-13",
+    lastNotifiedAt: "2026-11-13T10:00:00.000Z",
+    status: "Overdue",
+  };
+
+  const evalA = evaluateReminderStatus(recordA, settings, today);
+  assert.equal(evalA.alreadyNotifiedForThisDueDate, true);
+  assert.equal(evalA.isEligibleForNotification, false, "Must not be eligible if already notified for this due date");
+
+  // Case B: Record has ISO lastNotifiedDueDate and ISO serviceDueDate
+  const recordB = {
+    id: "rec-iso-2",
+    customerName: "kedar",
+    customerPhone: "8128634099",
+    serviceDueDate: "2026-11-13T18:30:00.000Z",
+    lastNotifiedDueDate: "2026-11-13T18:30:00.000Z",
+    lastNotifiedAt: "2026-11-13T10:00:00.000Z",
+    status: "Overdue",
+  };
+
+  const evalB = evaluateReminderStatus(recordB, settings, today);
+  assert.equal(evalB.alreadyNotifiedForThisDueDate, true);
+  assert.equal(evalB.isEligibleForNotification, false);
+
+  // Case C: Notification history contains sent record for this due date
+  const recordC = {
+    id: "rec-iso-3",
+    customerName: "kedar",
+    customerPhone: "8128634099",
+    serviceDueDate: "2026-11-13",
+    lastNotifiedDueDate: null,
+    notificationHistory: [
+      { status: "DELIVERED", dueDate: "2026-11-13", sentAt: "2026-11-13T10:00:00.000Z" },
+    ],
+    status: "Overdue",
+  };
+
+  const evalC = evaluateReminderStatus(recordC, settings, today);
+  assert.equal(evalC.alreadyNotifiedForThisDueDate, true);
+  assert.equal(evalC.isEligibleForNotification, false);
 });
