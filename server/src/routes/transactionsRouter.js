@@ -10,7 +10,7 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
@@ -158,10 +158,10 @@ router.get("/", async (req, res) => {
         invoiceNumber: row.document_number,
         billNumber: row.document_number,
         orderNumber: row.document_number,
-        transactionDate: row.transaction_date,
-        invoiceDate: row.transaction_date,
-        billDate: row.transaction_date,
-        dueDate: row.due_date,
+        transactionDate: toSqlDate(row.transaction_date),
+        invoiceDate: toSqlDate(row.transaction_date),
+        billDate: toSqlDate(row.transaction_date),
+        dueDate: toSqlDate(row.due_date),
         partyId: row.party_id,
         partyName: party,
         party: party,
@@ -193,7 +193,7 @@ router.get("/", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         eWayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
-        poDate: row.po_date || null,
+        poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
         terms: row.terms || "",
         items,
@@ -207,7 +207,7 @@ router.get("/", async (req, res) => {
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
           invoiceNumber: row.document_number,
-          invoiceDate: row.transaction_date,
+          invoiceDate: toSqlDate(row.transaction_date),
           paymentType: row.payment_mode || "Cash",
         },
         createdAt: row.created_at,
@@ -340,8 +340,8 @@ router.get("/:id", async (req, res) => {
         type: row.transaction_type,
         documentNumber: row.document_number,
         invoiceNumber: row.document_number,
-        transactionDate: row.transaction_date,
-        dueDate: row.due_date,
+        transactionDate: toSqlDate(row.transaction_date),
+        dueDate: toSqlDate(row.due_date),
         partyId: row.party_id,
         partyName: party,
         partyPhone: phone,
@@ -364,7 +364,7 @@ router.get("/:id", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         eWayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
-        poDate: row.po_date || null,
+        poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
         terms: row.terms || "",
         items,
@@ -382,7 +382,7 @@ router.get("/:id", async (req, res) => {
           billingAddress,
           shippingAddress,
           invoiceNumber: row.document_number,
-          invoiceDate: row.transaction_date,
+          invoiceDate: toSqlDate(row.transaction_date),
           paymentType: row.payment_mode || "Cash",
         },
         createdAt: row.created_at,
@@ -417,7 +417,7 @@ router.post("/", async (req, res) => {
       body.form?.billNumber ||
       "0"
     ).trim();
-    const transactionDate =
+    const rawTxnDate =
       body.transactionDate ||
       body.invoiceDate ||
       body.billDate ||
@@ -425,7 +425,8 @@ router.post("/", async (req, res) => {
       body.form?.invoiceDate ||
       body.form?.billDate ||
       new Date().toISOString().slice(0, 10);
-    const dueDate = body.dueDate || null;
+    const transactionDate = toSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
+    const dueDate = toSqlDate(body.dueDate || body.due_date || body.form?.dueDate);
     const partyId = body.partyId || body.party_id || null;
     const partyName =
       (body.partyName ||
@@ -482,7 +483,7 @@ router.post("/", async (req, res) => {
     const vehicleNo = body.vehicleNo || null;
     const eWayBillNo = body.eWayBillNo || null;
     const poNumber = body.poNumber || null;
-    const poDate = body.poDate || null;
+    const poDate = toSqlDate(body.poDate || body.po_date || body.form?.poDate);
     const notes = body.notes || null;
     const terms = body.terms || null;
 

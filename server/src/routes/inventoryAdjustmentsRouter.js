@@ -5,7 +5,7 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
@@ -59,7 +59,7 @@ router.post("/", async (req, res) => {
     const unitPrice = parseFloat(body.unitPrice ?? 0) || 0;
     const totalValue = parseFloat(body.totalValue ?? (quantity * unitPrice)) || 0;
     const reason = body.reason || null;
-    const adjustmentDate = body.adjustmentDate || new Date().toISOString().slice(0, 10);
+    const adjustmentDate = toSqlDate(body.adjustmentDate) || new Date().toISOString().slice(0, 10);
 
     if (!itemId || quantity <= 0) {
       await conn.rollback();

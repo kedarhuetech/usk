@@ -37,3 +37,31 @@ export function businessIdFromRequest(req) {
   if (!id || id.length > 64) throw Object.assign(new Error("A valid X-Business-Id header is required."), { status: 400 });
   return id;
 }
+
+/**
+ * Converts any date representation (ISO 8601 string, Date object, DD-MM-YYYY)
+ * to a clean MySQL DATE column formatted string (YYYY-MM-DD) or null.
+ */
+export function toSqlDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const d = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  const str = String(val).trim();
+  if (!str) return null;
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  const dmyMatch = str.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+  if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  return null;
+}
