@@ -21,25 +21,30 @@ import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js
 const STORAGE_KEY = "ledgerly:estimateQuotations.v1";
 
 function normalizeEstimate(item) {
+  if (!item) return item;
   return {
     ...item,
     id: item.id,
-    number: item.documentNumber || item.number || "",
-    customer: item.customer || item.partyName || item.customerName || item.party || "Cash Sale",
-    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    number: item.documentNumber || item.number || item.refNo || item.invoiceNumber || "",
+    customer: item.customer || item.partyName || item.customerName || item.party || item.form?.customer || "Cash Sale",
+    date: item.date || item.transactionDate || item.invoiceDate || (item.createdAt ? item.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
     amount: Number(item.amount ?? item.totalAmount ?? 0),
     status: item.status || "Open",
-    phone: item.phone || item.partyPhone || "",
-    billingAddress: item.billingAddress || "",
+    phone: item.phone || item.partyPhone || item.form?.phone || "",
+    billingAddress: item.billingAddress || item.partyAddress || item.address || "",
     shippingAddress: item.shippingAddress || "",
     description: item.description || item.notes || "",
     terms: item.terms || "",
     rows: (item.rows || item.items || []).map((r) => ({
+      id: r.id || crypto.randomUUID(),
       item: r.item || r.itemName || r.name || "",
       description: r.description || "",
-      qty: Number(r.qty ?? r.quantity ?? 1),
-      unit: r.unit || "",
-      price: Number(r.price ?? r.unitPrice ?? 0),
+      size: r.size || "",
+      qty: String(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "NONE",
+      price: String(r.price ?? r.unitPrice ?? 0),
+      discountPercent: String(r.discountPercent ?? r.discount ?? ""),
+      taxRate: String(r.taxRate ?? r.tax ?? "NONE"),
     })),
   };
 }
@@ -71,7 +76,8 @@ function endOfMonth(date) { return new Date(date.getFullYear(), date.getMonth() 
 
 export default function EstimateQuotation() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const today = new Date();
   const [estimates, setEstimates] = useState(readEstimates);
   const [dateFrom, setDateFrom] = useState(toIsoDate(startOfMonth(today)));
@@ -130,6 +136,14 @@ export default function EstimateQuotation() {
       };
     }
   }, []);
+
+  // Handle incoming edit or view state from reports or other pages
+  useEffect(() => {
+    if (location.state?.editEstimate || location.state?.editInvoice) {
+      const incoming = location.state.editEstimate || location.state.editInvoice;
+      setEditor({ mode: "edit", estimate: normalizeEstimate(incoming) });
+    }
+  }, [location.state]);
 
   const saveEstimates = (next) => {
     setEstimates(next);

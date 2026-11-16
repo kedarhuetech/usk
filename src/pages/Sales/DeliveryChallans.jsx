@@ -27,29 +27,41 @@ const dateLabel = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateS
 const freshRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discount: "", tax: "NONE", cess: "" });
 
 function normalizeChallan(item) {
+  if (!item) return item;
+  const rawRows = (item.rows && item.rows.length > 0)
+    ? item.rows
+    : (item.items && item.items.length > 0)
+    ? item.items
+    : [];
+
+  const rows = rawRows.length > 0
+    ? rawRows.map((r) => ({
+        id: r.id || crypto.randomUUID(),
+        item: r.item || r.itemName || r.name || "",
+        description: r.description || "",
+        size: r.size || "",
+        qty: String(r.qty ?? r.quantity ?? 1),
+        unit: r.unit || "NONE",
+        price: String(r.price ?? r.unitPrice ?? 0),
+        discount: String(r.discount ?? 0),
+        tax: String(r.tax ?? "NONE"),
+        cess: r.cess || "",
+        hsn: r.hsn || r.hsnCode || "",
+      }))
+    : [freshRow(), freshRow()];
+
   return {
     ...item,
     id: item.id,
-    number: item.documentNumber || item.number || "",
-    party: item.party || item.partyName || item.customerName || "Party",
+    number: item.documentNumber || item.number || item.refNo || item.invoiceNumber || "",
+    party: item.party || item.partyName || item.customerName || item.customer || "Party",
     phone: item.phone || item.partyPhone || "",
     date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : today()),
-    dueDate: item.dueDate || item.date || today(),
+    dueDate: item.dueDate || item.date || item.transactionDate || today(),
     total: Number(item.total ?? item.totalAmount ?? item.amount ?? 0),
     status: item.status || "Open",
-    rows: (item.rows || item.items || []).map((r) => ({
-      id: r.id || crypto.randomUUID(),
-      item: r.item || r.itemName || r.name || "",
-      description: r.description || "",
-      size: r.size || "",
-      qty: Number(r.qty ?? r.quantity ?? 1),
-      unit: r.unit || "NONE",
-      price: Number(r.price ?? r.unitPrice ?? 0),
-      discount: Number(r.discount ?? 0),
-      tax: r.tax || "NONE",
-      cess: r.cess || "",
-      hsn: r.hsn || r.hsnCode || "",
-    })),
+    state: item.state || item.stateOfSupply || "Select",
+    rows,
   };
 }
 
@@ -106,6 +118,10 @@ export default function DeliveryChallans() {
   useEffect(() => {
     if (location.state?.previewChallan) {
       setPreviewChallan(location.state.previewChallan);
+    }
+    if (location.state?.editChallan || location.state?.editInvoice) {
+      const incoming = location.state.editChallan || location.state.editInvoice;
+      setEditor({ mode: "edit", value: normalizeChallan(incoming) });
     }
   }, [location.state]);
 
@@ -310,7 +326,7 @@ export default function DeliveryChallans() {
   };
   const act = (action, challan) => {
     setMenuId("");
-    if (action === "View/Edit") setEditor({ mode: "edit", value: challan });
+    if (action === "View/Edit") setEditor({ mode: "edit", value: normalizeChallan(challan) });
     if (action === "Delete") {
       setConfirmModal({
         isOpen: true,

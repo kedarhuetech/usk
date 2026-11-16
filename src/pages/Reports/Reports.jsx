@@ -28,6 +28,8 @@ import GSTReport from "./GSTReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords.js";
+import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { toast } from "../../components/Common/Toast.jsx";
 import { isReportGroupVisible, isReportVisible } from "../../config/reportVisibility.js";
 import {
@@ -208,6 +210,35 @@ const readLocal = (...keys) => {
   return [];
 };
 
+function navigateToEditTransaction(row, navigate) {
+  const t = String(row.type || row.transactionType || "").toLowerCase();
+  if (t === "sale order" || t === "sale_order") {
+    navigate("/sales/sale-order", { state: { editOrder: row, editInvoice: row } });
+  } else if (t === "purchase order" || t === "purchase_order") {
+    navigate("/purchase-expense/purchase-order", { state: { editOrder: row, editPurchase: row } });
+  } else if (t === "purchase" || t === "purchase bill" || t === "purchase_bill") {
+    navigate("/purchase-expense/purchase-bills/new", { state: { editPurchase: row, editBill: row, editInvoice: row } });
+  } else if (t === "payment-in" || t === "payment_in") {
+    navigate("/sales/payment-in", { state: { editPayment: row, editInvoice: row } });
+  } else if (t === "payment-out" || t === "payment_out") {
+    navigate("/purchase-expense/payment-out", { state: { editPayment: row, editPurchase: row } });
+  } else if (t === "expense") {
+    navigate("/purchase-expense/expenses", { state: { editExpense: row, editInvoice: row } });
+  } else if (t === "estimate" || t === "quotation") {
+    navigate("/sales/estimate-quotation", { state: { editEstimate: row, editInvoice: row } });
+  } else if (t === "proforma" || t === "proforma_invoice") {
+    navigate("/sales/proforma-invoice", { state: { editProforma: row, editInvoice: row } });
+  } else if (t === "delivery_challan" || t.includes("challan")) {
+    navigate("/sales/delivery-challan", { state: { editChallan: row, editInvoice: row } });
+  } else if (t === "credit_note" || t === "sale_return" || t.includes("credit note") || t.includes("sale return")) {
+    navigate("/sales/sale-return-credit-note", { state: { editReturn: row, editInvoice: row } });
+  } else if (t === "debit_note" || t === "purchase_return" || t.includes("debit note") || t.includes("purchase return")) {
+    navigate("/purchase-expense/purchase-return", { state: { editReturn: row, editPurchase: row } });
+  } else {
+    navigate("/sales/sale-invoices/new", { state: { editInvoice: row } });
+  }
+}
+
 function Reports({ defaultReport }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -317,15 +348,36 @@ function Reports({ defaultReport }) {
   const isAllTransactions = activeReport === "All Transactions";
   const isPurchase = ["Purchase", "Purchase Bills"].includes(activeReport);
 
-  const sales = useMemo(
-    () => readLocal(transactionStorageKeys.sales),
-    []
-  );
+  const [sales, setSales] = useState(() => readLocal(transactionStorageKeys.sales));
+  const [purchases, setPurchases] = useState(() => readLocal(transactionStorageKeys.purchases));
 
-  const purchases = useMemo(
-    () => readLocal(transactionStorageKeys.purchases),
-    []
-  );
+  useEffect(() => {
+    let active = true;
+    const reload = () => {
+      setSales(readLocal(transactionStorageKeys.sales));
+      setPurchases(readLocal(transactionStorageKeys.purchases));
+    };
+
+    loadSalesInvoices()
+      .then((records) => {
+        if (active && Array.isArray(records) && records.length) setSales(records);
+      })
+      .catch(() => {});
+
+    loadPurchaseBills()
+      .then((records) => {
+        if (active && Array.isArray(records) && records.length) setPurchases(records);
+      })
+      .catch(() => {});
+
+    window.addEventListener(businessDataChangedEvent, reload);
+    window.addEventListener("storage", reload);
+    return () => {
+      active = false;
+      window.removeEventListener(businessDataChangedEvent, reload);
+      window.removeEventListener("storage", reload);
+    };
+  }, []);
 
   const paymentIns = useMemo(() => readLocal(transactionStorageKeys.paymentIns), []);
   const paymentOuts = useMemo(() => readLocal(transactionStorageKeys.paymentOuts), []);
@@ -1529,19 +1581,13 @@ function Reports({ defaultReport }) {
                               `font-medium ${statusClass(status)}`
                             )}
                             {cell(
-                              type === "Sale" && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    navigate("/sales/sale-invoices/new", {
-                                      state: { editInvoice: row },
-                                    })
-                                  }
-                                  className="text-slate-500 hover:text-sky-600"
-                                >
-                                  View/Edit
-                                </button>
-                              )
+                              <button
+                                type="button"
+                                onClick={() => navigateToEditTransaction(row, navigate)}
+                                className="text-slate-500 hover:text-sky-600 font-medium"
+                              >
+                                View/Edit
+                              </button>
                             )}
                           </>
                         )}

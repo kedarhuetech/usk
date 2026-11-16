@@ -289,6 +289,19 @@ export const transactionsDb = {
   },
 
   /**
+   * Fetches a single transaction by ID with normalized line items from MySQL
+   */
+  async getById(id) {
+    try {
+      const res = await apiRequest(`/transactions/${encodeURIComponent(id)}`);
+      return res?.data || res;
+    } catch (err) {
+      console.warn(`[MySQL] Failed to fetch transaction ${id}:`, err.message);
+      return null;
+    }
+  },
+
+  /**
    * Deletes a transaction from MySQL
    */
   async remove(id) {

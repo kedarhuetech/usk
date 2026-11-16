@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   FiCalendar,
   FiChevronDown,
@@ -63,11 +64,12 @@ const freshRow = () => ({
 });
 
 function normalizePurchaseReturn(item) {
+  if (!item) return item;
   return {
     ...item,
     id: item.id,
     refNo: item.documentNumber || item.refNo || item.number || "",
-    party: item.party || item.partyName || item.supplierName || "",
+    party: item.party || item.partyName || item.supplierName || item.supplier || "",
     date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : today()),
     total: Number(item.total ?? item.totalAmount ?? 0),
     received: Number(item.received ?? item.paidAmount ?? 0),
@@ -78,10 +80,10 @@ function normalizePurchaseReturn(item) {
       id: r.id || crypto.randomUUID(),
       item: r.item || r.itemName || r.name || "",
       description: r.description || "",
-      qty: Number(r.qty ?? r.quantity ?? 1),
+      qty: String(r.qty ?? r.quantity ?? 1),
       unit: r.unit || "NONE",
-      price: Number(r.price ?? r.unitPrice ?? 0),
-      discount: Number(r.discount ?? 0),
+      price: String(r.price ?? r.unitPrice ?? 0),
+      discount: String(r.discount ?? 0),
       tax: r.tax || "NONE",
       sourceItemId: r.sourceItemId || "",
       batchNo: r.batchNo || "",
@@ -105,6 +107,7 @@ const rowAmount = (row) => {
 };
 
 export default function PurchaseReturns() {
+  const location = useLocation();
   const [records, setRecords] = useState(readReturns);
   const [editor, setEditor] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -177,6 +180,13 @@ export default function PurchaseReturns() {
       };
     }
   }, []);
+
+  useEffect(() => {
+    if (location.state?.editReturn || location.state?.editPurchase) {
+      const target = location.state.editReturn || location.state.editPurchase;
+      setEditor({ mode: "edit", value: normalizePurchaseReturn(target) });
+    }
+  }, [location.state]);
 
   const persist = (next) => {
     const rollbackKeys = [STORAGE_KEY, "ledgerly:inventoryItems.v1", "ledgerly:batchMovements.v1"];
@@ -631,7 +641,7 @@ export default function PurchaseReturns() {
                         <button
                           onClick={() => {
                             setMenuId("");
-                            setEditor({ mode: "edit", value: item });
+                            setEditor({ mode: "edit", value: normalizePurchaseReturn(item) });
                           }}
                           className="block w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 text-left"
                         >
@@ -843,7 +853,7 @@ export default function PurchaseReturns() {
                     </tr>
                   </thead>
                   <tbody>
-                    {editor.value.rows.map((row, i) => (
+                    {(editor.value.rows || editor.value.items || []).map((row, i) => (
                       <tr key={row.id} className="border-b">
                         <td className="p-2 text-center text-gray-500">{i + 1}</td>
                         <td className="p-2 relative">

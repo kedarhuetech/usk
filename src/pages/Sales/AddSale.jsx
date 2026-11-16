@@ -56,6 +56,7 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 
 const termsAppliesTo = [
   "Sale Invoice",
@@ -243,6 +244,184 @@ function saleItemFromInventory(item = {}) {
     serialNumbers: item.serialNumbers || [],
     discount: item.discount || "",
     discountType: item.discountType || "Percentage",
+  };
+}
+
+// Normalizes and maps rows from an existing transaction or database items into AddSale row format
+function normalizeEditRows(editDoc) {
+  if (!editDoc) return [];
+  const candidateRows = editDoc.rows || editDoc.items || editDoc.lineItems || [];
+  if (!Array.isArray(candidateRows) || candidateRows.length === 0) return [];
+
+  return candidateRows.map((row, idx) => {
+    const discPercent =
+      row.discountPercent != null && row.discountPercent !== "" && Number(row.discountPercent) !== 0
+        ? String(row.discountPercent)
+        : "";
+    const discAmount =
+      row.discountAmount != null && row.discountAmount !== "" && Number(row.discountAmount) !== 0
+        ? String(row.discountAmount)
+        : (row.discount != null && row.discount !== "" && Number(row.discount) !== 0 ? String(row.discount) : "");
+    const discountMode = row.discountMode || (discAmount && !discPercent ? "amount" : "percent");
+
+    const rawTaxRate = row.taxRate != null && row.taxRate !== "" ? row.taxRate : (row.tax != null ? row.tax : "NONE");
+    let taxRate = "NONE";
+    if (rawTaxRate && rawTaxRate !== "NONE" && rawTaxRate !== "None" && rawTaxRate !== 0 && rawTaxRate !== "0") {
+      const numTax = typeof rawTaxRate === "number" ? rawTaxRate : parseFloat(String(rawTaxRate).replace(/[^0-9.]/g, ""));
+      if (numTax && saleTaxOptions.includes(`GST @ ${numTax}%`)) {
+        taxRate = `GST @ ${numTax}%`;
+      } else if (numTax && saleTaxOptions.includes(`IGST @ ${numTax}%`)) {
+        taxRate = `IGST @ ${numTax}%`;
+      } else if (saleTaxOptions.includes(String(rawTaxRate))) {
+        taxRate = String(rawTaxRate);
+      }
+    }
+
+    const serials = Array.isArray(row.serialNumbers)
+      ? row.serialNumbers
+      : (row.serialNo ? [row.serialNo] : []);
+
+    const qty =
+      row.qty != null && row.qty !== ""
+        ? String(row.qty)
+        : (row.quantity != null && row.quantity !== "" ? String(row.quantity) : "1");
+
+    const price =
+      row.price != null && row.price !== ""
+        ? String(row.price)
+        : (row.unitPrice != null && row.unitPrice !== ""
+          ? String(row.unitPrice)
+          : (row.rate != null && row.rate !== "" ? String(row.rate) : ""));
+
+    return {
+      ...createRow(),
+      ...row,
+      id: row.id || `edit-row-${idx}-${Date.now()}`,
+      item: row.item || row.itemName || row.name || "",
+      description: row.description || "",
+      qty,
+      unit: row.unit || "PCS",
+      price,
+      priceMode: row.priceMode || "Without Tax",
+      discountPercent: discPercent,
+      discountAmount: discAmount,
+      discountMode,
+      taxRate,
+      hsn: row.hsn || row.hsnCode || "",
+      cessPercent:
+        row.cessPercent != null && row.cessPercent !== "" && Number(row.cessPercent) !== 0
+          ? String(row.cessPercent)
+          : (row.cessRate != null && Number(row.cessRate) !== 0 ? String(row.cessRate) : ""),
+      cessAmount:
+        row.cessAmount != null && row.cessAmount !== "" && Number(row.cessAmount) !== 0
+          ? String(row.cessAmount)
+          : "",
+      sourceItemId: row.sourceItemId || row.itemId || row.item_id || "",
+      batchNo: row.batchNo || row.batch_no || "",
+      expDate: row.expDate || row.exp_date || "",
+      serialNumbers: serials,
+    };
+  });
+}
+
+// Extracts form fields from an existing transaction header, supporting both local and MySQL schemas
+function extractEditForm(editDoc, fallback = {}) {
+  if (!editDoc) return fallback;
+
+  const customer =
+    editDoc.form?.customer ??
+    editDoc.partyName ??
+    editDoc.customerName ??
+    editDoc.supplierName ??
+    editDoc.party ??
+    editDoc.customer ??
+    fallback.customer ??
+    "";
+
+  const phone =
+    editDoc.form?.phone ??
+    editDoc.partyPhone ??
+    editDoc.phone ??
+    editDoc.mobile ??
+    fallback.phone ??
+    "";
+
+  const billingAddress =
+    editDoc.form?.billingAddress ??
+    editDoc.billingAddress ??
+    fallback.billingAddress ??
+    "";
+
+  const shippingAddress =
+    editDoc.form?.shippingAddress ??
+    editDoc.shippingAddress ??
+    billingAddress ??
+    fallback.shippingAddress ??
+    "";
+
+  const invoiceNumber =
+    editDoc.form?.invoiceNumber ??
+    editDoc.documentNumber ??
+    editDoc.invoiceNumber ??
+    editDoc.billNumber ??
+    editDoc.number ??
+    fallback.invoiceNumber ??
+    "1";
+
+  const rawDate =
+    editDoc.form?.invoiceDate ??
+    editDoc.transactionDate ??
+    editDoc.invoiceDate ??
+    editDoc.billDate ??
+    editDoc.date ??
+    fallback.invoiceDate ??
+    currentLocalDate();
+  const invoiceDate = typeof rawDate === "string" ? rawDate.slice(0, 10) : String(rawDate);
+
+  const stateOfSupply =
+    editDoc.form?.stateOfSupply ??
+    editDoc.stateOfSupply ??
+    editDoc.state ??
+    fallback.stateOfSupply ??
+    "None";
+
+  const paymentType =
+    editDoc.form?.paymentType ??
+    editDoc.paymentMode ??
+    editDoc.paymentType ??
+    fallback.paymentType ??
+    "Cash";
+
+  const description =
+    editDoc.form?.description ??
+    editDoc.description ??
+    editDoc.notes ??
+    fallback.description ??
+    "";
+
+  const terms =
+    editDoc.form?.terms ??
+    editDoc.terms ??
+    fallback.terms ??
+    "";
+
+  return {
+    ...fallback,
+    customer,
+    phone,
+    billingAddress,
+    shippingAddress,
+    invoiceNumber: String(invoiceNumber),
+    invoiceDate,
+    stateOfSupply,
+    partyBalance: editDoc.form?.partyBalance || editDoc.partyBalance || fallback.partyBalance || "",
+    showTerms: Boolean(terms),
+    termsTitle: editDoc.form?.termsTitle || fallback.termsTitle || "",
+    terms,
+    showDescription: Boolean(description),
+    description,
+    paymentType,
+    ...(editDoc.form || {}),
   };
 }
 
@@ -1565,9 +1744,15 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
   const [tabs, setTabs] = useState([{ id: `${config.type}-1`, label: `${config.tabPrefix} #1` }]);
   const [activeTab, setActiveTab] = useState(`${config.type}-1`);
-  const [saleType, setSaleType] = useState(editInvoice?.saleType || "credit");
+  const [saleType, setSaleType] = useState(() => {
+    if (editInvoice?.saleType) return editInvoice.saleType;
+    const mode = String(editInvoice?.paymentMode || editInvoice?.paymentType || editInvoice?.form?.paymentType || "").toLowerCase();
+    if (mode === "cash") return "cash";
+    return "credit";
+  });
   const [rows, setRows] = useState(() => {
-    if (editInvoice?.rows?.length) return editInvoice.rows.map((row) => ({ ...createRow(), ...row, priceMode: row.priceMode || "Without Tax" }));
+    const editRows = normalizeEditRows(editInvoice);
+    if (editRows.length) return editRows;
     if (conversionItems?.length) {
       const inventory = getInventoryItems();
       return conversionItems.map((ci) => {
@@ -1693,11 +1878,20 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [businessMode, setBusinessMode] = useState("");
   const [roundOff, setRoundOff] = useState(true);
-  const [roundOffValue, setRoundOffValue] = useState(() => editInvoice?.totals?.roundOffAmount != null ? String(editInvoice.totals.roundOffAmount) : "");
-  const [receivedEnabled, setReceivedEnabled] = useState(() => Number(editInvoice?.totals?.received || 0) > 0);
-  const [receivedAmount, setReceivedAmount] = useState(() => editInvoice?.totals?.received != null ? String(editInvoice.totals.received) : "");
+  const [roundOffValue, setRoundOffValue] = useState(() => {
+    const raw = editInvoice?.totals?.roundOffAmount ?? editInvoice?.roundOff ?? editInvoice?.round_off;
+    return raw != null && raw !== 0 && raw !== "0" ? String(raw) : "";
+  });
+  const [receivedEnabled, setReceivedEnabled] = useState(() => {
+    const raw = editInvoice?.totals?.received ?? editInvoice?.receivedAmount ?? editInvoice?.paidAmount ?? editInvoice?.paid;
+    return Number(raw || 0) > 0;
+  });
+  const [receivedAmount, setReceivedAmount] = useState(() => {
+    const raw = editInvoice?.totals?.received ?? editInvoice?.receivedAmount ?? editInvoice?.paidAmount ?? editInvoice?.paid;
+    return raw != null && raw !== "" ? String(raw) : "";
+  });
   const [billingType, setBillingType] = useState("Full Sale");
-  const [transactionId, setTransactionId] = useState(() => editInvoice?.id || crypto.randomUUID());
+  const [transactionId, setTransactionId] = useState(() => editInvoice?.id || editInvoice?.invoiceId || crypto.randomUUID());
   const [files, setFiles] = useState(() => editInvoice?.files || { image: "", document: "" });
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
@@ -1711,31 +1905,65 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const [business, setBusiness] = useState(() => editInvoice?.business || initialBusiness);
   const shareRef = useRef(null);
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
-  const [form, setForm] = useState(() => ({
-    customer: purchaseOrderConversion?.supplier || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || (getAppSettings().cashSaleByDefault ? "Cash Sale" : ""),
-    phone: purchaseOrderConversion?.phone || quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
-    billingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
-    shippingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
-    invoiceNumber: quotationConversion?.number || deliveryChallanConversion?.number || "1",
-    invoiceDate: purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
-    stateOfSupply: purchaseOrderConversion?.state || quotationConversion?.state || deliveryChallanConversion?.state || "None",
-    partyBalance: "",
-    showTerms: false,
-    termsTitle: "",
-    terms: "",
-    showDescription: Boolean(purchaseOrderConversion || onlineOrderConversion || quotationConversion?.description || saleOrderConversion || deliveryChallanConversion),
-    description: purchaseOrderConversion ? `Converted from Purchase Order ${purchaseOrderConversion.number}.` : quotationConversion?.description || (saleOrderConversion
-      ? `Converted from Sale Order${saleOrderConversions.length > 1 ? "s" : ""} ${saleOrderConversions.map((order) => order.number).join(", ")}.`
-      : deliveryChallanConversions.length
-      ? `Converted from Delivery Challan${deliveryChallanConversions.length > 1 ? "s" : ""} ${deliveryChallanConversions.map((challan) => challan.number).join(", ")}.`
-      : onlineOrderConversion
-      ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
-      : ""),
-    terms: quotationConversion?.terms || (getAppSettings().enableTermsAndConditions ? (getAppSettings().termsAndConditions || "") : ""),
-    paymentType: "Cash",
-    ...(editInvoice?.form || {}),
-    invoiceDate: editInvoice?.form?.invoiceDate || purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
-  }));
+  const [form, setForm] = useState(() => {
+    const baseFallback = {
+      customer: purchaseOrderConversion?.supplier || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || (getAppSettings().cashSaleByDefault ? "Cash Sale" : ""),
+      phone: purchaseOrderConversion?.phone || quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
+      billingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
+      shippingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
+      invoiceNumber: quotationConversion?.number || deliveryChallanConversion?.number || "1",
+      invoiceDate: purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
+      stateOfSupply: purchaseOrderConversion?.state || quotationConversion?.state || deliveryChallanConversion?.state || "None",
+      partyBalance: "",
+      showTerms: false,
+      termsTitle: "",
+      terms: quotationConversion?.terms || (getAppSettings().enableTermsAndConditions ? (getAppSettings().termsAndConditions || "") : ""),
+      showDescription: Boolean(purchaseOrderConversion || onlineOrderConversion || quotationConversion?.description || saleOrderConversion || deliveryChallanConversion),
+      description: purchaseOrderConversion ? `Converted from Purchase Order ${purchaseOrderConversion.number}.` : quotationConversion?.description || (saleOrderConversion
+        ? `Converted from Sale Order${saleOrderConversions.length > 1 ? "s" : ""} ${saleOrderConversions.map((order) => order.number).join(", ")}.`
+        : deliveryChallanConversions.length
+        ? `Converted from Delivery Challan${deliveryChallanConversions.length > 1 ? "s" : ""} ${deliveryChallanConversions.map((challan) => challan.number).join(", ")}.`
+        : onlineOrderConversion
+        ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
+        : ""),
+      paymentType: "Cash",
+    };
+    return extractEditForm(editInvoice, baseFallback);
+  });
+
+  // If an edit invoice is loaded by ID, ensure all relational details and line items are fully hydrated from MySQL
+  useEffect(() => {
+    if (!editInvoice?.id) return;
+    let active = true;
+
+    const candidateRows = editInvoice.rows || editInvoice.items || editInvoice.lineItems || [];
+    if (!candidateRows.length) {
+      transactionsDb.getById(editInvoice.id)
+        .then((fullDoc) => {
+          if (!active || !fullDoc) return;
+          const mappedRows = normalizeEditRows(fullDoc);
+          if (mappedRows.length > 0) {
+            setRows(mappedRows);
+          }
+          setForm((current) => extractEditForm(fullDoc, current));
+          if (fullDoc.paymentMode || fullDoc.paymentType) {
+            setSaleType(String(fullDoc.paymentMode || fullDoc.paymentType).toLowerCase() === "cash" ? "cash" : "credit");
+          }
+          const rawRec = fullDoc.paidAmount ?? fullDoc.receivedAmount ?? fullDoc.totals?.received;
+          if (rawRec != null && Number(rawRec) > 0) {
+            setReceivedEnabled(true);
+            setReceivedAmount(String(rawRec));
+          }
+          const rawRound = fullDoc.roundOff ?? fullDoc.round_off ?? fullDoc.totals?.roundOffAmount;
+          if (rawRound != null && Number(rawRound) !== 0) {
+            setRoundOffValue(String(rawRound));
+          }
+        })
+        .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
+    }
+
+    return () => { active = false; };
+  }, [editInvoice?.id]);
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
 

@@ -25,7 +25,54 @@ const today = () => { const date = new Date(); return `${date.getFullYear()}-${S
 const dateText = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const freshRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discount: "", tax: "NONE", cess: "" });
 const freshOrder = (number) => ({ id: "", number: String(number), supplier: "", phone: "", date: today(), dueDate: today(), state: "Select", rows: [freshRow(), freshRow()], terms: "", description: "", paymentType: "Cash", roundOff: true, roundOffValue: "", status: "Open", history: [] });
-const readOrders = () => { try { const value = getPurchaseOrders(); return Array.isArray(value) ? value : []; } catch { return []; } };
+
+function normalizePurchaseOrder(order) {
+  if (!order) return order;
+  const rawRows = (order.rows && order.rows.length > 0)
+    ? order.rows
+    : (order.items && order.items.length > 0)
+    ? order.items
+    : [];
+
+  const rows = rawRows.length > 0
+    ? rawRows.map((r) => ({
+        id: r.id || crypto.randomUUID(),
+        item: r.item || r.itemName || r.name || "",
+        itemId: r.itemId || r.sourceItemId || "",
+        sourceItemId: r.sourceItemId || r.itemId || "",
+        description: r.description || "",
+        size: r.size || "",
+        qty: String(r.qty ?? r.quantity ?? ""),
+        unit: r.unit || "NONE",
+        price: String(r.price ?? r.unitPrice ?? ""),
+        discount: String(r.discount ?? r.discountPercent ?? ""),
+        tax: String(r.tax ?? r.taxRate ?? "NONE"),
+        cess: String(r.cess ?? ""),
+      }))
+    : [freshRow(), freshRow()];
+
+  return {
+    ...order,
+    id: order.id,
+    number: order.number || order.documentNumber || order.refNo || "",
+    supplier: order.supplier || order.partyName || order.party || order.supplierName || order.form?.customer || "",
+    phone: order.phone || order.partyPhone || order.form?.phone || "",
+    date: order.date || order.transactionDate || (order.createdAt ? order.createdAt.slice(0, 10) : today()),
+    dueDate: order.dueDate || order.date || order.transactionDate || today(),
+    state: order.state || order.stateOfSupply || "Select",
+    amount: Number(order.amount ?? order.totalAmount ?? 0),
+    status: order.status || "Open",
+    rows,
+    terms: order.terms || "",
+    description: order.description || order.notes || "",
+    paymentType: order.paymentType || "Cash",
+    roundOff: order.roundOff ?? true,
+    roundOffValue: order.roundOffValue || "",
+    history: order.history || [],
+  };
+}
+
+const readOrders = () => { try { const value = getPurchaseOrders(); return Array.isArray(value) ? value.map(normalizePurchaseOrder) : []; } catch { return []; } };
 const lineTotal = (row) => {
   const gross = (Number(row.qty) || 0) * (Number(row.price) || 0);
   const discount = row.discountType === "amount" ? Number(row.discount || 0) : gross * (Number(row.discount || 0) / 100);
@@ -125,9 +172,9 @@ export default function PurchaseOrders() {
 
   // Handle incoming navigation state (e.g. from All Transactions report)
   useEffect(() => {
-    if (location.state?.editOrder) {
-      const target = location.state.editOrder;
-      setEditor({ mode: "edit", value: { ...target, rows: (target.rows || []).map((r) => ({ ...r })) } });
+    if (location.state?.editOrder || location.state?.editPurchase) {
+      const target = location.state.editOrder || location.state.editPurchase;
+      setEditor({ mode: "edit", value: normalizePurchaseOrder(target) });
     } else if (location.state?.printOrder) {
       printPurchaseOrderDoc(location.state.printOrder, location.state.autoPrint);
     }
@@ -175,7 +222,7 @@ export default function PurchaseOrders() {
   };
   const action = (name, order) => {
     setMenuId("");
-    if (name === "View/Edit") setEditor({ mode: "edit", value: { ...order, rows: order.rows.map((row) => ({ ...row })) } });
+    if (name === "View/Edit") setEditor({ mode: "edit", value: normalizePurchaseOrder(order) });
     if (name === "Delete") {
       setConfirmModal({
         isOpen: true,
