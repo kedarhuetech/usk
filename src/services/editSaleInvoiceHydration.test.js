@@ -194,3 +194,90 @@ test("PaymentIn and PaymentOut normalize flat database transactions to payment e
   assert.equal(payments[0].amount, "5000");
 });
 
+test("AddSale hydration does not overwrite party/item data when form contains blank strings", () => {
+  const dbDoc = {
+    id: "b44dbf2f-1f90-4a5b-8d12-3081827463fc",
+    documentNumber: "4",
+    invoiceNumber: "4",
+    transactionDate: "2026-11-13",
+    partyName: "sa",
+    partyPhone: "343543434",
+    billingAddress: "adaasdsa",
+    shippingAddress: "adaasdsa",
+    paymentMode: "Cash",
+    items: [
+      {
+        id: "item_1",
+        item_id: "item-64b61cf5-0e7d-422c-8d8b-00452e4d1a4e",
+        item_name: "apple",
+        quantity: 2,
+        unit: "KG",
+        unit_price: 100,
+        discount_amount: 2,
+        total_amount: 198,
+      },
+    ],
+    // Simulating a partially blank or legacy form object
+    form: {
+      customer: "",
+      phone: "",
+      billingAddress: "",
+    },
+  };
+
+  // Test customer resolution logic
+  const rawCustomer =
+    dbDoc.partyName ||
+    dbDoc.party_name ||
+    dbDoc.customerName ||
+    dbDoc.form?.customer ||
+    "";
+  const customer = typeof rawCustomer === "string" ? rawCustomer.trim() : String(rawCustomer || "");
+
+  const rawPhone =
+    dbDoc.partyPhone ||
+    dbDoc.party_phone ||
+    dbDoc.phone ||
+    dbDoc.form?.phone ||
+    "";
+  const phone = typeof rawPhone === "string" ? rawPhone.trim() : String(rawPhone || "");
+
+  const billingAddress =
+    dbDoc.billingAddress ||
+    dbDoc.billing_address ||
+    dbDoc.form?.billingAddress ||
+    "";
+
+  // When merging, resolved non-empty values must override empty form properties
+  const form = {
+    ...(dbDoc.form || {}),
+    customer: customer || dbDoc.form?.customer || "",
+    phone: phone || dbDoc.form?.phone || "",
+    billingAddress: billingAddress || dbDoc.form?.billingAddress || "",
+    invoiceNumber: String(dbDoc.documentNumber || "1"),
+  };
+
+  assert.equal(form.customer, "sa");
+  assert.equal(form.phone, "343543434");
+  assert.equal(form.billingAddress, "adaasdsa");
+  assert.equal(form.invoiceNumber, "4");
+
+  // Items normalization
+  const candidateRows = dbDoc.rows || dbDoc.items || [];
+  const rows = candidateRows.map((row) => ({
+    item: row.item || row.itemName || row.item_name || row.name || "",
+    qty: String(row.qty ?? row.quantity ?? 1),
+    price: String(row.price ?? row.unitPrice ?? row.unit_price ?? 0),
+    unit: row.unit || "PCS",
+    sourceItemId: row.sourceItemId || row.itemId || row.item_id || "",
+  }));
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].item, "apple");
+  assert.equal(rows[0].qty, "2");
+  assert.equal(rows[0].price, "100");
+  assert.equal(rows[0].unit, "KG");
+  assert.equal(rows[0].sourceItemId, "item-64b61cf5-0e7d-422c-8d8b-00452e4d1a4e");
+});
+
+

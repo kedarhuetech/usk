@@ -37,12 +37,29 @@ export function getCalendarDayDifference(fromDateStr, targetDateStr) {
 }
 
 /**
+ * Normalizes any date value (ISO string, Date object, SQL date) into a consistent YYYY-MM-DD string.
+ */
+export function normalizeDateOnly(val) {
+  if (!val) return "";
+  if (typeof val === "string") {
+    const match = val.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Calculates the date on which a reminder should trigger:
  * (serviceDueDate - daysBefore calendar days)
  */
 export function calculateReminderDate(serviceDueDateStr, daysBefore = 2) {
   if (!serviceDueDateStr) return "";
-  const cleanDate = serviceDueDateStr.slice(0, 10);
+  const cleanDate = normalizeDateOnly(serviceDueDateStr);
   const ms = Date.parse(`${cleanDate}T00:00:00Z`);
   if (Number.isNaN(ms)) return "";
 
@@ -55,7 +72,7 @@ export function calculateReminderDate(serviceDueDateStr, daysBefore = 2) {
  * Evaluates a single service reminder record against current settings and date.
  */
 export function evaluateReminderStatus(record, settings = getReminderSettings(), today = localDateString()) {
-  const dueDate = record.serviceDueDate ? String(record.serviceDueDate).slice(0, 10) : "";
+  const dueDate = normalizeDateOnly(record.serviceDueDate);
   const daysBefore = Math.max(0, Number(settings?.reminderDaysBefore ?? 2));
   const reminderDate = calculateReminderDate(dueDate, daysBefore);
   const daysUntilDue = getCalendarDayDifference(today, dueDate);
@@ -83,9 +100,7 @@ export function evaluateReminderStatus(record, settings = getReminderSettings(),
 
   // Duplicate Prevention:
   // Normalize lastNotifiedDueDate
-  const cleanLastNotifiedDueDate = record.lastNotifiedDueDate
-    ? String(record.lastNotifiedDueDate).slice(0, 10)
-    : "";
+  const cleanLastNotifiedDueDate = normalizeDateOnly(record.lastNotifiedDueDate);
 
   // Check notification history for any delivered/sent record matching this due date
   const hasDeliveredHistory = Array.isArray(record.notificationHistory) && record.notificationHistory.some((h) => {
@@ -93,7 +108,7 @@ export function evaluateReminderStatus(record, settings = getReminderSettings(),
     const isSentOrDelivered = hStatus === "DELIVERED" || hStatus === "SENT" || hStatus === "SUCCESS";
     if (!isSentOrDelivered) return false;
 
-    const hDueDate = h?.dueDate ? String(h.dueDate).slice(0, 10) : "";
+    const hDueDate = normalizeDateOnly(h?.dueDate);
     if (hDueDate && dueDate) {
       return hDueDate === dueDate;
     }
@@ -257,7 +272,7 @@ export function recordReminderNotification(recordId, channel = "in_app", details
   const target = records.find((r) => r.id === recordId);
   if (!target) return null;
 
-  const cleanDueDate = target.serviceDueDate ? String(target.serviceDueDate).slice(0, 10) : "";
+  const cleanDueDate = normalizeDateOnly(target.serviceDueDate);
   const now = new Date().toISOString();
   const historyEntry = {
     channel,
@@ -425,8 +440,45 @@ export async function requestServiceReminderTemplateApproval() {
   }
 }
 
-// Session-level dispatch lock to guarantee no reminder is automatically dispatched twice for the same due date
+// Session and persistent dispatch lock to guarantee no reminder is automatically dispatched twice for the same due date
 const sessionDispatchedReminders = new Set();
+const DISPATCH_LOCK_KEY = "ledgerly:dispatched_reminders";
+
+function getDispatchedKeys() {
+  const keys = new Set(sessionDispatchedReminders);
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const raw = window.localStorage.getItem(DISPATCH_LOCK_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) arr.forEach((k) => keys.add(k));
+      }
+    }
+  } catch {}
+  return keys;
+}
+
+function persistDispatchedKey(key) {
+  sessionDispatchedReminders.add(key);
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const keys = getDispatchedKeys();
+      keys.add(key);
+      window.localStorage.setItem(DISPATCH_LOCK_KEY, JSON.stringify([...keys]));
+    }
+  } catch {}
+}
+
+function removeDispatchedKey(key) {
+  sessionDispatchedReminders.delete(key);
+  try {
+    if (typeof window !== "undefined" && window.localStorage) {
+      const keys = getDispatchedKeys();
+      keys.delete(key);
+      window.localStorage.setItem(DISPATCH_LOCK_KEY, JSON.stringify([...keys]));
+    }
+  } catch {}
+}
 
 /**
  * Automatically checks and dispatches any service due reminders that have reached their reminder date
@@ -454,11 +506,12 @@ export async function autoDispatchDueRemindersViaMeta(companyName = null) {
   }
 
   const processed = processServiceReminders({ settings });
+  const dispatchedKeys = getDispatchedKeys();
   const eligible = (processed.activeAlerts || []).filter((r) => {
     if (!r.hasValidPhone || r.alreadyNotifiedForThisDueDate) return false;
-    const cleanDueDate = r.serviceDueDate ? String(r.serviceDueDate).slice(0, 10) : "";
+    const cleanDueDate = normalizeDateOnly(r.serviceDueDate);
     const sessionKey = `${r.id}_${cleanDueDate}`;
-    if (sessionDispatchedReminders.has(sessionKey)) return false;
+    if (dispatchedKeys.has(sessionKey)) return false;
     return true;
   });
 
@@ -471,10 +524,10 @@ export async function autoDispatchDueRemindersViaMeta(companyName = null) {
   const errors = [];
 
   for (const record of eligible) {
-    const cleanDueDate = record.serviceDueDate ? String(record.serviceDueDate).slice(0, 10) : "";
+    const cleanDueDate = normalizeDateOnly(record.serviceDueDate);
     const sessionKey = `${record.id}_${cleanDueDate}`;
     // Lock key immediately to prevent duplicate dispatch during in-flight network requests
-    sessionDispatchedReminders.add(sessionKey);
+    persistDispatchedKey(sessionKey);
 
     try {
       const res = await sendServiceReminderViaMeta(record, companyName);
@@ -482,12 +535,12 @@ export async function autoDispatchDueRemindersViaMeta(companyName = null) {
         dispatched++;
         dispatchedCustomers.push(record.customerName || record.customerPhone);
       } else {
-        // If delivery failed, remove from session lock so it can be retried
-        sessionDispatchedReminders.delete(sessionKey);
+        // If delivery failed, remove from lock so it can be retried
+        removeDispatchedKey(sessionKey);
         errors.push({ customer: record.customerName, error: res.error });
       }
     } catch (err) {
-      sessionDispatchedReminders.delete(sessionKey);
+      removeDispatchedKey(sessionKey);
       console.warn("Auto-dispatch reminder failed for", record.customerName, err);
       errors.push({ customer: record.customerName, error: err.message });
     }
