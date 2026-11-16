@@ -167,7 +167,18 @@ export default function Expenses() {
       return acc;
     }, { total: 0, balance: 0 });
   }, [records, tab, activeName]);
-  const editEntry = (entry) => { setEditor({ mode: "edit", entry: { ...entry, rows: entry.rows.map(row => ({ ...row })), payments: entry.payments.map(payment => ({ ...payment })) } }); setMenuId(""); };
+  const editEntry = (entry) => {
+    const norm = normalizeExpense(entry);
+    setEditor({
+      mode: "edit",
+      entry: {
+        ...norm,
+        rows: (norm.rows || []).map(row => ({ ...row })),
+        payments: (norm.payments || []).map(payment => ({ ...payment }))
+      }
+    });
+    setMenuId("");
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -191,8 +202,8 @@ export default function Expenses() {
   }, []);
 
   useEffect(() => {
-    if (location.state?.editExpense) {
-      editEntry(location.state.editExpense);
+    if (location.state?.editExpense || location.state?.editInvoice) {
+      editEntry(location.state.editExpense || location.state.editInvoice);
     }
   }, [location.state]);
 

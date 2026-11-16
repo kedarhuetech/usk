@@ -165,9 +165,9 @@ export default function PartyStatementReport() {
     } else if (t === "Payment-Out") {
       navigate("/purchase-expense/payment-out", { state: { editPayment: txn.raw } });
     } else if (t === "Credit Note") {
-      navigate("/sales/sale-return/new", { state: { editInvoice: txn.raw, editReturn: txn.raw } });
+      navigate("/sales/sale-return-credit-note", { state: { editInvoice: txn.raw, editReturn: txn.raw } });
     } else if (t === "Debit Note") {
-      navigate("/purchase-expense/purchase-return/new", { state: { editBill: txn.raw, editReturn: txn.raw } });
+      navigate("/purchase-expense/purchase-return", { state: { editBill: txn.raw, editReturn: txn.raw, editPurchase: txn.raw } });
     }
   };
 

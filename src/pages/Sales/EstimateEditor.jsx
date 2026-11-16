@@ -7,6 +7,31 @@ const STATES = ["Select", "Andhra Pradesh", "Delhi", "Gujarat", "Karnataka", "Ma
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const makeRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discountPercent: "", discountAmount: "", taxRate: "NONE" });
 
+function normalizeEstimateRows(inputRows = [], inputItems = []) {
+  const source = (Array.isArray(inputRows) && inputRows.length > 0)
+    ? inputRows
+    : (Array.isArray(inputItems) && inputItems.length > 0)
+    ? inputItems
+    : [];
+
+  if (!source.length) {
+    return [makeRow(), makeRow()];
+  }
+
+  return source.map((r) => ({
+    id: r.id || crypto.randomUUID(),
+    item: r.item || r.itemName || r.name || "",
+    description: r.description || "",
+    size: r.size || "",
+    qty: r.qty != null ? String(r.qty) : r.quantity != null ? String(r.quantity) : "",
+    unit: r.unit || "NONE",
+    price: r.price != null ? String(r.price) : r.unitPrice != null ? String(r.unitPrice) : "",
+    discountPercent: r.discountPercent != null ? String(r.discountPercent) : r.discount != null ? String(r.discount) : "",
+    discountAmount: r.discountAmount != null ? String(r.discountAmount) : "",
+    taxRate: r.taxRate != null ? String(r.taxRate) : r.tax != null ? String(r.tax) : "NONE",
+  }));
+}
+
 function lineTotals(row) {
   const gross = Math.max(Number(row.qty) || 0, 0) * Math.max(Number(row.price) || 0, 0);
   const discount = Math.max(Number(row.discountAmount) || gross * (Number(row.discountPercent) || 0) / 100, 0);
@@ -19,20 +44,36 @@ function lineTotals(row) {
 export default function EstimateEditor({ estimate, onClose, onSave, documentType = "Estimate/Quotation" }) {
   const parties = useMemo(() => getParties(), []);
   const items = useMemo(() => getInventoryItems(), []);
-  const [customer, setCustomer] = useState(estimate?.customer || "");
-  const [phone, setPhone] = useState(estimate?.phone || "");
-  const [billingAddress, setBillingAddress] = useState(estimate?.billingAddress || "");
+  const [customer, setCustomer] = useState(() => estimate?.customer || estimate?.partyName || estimate?.customerName || estimate?.party || estimate?.form?.customer || "");
+  const [phone, setPhone] = useState(() => estimate?.phone || estimate?.partyPhone || estimate?.form?.phone || "");
+  const [billingAddress, setBillingAddress] = useState(() => estimate?.billingAddress || estimate?.partyAddress || estimate?.address || estimate?.form?.billingAddress || "");
   const [partyListOpen, setPartyListOpen] = useState(false);
-  const [refNo, setRefNo] = useState(estimate?.number || String(Date.now()).slice(-6));
-  const [date, setDate] = useState(estimate?.date || new Date().toISOString().slice(0, 10));
-  const [state, setState] = useState(estimate?.state || "Select");
-  const [rows, setRows] = useState(estimate?.rows?.length ? estimate.rows : [makeRow(), makeRow()]);
-  const [roundOff, setRoundOff] = useState(estimate?.roundOffEnabled ?? true);
-  const [roundOffValue, setRoundOffValue] = useState(estimate?.roundOffValue || "");
-  const [terms, setTerms] = useState(estimate?.terms || "");
-  const [description, setDescription] = useState(estimate?.description || "");
+  const [refNo, setRefNo] = useState(() => estimate?.number || estimate?.refNo || estimate?.documentNumber || estimate?.invoiceNumber || estimate?.form?.invoiceNumber || String(Date.now()).slice(-6));
+  const [date, setDate] = useState(() => (estimate?.date || estimate?.transactionDate || estimate?.invoiceDate || estimate?.form?.invoiceDate || new Date().toISOString().slice(0, 10)).slice(0, 10));
+  const [state, setState] = useState(() => estimate?.state || estimate?.stateOfSupply || estimate?.form?.stateOfSupply || "Select");
+  const [rows, setRows] = useState(() => normalizeEstimateRows(estimate?.rows, estimate?.items));
+  const [roundOff, setRoundOff] = useState(() => estimate?.roundOffEnabled ?? estimate?.roundOff ?? true);
+  const [roundOffValue, setRoundOffValue] = useState(() => estimate?.roundOffValue != null ? String(estimate.roundOffValue) : "");
+  const [terms, setTerms] = useState(() => estimate?.terms || estimate?.form?.terms || "");
+  const [description, setDescription] = useState(() => estimate?.description || estimate?.notes || "");
   const [toast, setToast] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+
+  // Synchronize state if incoming estimate prop changes or is hydrated
+  useEffect(() => {
+    if (!estimate) return;
+    setCustomer(estimate.customer || estimate.partyName || estimate.customerName || estimate.party || estimate.form?.customer || "");
+    setPhone(estimate.phone || estimate.partyPhone || estimate.form?.phone || "");
+    setBillingAddress(estimate.billingAddress || estimate.partyAddress || estimate.address || estimate.form?.billingAddress || "");
+    setRefNo(estimate.number || estimate.refNo || estimate.documentNumber || estimate.invoiceNumber || estimate.form?.invoiceNumber || String(Date.now()).slice(-6));
+    setDate((estimate.date || estimate.transactionDate || estimate.invoiceDate || estimate.form?.invoiceDate || new Date().toISOString().slice(0, 10)).slice(0, 10));
+    setState(estimate.state || estimate.stateOfSupply || estimate.form?.stateOfSupply || "Select");
+    setRows(normalizeEstimateRows(estimate.rows, estimate.items));
+    setRoundOff(estimate.roundOffEnabled ?? estimate.roundOff ?? true);
+    setRoundOffValue(estimate.roundOffValue != null ? String(estimate.roundOffValue) : "");
+    setTerms(estimate.terms || estimate.form?.terms || "");
+    setDescription(estimate.description || estimate.notes || "");
+  }, [estimate]);
   const matchingParties = parties.filter((party) => {
     const name = party.partyName || party.name || "";
     const query = customer.trim().toLowerCase();

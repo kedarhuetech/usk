@@ -28,8 +28,8 @@ import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateLabel = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
-const invoiceCustomer = (invoice) => String(invoice.form?.customer || invoice.customer || invoice.partyName || "").trim();
-const rowIdentity = (row) => String(row.id || row.sourceRowId || row.sourceItemId || row.item || "");
+const invoiceCustomer = (invoice) => String(invoice.form?.customer || invoice.customer || invoice.partyName || invoice.party || invoice.customerName || "").trim();
+const rowIdentity = (row) => String(row.id || row.sourceRowId || row.sourceItemId || row.item || row.itemName || "");
 const blankRow = (row, returned = 0) => {
   const soldQty = Number(row.qty ?? row.quantity ?? 0);
   const taxRate = row.taxRate || row.tax || "NONE";
@@ -37,13 +37,13 @@ const blankRow = (row, returned = 0) => {
     ...row,
     id: crypto.randomUUID(),
     sourceRowId: rowIdentity(row),
-    sourceItemId: row.sourceItemId || row.itemId || "",
+    sourceItemId: row.sourceItemId || row.itemId || row.id || "",
     item: row.item || row.itemName || "Item",
     soldQty,
     returnedQty: returned,
     remainingQty: Math.max(0, soldQty - returned),
     qty: "",
-    price: String(row.price || row.unitPrice || ""),
+    price: String(row.price ?? row.unitPrice ?? ""),
     unit: row.unit || "",
     priceMode: row.priceMode || "Without Tax",
     discountPercent: String(row.discountPercent ?? row.discount ?? ""),
@@ -78,7 +78,8 @@ const createReturnFromInvoice = (invoice, records, targetItem) => {
   const partyId = invoice.partyId || (partyName.toLowerCase() === "cash sale" ? "cash-sale" : `cust-${partyName.toLowerCase().replace(/\s+/g, "-")}`);
   const prior = records.filter((record) => record.invoiceId === invoice.id && !record.cancelled).flatMap((record) => record.rows || []);
 
-  const rows = (invoice.rows || []).map((row) => {
+  const invoiceRows = invoice.rows || invoice.items || [];
+  const rows = invoiceRows.map((row) => {
     const id = rowIdentity(row);
     const returnedQty = prior.filter((returnRow) => String(returnRow.sourceRowId || returnRow.sourceItemId || returnRow.item || "") === id).reduce((sum, returnRow) => sum + Number(returnRow.qty || 0), 0);
     const blank = blankRow(row, returnedQty);
@@ -197,7 +198,7 @@ function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, o
   const customerCreditAmount = Math.max(0, breakdown.total - received - adjustedAmount);
 
   const change = (key, nextValue) => onChange({ ...value, [key]: nextValue });
-  const changeRow = (rowId, patch) => change("rows", value.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row));
+  const changeRow = (rowId, patch) => change("rows", (value.rows || value.items || []).map((row) => row.id === rowId ? { ...row, ...patch } : row));
   const chooseCustomer = (partyId) => {
     const party = parties.find((entry) => String(entry.id) === String(partyId));
     onChange({ ...value, partyId: party?.id || "", party: party?.partyName || party?.name || "", phone: party?.phone || "", invoiceId: "", invoiceNumber: "", invoiceDate: "", rows: [] });
@@ -206,7 +207,8 @@ function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, o
     const invoice = invoices.find((entry) => String(entry.id) === String(invoiceId));
     if (!invoice) { change("invoiceId", ""); return; }
     const prior = records.filter((record) => record.invoiceId === invoice.id && record.id !== value.id && !record.cancelled).flatMap((record) => record.rows || []);
-    const rows = (invoice.rows || []).map((row) => {
+    const invoiceRows = invoice.rows || invoice.items || [];
+    const rows = invoiceRows.map((row) => {
       const id = rowIdentity(row);
       const returnedQty = prior.filter((returnRow) => String(returnRow.sourceRowId || returnRow.sourceItemId || returnRow.item || "") === id).reduce((sum, returnRow) => sum + Number(returnRow.qty || 0), 0);
       const blank = blankRow(row, returnedQty);
@@ -215,11 +217,11 @@ function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, o
     }).filter((row) => row.remainingQty > 0);
     const partyName = invoiceCustomer(invoice) || "Cash Sale";
     const partyId = invoice.partyId || value.partyId || (partyName.toLowerCase() === "cash sale" ? "cash-sale" : "");
-    onChange({ ...value, invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber || invoice.form?.invoiceNumber || "", invoiceDate: invoice.form?.invoiceDate || invoice.invoiceDate || "", party: partyName, partyId, phone: invoice.form?.phone || value.phone || "", rows });
+    onChange({ ...value, invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber || invoice.form?.invoiceNumber || invoice.documentNumber || "", invoiceDate: invoice.form?.invoiceDate || invoice.invoiceDate || invoice.transactionDate || "", party: partyName, partyId, phone: invoice.form?.phone || value.phone || "", rows });
   };
   const submit = () => {
     setError("");
-    const selectedRows = value.rows.filter((row) => Number(row.qty) > 0);
+    const selectedRows = (value.rows || value.items || []).filter((row) => Number(row.qty) > 0);
     if (!value.partyId && value.party) {
       const match = parties.find((p) => (p.partyName || p.name || "").toLowerCase() === value.party.toLowerCase());
       if (match) value.partyId = match.id;
@@ -459,6 +461,29 @@ export default function SaleReturns() {
   }, [parties, allInvoices]);
 
   useEffect(() => {
+    if (location.state?.editReturn || location.state?.editInvoice) {
+      const incoming = location.state.editReturn || location.state.editInvoice;
+      const normalizedValue = {
+        ...incoming,
+        party: incoming.party || incoming.partyName || incoming.customer || "",
+        number: incoming.number || incoming.documentNumber || "",
+        date: incoming.date || incoming.transactionDate || today(),
+        rows: (incoming.rows || incoming.items || []).map((r) => ({
+          ...r,
+          id: r.id || crypto.randomUUID(),
+          item: r.item || r.itemName || "Item",
+          qty: String(r.qty ?? r.quantity ?? ""),
+          price: String(r.price ?? r.unitPrice ?? ""),
+          taxRate: r.taxRate || r.tax || "NONE",
+          remainingQty: Number(r.remainingQty ?? r.qty ?? r.quantity ?? 1),
+        })),
+      };
+      setRecordType("Credit Note");
+      setEditor({ mode: "edit", value: normalizedValue });
+      window.history.replaceState({}, document.title);
+      return;
+    }
+
     if (location.state?.convertInvoice || location.state?.invoiceId) {
       const incomingInvoice = location.state.convertInvoice || allInvoices.find((inv) => String(inv.id) === String(location.state.invoiceId));
       if (incomingInvoice) {

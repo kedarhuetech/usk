@@ -25,25 +25,30 @@ const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const endOfMonth = (date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
 
 function normalizeProforma(item) {
+  if (!item) return item;
   return {
     ...item,
     id: item.id,
-    number: item.documentNumber || item.number || "",
-    customer: item.customer || item.partyName || item.customerName || item.party || "Cash Sale",
-    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    number: item.documentNumber || item.number || item.refNo || item.invoiceNumber || "",
+    customer: item.customer || item.partyName || item.customerName || item.party || item.form?.customer || "Cash Sale",
+    date: item.date || item.transactionDate || item.invoiceDate || (item.createdAt ? item.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
     amount: Number(item.amount ?? item.totalAmount ?? 0),
     status: item.status || "Open",
-    phone: item.phone || item.partyPhone || "",
-    billingAddress: item.billingAddress || "",
+    phone: item.phone || item.partyPhone || item.form?.phone || "",
+    billingAddress: item.billingAddress || item.partyAddress || item.address || "",
     shippingAddress: item.shippingAddress || "",
     description: item.description || item.notes || "",
     terms: item.terms || "",
     rows: (item.rows || item.items || []).map((r) => ({
+      id: r.id || crypto.randomUUID(),
       item: r.item || r.itemName || r.name || "",
       description: r.description || "",
-      qty: Number(r.qty ?? r.quantity ?? 1),
-      unit: r.unit || "",
-      price: Number(r.price ?? r.unitPrice ?? 0),
+      size: r.size || "",
+      qty: String(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "NONE",
+      price: String(r.price ?? r.unitPrice ?? 0),
+      discountPercent: String(r.discountPercent ?? r.discount ?? ""),
+      taxRate: String(r.taxRate ?? r.tax ?? "NONE"),
     })),
   };
 }
@@ -57,7 +62,8 @@ function readProformas() {
 
 export default function ProformaInvoices() {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const now = new Date();
   const [proformas, setProformas] = useState(readProformas);
   const [dateFrom, setDateFrom] = useState(iso(startOfMonth(now)));
@@ -117,6 +123,14 @@ export default function ProformaInvoices() {
       };
     }
   }, []);
+
+  // Handle incoming edit or view state from reports or other pages
+  useEffect(() => {
+    if (location.state?.editProforma || location.state?.editInvoice) {
+      const incoming = location.state.editProforma || location.state.editInvoice;
+      setEditor({ mode: "edit", entry: normalizeProforma(incoming) });
+    }
+  }, [location.state]);
 
   const persist = (next) => {
     setProformas(next);

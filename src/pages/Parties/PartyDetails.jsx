@@ -269,6 +269,9 @@ function AddPartyModal({ onClose, onSave, initialParty = null, appSettings = {} 
     status: "active",
     loyaltyPoints: 0,
     ...(initialParty || {}),
+    partyName: initialParty?.partyName || initialParty?.name || "",
+    phone: initialParty?.phone || initialParty?.phoneNumber || "",
+    billingAddress: initialParty?.billingAddress || initialParty?.address || "",
   }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");

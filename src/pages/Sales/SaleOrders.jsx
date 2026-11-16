@@ -25,7 +25,52 @@ const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { min
 const localDate = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const newRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discount: "", tax: "NONE", cess: "" });
 const newPayment = () => ({ id: crypto.randomUUID(), type: "Cash", amount: "" });
-function readOrders() { try { const data = getSaleOrders(); return Array.isArray(data) ? data : []; } catch { return []; } }
+
+function normalizeSaleOrder(order) {
+  if (!order) return order;
+  const rawRows = (order.rows && order.rows.length > 0)
+    ? order.rows
+    : (order.items && order.items.length > 0)
+    ? order.items
+    : [];
+
+  const rows = rawRows.length > 0
+    ? rawRows.map((r) => ({
+        id: r.id || crypto.randomUUID(),
+        item: r.item || r.itemName || r.name || "",
+        description: r.description || "",
+        size: r.size || "",
+        qty: String(r.qty ?? r.quantity ?? ""),
+        unit: r.unit || "NONE",
+        price: String(r.price ?? r.unitPrice ?? ""),
+        discount: String(r.discount ?? r.discountPercent ?? ""),
+        tax: String(r.tax ?? r.taxRate ?? "NONE"),
+        cess: String(r.cess ?? ""),
+      }))
+    : [newRow(), newRow()];
+
+  return {
+    ...order,
+    id: order.id,
+    number: order.number || order.documentNumber || order.refNo || "",
+    customer: order.customer || order.partyName || order.party || order.customerName || order.form?.customer || "",
+    phone: order.phone || order.partyPhone || order.form?.phone || "",
+    date: order.date || order.transactionDate || (order.createdAt ? order.createdAt.slice(0, 10) : localDate()),
+    dueDate: order.dueDate || order.date || order.transactionDate || localDate(),
+    state: order.state || order.stateOfSupply || "Select",
+    amount: Number(order.amount ?? order.totalAmount ?? 0),
+    status: order.status || "Open",
+    rows,
+    payments: order.payments || [newPayment()],
+    roundOff: order.roundOff ?? true,
+    roundOffValue: order.roundOffValue || "",
+    terms: order.terms || "",
+    description: order.description || order.notes || "",
+    linkedOrderIds: order.linkedOrderIds || [],
+  };
+}
+
+function readOrders() { try { const data = getSaleOrders(); return Array.isArray(data) ? data.map(normalizeSaleOrder) : []; } catch { return []; } }
 function rowAmount(row) { const gross = (Number(row.qty) || 0) * (Number(row.price) || 0); const discount = row.discountType === "amount" ? Number(row.discount || 0) : gross * (Number(row.discount || 0) / 100); const net = Math.max(0, gross - discount); return net + net * (Number(row.tax) || 0) / 100 + net * (Number(row.cess) || 0) / 100; }
 const displayDate = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-GB") : "—";
 
@@ -123,9 +168,9 @@ export default function SaleOrders() {
 
   // Handle incoming navigation state (e.g. from All Transactions report)
   useEffect(() => {
-    if (location.state?.editOrder) {
-      const target = location.state.editOrder;
-      setEditor({ mode: "edit", value: { ...target, rows: (target.rows || []).map((r) => ({ ...r })) } });
+    if (location.state?.editOrder || location.state?.editInvoice) {
+      const target = location.state.editOrder || location.state.editInvoice;
+      setEditor({ mode: "edit", value: normalizeSaleOrder(target) });
     } else if (location.state?.printOrder) {
       printSaleOrderDoc(location.state.printOrder);
     }
@@ -229,7 +274,7 @@ export default function SaleOrders() {
   };
   const act = (action, order) => {
     setMenuId("");
-    if (action === "View/Edit") setEditor({ mode: "edit", value: order });
+    if (action === "View/Edit") setEditor({ mode: "edit", value: normalizeSaleOrder(order) });
     if (action === "Delete") {
       setConfirmModal({
         isOpen: true,
