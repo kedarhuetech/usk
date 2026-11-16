@@ -173,53 +173,136 @@ router.get("/company-profile", async (req, res) => {
 
 /**
  * POST /api/settings/company-profile
- * Saves company profile in pure SQL columns
+ * Saves company profile in pure SQL columns with partial-update data preservation
  */
 router.post("/company-profile", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const companyName = (body.companyName || body.businessName || "Sai Kirana Stores").trim();
-    const tradeName = body.tradeName || null;
-    const businessType = body.businessType || null;
-    const businessCategory = body.businessCategory || null;
+    // 1. Fetch existing profile for this business to preserve omitted properties
+    const [existingRows] = await pool.query(
+      `SELECT * FROM company_profiles WHERE business_id = ? LIMIT 1`,
+      [businessId]
+    );
+    const existing = existingRows && existingRows.length ? existingRows[0] : null;
 
-    const phone = body.phone || body.phoneNumber || null;
-    const email = body.email || body.emailId || null;
-    const gstin = body.gstin || null;
-    const pan = body.pan || null;
+    const hasOwn = (obj, key) => Boolean(obj && Object.prototype.hasOwnProperty.call(obj, key));
 
-   
+    // Helper to resolve string fields with aliases while distinguishing omitted from explicitly cleared
+    const resolveField = (aliases, existingValue) => {
+      const presentAlias = aliases.find((key) => hasOwn(body, key));
+      if (presentAlias !== undefined) {
+        const definedAlias = aliases.find((key) => hasOwn(body, key) && body[key] !== undefined) ?? presentAlias;
+        const raw = body[definedAlias];
+        if (raw == null) return null;
+        const str = String(raw).trim();
+        return str === "" ? null : str;
+      }
+      return existingValue ?? null;
+    };
 
-    const streetAddress =
-      body.streetAddress ||
-      body.businessAddress ||
-      body.address ||
-      null;
-    const city = body.city || null;
-    const state = body.state || null;
-    const pincode = body.pincode || null;
-    const country = body.country || "India";
+    // Helper for bank details supporting root and nested bankDetails object
+    const resolveBankField = (fieldName, existingValue) => {
+      const bankDetails = body.bankDetails;
+      const hasRoot = hasOwn(body, fieldName);
+      const hasNested = Boolean(bankDetails && typeof bankDetails === "object" && hasOwn(bankDetails, fieldName));
 
-    // Extract bank columns
-    const bankDetails = body.bankDetails || {};
-    const bankName = body.bankName || bankDetails.bankName || null;
-    const accountNumber = body.accountNumber || bankDetails.accountNumber || null;
-    const ifscCode = body.ifscCode || bankDetails.ifscCode || null;
-    const branchName = body.branchName || bankDetails.branchName || null;
-    const upiId = body.upiId || bankDetails.upiId || null;
+      if (hasRoot || hasNested) {
+        let raw;
+        if (hasRoot && body[fieldName] !== undefined) {
+          raw = body[fieldName];
+        } else if (hasNested && bankDetails[fieldName] !== undefined) {
+          raw = bankDetails[fieldName];
+        } else if (hasRoot) {
+          raw = body[fieldName];
+        } else {
+          raw = bankDetails[fieldName];
+        }
+        if (raw == null) return null;
+        const str = String(raw).trim();
+        return str === "" ? null : str;
+      }
+      return existingValue ?? null;
+    };
 
-    let signatureUrl = body.signatureUrl || body.signature || null;
-    let logoUrl = body.logoUrl || body.logo || null;
-
-    if (signatureUrl && typeof signatureUrl === "string" && signatureUrl.startsWith("data:image/")) {
-      signatureUrl = await persistBase64Asset(signatureUrl, "company-signature", businessId);
+    // Business Name / Company Name (NOT NULL)
+    let companyName;
+    const hasCompanyName = hasOwn(body, "companyName") || hasOwn(body, "businessName");
+    if (hasCompanyName) {
+      const raw = (hasOwn(body, "companyName") && body.companyName !== undefined)
+        ? body.companyName
+        : body.businessName;
+      const trimmed = raw != null ? String(raw).trim() : "";
+      companyName = trimmed || (existing?.company_name || "Sai Kirana Stores");
+    } else {
+      companyName = existing?.company_name || "Sai Kirana Stores";
     }
-    if (logoUrl && typeof logoUrl === "string" && logoUrl.startsWith("data:image/")) {
-      logoUrl = await persistBase64Asset(logoUrl, "company-logo", businessId);
+
+    const tradeName = resolveField(["tradeName"], existing?.trade_name);
+    const businessType = resolveField(["businessType"], existing?.business_type);
+    const businessCategory = resolveField(["businessCategory"], existing?.business_category);
+
+    const phone = resolveField(["phone", "phoneNumber"], existing?.phone);
+    const email = resolveField(["email", "emailId"], existing?.email);
+    const gstin = resolveField(["gstin"], existing?.gstin);
+    const pan = resolveField(["pan"], existing?.pan);
+
+    const streetAddress = resolveField(["streetAddress", "businessAddress", "address"], existing?.street_address);
+    const city = resolveField(["city"], existing?.city);
+    const state = resolveField(["state"], existing?.state);
+    const pincode = resolveField(["pincode"], existing?.pincode);
+
+    let country;
+    if (hasOwn(body, "country")) {
+      country = body.country != null && String(body.country).trim() !== "" ? String(body.country).trim() : "India";
+    } else {
+      country = existing?.country || "India";
     }
-    const termsAndConditions = body.termsAndConditions || null;
+
+    const bankName = resolveBankField("bankName", existing?.bank_name);
+    const accountNumber = resolveBankField("accountNumber", existing?.account_number);
+    const ifscCode = resolveBankField("ifscCode", existing?.ifsc_code);
+    const branchName = resolveBankField("branchName", existing?.branch_name);
+    const upiId = resolveBankField("upiId", existing?.upi_id);
+
+    // Signature resolution (supports aliases, explicit clear, Base64 persistence, or omission preservation)
+    let signatureUrl;
+    const hasSignature = hasOwn(body, "signatureUrl") || hasOwn(body, "signature");
+    if (hasSignature) {
+      const rawSig = (hasOwn(body, "signatureUrl") && body.signatureUrl !== undefined)
+        ? body.signatureUrl
+        : body.signature;
+      if (rawSig == null || String(rawSig).trim() === "") {
+        signatureUrl = null;
+      } else if (typeof rawSig === "string" && rawSig.startsWith("data:image/")) {
+        signatureUrl = await persistBase64Asset(rawSig, "company-signature", businessId);
+      } else {
+        signatureUrl = String(rawSig).trim();
+      }
+    } else {
+      signatureUrl = existing ? existing.signature_url : null;
+    }
+
+    // Logo resolution (supports aliases, explicit clear, Base64 persistence, or omission preservation)
+    let logoUrl;
+    const hasLogo = hasOwn(body, "logoUrl") || hasOwn(body, "logo");
+    if (hasLogo) {
+      const rawLogo = (hasOwn(body, "logoUrl") && body.logoUrl !== undefined)
+        ? body.logoUrl
+        : body.logo;
+      if (rawLogo == null || String(rawLogo).trim() === "") {
+        logoUrl = null;
+      } else if (typeof rawLogo === "string" && rawLogo.startsWith("data:image/")) {
+        logoUrl = await persistBase64Asset(rawLogo, "company-logo", businessId);
+      } else {
+        logoUrl = String(rawLogo).trim();
+      }
+    } else {
+      logoUrl = existing ? existing.logo_url : null;
+    }
+
+    const termsAndConditions = resolveField(["termsAndConditions"], existing?.terms_and_conditions);
 
     await pool.query(
       `INSERT INTO company_profiles (

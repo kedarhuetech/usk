@@ -138,10 +138,18 @@ export default function EditProfile() {
   const handleChange = (e) => {
     markDirty();
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [name]: value,
+      };
+      if (name === "businessName") {
+        next.companyName = value;
+      } else if (name === "companyName") {
+        next.businessName = value;
+      }
+      return next;
+    });
   };
 
   const handleLogoUpload = (e) => {
@@ -384,6 +392,20 @@ export default function EditProfile() {
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Trade Name
+                </label>
+                <input
+                  type="text"
+                  name="tradeName"
+                  value={formData.tradeName || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Trade Name"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                   Phone Number
                 </label>
                 <input
@@ -410,6 +432,21 @@ export default function EditProfile() {
                   value={formData.gstin || ""}
                   onChange={handleChange}
                   placeholder="Enter GSTIN"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  PAN Number
+                </label>
+                <input
+                  type="text"
+                  name="pan"
+                  value={formData.pan || ""}
+                  onChange={handleChange}
+                  maxLength={10}
+                  placeholder="Enter PAN Number"
                   className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
@@ -503,6 +540,20 @@ export default function EditProfile() {
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  City
+                </label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city || ""}
+                  onChange={handleChange}
+                  placeholder="Enter City"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                   Pincode
                 </label>
                 <input
@@ -583,6 +634,99 @@ export default function EditProfile() {
                   accept="image/jpeg,image/png,image/webp,image/gif"
                   onChange={handleSignatureUpload}
                   className="hidden"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Terms & Conditions
+                </label>
+                <textarea
+                  name="termsAndConditions"
+                  value={formData.termsAndConditions || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Terms and Conditions..."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  style={{ minHeight: "80px" }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Bank & Payment Details */}
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <h2 className="mb-4 text-base font-bold text-slate-800">
+              Bank & Payment Details
+            </h2>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  name="bankName"
+                  value={formData.bankName || ""}
+                  onChange={handleChange}
+                  placeholder="e.g. HDFC Bank, SBI"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Account Number
+                </label>
+                <input
+                  type="text"
+                  name="accountNumber"
+                  value={formData.accountNumber || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Account Number"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  IFSC Code
+                </label>
+                <input
+                  type="text"
+                  name="ifscCode"
+                  value={formData.ifscCode || ""}
+                  onChange={handleChange}
+                  placeholder="e.g. HDFC0001234"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Branch Name
+                </label>
+                <input
+                  type="text"
+                  name="branchName"
+                  value={formData.branchName || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Branch Name"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  UPI ID
+                </label>
+                <input
+                  type="text"
+                  name="upiId"
+                  value={formData.upiId || ""}
+                  onChange={handleChange}
+                  placeholder="e.g. business@upi"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             </div>

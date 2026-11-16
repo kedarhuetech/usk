@@ -6,18 +6,33 @@ const COMPANY_PROFILE_KEY = "ledgerly:companyProfile.v1";
 export const companyProfileUpdatedEvent = "ledgerly:company-profile-updated";
 
 const defaultCompanyProfile = {
-  companyName: "Sai Kirana Stores",
-  businessName: "Sai Kirana Stores",
-  phoneNumber: "8369501991",
+  companyName: "",
+  businessName: "",
+  tradeName: "",
+  phoneNumber: "",
+  phone: "",
   gstin: "",
+  pan: "",
   emailId: "",
+  email: "",
   businessType: "",
   businessCategory: "",
   state: "",
+  city: "",
   pincode: "",
+  country: "India",
   businessAddress: "",
+  streetAddress: "",
+  bankName: "",
+  accountNumber: "",
+  ifscCode: "",
+  branchName: "",
+  upiId: "",
+  termsAndConditions: "",
   signature: "",
+  signatureUrl: "",
   logo: "",
+  logoUrl: "",
 };
 
 // Checks whether use storage.
@@ -25,11 +40,19 @@ function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
-// Sanitizes name so 'My Company' placeholder is never returned.
+// Sanitizes name so 'My Company' or default placeholder is never returned.
 function cleanName(val) {
   if (!val || typeof val !== "string") return "";
   const trimmed = val.trim();
-  return trimmed.toLowerCase() === "my company" ? "" : trimmed;
+  const lower = trimmed.toLowerCase();
+  return lower === "my company" || lower === "sai kirana stores" ? "" : trimmed;
+}
+
+// Sanitizes phone so placeholder is never returned.
+function cleanPhone(val) {
+  if (!val || typeof val !== "string") return "";
+  const trimmed = val.trim();
+  return trimmed === "8369501991" ? "" : trimmed;
 }
 
 // Gets company profile.
@@ -44,25 +67,47 @@ export function getCompanyProfile() {
       return { ...defaultCompanyProfile };
     }
 
-    const rawName = cleanName(saved.businessName) || cleanName(saved.companyName) || defaultCompanyProfile.companyName;
+    const rawName = cleanName(saved.businessName) || cleanName(saved.companyName) || "";
+    const rawPhone = cleanPhone(saved.phoneNumber) || cleanPhone(saved.phone) || "";
+    const bDetails = (saved && typeof saved.bankDetails === "object") ? saved.bankDetails : {};
 
     const profile = {
       ...defaultCompanyProfile,
       ...saved,
       companyName: rawName,
       businessName: rawName,
-      phoneNumber: saved.phoneNumber || saved.phone || defaultCompanyProfile.phoneNumber,
-      phone: saved.phone || saved.phoneNumber || defaultCompanyProfile.phoneNumber,
+      tradeName: saved.tradeName || "",
+      phoneNumber: rawPhone,
+      phone: rawPhone,
       emailId: saved.emailId || saved.email || "",
       email: saved.email || saved.emailId || "",
+      gstin: saved.gstin || "",
+      pan: saved.pan || "",
       businessAddress: saved.businessAddress || saved.streetAddress || saved.address || "",
       streetAddress: saved.streetAddress || saved.businessAddress || saved.address || "",
+      city: saved.city || "",
+      state: saved.state || "",
+      pincode: saved.pincode || "",
+      country: saved.country || "India",
       businessType: saved.businessType || "",
       businessCategory: saved.businessCategory || "",
+      bankName: saved.bankName || bDetails.bankName || "",
+      accountNumber: saved.accountNumber || bDetails.accountNumber || "",
+      ifscCode: saved.ifscCode || bDetails.ifscCode || "",
+      branchName: saved.branchName || bDetails.branchName || "",
+      upiId: saved.upiId || bDetails.upiId || "",
+      termsAndConditions: saved.termsAndConditions || "",
       signature: saved.signature || saved.signatureUrl || "",
       signatureUrl: saved.signatureUrl || saved.signature || "",
       logo: saved.logo || saved.logoUrl || "",
       logoUrl: saved.logoUrl || saved.logo || "",
+      bankDetails: {
+        bankName: saved.bankName || bDetails.bankName || "",
+        accountNumber: saved.accountNumber || bDetails.accountNumber || "",
+        ifscCode: saved.ifscCode || bDetails.ifscCode || "",
+        branchName: saved.branchName || bDetails.branchName || "",
+        upiId: saved.upiId || bDetails.upiId || "",
+      },
     };
     return profile;
   } catch {
@@ -85,10 +130,34 @@ export async function saveCompanyProfile(profile) {
   }
 
   // Keep aliases in sync
+  if (nextProfile.phone) nextProfile.phoneNumber = nextProfile.phone;
+  if (nextProfile.phoneNumber && !nextProfile.phone) nextProfile.phone = nextProfile.phoneNumber;
+
+  if (nextProfile.email) nextProfile.emailId = nextProfile.email;
+  if (nextProfile.emailId && !nextProfile.email) nextProfile.email = nextProfile.emailId;
+
+  if (nextProfile.businessAddress) nextProfile.streetAddress = nextProfile.businessAddress;
+  if (nextProfile.streetAddress && !nextProfile.businessAddress) nextProfile.businessAddress = nextProfile.streetAddress;
+
   if (nextProfile.logo) nextProfile.logoUrl = nextProfile.logo;
   if (nextProfile.logoUrl && !nextProfile.logo) nextProfile.logo = nextProfile.logoUrl;
   if (nextProfile.signature) nextProfile.signatureUrl = nextProfile.signature;
   if (nextProfile.signatureUrl && !nextProfile.signature) nextProfile.signature = nextProfile.signatureUrl;
+
+  // Keep bank details in sync
+  const bDetails = nextProfile.bankDetails || {};
+  const bankName = nextProfile.bankName || bDetails.bankName || "";
+  const accountNumber = nextProfile.accountNumber || bDetails.accountNumber || "";
+  const ifscCode = nextProfile.ifscCode || bDetails.ifscCode || "";
+  const branchName = nextProfile.branchName || bDetails.branchName || "";
+  const upiId = nextProfile.upiId || bDetails.upiId || "";
+
+  nextProfile.bankName = bankName;
+  nextProfile.accountNumber = accountNumber;
+  nextProfile.ifscCode = ifscCode;
+  nextProfile.branchName = branchName;
+  nextProfile.upiId = upiId;
+  nextProfile.bankDetails = { bankName, accountNumber, ifscCode, branchName, upiId };
 
   if (canUseStorage()) {
     try {
