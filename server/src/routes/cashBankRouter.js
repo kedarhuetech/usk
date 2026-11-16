@@ -8,7 +8,7 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
@@ -135,11 +135,12 @@ router.post("/cheques", async (req, res) => {
     const chequeNumber = (body.chequeNumber || body.number || "").trim();
     const bankName = (body.bankName || "Bank").trim();
     const amount = parseFloat(body.amount) || 0;
-    const chequeDate = body.chequeDate || body.date || new Date().toISOString().slice(0, 10);
+    const rawChequeDate = body.chequeDate || body.date || new Date().toISOString().slice(0, 10);
+    const chequeDate = toSqlDate(rawChequeDate) || new Date().toISOString().slice(0, 10);
     const chequeType = body.chequeType || "received";
     const status = body.status || "pending";
-    const depositDate = body.depositDate || null;
-    const clearanceDate = body.clearanceDate || null;
+    const depositDate = toSqlDate(body.depositDate);
+    const clearanceDate = toSqlDate(body.clearanceDate);
     const notes = body.notes || null;
 
     await pool.query(

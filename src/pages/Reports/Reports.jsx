@@ -402,6 +402,16 @@ function Reports({ defaultReport }) {
       setPurchases(readLocal(transactionStorageKeys.purchases));
       setPaymentIns(readLocal(transactionStorageKeys.paymentIns));
       setPaymentOuts(readLocal(transactionStorageKeys.paymentOuts));
+      loadSalesInvoices()
+        .then((records) => {
+          if (active && Array.isArray(records) && records.length) setSales(records);
+        })
+        .catch(() => {});
+      loadPurchaseBills()
+        .then((records) => {
+          if (active && Array.isArray(records) && records.length) setPurchases(records);
+        })
+        .catch(() => {});
     };
 
     loadSalesInvoices()

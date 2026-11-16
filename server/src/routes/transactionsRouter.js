@@ -10,7 +10,7 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
@@ -185,11 +185,18 @@ router.get("/", async (req, res) => {
         invoiceNumber: row.document_number,
         billNumber: row.document_number,
         orderNumber: row.document_number,
+<<<<<<< HEAD
+        transactionDate: toSqlDate(row.transaction_date),
+        invoiceDate: toSqlDate(row.transaction_date),
+        billDate: toSqlDate(row.transaction_date),
+        dueDate: toSqlDate(row.due_date),
+=======
         transactionDate: txnDate,
         invoiceDate: txnDate,
         billDate: txnDate,
         date: txnDate,
         dueDate: dueDate,
+>>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party: party,
@@ -222,7 +229,7 @@ router.get("/", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         eWayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
-        poDate: row.po_date || null,
+        poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
         terms: row.terms || "",
         items,
@@ -242,6 +249,11 @@ router.get("/", async (req, res) => {
           dueDate: dueDate,
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
+<<<<<<< HEAD
+          invoiceNumber: row.document_number,
+          invoiceDate: toSqlDate(row.transaction_date),
+=======
+>>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -320,7 +332,7 @@ router.get("/:id", async (req, res) => {
               COALESCE(NULLIF(TRIM(t.shipping_address), ''), p.shipping_address, '') AS resolved_shipping_address
        FROM transactions t
        LEFT JOIN parties p ON t.party_id = p.id
-       WHERE t.business_id = ? AND t.id = ?
+       WHERE (t.business_id = ? OR t.business_id IN ('demo-business', 'local-development')) AND t.id = ?
        LIMIT 1`,
       [businessId, txnId]
     );
@@ -333,7 +345,7 @@ router.get("/:id", async (req, res) => {
 
     // Fetch line items from normalized transaction_items table
     const [itemRows] = await pool.query(
-      `SELECT * FROM transaction_items WHERE business_id = ? AND transaction_id = ? ORDER BY id ASC`,
+      `SELECT * FROM transaction_items WHERE (business_id = ? OR business_id IN ('demo-business', 'local-development')) AND transaction_id = ? ORDER BY id ASC`,
       [businessId, txnId]
     );
 
@@ -386,6 +398,10 @@ router.get("/:id", async (req, res) => {
         type: row.transaction_type,
         documentNumber: row.document_number,
         invoiceNumber: row.document_number,
+<<<<<<< HEAD
+        transactionDate: toSqlDate(row.transaction_date),
+        dueDate: toSqlDate(row.due_date),
+=======
         billNumber: row.document_number,
         orderNumber: row.document_number,
         transactionDate: txnDate,
@@ -393,6 +409,7 @@ router.get("/:id", async (req, res) => {
         billDate: txnDate,
         date: txnDate,
         dueDate: dueDate,
+>>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party,
@@ -422,7 +439,7 @@ router.get("/:id", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         eWayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
-        poDate: row.po_date || null,
+        poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
         terms: row.terms || "",
         items,
@@ -442,6 +459,11 @@ router.get("/:id", async (req, res) => {
           dueDate: dueDate,
           billingAddress,
           shippingAddress,
+<<<<<<< HEAD
+          invoiceNumber: row.document_number,
+          invoiceDate: toSqlDate(row.transaction_date),
+=======
+>>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -485,11 +507,35 @@ router.post("/", async (req, res) => {
       body.form?.billNumber ||
       "0"
     ).trim();
+<<<<<<< HEAD
+    const rawTxnDate =
+      body.transactionDate ||
+      body.invoiceDate ||
+      body.billDate ||
+      body.date ||
+      body.form?.invoiceDate ||
+      body.form?.billDate ||
+      new Date().toISOString().slice(0, 10);
+    const transactionDate = toSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
+    const dueDate = toSqlDate(body.dueDate || body.due_date || body.form?.dueDate);
+    const partyId = body.partyId || body.party_id || null;
+    const partyName =
+      (body.partyName ||
+      body.customerName ||
+      body.supplierName ||
+      body.party ||
+      body.customer ||
+      body.form?.customer ||
+      body.form?.partyName ||
+      body.form?.party ||
+      "").trim() ||
+=======
     const rawTxnDate = body.transactionDate || body.invoiceDate || body.billDate || body.date || body.form?.invoiceDate || new Date();
     const transactionDate = formatSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
     const dueDate = formatSqlDate(body.dueDate || body.form?.dueDate);
     const partyId = body.partyId || body.party_id || body.form?.partyId || body.customerId || null;
     const partyName = (body.partyName || body.party || body.customerName || body.customer || body.supplierName || body.form?.customer || body.form?.partyName || body.form?.party || "").trim() ||
+>>>>>>> origin/main
       ((body.paymentMode === "Cash" || body.paymentType === "Cash" || body.form?.paymentType === "Cash" || transactionType === "pos") ? "Cash Sale" : null);
     const partyPhone = body.partyPhone || body.phone || body.mobile || body.customerPhone || body.form?.phone || null;
     const partyGstin = body.partyGstin || body.gstin || body.form?.gstin || null;
@@ -500,6 +546,10 @@ router.post("/", async (req, res) => {
       ? JSON.stringify(body.shippingAddress || body.shipping_address)
       : (body.shippingAddress || body.form?.shippingAddress || body.shipping_address || billingAddress || null);
 
+<<<<<<< HEAD
+   
+=======
+>>>>>>> origin/main
     const rawItems = Array.isArray(body.items) && body.items.length
       ? body.items
       : (Array.isArray(body.rows) && body.rows.length ? body.rows : (Array.isArray(body.lineItems) ? body.lineItems : []));
@@ -523,7 +573,7 @@ router.post("/", async (req, res) => {
     const vehicleNo = body.vehicleNo || null;
     const eWayBillNo = body.eWayBillNo || null;
     const poNumber = body.poNumber || null;
-    const poDate = body.poDate || null;
+    const poDate = toSqlDate(body.poDate || body.po_date || body.form?.poDate);
     const notes = body.notes || null;
     const terms = body.terms || null;
 

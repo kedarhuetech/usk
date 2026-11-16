@@ -7,6 +7,7 @@ import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { itemsDb, partiesDb, transactionsDb } from "./databaseRepository.js";
+import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
 // This helper handles id logic.
 function withId(record = {}) {
@@ -139,6 +140,7 @@ export async function saveBusinessSaleInvoice(value) {
   for (const item of changedItems) {
     if (touchedIds.has(item.id)) await saveBusinessItem(item);
   }
+  notifyBusinessDataChanged();
   return saved;
 }
 
@@ -188,5 +190,6 @@ export async function saveBusinessPurchaseBill(value) {
     console.warn("[MySQL] Saved purchase bill to local cache:", error.message);
   }
 
+  notifyBusinessDataChanged();
   return localSaved;
 }

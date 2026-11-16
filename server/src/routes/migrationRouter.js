@@ -11,7 +11,7 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
@@ -158,8 +158,9 @@ router.post("/migrate-from-local", async (req, res) => {
       const id = txn.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const type = (txn.transactionType || txn.type || "sale").toLowerCase();
       const docNo = txn.documentNumber || txn.invoiceNumber || txn.billNumber || txn.number || "0";
-      const date = txn.transactionDate || txn.invoiceDate || txn.billDate || txn.date || new Date().toISOString().slice(0, 10);
-      const dueDate = txn.dueDate || null;
+      const rawDate = txn.transactionDate || txn.invoiceDate || txn.billDate || txn.date || new Date().toISOString().slice(0, 10);
+      const date = toSqlDate(rawDate) || new Date().toISOString().slice(0, 10);
+      const dueDate = toSqlDate(txn.dueDate);
       const pId = txn.partyId || txn.party_id || null;
       const pName = txn.partyName || txn.party || txn.customerName || txn.supplierName || null;
       const pPhone = txn.partyPhone || txn.phone || null;
@@ -183,7 +184,7 @@ router.post("/migrate-from-local", async (req, res) => {
       const vehicleNo = txn.vehicleNo || null;
       const eWayBillNo = txn.eWayBillNo || null;
       const poNumber = txn.poNumber || null;
-      const poDate = txn.poDate || null;
+      const poDate = toSqlDate(txn.poDate);
       const notes = txn.notes || null;
       const terms = txn.terms || null;
 
@@ -259,12 +260,12 @@ router.post("/migrate-from-local", async (req, res) => {
       const cPhone = s.customerPhone || null;
       const cEmail = s.customerEmail || null;
       const sName = s.serviceName || "Service";
-      const sDate = s.serviceDate || new Date().toISOString().slice(0, 10);
-      const sDueDate = s.serviceDueDate || s.dueDate || sDate;
+      const sDate = toSqlDate(s.serviceDate) || new Date().toISOString().slice(0, 10);
+      const sDueDate = toSqlDate(s.serviceDueDate || s.dueDate) || sDate;
       const status = s.status || "Active";
       const lastNotifiedAt = s.lastNotifiedAt ? new Date(s.lastNotifiedAt) : null;
       const lastChannel = s.lastNotifiedChannel || null;
-      const lastDueDate = s.lastNotifiedDueDate || null;
+      const lastDueDate = toSqlDate(s.lastNotifiedDueDate);
       const notes = s.notes || null;
 
       await conn.query(
