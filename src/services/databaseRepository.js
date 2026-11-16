@@ -399,6 +399,11 @@ export const settingsDb = {
       const data = res?.data ?? res;
       if (data && typeof data === "object") {
         writeLocal(COMPANY_PROFILE_KEY, data);
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(new CustomEvent("ledgerly:company-profile-updated", { detail: data }));
+          } catch {}
+        }
         return data;
       }
       return readLocal(COMPANY_PROFILE_KEY, {});

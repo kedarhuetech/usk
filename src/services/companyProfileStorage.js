@@ -52,7 +52,17 @@ export function getCompanyProfile() {
       companyName: rawName,
       businessName: rawName,
       phoneNumber: saved.phoneNumber || saved.phone || defaultCompanyProfile.phoneNumber,
-      signature: saved.signature || "",
+      phone: saved.phone || saved.phoneNumber || defaultCompanyProfile.phoneNumber,
+      emailId: saved.emailId || saved.email || "",
+      email: saved.email || saved.emailId || "",
+      businessAddress: saved.businessAddress || saved.streetAddress || saved.address || "",
+      streetAddress: saved.streetAddress || saved.businessAddress || saved.address || "",
+      businessType: saved.businessType || "",
+      businessCategory: saved.businessCategory || "",
+      signature: saved.signature || saved.signatureUrl || "",
+      signatureUrl: saved.signatureUrl || saved.signature || "",
+      logo: saved.logo || saved.logoUrl || "",
+      logoUrl: saved.logoUrl || saved.logo || "",
     };
     return profile;
   } catch {
@@ -61,7 +71,7 @@ export function getCompanyProfile() {
 }
 
 // Saves company profile.
-export function saveCompanyProfile(profile) {
+export async function saveCompanyProfile(profile) {
   const current = getCompanyProfile();
   const nextProfile = {
     ...current,
@@ -74,12 +84,27 @@ export function saveCompanyProfile(profile) {
     nextProfile.businessName = profile.companyName;
   }
 
+  // Keep aliases in sync
+  if (nextProfile.logo) nextProfile.logoUrl = nextProfile.logo;
+  if (nextProfile.logoUrl && !nextProfile.logo) nextProfile.logo = nextProfile.logoUrl;
+  if (nextProfile.signature) nextProfile.signatureUrl = nextProfile.signature;
+  if (nextProfile.signatureUrl && !nextProfile.signature) nextProfile.signature = nextProfile.signatureUrl;
+
   if (canUseStorage()) {
-    window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
+    try {
+      window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
+    } catch (err) {
+      console.warn("Could not save company profile to localStorage:", err);
+    }
     window.dispatchEvent(new CustomEvent(companyProfileUpdatedEvent, { detail: nextProfile }));
   }
   if (isDatabaseMode()) {
-    settingsDb.saveCompanyProfile(nextProfile).catch((err) => console.warn("[MySQL] Background company profile sync notice:", err.message));
+    try {
+      await settingsDb.saveCompanyProfile(nextProfile);
+    } catch (err) {
+      console.warn("[MySQL] Background company profile sync notice:", err.message);
+      throw err;
+    }
   }
   return nextProfile;
 }

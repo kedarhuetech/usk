@@ -7,9 +7,39 @@
  */
 
 import { Router } from "express";
+import crypto from "node:crypto";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
 
 const router = Router();
+
+/**
+ * Safely persists a Base64 data URL into business_growth_assets
+ * and returns the persistent asset reference URL.
+ */
+async function persistBase64Asset(val, entityType, businessId) {
+  if (!val || typeof val !== "string" || !val.startsWith("data:image/")) {
+    return val || null;
+  }
+  try {
+    const matches = val.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return null;
+    const mimeType = matches[1];
+    const buffer = Buffer.from(matches[2], "base64");
+    if (buffer.length > 10 * 1024 * 1024) return null;
+    const id = crypto.randomUUID();
+    const ext = mimeType.split("/")[1] || "png";
+    const filename = `${entityType}-${Date.now()}.${ext}`;
+    await pool.execute(
+      `INSERT INTO business_growth_assets (id, business_id, entity_type, entity_id, original_filename, mime_type, size_bytes, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, businessId, entityType, entityType, filename, mimeType, buffer.length, buffer]
+    );
+    return `/api/business-growth/assets/${id}?businessId=${encodeURIComponent(businessId)}`;
+  } catch (err) {
+    console.error(`Failed to persist Base64 asset (${entityType}):`, err.message);
+    return null;
+  }
+}
 
 /**
  * GET /api/settings and GET /api/settings/app
@@ -86,6 +116,8 @@ router.get("/company-profile", async (req, res) => {
         data: {
           companyName: "Sai Kirana Stores",
           businessName: "Sai Kirana Stores",
+          businessType: "",
+          businessCategory: "",
         },
       });
     }
@@ -98,11 +130,17 @@ router.get("/company-profile", async (req, res) => {
         companyName: row.company_name,
         businessName: row.company_name,
         tradeName: row.trade_name || "",
+        businessType: row.business_type || "",
+        businessCategory: row.business_category || "",
         phone: row.phone || "",
+        phoneNumber: row.phone || "",
+
         email: row.email || "",
+        emailId: row.email || "",
         gstin: row.gstin || "",
         pan: row.pan || "",
         streetAddress: row.street_address || "",
+        businessAddress: row.street_address || "",
         address: row.street_address || "",
         city: row.city || "",
         state: row.state || "",
@@ -114,7 +152,10 @@ router.get("/company-profile", async (req, res) => {
         branchName: row.branch_name || "",
         upiId: row.upi_id || "",
         signatureUrl: row.signature_url || "",
+        signature: row.signature_url || "",
+
         logoUrl: row.logo_url || "",
+        logo: row.logo_url || "",
         termsAndConditions: row.terms_and_conditions || "",
         bankDetails: {
           bankName: row.bank_name || "",
@@ -141,11 +182,21 @@ router.post("/company-profile", async (req, res) => {
 
     const companyName = (body.companyName || body.businessName || "Sai Kirana Stores").trim();
     const tradeName = body.tradeName || null;
-    const phone = body.phone || null;
-    const email = body.email || null;
+    const businessType = body.businessType || null;
+    const businessCategory = body.businessCategory || null;
+
+    const phone = body.phone || body.phoneNumber || null;
+    const email = body.email || body.emailId || null;
     const gstin = body.gstin || null;
     const pan = body.pan || null;
-    const streetAddress = body.streetAddress || body.address || null;
+
+   
+
+    const streetAddress =
+      body.streetAddress ||
+      body.businessAddress ||
+      body.address ||
+      null;
     const city = body.city || null;
     const state = body.state || null;
     const pincode = body.pincode || null;
@@ -159,20 +210,30 @@ router.post("/company-profile", async (req, res) => {
     const branchName = body.branchName || bankDetails.branchName || null;
     const upiId = body.upiId || bankDetails.upiId || null;
 
-    const signatureUrl = body.signatureUrl || null;
-    const logoUrl = body.logoUrl || null;
+    let signatureUrl = body.signatureUrl || body.signature || null;
+    let logoUrl = body.logoUrl || body.logo || null;
+
+    if (signatureUrl && typeof signatureUrl === "string" && signatureUrl.startsWith("data:image/")) {
+      signatureUrl = await persistBase64Asset(signatureUrl, "company-signature", businessId);
+    }
+    if (logoUrl && typeof logoUrl === "string" && logoUrl.startsWith("data:image/")) {
+      logoUrl = await persistBase64Asset(logoUrl, "company-logo", businessId);
+    }
     const termsAndConditions = body.termsAndConditions || null;
 
     await pool.query(
       `INSERT INTO company_profiles (
-        business_id, company_name, trade_name, phone, email, gstin, pan,
+        business_id, company_name, trade_name, business_type, business_category,
+        phone, email, gstin, pan,
         street_address, city, state, pincode, country,
         bank_name, account_number, ifsc_code, branch_name, upi_id,
         signature_url, logo_url, terms_and_conditions
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         company_name = VALUES(company_name),
         trade_name = VALUES(trade_name),
+        business_type = VALUES(business_type),
+        business_category = VALUES(business_category),
         phone = VALUES(phone),
         email = VALUES(email),
         gstin = VALUES(gstin),
@@ -192,7 +253,8 @@ router.post("/company-profile", async (req, res) => {
         terms_and_conditions = VALUES(terms_and_conditions),
         updated_at = CURRENT_TIMESTAMP`,
       [
-        businessId, companyName, tradeName, phone, email, gstin, pan,
+        businessId, companyName, tradeName, businessType, businessCategory,
+        phone, email, gstin, pan,
         streetAddress, city, state, pincode, country,
         bankName, accountNumber, ifscCode, branchName, upiId,
         signatureUrl, logoUrl, termsAndConditions

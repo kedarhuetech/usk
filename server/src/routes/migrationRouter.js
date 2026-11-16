@@ -152,6 +152,7 @@ router.post("/migrate-from-local", async (req, res) => {
     }
 
     // 3. Ingest Transactions & Line Items
+
     for (const txn of transactions) {
       if (!txn.id && !txn.documentNumber && !txn.invoiceNumber) continue;
       const id = txn.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
