@@ -62,6 +62,9 @@ export async function loadBusinessSummary() {
       if (data && data.sales !== undefined) {
         return {
           sales: data.sales?.totalAmount || 0,
+          totalSales: data.sales?.totalAmount || 0,
+          activeSales: [],
+          salesCount: data.sales?.count || 0,
           received: data.sales?.receivedAmount || 0,
           receivable: data.balances?.toReceive || 0,
           payable: data.balances?.toPay || 0,

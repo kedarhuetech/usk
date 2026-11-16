@@ -116,13 +116,16 @@ function Home() {
     };
   }, []);
 
-  const totalSales = summary?.totalSales;
+  const totalSales = Number(summary?.totalSales ?? summary?.sales?.totalAmount ?? summary?.sales ?? 0);
+  const activeSalesCount = Array.isArray(summary?.activeSales)
+    ? summary.activeSales.length
+    : (Number(summary?.salesCount ?? summary?.sales?.count ?? 0) || 0);
 
   const summaryCards = [
     {
       label: "Total Sales",
       value: isLoading && !summary ? "Loading…" : summary ? currencyFormatter.format(totalSales) : "—",
-      note: summary ? `${summary.activeSales.length} active saved invoice${summary.activeSales.length === 1 ? "" : "s"}` : loadError ? "Saved sales are unavailable" : "No sales recorded yet",
+      note: summary ? `${activeSalesCount} active saved invoice${activeSalesCount === 1 ? "" : "s"}` : loadError ? "Saved sales are unavailable" : "No sales recorded yet",
       icon: FiTrendingUp,
       tone: "blue",
       onClick: () => navigate("/sales/sale-invoices"),

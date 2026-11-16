@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiTrendingUp } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import Button from "../../components/Common/Button";
@@ -15,13 +15,39 @@ import {
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const STORAGE_KEY = "ledgerly:estimateQuotations.v1";
+
+function normalizeEstimate(item) {
+  return {
+    ...item,
+    id: item.id,
+    number: item.documentNumber || item.number || "",
+    customer: item.customer || item.partyName || item.customerName || item.party || "Cash Sale",
+    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : new Date().toISOString().slice(0, 10)),
+    amount: Number(item.amount ?? item.totalAmount ?? 0),
+    status: item.status || "Open",
+    phone: item.phone || item.partyPhone || "",
+    billingAddress: item.billingAddress || "",
+    shippingAddress: item.shippingAddress || "",
+    description: item.description || item.notes || "",
+    terms: item.terms || "",
+    rows: (item.rows || item.items || []).map((r) => ({
+      item: r.item || r.itemName || r.name || "",
+      description: r.description || "",
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "",
+      price: Number(r.price ?? r.unitPrice ?? 0),
+    })),
+  };
+}
 
 function readEstimates() {
   try {
     const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
+    return Array.isArray(value) ? value.map(normalizeEstimate) : [];
   } catch {
     return [];
   }
@@ -84,9 +110,31 @@ export default function EstimateQuotation() {
     return result;
   }, { amount: 0, converted: 0, open: 0 }), [visible]);
 
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchEstimates() {
+      try {
+        const list = await transactionsDb.listByType("estimate");
+        if (isMounted && Array.isArray(list) && list.length > 0) {
+          setEstimates(list.map(normalizeEstimate));
+        }
+      } catch {}
+    }
+    fetchEstimates();
+    const onDataChanged = () => fetchEstimates();
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+      return () => {
+        isMounted = false;
+        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+      };
+    }
+  }, []);
+
   const saveEstimates = (next) => {
     setEstimates(next);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    notifyBusinessDataChanged();
   };
 
   const setPreset = (value) => {
@@ -107,6 +155,24 @@ export default function EstimateQuotation() {
     const saved = { ...estimate, id: estimate.id || `estimate-${Date.now()}` };
     saveEstimates(editor.mode === "edit" ? estimates.map((item) => item.id === saved.id ? saved : item) : [saved, ...estimates]);
     setEditor(null);
+
+    // Save directly to MySQL transactions table
+    transactionsDb.save({
+      ...saved,
+      transactionType: "estimate",
+      type: "estimate",
+      documentNumber: saved.number,
+      transactionDate: saved.date,
+      partyName: saved.customer,
+      totalAmount: Number(saved.amount || 0),
+      items: (saved.rows || []).map((r) => ({
+        itemName: r.item,
+        description: r.description,
+        quantity: Number(r.qty || 1),
+        unitPrice: Number(r.price || 0),
+        totalAmount: Number(r.qty || 1) * Number(r.price || 0),
+      })),
+    }).catch((err) => console.warn("[Estimate] MySQL save notice:", err.message));
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -137,6 +203,7 @@ export default function EstimateQuotation() {
       onConfirm: () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         saveEstimates(estimates.filter((item) => item.id !== estimate.id));
+        transactionsDb.remove(estimate.id).catch(() => {});
         toast.success(`Quotation ${estimate.number} deleted.`);
       },
     });

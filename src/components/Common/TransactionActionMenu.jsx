@@ -13,6 +13,7 @@ import {
   recordAuditTrail,
 } from "../../services/auditTrailStorage.js";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 
 /**
  * Builds printable unified document HTML for any transaction type.
@@ -288,6 +289,8 @@ export default function TransactionActionMenu({
       } else if (source === "Debit Note") {
         filterStorage("ledgerly:purchaseReturns.v1");
       }
+
+      transactionsDb.remove(rawId).catch(() => {});
 
       recordAuditTrail({
         action: "Transaction Deleted",

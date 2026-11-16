@@ -240,12 +240,29 @@ export const transactionsDb = {
         const paymentIns = list.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in");
         const paymentOuts = list.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out");
         const expenses = list.filter((t) => t.transactionType === "expense" || t.type === "expense");
+        const estimates = list.filter((t) => t.transactionType === "estimate" || t.type === "estimate");
+        const proformas = list.filter((t) => t.transactionType === "proforma" || t.type === "proforma");
+        const challans = list.filter((t) => t.transactionType === "delivery_challan" || t.type === "delivery_challan");
+        const debitNotes = list.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note");
+        const creditNotes = list.filter((t) => t.transactionType === "credit_note" || t.transactionType === "sale_return" || t.type === "sale_return" || t.type === "credit_note");
+        const saleOrders = list.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order");
+        const purchaseOrders = list.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order");
 
         if (sales.length > 0) writeLocal(SALE_INVOICES_KEY, sales);
         if (purchases.length > 0) writeLocal(PURCHASE_BILLS_KEY, purchases);
         if (paymentIns.length > 0) writeLocal(transactionStorageKeys.paymentIns, paymentIns);
         if (paymentOuts.length > 0) writeLocal(transactionStorageKeys.paymentOuts, paymentOuts);
-        if (expenses.length > 0) writeLocal(transactionStorageKeys.expenses, expenses);
+        if (expenses.length > 0) {
+          writeLocal(transactionStorageKeys.expenses, expenses);
+          writeLocal("ledgerly:expenses.v1", expenses);
+        }
+        if (estimates.length > 0) writeLocal("ledgerly:estimateQuotations.v1", estimates);
+        if (proformas.length > 0) writeLocal("ledgerly:proformaInvoices.v1", proformas);
+        if (challans.length > 0) writeLocal("ledgerly:deliveryChallans.v1", challans);
+        if (debitNotes.length > 0) writeLocal("ledgerly:purchaseReturns.v1", debitNotes);
+        if (creditNotes.length > 0) writeLocal("ledgerly:saleReturns.v1", creditNotes);
+        if (saleOrders.length > 0) writeLocal("ledgerly:saleOrders.v1", saleOrders);
+        if (purchaseOrders.length > 0) writeLocal("ledgerly:purchaseOrders.v1", purchaseOrders);
         return list;
       }
       return [];
@@ -548,10 +565,27 @@ export async function autoMigrateLocalDataToMySQL() {
   const settings = readLocal(SETTINGS_KEY, {});
   const companyProfile = readLocal(COMPANY_PROFILE_KEY, {});
 
-  // Combine sales and purchases into transactions
+  // Combine all local transactions into transactions payload
+  const estimates = readLocal("ledgerly:estimateQuotations.v1", []);
+  const proformas = readLocal("ledgerly:proformaInvoices.v1", []);
+  const challans = readLocal("ledgerly:deliveryChallans.v1", []);
+  const expenses = readLocal("ledgerly:expenses.v1", []);
+  const debitNotes = readLocal("ledgerly:purchaseReturns.v1", []);
+  const creditNotes = readLocal("ledgerly:saleReturns.v1", []);
+  const saleOrders = readLocal("ledgerly:saleOrders.v1", []);
+  const purchaseOrders = readLocal("ledgerly:purchaseOrders.v1", []);
+
   const transactions = [
     ...sales.map((s) => ({ ...s, transactionType: "sale" })),
     ...purchases.map((p) => ({ ...p, transactionType: "purchase" })),
+    ...estimates.map((e) => ({ ...e, transactionType: "estimate" })),
+    ...proformas.map((p) => ({ ...p, transactionType: "proforma" })),
+    ...challans.map((c) => ({ ...c, transactionType: "delivery_challan" })),
+    ...expenses.map((x) => ({ ...x, transactionType: "expense" })),
+    ...debitNotes.map((d) => ({ ...d, transactionType: "debit_note" })),
+    ...creditNotes.map((c) => ({ ...c, transactionType: "sale_return" })),
+    ...saleOrders.map((o) => ({ ...o, transactionType: "sale_order" })),
+    ...purchaseOrders.map((o) => ({ ...o, transactionType: "purchase_order" })),
   ];
 
   if (!parties.length && !items.length && !transactions.length && !reminders.length) {

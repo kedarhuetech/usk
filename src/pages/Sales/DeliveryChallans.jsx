@@ -17,13 +17,43 @@ import {
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const STORAGE_KEY = "ledgerly:deliveryChallans.v1";
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateLabel = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const freshRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discount: "", tax: "NONE", cess: "" });
-const readChallans = () => { try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); return Array.isArray(value) ? value : []; } catch { return []; } };
+
+function normalizeChallan(item) {
+  return {
+    ...item,
+    id: item.id,
+    number: item.documentNumber || item.number || "",
+    party: item.party || item.partyName || item.customerName || "Party",
+    phone: item.phone || item.partyPhone || "",
+    date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : today()),
+    dueDate: item.dueDate || item.date || today(),
+    total: Number(item.total ?? item.totalAmount ?? item.amount ?? 0),
+    status: item.status || "Open",
+    rows: (item.rows || item.items || []).map((r) => ({
+      id: r.id || crypto.randomUUID(),
+      item: r.item || r.itemName || r.name || "",
+      description: r.description || "",
+      size: r.size || "",
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "NONE",
+      price: Number(r.price ?? r.unitPrice ?? 0),
+      discount: Number(r.discount ?? 0),
+      tax: r.tax || "NONE",
+      cess: r.cess || "",
+      hsn: r.hsn || r.hsnCode || "",
+    })),
+  };
+}
+
+const readChallans = () => { try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); return Array.isArray(value) ? value.map(normalizeChallan) : []; } catch { return []; } };
 const rowAmount = (row) => {
   const net = Math.max(0, Number(row.qty || 0) * Number(row.price || 0) - (Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100));
   return net + net * (Number(row.tax) || 0) / 100 + net * (Number(row.cess) || 0) / 100;
@@ -99,7 +129,32 @@ export default function DeliveryChallans() {
     && `${challan.number} ${challan.party}`.toLowerCase().includes(selectorSearch.toLowerCase()));
   const subtotal = editor?.value.rows.reduce((sum, row) => sum + rowAmount(row), 0) || 0;
 
-  const persist = (next) => { setChallans(next); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); };
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchChallans() {
+      try {
+        const list = await transactionsDb.listByType("delivery_challan");
+        if (isMounted && Array.isArray(list) && list.length > 0) {
+          setChallans(list.map(normalizeChallan));
+        }
+      } catch {}
+    }
+    fetchChallans();
+    const onDataChanged = () => fetchChallans();
+    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+      return () => {
+        isMounted = false;
+        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+      };
+    }
+  }, []);
+
+  const persist = (next) => {
+    setChallans(next);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    notifyBusinessDataChanged();
+  };
   const exportExcel = () => {
     const workbook = XLSX.utils.book_new();
     const challanRows = filtered.map((challan) => ({
@@ -215,6 +270,26 @@ export default function DeliveryChallans() {
     persist(editor.mode === "edit" ? challans.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...challans]);
     setEditor(null);
 
+    // Save directly to MySQL transactions table
+    transactionsDb.save({
+      ...saved,
+      transactionType: "delivery_challan",
+      type: "delivery_challan",
+      documentNumber: saved.number,
+      transactionDate: saved.date,
+      dueDate: saved.dueDate,
+      partyName: saved.party,
+      totalAmount: Number(saved.total || 0),
+      items: (saved.rows || []).map((r) => ({
+        itemName: r.item,
+        description: r.description,
+        quantity: Number(r.qty || 1),
+        unitPrice: Number(r.price || 0),
+        discountPercent: Number(r.discount || 0),
+        totalAmount: rowAmount(r),
+      })),
+    }).catch((err) => console.warn("[Challan] MySQL save notice:", err.message));
+
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
       const currentSettings = getAppSettings();
@@ -246,6 +321,7 @@ export default function DeliveryChallans() {
         onConfirm: () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
           persist(challans.filter((entry) => entry.id !== challan.id));
+          transactionsDb.remove(challan.id).catch(() => {});
           toast.success(`Challan ${challan.number} deleted.`);
         },
       });
