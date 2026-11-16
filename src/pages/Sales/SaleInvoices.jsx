@@ -23,7 +23,7 @@ import Card from "../../components/Common/Card";
 import { loadSalesInvoices, saveBusinessSaleInvoice } from "../../services/businessRecords";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentIns, readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
-import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { notifyBusinessDataChanged, businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
 const SALE_INVOICE_UI_KEY = transactionStorageKeys.saleInvoiceUi;
@@ -318,8 +318,14 @@ function SaleInvoices() {
       try { const rows = await loadSalesInvoices(); if (active) setInvoices(rows.filter((invoice) => invoice.transactionType !== "purchase")); }
       catch (error) { console.error("Could not load sale invoices:", error); }
     };
-    refresh(); window.addEventListener("focus", refresh);
-    return () => { active = false; window.removeEventListener("focus", refresh); };
+    refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener(businessDataChangedEvent, refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener(businessDataChangedEvent, refresh);
+    };
   }, []);
 
   const shownInvoices = useMemo(() => [

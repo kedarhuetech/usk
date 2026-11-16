@@ -376,6 +376,16 @@ function Reports({ defaultReport }) {
     const reload = () => {
       setSales(readLocal(transactionStorageKeys.sales));
       setPurchases(readLocal(transactionStorageKeys.purchases));
+      loadSalesInvoices()
+        .then((records) => {
+          if (active && Array.isArray(records) && records.length) setSales(records);
+        })
+        .catch(() => {});
+      loadPurchaseBills()
+        .then((records) => {
+          if (active && Array.isArray(records) && records.length) setPurchases(records);
+        })
+        .catch(() => {});
     };
 
     loadSalesInvoices()
