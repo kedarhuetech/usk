@@ -210,6 +210,35 @@ const readLocal = (...keys) => {
   return [];
 };
 
+function navigateToEditTransaction(row, navigate) {
+  const t = String(row.type || row.transactionType || "").toLowerCase();
+  if (t === "sale order" || t === "sale_order") {
+    navigate("/sales/sale-order", { state: { editOrder: row, editInvoice: row } });
+  } else if (t === "purchase order" || t === "purchase_order") {
+    navigate("/purchase-expense/purchase-order", { state: { editOrder: row, editPurchase: row } });
+  } else if (t === "purchase" || t === "purchase bill" || t === "purchase_bill") {
+    navigate("/purchase-expense/purchase-bills/new", { state: { editPurchase: row, editBill: row, editInvoice: row } });
+  } else if (t === "payment-in" || t === "payment_in") {
+    navigate("/sales/payment-in", { state: { editPayment: row, editInvoice: row } });
+  } else if (t === "payment-out" || t === "payment_out") {
+    navigate("/purchase-expense/payment-out", { state: { editPayment: row, editPurchase: row } });
+  } else if (t === "expense") {
+    navigate("/purchase-expense/expenses", { state: { editExpense: row, editInvoice: row } });
+  } else if (t === "estimate" || t === "quotation") {
+    navigate("/sales/estimate-quotation", { state: { editEstimate: row, editInvoice: row } });
+  } else if (t === "proforma" || t === "proforma_invoice") {
+    navigate("/sales/proforma-invoice", { state: { editProforma: row, editInvoice: row } });
+  } else if (t === "delivery_challan" || t.includes("challan")) {
+    navigate("/sales/delivery-challan", { state: { editChallan: row, editInvoice: row } });
+  } else if (t === "credit_note" || t === "sale_return" || t.includes("credit note") || t.includes("sale return")) {
+    navigate("/sales/sale-return-credit-note", { state: { editReturn: row, editInvoice: row } });
+  } else if (t === "debit_note" || t === "purchase_return" || t.includes("debit note") || t.includes("purchase return")) {
+    navigate("/purchase-expense/purchase-return", { state: { editReturn: row, editPurchase: row } });
+  } else {
+    navigate("/sales/sale-invoices/new", { state: { editInvoice: row } });
+  }
+}
+
 function Reports({ defaultReport }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1552,19 +1581,13 @@ function Reports({ defaultReport }) {
                               `font-medium ${statusClass(status)}`
                             )}
                             {cell(
-                              (type === "Sale" || type === "Sale Invoices" || row.transactionType === "sale" || row.transactionType === "pos") && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    navigate("/sales/sale-invoices/new", {
-                                      state: { editInvoice: row },
-                                    })
-                                  }
-                                  className="text-slate-500 hover:text-sky-600"
-                                >
-                                  View/Edit
-                                </button>
-                              )
+                              <button
+                                type="button"
+                                onClick={() => navigateToEditTransaction(row, navigate)}
+                                className="text-slate-500 hover:text-sky-600 font-medium"
+                              >
+                                View/Edit
+                              </button>
                             )}
                           </>
                         )}
