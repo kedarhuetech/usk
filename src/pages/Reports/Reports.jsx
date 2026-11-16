@@ -47,7 +47,6 @@ const reportGroups = [
     reports: [
       "Sale",
       "Purchase",
-      "Day book",
       "All Transactions",
       "Profit And Loss",
       "Bill Wise Profit",
@@ -110,7 +109,6 @@ const reportTitle = (name) =>
   Sale: "Sale Invoices",
   Purchase: "Purchase Bills",
   "All Transactions": "All Transactions",
-  "Day book": "Day book",
 }[name] || name);
 
 const money = (value) =>
@@ -123,20 +121,45 @@ const localDate = (date = new Date()) =>
     date.getDate()
   ).padStart(2, "0")}`;
 
-const dateOf = (row) => {
-  const d =
-    row.transactionDate ||
-    row.transaction_date ||
-    row.invoiceDate ||
-    row.billDate ||
-    row.form?.invoiceDate ||
-    row.form?.billDate ||
-    row.date ||
-    row.createdAt ||
-    "";
-  if (!d) return "";
-  return typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
+const parseYmdDate = (val) => {
+  if (!val) return "";
+  if (typeof val === "string") {
+    const s = val.trim();
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
+      const [y, m, d] = s.split("-");
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
+    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
+    if (s.includes("T") || s.includes("Z") || s.includes(" ")) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+    }
+    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+    return s.slice(0, 10);
+  }
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  return String(val);
 };
+
+const dateOf = (row) =>
+  parseYmdDate(
+    row.form?.invoiceDate ||
+    row.invoiceDate ||
+    row.transaction_date ||
+    row.transactionDate ||
+    row.form?.billDate ||
+    row.billDate ||
+    row.date ||
+    row.createdAt
+  );
 
 const storeOf = (row) =>
   row.form?.firm ||
@@ -364,18 +387,21 @@ function Reports({ defaultReport }) {
   const [paymentFilter, setPaymentFilter] = useState("All Payment");
   const [printModalOpen, setPrintModalOpen] = useState(false);
 
-  const isDayBook = activeReport === "Day book";
   const isAllTransactions = activeReport === "All Transactions";
   const isPurchase = ["Purchase", "Purchase Bills"].includes(activeReport);
 
   const [sales, setSales] = useState(() => readLocal(transactionStorageKeys.sales));
   const [purchases, setPurchases] = useState(() => readLocal(transactionStorageKeys.purchases));
+  const [paymentIns, setPaymentIns] = useState(() => readLocal(transactionStorageKeys.paymentIns));
+  const [paymentOuts, setPaymentOuts] = useState(() => readLocal(transactionStorageKeys.paymentOuts));
 
   useEffect(() => {
     let active = true;
     const reload = () => {
       setSales(readLocal(transactionStorageKeys.sales));
       setPurchases(readLocal(transactionStorageKeys.purchases));
+      setPaymentIns(readLocal(transactionStorageKeys.paymentIns));
+      setPaymentOuts(readLocal(transactionStorageKeys.paymentOuts));
       loadSalesInvoices()
         .then((records) => {
           if (active && Array.isArray(records) && records.length) setSales(records);
@@ -408,9 +434,6 @@ function Reports({ defaultReport }) {
       window.removeEventListener("storage", reload);
     };
   }, []);
-
-  const paymentIns = useMemo(() => readLocal(transactionStorageKeys.paymentIns), []);
-  const paymentOuts = useMemo(() => readLocal(transactionStorageKeys.paymentOuts), []);
 
   const allLocalTransactions = useMemo(
     () => [
@@ -474,7 +497,6 @@ function Reports({ defaultReport }) {
     if (
       [
         "All Transactions",
-        "Day book",
         "Profit And Loss",
         "Cash flow",
       ].includes(activeReport)
@@ -550,9 +572,8 @@ function Reports({ defaultReport }) {
             paymentFilter === "All Payment" ||
             paymentTypeOf(row) === paymentFilter;
 
-          const dateMatches = isDayBook
-            ? !to || !date || date === to
-            : (!from || !date || date >= from) &&
+          const dateMatches =
+            (!from || !date || date >= from) &&
             (!to || !date || date <= to);
 
           return (
@@ -577,7 +598,6 @@ function Reports({ defaultReport }) {
       activeReport,
       transactionType,
       paymentFilter,
-      isDayBook,
     ]
   );
 
@@ -604,39 +624,6 @@ function Reports({ defaultReport }) {
     (sum, row) => sum + Math.max(0, amountOf(row) - receivedOf(row)),
     0
   );
-
-  const moneyIn = visible.reduce(
-    (sum, row) =>
-      sum +
-      (["Sale", "Sale Order", "Payment-In", "Cash Increase"].includes(
-        row.reportType
-      )
-        ? row.reportType === "Payment-In"
-          ? amountOf(row)
-          : receivedOf(row)
-        : 0),
-    0
-  );
-
-  const moneyOut = visible.reduce(
-    (sum, row) =>
-      sum +
-      ([
-        "Purchase",
-        "Purchase Order",
-        "Payment-Out",
-        "Expense",
-        "Credit Note",
-        "Cash Decrease",
-      ].includes(row.reportType)
-        ? ["Payment-Out", "Expense"].includes(row.reportType)
-          ? amountOf(row)
-          : receivedOf(row)
-        : 0),
-    0
-  );
-
-  const netMoney = moneyIn - moneyOut;
 
   const exportCsv = () => {
     const headings = [
@@ -693,19 +680,8 @@ function Reports({ defaultReport }) {
   const columns =
     activeReport === "All parties" || activeReport === "Party Statement"
       ? ["Party Name", "Phone", "Amount", "Updated"]
-      : isDayBook
+      : isAllTransactions
         ? [
-          "Name",
-          "Ref. No.",
-          "Type",
-          "Payment Type",
-          "Total",
-          "Money In",
-          "Money Out",
-          "Print / Share",
-        ]
-        : isAllTransactions
-          ? [
             "#",
             "Date",
             "Ref. No.",
@@ -1040,105 +1016,84 @@ function Reports({ defaultReport }) {
             className={`flex flex-wrap items-center gap-3 rounded-md bg-white px-4 py-4 ${isAllTransactions ? "min-h-[174px] content-start" : ""
               }`}
           >
-            {!isDayBook && (
-              <>
-                <span className="text-sm font-medium">
-                  {isPurchase ? "Filter by:" : ""}
-                </span>
+            <span className="text-sm font-medium">
+              {isPurchase ? "Filter by:" : ""}
+            </span>
 
-                <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
-                  <select
-                    aria-label="Report period"
-                    value={period}
-                    onChange={(event) => {
-                      const selected = event.target.value;
-                      setPeriod(selected);
+            <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
+              <select
+                aria-label="Report period"
+                value={period}
+                onChange={(event) => {
+                  const selected = event.target.value;
+                  setPeriod(selected);
 
-                      const now = new Date();
+                  const now = new Date();
 
-                      if (selected === "This Month") {
-                        const last = new Date(
-                          now.getFullYear(),
-                          now.getMonth() + 1,
-                          0
-                        );
+                  if (selected === "This Month") {
+                    const last = new Date(
+                      now.getFullYear(),
+                      now.getMonth() + 1,
+                      0
+                    );
 
-                        setFrom(
-                          `${now.getFullYear()}-${String(
-                            now.getMonth() + 1
-                          ).padStart(2, "0")}-01`
-                        );
+                    setFrom(
+                      `${now.getFullYear()}-${String(
+                        now.getMonth() + 1
+                      ).padStart(2, "0")}-01`
+                    );
 
-                        setTo(
-                          `${last.getFullYear()}-${String(
-                            last.getMonth() + 1
-                          ).padStart(2, "0")}-${String(
-                            last.getDate()
-                          ).padStart(2, "0")}`
-                        );
-                      } else if (selected === "This Year") {
-                        setFrom(`${now.getFullYear()}-01-01`);
-                        setTo(`${now.getFullYear()}-12-31`);
-                      } else {
-                        setFrom("");
-                        setTo("");
-                      }
-                    }}
-                    className="bg-transparent outline-none"
-                  >
-                    <option>This Month</option>
-                    <option>This Year</option>
-                    <option>All Time</option>
-                    <option>Custom</option>
-                  </select>
-                </label>
+                    setTo(
+                      `${last.getFullYear()}-${String(
+                        last.getMonth() + 1
+                      ).padStart(2, "0")}-${String(
+                        last.getDate()
+                      ).padStart(2, "0")}`
+                    );
+                  } else if (selected === "This Year") {
+                    setFrom(`${now.getFullYear()}-01-01`);
+                    setTo(`${now.getFullYear()}-12-31`);
+                  } else {
+                    setFrom("");
+                    setTo("");
+                  }
+                }}
+                className="bg-transparent outline-none"
+              >
+                <option>This Month</option>
+                <option>This Year</option>
+                <option>All Time</option>
+                <option>Custom</option>
+              </select>
+            </label>
 
-                <div className="flex flex-wrap items-center gap-2 rounded-full bg-sky-100 px-4 py-2 text-sm">
-                  <span>▦</span>
+            <div className="flex flex-wrap items-center gap-2 rounded-full bg-sky-100 px-4 py-2 text-sm">
+              <span>▦</span>
 
-                  <input
-                    aria-label="Start date"
-                    type="date"
-                    value={from}
-                    onChange={(event) => {
-                      setFrom(event.target.value);
-                      setPeriod("Custom");
-                    }}
-                    className="w-[132px] bg-transparent outline-none"
-                  />
+              <input
+                aria-label="Start date"
+                type="date"
+                value={from}
+                onChange={(event) => {
+                  setFrom(event.target.value);
+                  setPeriod("Custom");
+                }}
+                className="w-[132px] bg-transparent outline-none"
+              />
 
-                  <span>To</span>
+              <span>To</span>
 
-                  <input
-                    aria-label="End date"
-                    type="date"
-                    value={to}
-                    onChange={(event) => {
-                      setTo(event.target.value);
-                      setPeriod("Custom");
-                    }}
-                    className="w-[132px] bg-transparent outline-none"
-                  />
-                </div>
-              </>
-            )}
-
-            {isDayBook && (
-              <label className="rounded border border-slate-300 px-4 py-2 text-sm">
-                <span className="mr-3 text-slate-500">Date</span>
-
-                <input
-                  aria-label="Day book date"
-                  type="date"
-                  value={to}
-                  onChange={(event) => {
-                    setTo(event.target.value);
-                    setFrom(event.target.value);
-                  }}
-                  className="bg-transparent outline-none"
-                />
-              </label>
-            )}
+              <input
+                aria-label="End date"
+                type="date"
+                value={to}
+                onChange={(event) => {
+                  setTo(event.target.value);
+                  setPeriod("Custom");
+                }}
+                className="w-[132px] bg-transparent outline-none"
+              />
+            </div>
 
             <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
               <select
@@ -1154,21 +1109,19 @@ function Reports({ defaultReport }) {
               </select>
             </label>
 
-            {!isDayBook && (
-              <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
-                <select
-                  aria-label="User filter"
-                  value={user}
-                  onChange={(event) => setUser(event.target.value)}
-                  className="bg-transparent outline-none"
-                >
-                  <option>All Users</option>
-                  {userOptions.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
-            )}
+            <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
+              <select
+                aria-label="User filter"
+                value={user}
+                onChange={(event) => setUser(event.target.value)}
+                className="bg-transparent outline-none"
+              >
+                <option>All Users</option>
+                {userOptions.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
 
             {isAllTransactions && (
               <div className="basis-full h-0" aria-hidden="true" />
@@ -1213,22 +1166,10 @@ function Reports({ defaultReport }) {
                 </label>
               </>
             )}
-
-            {isDayBook && (
-              <div className="ml-auto flex items-center gap-4 text-sm">
-                <button type="button" onClick={exportCsv}>
-                  ▣ Excel Report
-                </button>
-
-                <button type="button" onClick={() => setPrintModalOpen(true)}>
-                  ▣ Print
-                </button>
-              </div>
-            )}
           </section>
 
           {/* Summary cards: hidden for All Transactions */}
-          {!isDayBook && !isAllTransactions && (
+          {!isAllTransactions && (
             <section className="min-h-[145px] rounded-md bg-white p-4">
               {isPurchase ? (
                 <div className="flex flex-wrap items-center gap-4">
@@ -1378,9 +1319,7 @@ function Reports({ defaultReport }) {
               <table
                 className={`w-full ${isAllTransactions
                     ? "min-w-[1180px]"
-                    : isDayBook
-                      ? "min-w-[900px]"
-                      : "min-w-[760px]"
+                    : "min-w-[760px]"
                   } border-collapse text-left text-sm`}
               >
                 <thead className="sticky top-0 z-[1] bg-slate-50 text-slate-500">
@@ -1462,35 +1401,6 @@ function Reports({ defaultReport }) {
                             {cell(row.phone || "—")}
                             {cell(money(row.openingBalance || 0))}
                             {cell(row.updatedAt?.slice(0, 10) || "—")}
-                          </>
-                        ) : isDayBook ? (
-                          <>
-                            {cell(party)}
-                            {cell(invoiceNo, "text-right")}
-                            {cell(type)}
-                            {cell(paymentTypeOf(row))}
-                            {cell(money(amount), "text-right")}
-
-                            {cell(
-                              incomingAmount ? money(incomingAmount) : "—",
-                              "text-right text-emerald-700"
-                            )}
-
-                            {cell(
-                              outgoingAmount ? money(outgoingAmount) : "—",
-                              "text-right text-rose-600"
-                            )}
-
-                            {cell(
-                              <button
-                                type="button"
-                                onClick={() => setPrintModalOpen(true)}
-                                className="text-slate-500 hover:text-sky-600"
-                                title="Print day book"
-                              >
-                                Print
-                              </button>
-                            )}
                           </>
                         ) : isAllTransactions ? (
                           <>
@@ -1635,26 +1545,6 @@ function Reports({ defaultReport }) {
                 </div>
               )}
             </div>
-
-            {isDayBook && visible.length > 0 && (
-              <footer className="flex flex-wrap justify-between gap-3 border-t border-slate-200 px-4 py-4 text-sm font-semibold">
-                <span className="text-emerald-600">
-                  Total Money-In: {money(moneyIn)}
-                </span>
-
-                <span className="text-rose-500">
-                  Total Money-Out: {money(moneyOut)}
-                </span>
-
-                <span
-                  className={
-                    netMoney >= 0 ? "text-emerald-600" : "text-rose-500"
-                  }
-                >
-                  Money In - Money Out: {money(netMoney)}
-                </span>
-              </footer>
-            )}
           </section>
           <ReportPrintPreviewModal
             isOpen={printModalOpen}

@@ -152,6 +152,7 @@ router.post("/migrate-from-local", async (req, res) => {
     }
 
     // 3. Ingest Transactions & Line Items
+
     for (const txn of transactions) {
       if (!txn.id && !txn.documentNumber && !txn.invoiceNumber) continue;
       const id = txn.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -335,39 +336,132 @@ router.post("/migrate-from-local", async (req, res) => {
     }
 
     // 7. Ingest Company Profile
-    if (companyProfile && typeof companyProfile === "object") {
-      const bDetails = companyProfile.bankDetails || {};
+    if (companyProfile && typeof companyProfile === "object" && Object.keys(companyProfile).length > 0) {
+      const [existingRows] = await conn.query(
+        "SELECT * FROM company_profiles WHERE business_id = ? LIMIT 1",
+        [businessId]
+      );
+      const existing = existingRows && existingRows.length ? existingRows[0] : null;
+
+      const hasOwn = (obj, key) => Boolean(obj && Object.prototype.hasOwnProperty.call(obj, key));
+
+      const resolveMigrateField = (aliases, existingValue) => {
+        const presentAlias = aliases.find((key) => hasOwn(companyProfile, key));
+        if (presentAlias !== undefined) {
+          const definedAlias = aliases.find((key) => hasOwn(companyProfile, key) && companyProfile[key] !== undefined) ?? presentAlias;
+          const raw = companyProfile[definedAlias];
+          if (raw == null) return null;
+          const str = String(raw).trim();
+          return str === "" ? null : str;
+        }
+        return existingValue ?? null;
+      };
+
+      const resolveMigrateBankField = (fieldName, existingValue) => {
+        const bankDetails = companyProfile.bankDetails;
+        const hasRoot = hasOwn(companyProfile, fieldName);
+        const hasNested = Boolean(bankDetails && typeof bankDetails === "object" && hasOwn(bankDetails, fieldName));
+
+        if (hasRoot || hasNested) {
+          let raw;
+          if (hasRoot && companyProfile[fieldName] !== undefined) {
+            raw = companyProfile[fieldName];
+          } else if (hasNested && bankDetails[fieldName] !== undefined) {
+            raw = bankDetails[fieldName];
+          } else if (hasRoot) {
+            raw = companyProfile[fieldName];
+          } else {
+            raw = bankDetails[fieldName];
+          }
+          if (raw == null) return null;
+          const str = String(raw).trim();
+          return str === "" ? null : str;
+        }
+        return existingValue ?? null;
+      };
+
+      let companyName;
+      const hasCompanyName = hasOwn(companyProfile, "companyName") || hasOwn(companyProfile, "businessName");
+      if (hasCompanyName) {
+        const raw = (hasOwn(companyProfile, "companyName") && companyProfile.companyName !== undefined)
+          ? companyProfile.companyName
+          : companyProfile.businessName;
+        const trimmed = raw != null ? String(raw).trim() : "";
+        companyName = trimmed || (existing?.company_name || "");
+      } else {
+        companyName = existing?.company_name || "";
+      }
+
+      const tradeName = resolveMigrateField(["tradeName"], existing?.trade_name);
+      const businessType = resolveMigrateField(["businessType"], existing?.business_type);
+      const businessCategory = resolveMigrateField(["businessCategory"], existing?.business_category);
+
+      const phone = resolveMigrateField(["phone", "phoneNumber"], existing?.phone);
+      const email = resolveMigrateField(["email", "emailId"], existing?.email);
+      const gstin = resolveMigrateField(["gstin"], existing?.gstin);
+      const pan = resolveMigrateField(["pan"], existing?.pan);
+
+      const streetAddress = resolveMigrateField(["streetAddress", "businessAddress", "address"], existing?.street_address);
+      const city = resolveMigrateField(["city"], existing?.city);
+      const state = resolveMigrateField(["state"], existing?.state);
+      const pincode = resolveMigrateField(["pincode"], existing?.pincode);
+
+      let country;
+      if (hasOwn(companyProfile, "country")) {
+        country = companyProfile.country != null && String(companyProfile.country).trim() !== ""
+          ? String(companyProfile.country).trim()
+          : "India";
+      } else {
+        country = existing?.country || "India";
+      }
+
+      const bankName = resolveMigrateBankField("bankName", existing?.bank_name);
+      const accountNumber = resolveMigrateBankField("accountNumber", existing?.account_number);
+      const ifscCode = resolveMigrateBankField("ifscCode", existing?.ifsc_code);
+      const branchName = resolveMigrateBankField("branchName", existing?.branch_name);
+      const upiId = resolveMigrateBankField("upiId", existing?.upi_id);
+
+      const signatureUrl = resolveMigrateField(["signatureUrl", "signature"], existing?.signature_url);
+      const logoUrl = resolveMigrateField(["logoUrl", "logo"], existing?.logo_url);
+      const termsAndConditions = resolveMigrateField(["termsAndConditions"], existing?.terms_and_conditions);
+
       await conn.query(
         `INSERT INTO company_profiles (
-          business_id, company_name, trade_name, phone, email, gstin, pan,
+          business_id, company_name, trade_name, business_type, business_category,
+          phone, email, gstin, pan,
           street_address, city, state, pincode, country,
           bank_name, account_number, ifsc_code, branch_name, upi_id,
           signature_url, logo_url, terms_and_conditions
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           company_name = VALUES(company_name),
-          phone = VALUES(phone)`,
+          trade_name = VALUES(trade_name),
+          business_type = VALUES(business_type),
+          business_category = VALUES(business_category),
+          phone = VALUES(phone),
+          email = VALUES(email),
+          gstin = VALUES(gstin),
+          pan = VALUES(pan),
+          street_address = VALUES(street_address),
+          city = VALUES(city),
+          state = VALUES(state),
+          pincode = VALUES(pincode),
+          country = VALUES(country),
+          bank_name = VALUES(bank_name),
+          account_number = VALUES(account_number),
+          ifsc_code = VALUES(ifsc_code),
+          branch_name = VALUES(branch_name),
+          upi_id = VALUES(upi_id),
+          signature_url = VALUES(signature_url),
+          logo_url = VALUES(logo_url),
+          terms_and_conditions = VALUES(terms_and_conditions),
+          updated_at = CURRENT_TIMESTAMP`,
         [
-          businessId,
-          companyProfile.companyName || companyProfile.businessName || "Sai Kirana Stores",
-          companyProfile.tradeName || null,
-          companyProfile.phone || null,
-          companyProfile.email || null,
-          companyProfile.gstin || null,
-          companyProfile.pan || null,
-          companyProfile.streetAddress || companyProfile.address || null,
-          companyProfile.city || null,
-          companyProfile.state || null,
-          companyProfile.pincode || null,
-          companyProfile.country || "India",
-          companyProfile.bankName || bDetails.bankName || null,
-          companyProfile.accountNumber || bDetails.accountNumber || null,
-          companyProfile.ifscCode || bDetails.ifscCode || null,
-          companyProfile.branchName || bDetails.branchName || null,
-          companyProfile.upiId || bDetails.upiId || null,
-          companyProfile.signatureUrl || null,
-          companyProfile.logoUrl || null,
-          companyProfile.termsAndConditions || null
+          businessId, companyName, tradeName, businessType, businessCategory,
+          phone, email, gstin, pan,
+          streetAddress, city, state, pincode, country,
+          bankName, accountNumber, ifscCode, branchName, upiId,
+          signatureUrl, logoUrl, termsAndConditions
         ]
       );
     }

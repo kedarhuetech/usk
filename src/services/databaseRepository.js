@@ -276,53 +276,125 @@ export const transactionsDb = {
    * Atomically saves a transaction and adjusts stock & balances in MySQL
    */
   async save(transaction) {
-    try {
-      const partyName = (transaction.partyName || transaction.customerName || transaction.party || transaction.customer || transaction.form?.customer || "").trim();
-      const partyPhone = (transaction.partyPhone || transaction.phone || transaction.customerPhone || transaction.form?.phone || "").trim();
-      const billingAddress = transaction.billingAddress || transaction.form?.billingAddress || "";
-      const shippingAddress = transaction.shippingAddress || transaction.form?.shippingAddress || billingAddress || "";
-      const documentNumber = String(transaction.documentNumber || transaction.invoiceNumber || transaction.billNumber || transaction.number || transaction.form?.invoiceNumber || "0").trim();
-      const transactionDate = transaction.transactionDate || transaction.invoiceDate || transaction.billDate || transaction.date || transaction.form?.invoiceDate || new Date().toISOString().slice(0, 10);
-      const rawRows = Array.isArray(transaction.rows) && transaction.rows.length ? transaction.rows : (Array.isArray(transaction.items) ? transaction.items : []);
-      const items = rawRows.map((r) => ({
-        ...r,
-        item: r.item || r.name || r.itemName || "Item",
-        name: r.name || r.item || r.itemName || "Item",
-        itemName: r.itemName || r.item || r.name || "Item",
-        itemId: r.sourceItemId || r.itemId || r.item_id || null,
-        sourceItemId: r.sourceItemId || r.itemId || r.item_id || null,
-        qty: r.qty ?? r.quantity ?? 1,
-        quantity: r.quantity ?? r.qty ?? 1,
-        price: r.price ?? r.unitPrice ?? 0,
-        unitPrice: r.unitPrice ?? r.price ?? 0,
-      }));
+    const isGenuineCash =
+      transaction.saleType === "cash" &&
+      (!transaction.form?.customer && !transaction.customer && !transaction.partyName && !transaction.customerName);
 
-      const payload = {
-        ...transaction,
-        partyName,
-        customerName: partyName,
-        customer: partyName,
-        partyPhone,
-        phone: partyPhone,
-        billingAddress,
-        shippingAddress,
-        documentNumber,
-        invoiceNumber: documentNumber,
-        transactionDate,
-        invoiceDate: transactionDate,
-        items,
-        rows: rawRows,
-      };
+    const partyName =
+      transaction.partyName ||
+      transaction.customer ||
+      transaction.party ||
+      transaction.form?.customer ||
+      transaction.customerName ||
+      (isGenuineCash ? "Cash Sale" : (transaction.saleType === "cash" ? "Cash Sale" : null));
 
-      const res = await apiRequest("/transactions", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      return res?.data || transaction;
-    } catch (err) {
-      console.warn("[MySQL] Failed to save transaction to backend:", err.message);
-      return transaction;
-    }
+    const partyId =
+      transaction.partyId ||
+      transaction.party_id ||
+      transaction.form?.partyId ||
+      transaction.customerId ||
+      null;
+
+    const phone =
+      transaction.partyPhone ||
+      transaction.phone ||
+      transaction.form?.phone ||
+      null;
+
+    const invoiceNumber = String(
+      transaction.documentNumber ||
+      transaction.invoiceNumber ||
+      transaction.form?.invoiceNumber ||
+      "1"
+    );
+
+    const transactionDate =
+      transaction.transactionDate ||
+      transaction.invoiceDate ||
+      transaction.billDate ||
+      transaction.form?.invoiceDate ||
+      transaction.date ||
+      new Date().toISOString().slice(0, 10);
+
+    const totalAmount = Number(
+      transaction.totalAmount ??
+      transaction.totals?.finalTotal ??
+      transaction.total ??
+      0
+    );
+
+    const paidAmount = Number(
+      transaction.paidAmount ??
+      transaction.totals?.received ??
+      (transaction.saleType === "cash" ? totalAmount : 0)
+    );
+
+    const balanceAmount = Number(
+      transaction.balanceAmount ??
+      transaction.totals?.balance ??
+      Math.max(0, totalAmount - paidAmount)
+    );
+
+    const rawRows = (Array.isArray(transaction.items) && transaction.items.length)
+      ? transaction.items
+      : (Array.isArray(transaction.rows) ? transaction.rows : []);
+    const items = rawRows.map((r, idx) => ({
+      id: r.id || `line-${Date.now()}-${idx}`,
+      itemId: r.itemId || r.sourceItemId || null,
+      sourceItemId: r.sourceItemId || r.itemId || null,
+      name: r.item || r.name || r.itemName || "Item",
+      itemName: r.item || r.name || r.itemName || "Item",
+      itemCode: r.itemCode || r.code || null,
+      hsnCode: r.hsnCode || r.hsn || null,
+      batchNo: r.batchNo || null,
+      serialNo: Array.isArray(r.serialNumbers) ? r.serialNumbers.join(",") : (r.serialNo || r.serial || null),
+      qty: Number(r.qty ?? r.quantity ?? 1),
+      quantity: Number(r.qty ?? r.quantity ?? 1),
+      unit: r.unit || "PCS",
+      price: Number(r.price ?? r.unitPrice ?? 0),
+      unitPrice: Number(r.price ?? r.unitPrice ?? 0),
+      purchasePrice: Number(r.purchasePrice ?? 0),
+      discountPercent: Number(r.discountPercent || 0),
+      discountAmount: Number(r.discountAmount || 0),
+      taxRate: Number(r.taxRate || 0),
+      taxAmount: Number(r.taxAmount || 0),
+      amount: Number(r.amount ?? r.totalAmount ?? (Number(r.qty ?? 1) * Number(r.price ?? 0))),
+      totalAmount: Number(r.amount ?? r.totalAmount ?? (Number(r.qty ?? 1) * Number(r.price ?? 0))),
+    }));
+
+    const payload = {
+      ...transaction,
+      id: transaction.id || transaction.invoiceId,
+      transactionType: transaction.transactionType || "sale",
+      documentNumber: invoiceNumber,
+      invoiceNumber,
+      billNumber: transaction.billNumber || invoiceNumber,
+      transactionDate,
+      invoiceDate: transactionDate,
+      partyId,
+      partyName,
+      customer: partyName,
+      customerName: partyName,
+      partyPhone: phone,
+      phone,
+      billingAddress: transaction.billingAddress || transaction.form?.billingAddress || null,
+      shippingAddress: transaction.shippingAddress || transaction.form?.shippingAddress || null,
+      subtotal: Number(transaction.subtotal ?? transaction.totals?.subtotal ?? totalAmount),
+      totalAmount,
+      total: totalAmount,
+      amount: totalAmount,
+      paidAmount,
+      balanceAmount,
+      paymentMode: transaction.paymentMode || transaction.paymentType || transaction.form?.paymentType || (transaction.saleType === "cash" ? "Cash" : "Credit"),
+      items,
+      rows: items,
+    };
+
+    const res = await apiRequest("/transactions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return res?.data || payload;
   },
 
   /**
@@ -483,6 +555,11 @@ export const settingsDb = {
       const data = res?.data ?? res;
       if (data && typeof data === "object") {
         writeLocal(COMPANY_PROFILE_KEY, data);
+        if (typeof window !== "undefined") {
+          try {
+            window.dispatchEvent(new CustomEvent("ledgerly:company-profile-updated", { detail: data }));
+          } catch {}
+        }
         return data;
       }
       return readLocal(COMPANY_PROFILE_KEY, {});

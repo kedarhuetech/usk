@@ -1,6 +1,6 @@
 import { apiRequest } from "./apiClient.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./itemsStorage.js";
-import { getSaleInvoices, saveSaleInvoice } from "./salesStorage.js";
+import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice } from "./salesStorage.js";
 import { getParties, saveParty } from "./partiesStorage.js";
 import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
@@ -102,9 +102,9 @@ export async function loadSalesInvoices() {
       const dbSales = await transactionsDb.listByType("sale");
       if (Array.isArray(dbSales) && dbSales.length > 0) {
         for (const invoice of dbSales) {
-          try { saveSaleInvoice(invoice); } catch {}
+          try { saveSaleInvoice(invoice, { skipRemoteSync: true }); } catch {}
         }
-        return dbSales;
+        return dbSales.map(normalizeInvoice);
       }
     } catch (e) {
       console.warn("[MySQL] Falling back to local sales invoices:", e.message);
@@ -121,14 +121,18 @@ export async function nextSalesInvoiceNumber() {
 
 // Saves business sale invoice directly to MySQL database
 export async function saveBusinessSaleInvoice(value) {
-  const localInvoice = saveSaleInvoice(value);
+  const localInvoice = saveSaleInvoice(value, { skipRemoteSync: true });
   if (!isDatabaseMode()) return localInvoice;
 
   let saved = localInvoice;
   try {
-    saved = await transactionsDb.save(localInvoice);
+    const remote = await transactionsDb.save(localInvoice);
+    saved = { ...localInvoice, ...(remote || {}) };
   } catch (error) {
-    console.warn("[MySQL] Saved sale invoice to local cache:", error.message);
+    try {
+      deleteSaleInvoice(localInvoice.id);
+    } catch {}
+    throw error;
   }
 
   const changedItems = getInventoryItems();

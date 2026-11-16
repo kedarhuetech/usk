@@ -3,7 +3,7 @@
 import { Buffer } from "node:buffer";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -74,16 +74,107 @@ function getFileExtension(mimeType) {
   return "jpg";
 }
 
-// This helper handles python segmentation logic.
-function getPythonBinary() {
+// Resolves a potential Python executable path across supported relative and absolute locations.
+export function resolvePythonPath(rawCandidate) {
+  if (!rawCandidate || typeof rawCandidate !== "string") return null;
+  const trimmed = rawCandidate.trim();
+  if (!trimmed) return null;
+
+  if (path.isAbsolute(trimmed)) {
+    return existsSync(trimmed) ? path.normalize(trimmed) : null;
+  }
+
+  // Check candidate base directories for relative paths
+  const baseDirs = [
+    process.cwd(),
+    path.resolve(__dirname, "../../"),
+    path.resolve(process.cwd(), "server"),
+    path.resolve(__dirname, "../../../"),
+  ];
+
+  for (const baseDir of baseDirs) {
+    const candidate = path.resolve(baseDir, trimmed);
+    if (existsSync(candidate)) {
+      return path.normalize(candidate);
+    }
+  }
+
+  return null;
+}
+
+// Ensures a virtual environment's pyvenv.cfg points to a valid base Python on this machine.
+export function ensureVenvConfigValid(pythonBinaryPath) {
+  try {
+    if (process.platform !== "win32") return;
+    const venvDir = path.resolve(path.dirname(pythonBinaryPath), "..");
+    const cfgPath = path.join(venvDir, "pyvenv.cfg");
+    if (!existsSync(cfgPath)) return;
+
+    const content = readFileSync(cfgPath, "utf-8");
+    const homeMatch = content.match(/^home\s*=\s*(.+)$/m);
+    if (!homeMatch) return;
+
+    const currentHome = homeMatch[1].trim();
+    const currentExe = path.join(currentHome, "python.exe");
+    if (existsSync(currentHome) && existsSync(currentExe)) {
+      return;
+    }
+
+    // Current home base runtime is invalid or does not exist on this machine.
+    // Dynamically look for an existing Python base installation without hardcoding personal paths.
+    const candidates = [];
+    if (process.env.USERPROFILE) {
+      candidates.push(path.join(process.env.USERPROFILE, ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "python"));
+      candidates.push(path.join(process.env.USERPROFILE, "AppData", "Local", "Programs", "Python", "Python312"));
+      candidates.push(path.join(process.env.USERPROFILE, "AppData", "Local", "Programs", "Python", "Python311"));
+      candidates.push(path.join(process.env.USERPROFILE, "AppData", "Local", "Programs", "Python", "Python310"));
+    }
+    if (process.env.LOCALAPPDATA) {
+      candidates.push(path.join(process.env.LOCALAPPDATA, "Programs", "Python", "Python312"));
+      candidates.push(path.join(process.env.LOCALAPPDATA, "Programs", "Python", "Python311"));
+    }
+    candidates.push("C:\\Python312", "C:\\Python311", "C:\\Python310");
+
+    const validCandidate = candidates.find((dir) => existsSync(dir) && existsSync(path.join(dir, "python.exe")));
+    if (validCandidate) {
+      const updatedContent = content
+        .replace(/^home\s*=.*$/m, `home = ${validCandidate}`)
+        .replace(/^executable\s*=.*$/m, `executable = ${path.join(validCandidate, "python.exe")}`);
+      writeFileSync(cfgPath, updatedContent, "utf-8");
+    }
+  } catch {
+    // Non-fatal, let process execution surface specific errors
+  }
+}
+
+// Selects the Python executable path, honoring PYTHON_BIN as preferred.
+export function getPythonBinary() {
   const configuredPython = process.env.PYTHON_BIN?.trim();
-  if (configuredPython && existsSync(configuredPython)) {
-    return configuredPython;
+
+  // 1. If PYTHON_BIN is configured, prioritize it
+  if (configuredPython) {
+    const resolvedConfigured = resolvePythonPath(configuredPython);
+    if (resolvedConfigured) {
+      ensureVenvConfigValid(resolvedConfigured);
+      return resolvedConfigured;
+    }
+
+    const error = new Error(
+      `Configured Python executable was not found: "${configuredPython}". Verify PYTHON_BIN in server/.env or unset it to use the default virtual environment.`
+    );
+    error.statusCode = 503;
+    throw error;
   }
-  const localVenvPython = path.resolve(__dirname, "../../.venv-image-to-layers", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  if (existsSync(localVenvPython)) {
-    return localVenvPython;
+
+  // 2. Auto-discovery fallback: local project virtual environment (.venv-image-to-layers)
+  const defaultVenvRel = process.platform === "win32" ? ".venv-image-to-layers/Scripts/python.exe" : ".venv-image-to-layers/bin/python";
+  const defaultVenvPath = resolvePythonPath(defaultVenvRel);
+  if (defaultVenvPath) {
+    ensureVenvConfigValid(defaultVenvPath);
+    return defaultVenvPath;
   }
+
+  // 3. Fallback to system Python executable
   return process.platform === "win32" ? "python" : "python3";
 }
 
@@ -117,7 +208,7 @@ function runPythonSegmentation(inputPath) {
       clearTimeout(timeout);
       error.statusCode = 503;
       if (error.code === "ENOENT") {
-        error.message = "Python 3 was not found. Install Python and the Image to Layers requirements, or set PYTHON_BIN in server/.env.";
+        error.message = `Python executable was not found at "${pythonBinary}". Install Python and the Image to Layers requirements, or configure PYTHON_BIN in server/.env.`;
       }
       reject(error);
     });
@@ -129,6 +220,12 @@ function runPythonSegmentation(inputPath) {
       try {
         payload = JSON.parse(stdout || "{}");
       } catch {
+        if (/No Python at/i.test(stderr)) {
+          const error = new Error(`Python virtual environment launcher error: ${stderr.trim()}. The base Python runtime configured in pyvenv.cfg was not found.`);
+          error.statusCode = 503;
+          reject(error);
+          return;
+        }
         const error = new Error(stderr || "Python segmentation service returned an invalid response.");
         error.statusCode = 502;
         reject(error);
@@ -136,6 +233,12 @@ function runPythonSegmentation(inputPath) {
       }
 
       if (code !== 0 && payload?.success !== false) {
+        if (/No Python at/i.test(stderr)) {
+          const error = new Error(`Python virtual environment launcher error: ${stderr.trim()}. The base Python runtime configured in pyvenv.cfg was not found.`);
+          error.statusCode = 503;
+          reject(error);
+          return;
+        }
         const error = new Error(stderr || `Python segmentation service exited with code ${code}.`);
         error.statusCode = 502;
         reject(error);

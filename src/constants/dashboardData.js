@@ -19,7 +19,6 @@ export const dashboardData = {
   reports: [
     "Sale Report",
     "All Transactions",
-    "Daybook Report",
     "Party Statement",
   ],
   actions: ["Add Sale", "Add Purchase", "Add Party", "Add Item"],

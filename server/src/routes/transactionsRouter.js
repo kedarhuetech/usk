@@ -14,6 +14,32 @@ import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
+function formatSqlDate(val) {
+  if (!val) return null;
+  if (typeof val === "string") {
+    const s = val.trim();
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (s.includes("T") || s.includes(" ") || s.includes("Z")) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+    }
+    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
+    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
+    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+    return s.slice(0, 10);
+  }
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  return String(val);
+}
+
 /**
  * GET /api/transactions
  * Retrieves paginated list of transactions with normalized line items.
@@ -144,12 +170,13 @@ router.get("/", async (req, res) => {
     }
 
     const transactions = rows.map((row) => {
+      const txnDate = formatSqlDate(row.transaction_date);
+      const dueDate = formatSqlDate(row.due_date);
       const items = itemsMap.get(row.id) || [];
       const itemsTotal = items.reduce((s, it) => s + (parseFloat(it.totalAmount || it.amount) || 0), 0);
       const rawTotal = parseFloat(row.total_amount) || 0;
       const effectiveTotal = rawTotal > 0 ? rawTotal : itemsTotal;
       const party = row.party_name || (row.payment_mode === "Cash" || row.transaction_type === "pos" ? "Cash Sale" : "");
-
       return {
         id: row.id,
         transactionType: row.transaction_type,
@@ -158,13 +185,22 @@ router.get("/", async (req, res) => {
         invoiceNumber: row.document_number,
         billNumber: row.document_number,
         orderNumber: row.document_number,
+<<<<<<< HEAD
         transactionDate: toSqlDate(row.transaction_date),
         invoiceDate: toSqlDate(row.transaction_date),
         billDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
+=======
+        transactionDate: txnDate,
+        invoiceDate: txnDate,
+        billDate: txnDate,
+        date: txnDate,
+        dueDate: dueDate,
+>>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party: party,
+        customer: party,
         customerName: party,
         supplierName: party,
         partyPhone: row.party_phone || "",
@@ -197,19 +233,39 @@ router.get("/", async (req, res) => {
         notes: row.notes || "",
         terms: row.terms || "",
         items,
-        rows: items,
-        customer: party,
-        customerPhone: row.party_phone || "",
+        rows: items.map((it) => ({
+          ...it,
+          item: it.itemName,
+          name: it.itemName,
+          sourceItemId: it.itemId,
+        })),
         form: {
           customer: party,
           partyName: party,
+          partyId: row.party_id,
           phone: row.party_phone || "",
+          invoiceNumber: row.document_number,
+          invoiceDate: txnDate,
+          dueDate: dueDate,
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
+<<<<<<< HEAD
           invoiceNumber: row.document_number,
           invoiceDate: toSqlDate(row.transaction_date),
+=======
+>>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
+        totals: {
+          subtotal: parseFloat(row.subtotal) || effectiveTotal,
+          discount: parseFloat(row.discount_amount) || 0,
+          tax: parseFloat(row.tax_amount) || 0,
+          roundOffAmount: parseFloat(row.round_off) || 0,
+          finalTotal: effectiveTotal,
+          received: parseFloat(row.paid_amount) || 0,
+          balance: parseFloat(row.balance_amount) || 0,
+        },
+        customerPhone: row.party_phone || "",
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -324,6 +380,8 @@ router.get("/:id", async (req, res) => {
       totalAmount: parseFloat(item.total_amount) || 0,
     }));
 
+    const txnDate = formatSqlDate(row.transaction_date);
+    const dueDate = formatSqlDate(row.due_date);
     const itemsTotal = items.reduce((s, it) => s + (parseFloat(it.totalAmount || it.amount) || 0), 0);
     const rawTotal = parseFloat(row.total_amount) || 0;
     const effectiveTotal = rawTotal > 0 ? rawTotal : itemsTotal;
@@ -340,11 +398,26 @@ router.get("/:id", async (req, res) => {
         type: row.transaction_type,
         documentNumber: row.document_number,
         invoiceNumber: row.document_number,
+<<<<<<< HEAD
         transactionDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
+=======
+        billNumber: row.document_number,
+        orderNumber: row.document_number,
+        transactionDate: txnDate,
+        invoiceDate: txnDate,
+        billDate: txnDate,
+        date: txnDate,
+        dueDate: dueDate,
+>>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
+        party,
+        customer: party,
+        customerName: party,
+        supplierName: party,
         partyPhone: phone,
+        phone,
         partyGstin: row.resolved_party_gstin || row.party_gstin || "",
         billingAddress,
         shippingAddress,
@@ -355,8 +428,10 @@ router.get("/:id", async (req, res) => {
         roundOff: parseFloat(row.round_off) || 0,
         totalAmount: effectiveTotal,
         paidAmount: parseFloat(row.paid_amount) || 0,
+        receivedAmount: parseFloat(row.paid_amount) || 0,
         balanceAmount: parseFloat(row.balance_amount) || 0,
         paymentMode: row.payment_mode || "Cash",
+        paymentType: row.payment_mode || "Cash",
         status: row.payment_status || "Completed",
         paymentRefNo: row.payment_ref_no || "",
         cashTendered: parseFloat(row.cash_tendered) || 0,
@@ -368,22 +443,37 @@ router.get("/:id", async (req, res) => {
         notes: row.notes || "",
         terms: row.terms || "",
         items,
-        rows: items,
-        customer: party,
-        customerName: party,
-        party,
-        customerPhone: phone,
-        phone,
-        paymentType: row.payment_mode || "Cash",
+        rows: items.map((it) => ({
+          ...it,
+          item: it.itemName,
+          name: it.itemName,
+          sourceItemId: it.itemId,
+        })),
         form: {
           customer: party,
           partyName: party,
+          partyId: row.party_id,
           phone,
+          invoiceNumber: row.document_number,
+          invoiceDate: txnDate,
+          dueDate: dueDate,
           billingAddress,
           shippingAddress,
+<<<<<<< HEAD
           invoiceNumber: row.document_number,
           invoiceDate: toSqlDate(row.transaction_date),
+=======
+>>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
+        },
+        totals: {
+          subtotal: parseFloat(row.subtotal) || effectiveTotal,
+          discount: parseFloat(row.discount_amount) || 0,
+          tax: parseFloat(row.tax_amount) || 0,
+          roundOffAmount: parseFloat(row.round_off) || 0,
+          finalTotal: effectiveTotal,
+          received: parseFloat(row.paid_amount) || 0,
+          balance: parseFloat(row.balance_amount) || 0,
         },
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -417,6 +507,7 @@ router.post("/", async (req, res) => {
       body.form?.billNumber ||
       "0"
     ).trim();
+<<<<<<< HEAD
     const rawTxnDate =
       body.transactionDate ||
       body.invoiceDate ||
@@ -438,28 +529,27 @@ router.post("/", async (req, res) => {
       body.form?.partyName ||
       body.form?.party ||
       "").trim() ||
+=======
+    const rawTxnDate = body.transactionDate || body.invoiceDate || body.billDate || body.date || body.form?.invoiceDate || new Date();
+    const transactionDate = formatSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
+    const dueDate = formatSqlDate(body.dueDate || body.form?.dueDate);
+    const partyId = body.partyId || body.party_id || body.form?.partyId || body.customerId || null;
+    const partyName = (body.partyName || body.party || body.customerName || body.customer || body.supplierName || body.form?.customer || body.form?.partyName || body.form?.party || "").trim() ||
+>>>>>>> origin/main
       ((body.paymentMode === "Cash" || body.paymentType === "Cash" || body.form?.paymentType === "Cash" || transactionType === "pos") ? "Cash Sale" : null);
-    const partyPhone =
-      body.partyPhone ||
-      body.phone ||
-      body.mobile ||
-      body.customerPhone ||
-      body.form?.phone ||
-      null;
+    const partyPhone = body.partyPhone || body.phone || body.mobile || body.customerPhone || body.form?.phone || null;
     const partyGstin = body.partyGstin || body.gstin || body.form?.gstin || null;
-    const billingAddress =
-      body.billingAddress ||
-      body.form?.billingAddress ||
-      (typeof body.billing_address === "object" ? JSON.stringify(body.billing_address) : body.billing_address) ||
-      null;
-    const shippingAddress =
-      body.shippingAddress ||
-      body.form?.shippingAddress ||
-      (typeof body.shipping_address === "object" ? JSON.stringify(body.shipping_address) : body.shipping_address) ||
-      billingAddress ||
-      null;
+    const billingAddress = typeof (body.billingAddress || body.billing_address) === "object"
+      ? JSON.stringify(body.billingAddress || body.billing_address)
+      : (body.billingAddress || body.form?.billingAddress || body.billing_address || null);
+    const shippingAddress = typeof (body.shippingAddress || body.shipping_address) === "object"
+      ? JSON.stringify(body.shippingAddress || body.shipping_address)
+      : (body.shippingAddress || body.form?.shippingAddress || body.shipping_address || billingAddress || null);
 
+<<<<<<< HEAD
    
+=======
+>>>>>>> origin/main
     const rawItems = Array.isArray(body.items) && body.items.length
       ? body.items
       : (Array.isArray(body.rows) && body.rows.length ? body.rows : (Array.isArray(body.lineItems) ? body.lineItems : []));

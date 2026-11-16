@@ -8,7 +8,9 @@ import mysql from "mysql2/promise";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 dotenv.config({ path: path.resolve(process.cwd(), "server/.env"), quiet: true });
-dotenv.config({ path: path.resolve(process.cwd(), ".env"), quiet: true });
+dotenv.config({ path: path.resolve(process.cwd(), ".env"), quiet: true }); 
+
+
 
 export const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
@@ -22,6 +24,7 @@ export const pool = mysql.createPool({
   connectionLimit: Math.max(1, Number.parseInt(process.env.DB_CONNECTION_LIMIT || "10", 10) || 10),
   queueLimit: 0,
   charset: "utf8mb4",
+  dateStrings: true,
 });
 
 // This helper handles id from request logic.

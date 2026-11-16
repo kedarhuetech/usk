@@ -1,7 +1,8 @@
 // Renders the Edit Profile page allowing users to view and update company details stored in localStorage.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  FiAlertCircle,
   FiCheck,
   FiChevronDown,
   FiEdit2,
@@ -14,6 +15,21 @@ import {
   getCompanyProfile,
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
+import { businessGrowthApi } from "../../services/apiClient";
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+function validateImageFile(file) {
+  if (!file) return { valid: false, error: "No file selected." };
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { valid: false, error: "Only JPG, PNG, WEBP, and GIF images are accepted." };
+  }
+  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+    return { valid: false, error: "Image must be 10 MB or smaller." };
+  }
+  return { valid: true };
+}
 
 const INDIAN_STATES = [
   "Andaman and Nicobar Islands",
@@ -83,9 +99,32 @@ export default function EditProfile() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState(getCompanyProfile);
   const [savedNotification, setSavedNotification] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
+  const [signatureFile, setSignatureFile] = useState(null);
+
+  const isDirtyRef = useRef(false);
+  const [, setIsDirty] = useState(false);
+
+  const markDirty = () => {
+    if (!isDirtyRef.current) {
+      isDirtyRef.current = true;
+      setIsDirty(true);
+    }
+  };
+
+  const resetDirty = () => {
+    isDirtyRef.current = false;
+    setIsDirty(false);
+  };
 
   useEffect(() => {
     const handleProfileChange = () => {
+      // Prevent database hydration or external sync from clobbering active, unsaved edits
+      if (isDirtyRef.current) {
+        return;
+      }
       setFormData(getCompanyProfile());
     };
     window.addEventListener(companyProfileUpdatedEvent, handleProfileChange);
@@ -97,17 +136,36 @@ export default function EditProfile() {
   }, []);
 
   const handleChange = (e) => {
+    markDirty();
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [name]: value,
+      };
+      if (name === "businessName") {
+        next.companyName = value;
+      } else if (name === "companyName") {
+        next.businessName = value;
+      }
+      return next;
+    });
   };
 
   const handleLogoUpload = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
 
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setErrorMessage(validation.error);
+      return;
+    }
+
+    markDirty();
+    setErrorMessage("");
+    setLogoFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setFormData((prev) => ({
@@ -118,10 +176,27 @@ export default function EditProfile() {
     reader.readAsDataURL(file);
   };
 
+  const handleRemoveLogo = () => {
+    markDirty();
+    setLogoFile(null);
+    setErrorMessage("");
+    setFormData((prev) => ({ ...prev, logo: "", logoUrl: "" }));
+  };
+
   const handleSignatureUpload = (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
 
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setErrorMessage(validation.error);
+      return;
+    }
+
+    markDirty();
+    setErrorMessage("");
+    setSignatureFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setFormData((prev) => ({
@@ -132,17 +207,80 @@ export default function EditProfile() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (e) => {
+  const handleRemoveSignature = () => {
+    markDirty();
+    setSignatureFile(null);
+    setErrorMessage("");
+    setFormData((prev) => ({ ...prev, signature: "", signatureUrl: "" }));
+  };
+
+  const handleSave = async (e) => {
     e?.preventDefault?.();
-    const updated = saveCompanyProfile(formData);
-    setFormData(updated);
-    setSavedNotification(true);
-    setTimeout(() => {
-      setSavedNotification(false);
-    }, 3000);
+    setIsSaving(true);
+    setErrorMessage("");
+
+    try {
+      const businessId = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
+      let finalLogoUrl = formData.logoUrl || formData.logo || "";
+      let finalSignatureUrl = formData.signatureUrl || formData.signature || "";
+
+      // 1. Upload new logo if user selected a file
+      if (logoFile) {
+        try {
+          const asset = await businessGrowthApi.upload(logoFile, "company-logo", "logo");
+          finalLogoUrl = asset?.url
+            ? `${asset.url}?businessId=${encodeURIComponent(businessId)}`
+            : "";
+        } catch (uploadErr) {
+          throw new Error(uploadErr?.message || "Failed to upload business logo.");
+        }
+      } else if (!formData.logo) {
+        finalLogoUrl = "";
+      }
+
+      // 2. Upload new signature if user selected a file
+      if (signatureFile) {
+        try {
+          const asset = await businessGrowthApi.upload(signatureFile, "company-signature", "signature");
+          finalSignatureUrl = asset?.url
+            ? `${asset.url}?businessId=${encodeURIComponent(businessId)}`
+            : "";
+        } catch (uploadErr) {
+          throw new Error(uploadErr?.message || "Failed to upload signature image.");
+        }
+      } else if (!formData.signature) {
+        finalSignatureUrl = "";
+      }
+
+      const profileToSave = {
+        ...formData,
+        logo: finalLogoUrl,
+        logoUrl: finalLogoUrl,
+        signature: finalSignatureUrl,
+        signatureUrl: finalSignatureUrl,
+      };
+
+      const updated = await saveCompanyProfile(profileToSave);
+      setFormData(updated);
+      setLogoFile(null);
+      setSignatureFile(null);
+      resetDirty();
+      setSavedNotification(true);
+      setTimeout(() => {
+        setSavedNotification(false);
+      }, 3000);
+    } catch (err) {
+      setErrorMessage(err.message || "Failed to save company profile.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
+    setLogoFile(null);
+    setSignatureFile(null);
+    setErrorMessage("");
+    resetDirty();
     setFormData(getCompanyProfile());
     navigate(-1);
   };
@@ -212,7 +350,7 @@ export default function EditProfile() {
             <input
               id="company-logo-file-input"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp,image/gif"
               onChange={handleLogoUpload}
               className="hidden"
             />
@@ -220,7 +358,7 @@ export default function EditProfile() {
           {formData.logo && (
             <button
               type="button"
-              onClick={() => setFormData((prev) => ({ ...prev, logo: "" }))}
+              onClick={handleRemoveLogo}
               className="mt-1 block w-full text-center text-xs text-rose-500 hover:underline"
             >
               Remove Logo
@@ -254,6 +392,20 @@ export default function EditProfile() {
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Trade Name
+                </label>
+                <input
+                  type="text"
+                  name="tradeName"
+                  value={formData.tradeName || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Trade Name"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                   Phone Number
                 </label>
                 <input
@@ -280,6 +432,21 @@ export default function EditProfile() {
                   value={formData.gstin || ""}
                   onChange={handleChange}
                   placeholder="Enter GSTIN"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  PAN Number
+                </label>
+                <input
+                  type="text"
+                  name="pan"
+                  value={formData.pan || ""}
+                  onChange={handleChange}
+                  maxLength={10}
+                  placeholder="Enter PAN Number"
                   className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
@@ -373,6 +540,20 @@ export default function EditProfile() {
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  City
+                </label>
+                <input
+                  type="text"
+                  name="city"
+                  value={formData.city || ""}
+                  onChange={handleChange}
+                  placeholder="Enter City"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
                   Pincode
                 </label>
                 <input
@@ -427,9 +608,7 @@ export default function EditProfile() {
                       </label>
                       <button
                         type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({ ...prev, signature: "" }))
-                        }
+                        onClick={handleRemoveSignature}
                         className="font-medium text-rose-500 hover:underline"
                       >
                         Remove
@@ -452,9 +631,102 @@ export default function EditProfile() {
                 <input
                   id="company-signature-file-input"
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
                   onChange={handleSignatureUpload}
                   className="hidden"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Terms & Conditions
+                </label>
+                <textarea
+                  name="termsAndConditions"
+                  value={formData.termsAndConditions || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Terms and Conditions..."
+                  rows={3}
+                  className="w-full resize-none rounded-lg border border-slate-300 px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  style={{ minHeight: "80px" }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Bank & Payment Details */}
+          <div className="mt-8 border-t border-slate-100 pt-6">
+            <h2 className="mb-4 text-base font-bold text-slate-800">
+              Bank & Payment Details
+            </h2>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Bank Name
+                </label>
+                <input
+                  type="text"
+                  name="bankName"
+                  value={formData.bankName || ""}
+                  onChange={handleChange}
+                  placeholder="e.g. HDFC Bank, SBI"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Account Number
+                </label>
+                <input
+                  type="text"
+                  name="accountNumber"
+                  value={formData.accountNumber || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Account Number"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  IFSC Code
+                </label>
+                <input
+                  type="text"
+                  name="ifscCode"
+                  value={formData.ifscCode || ""}
+                  onChange={handleChange}
+                  placeholder="e.g. HDFC0001234"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  Branch Name
+                </label>
+                <input
+                  type="text"
+                  name="branchName"
+                  value={formData.branchName || ""}
+                  onChange={handleChange}
+                  placeholder="Enter Branch Name"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-slate-600">
+                  UPI ID
+                </label>
+                <input
+                  type="text"
+                  name="upiId"
+                  value={formData.upiId || ""}
+                  onChange={handleChange}
+                  placeholder="e.g. business@upi"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             </div>
@@ -464,23 +736,29 @@ export default function EditProfile() {
           <div className="mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
             {savedNotification && (
               <span className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                <FiCheck className="h-4 w-4" /> Changes saved successfully to local storage!
+                <FiCheck className="h-4 w-4" /> Changes saved successfully!
               </span>
             )}
-
+            {errorMessage && (
+              <span className="mr-auto flex items-center gap-1.5 text-xs font-semibold text-rose-600">
+                <FiAlertCircle className="h-4 w-4 shrink-0" /> {errorMessage}
+              </span>
+            )}
 
             <button
               type="button"
               onClick={handleCancel}
-              className="rounded-lg bg-slate-100 px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              disabled={isSaving}
+              className="rounded-lg bg-slate-100 px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="rounded-full bg-[#e11d48] px-7 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#be123c] active:scale-[0.98]"
+              disabled={isSaving}
+              className="rounded-full bg-[#e11d48] px-7 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-[#be123c] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              Save Changes
+              {isSaving ? "Saving..." : "Save Changes"}
             </button>
           </div>
         </form>
