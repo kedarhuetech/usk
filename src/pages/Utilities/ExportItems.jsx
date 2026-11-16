@@ -6,8 +6,15 @@ import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { loadBusinessItems } from "../../services/businessRecords.js";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { exportRows } from "../../services/itemImportExport.js";
+
+// Resolves item field values for display and export.
+const valueFor = (item, key) => {
+  if (key === "stock") return item.currentStock ?? item.stock ?? item.openingQuantity ?? item.quantity ?? "";
+  return item[key] ?? "";
+};
 
 // This helper handles stamp logic.
 const dateStamp = () => new Date().toISOString().slice(0, 10);
@@ -68,6 +75,9 @@ function ExportItems() {
   useEffect(() => {
     setItems(getInventoryItems());
     setLoading(false);
+    loadBusinessItems().then((dbItems) => {
+      if (Array.isArray(dbItems) && dbItems.length > 0) setItems(dbItems);
+    }).catch(() => {});
   }, []);
 
   const categories = useMemo(() => [...new Set(items.map((item) => String(item.category || "").trim()).filter(Boolean))].sort(), [items]);
