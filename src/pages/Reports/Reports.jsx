@@ -254,31 +254,35 @@ const readLocal = (...keys) => {
 };
 
 function navigateToEditTransaction(row, navigate) {
-  const t = String(row.type || row.transactionType || "").toLowerCase();
+  const rawObj = row.raw || row || {};
+  const t = String(rawObj.type || rawObj.transactionType || rawObj.reportType || row.reportType || row.type || "").toLowerCase();
+  const cleanId = rawObj.id || row.id || rawObj.invoiceId;
+  const targetDoc = { ...rawObj, id: cleanId };
+
   if (t === "sale order" || t === "sale_order") {
-    navigate("/sales/sale-order", { state: { editOrder: row, editInvoice: row } });
+    navigate("/sales/sale-order", { state: { editOrder: targetDoc, editInvoice: targetDoc } });
   } else if (t === "purchase order" || t === "purchase_order") {
-    navigate("/purchase-expense/purchase-order", { state: { editOrder: row, editPurchase: row } });
+    navigate("/purchase-expense/purchase-order", { state: { editOrder: targetDoc, editPurchase: targetDoc } });
   } else if (t === "purchase" || t === "purchase bill" || t === "purchase_bill") {
-    navigate("/purchase-expense/purchase-bills/new", { state: { editPurchase: row, editBill: row, editInvoice: row } });
+    navigate("/purchase-expense/purchase-bills/new", { state: { editPurchase: targetDoc, editBill: targetDoc, editInvoice: targetDoc } });
   } else if (t === "payment-in" || t === "payment_in") {
-    navigate("/sales/payment-in", { state: { editPayment: row, editInvoice: row } });
+    navigate("/sales/payment-in", { state: { editPayment: targetDoc, editInvoice: targetDoc } });
   } else if (t === "payment-out" || t === "payment_out") {
-    navigate("/purchase-expense/payment-out", { state: { editPayment: row, editPurchase: row } });
+    navigate("/purchase-expense/payment-out", { state: { editPayment: targetDoc, editPurchase: targetDoc } });
   } else if (t === "expense") {
-    navigate("/purchase-expense/expenses", { state: { editExpense: row, editInvoice: row } });
+    navigate("/purchase-expense/expenses", { state: { editExpense: targetDoc, editInvoice: targetDoc } });
   } else if (t === "estimate" || t === "quotation") {
-    navigate("/sales/estimate-quotation", { state: { editEstimate: row, editInvoice: row } });
+    navigate("/sales/estimate-quotation", { state: { editEstimate: targetDoc, editInvoice: targetDoc } });
   } else if (t === "proforma" || t === "proforma_invoice") {
-    navigate("/sales/proforma-invoice", { state: { editProforma: row, editInvoice: row } });
+    navigate("/sales/proforma-invoice", { state: { editProforma: targetDoc, editInvoice: targetDoc } });
   } else if (t === "delivery_challan" || t.includes("challan")) {
-    navigate("/sales/delivery-challan", { state: { editChallan: row, editInvoice: row } });
+    navigate("/sales/delivery-challan", { state: { editChallan: targetDoc, editInvoice: targetDoc } });
   } else if (t === "credit_note" || t === "sale_return" || t.includes("credit note") || t.includes("sale return")) {
-    navigate("/sales/sale-return-credit-note", { state: { editReturn: row, editInvoice: row } });
+    navigate("/sales/sale-return-credit-note", { state: { editReturn: targetDoc, editInvoice: targetDoc } });
   } else if (t === "debit_note" || t === "purchase_return" || t.includes("debit note") || t.includes("purchase return")) {
-    navigate("/purchase-expense/purchase-return", { state: { editReturn: row, editPurchase: row } });
+    navigate("/purchase-expense/purchase-return", { state: { editReturn: targetDoc, editPurchase: targetDoc } });
   } else {
-    navigate("/sales/sale-invoices/new", { state: { editInvoice: row } });
+    navigate("/sales/sale-invoices/new", { state: { editInvoice: targetDoc } });
   }
 }
 

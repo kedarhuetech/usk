@@ -250,8 +250,13 @@ function saleItemFromInventory(item = {}) {
 // Normalizes and maps rows from an existing transaction or database items into AddSale row format
 function normalizeEditRows(editDoc) {
   if (!editDoc) return [];
-  const candidateRows = editDoc.rows || editDoc.items || editDoc.lineItems || [];
+  let candidateRows = editDoc.rows || editDoc.items || editDoc.lineItems || editDoc.transaction_items || [];
+  if (typeof candidateRows === "string") {
+    try { candidateRows = JSON.parse(candidateRows); } catch { candidateRows = []; }
+  }
   if (!Array.isArray(candidateRows) || candidateRows.length === 0) return [];
+
+  const inventory = getInventoryItems();
 
   return candidateRows.map((row, idx) => {
     const rawDiscPercent = row.discountPercent ?? row.discount_percent;
@@ -283,6 +288,11 @@ function normalizeEditRows(editDoc) {
       ? row.serialNumbers
       : (row.serialNo || row.serial_no ? [row.serialNo || row.serial_no] : []);
 
+    const sourceItemId = row.sourceItemId || row.itemId || row.item_id || "";
+    const matched = inventory.find((i) => (sourceItemId && i.id === sourceItemId) || (row.item && String(i.itemName || "").trim().toLowerCase() === String(row.item).trim().toLowerCase()));
+
+    const resolvedItem = row.item || row.itemName || row.item_name || row.name || matched?.itemName || "";
+
     const qty =
       row.qty != null && row.qty !== ""
         ? String(row.qty)
@@ -295,23 +305,25 @@ function normalizeEditRows(editDoc) {
           ? String(row.unitPrice)
           : (row.unit_price != null && row.unit_price !== ""
             ? String(row.unit_price)
-            : (row.rate != null && row.rate !== "" ? String(row.rate) : "0")));
+            : (row.rate != null && row.rate !== "" ? String(row.rate) : (matched?.salePrice != null ? String(matched.salePrice) : "0"))));
+
+    const unit = row.unit || matched?.unit || "PCS";
 
     return {
       ...createRow(),
       ...row,
       id: row.id || `edit-row-${idx}-${Date.now()}`,
-      item: row.item || row.itemName || row.item_name || row.name || "",
+      item: resolvedItem,
       description: row.description || "",
       qty,
-      unit: row.unit || "PCS",
+      unit,
       price,
       priceMode: row.priceMode || "Without Tax",
       discountPercent: discPercent,
       discountAmount: discAmount,
       discountMode,
       taxRate,
-      hsn: row.hsn || row.hsnCode || row.hsn_code || "",
+      hsn: row.hsn || row.hsnCode || row.hsn_code || matched?.hsn || "",
       cessPercent:
         row.cessPercent != null && row.cessPercent !== "" && Number(row.cessPercent) !== 0
           ? String(row.cessPercent)
@@ -320,7 +332,7 @@ function normalizeEditRows(editDoc) {
         row.cessAmount != null && row.cessAmount !== "" && Number(row.cessAmount) !== 0
           ? String(row.cessAmount)
           : (row.cess_amount != null && Number(row.cess_amount) !== 0 ? String(row.cess_amount) : ""),
-      sourceItemId: row.sourceItemId || row.itemId || row.item_id || "",
+      sourceItemId: sourceItemId || matched?.id || "",
       batchNo: row.batchNo || row.batch_no || "",
       expDate: row.expDate || row.exp_date || "",
       serialNumbers: serials,
@@ -331,6 +343,12 @@ function normalizeEditRows(editDoc) {
 // Extracts form fields from an existing transaction header, supporting both local and MySQL schemas
 function extractEditForm(editDoc, fallback = {}) {
   if (!editDoc) return fallback;
+
+  const cleanStr = (val) => {
+    if (val == null) return "";
+    const s = String(val).trim();
+    return s === "null" || s === "undefined" ? "" : s;
+  };
 
   const rawCustomer =
     editDoc.partyName ||
@@ -344,7 +362,7 @@ function extractEditForm(editDoc, fallback = {}) {
     editDoc.form?.partyName ||
     fallback.customer ||
     "";
-  const customer = typeof rawCustomer === "string" ? rawCustomer.trim() : String(rawCustomer || "");
+  const customer = cleanStr(rawCustomer);
 
   const partyId =
     editDoc.form?.partyId ??
@@ -364,24 +382,26 @@ function extractEditForm(editDoc, fallback = {}) {
     editDoc.form?.phone ||
     fallback.phone ||
     "";
-  const phone = typeof rawPhone === "string" ? rawPhone.trim() : String(rawPhone || "");
+  const phone = cleanStr(rawPhone);
 
-  const billingAddress =
+  const billingAddress = cleanStr(
     editDoc.billingAddress ||
     editDoc.billing_address ||
     editDoc.form?.billingAddress ||
     fallback.billingAddress ||
-    "";
+    ""
+  );
 
-  const shippingAddress =
+  const shippingAddress = cleanStr(
     editDoc.shippingAddress ||
     editDoc.shipping_address ||
     editDoc.form?.shippingAddress ||
     billingAddress ||
     fallback.shippingAddress ||
-    "";
+    ""
+  );
 
-  const invoiceNumber =
+  const invoiceNumber = cleanStr(
     editDoc.documentNumber ||
     editDoc.document_number ||
     editDoc.invoiceNumber ||
@@ -390,7 +410,8 @@ function extractEditForm(editDoc, fallback = {}) {
     editDoc.number ||
     editDoc.form?.invoiceNumber ||
     fallback.invoiceNumber ||
-    "1";
+    "1"
+  );
 
   const rawDate =
     editDoc.transactionDate ||
@@ -403,43 +424,57 @@ function extractEditForm(editDoc, fallback = {}) {
     currentLocalDate();
   const invoiceDate = typeof rawDate === "string" ? rawDate.slice(0, 10) : String(rawDate);
 
-  const stateOfSupply =
+  const stateOfSupply = cleanStr(
     editDoc.stateOfSupply ||
     editDoc.state ||
     editDoc.form?.stateOfSupply ||
     fallback.stateOfSupply ||
-    "None";
+    "None"
+  );
 
-  const paymentType =
+  const paymentType = cleanStr(
     editDoc.paymentMode ||
     editDoc.paymentType ||
     editDoc.payment_mode ||
     editDoc.form?.paymentType ||
     fallback.paymentType ||
-    "Cash";
+    "Cash"
+  );
 
-  const description =
+  const description = cleanStr(
     editDoc.description ||
     editDoc.notes ||
     editDoc.form?.description ||
     fallback.description ||
-    "";
+    ""
+  );
 
-  const terms =
+  const terms = cleanStr(
     editDoc.terms ||
     editDoc.form?.terms ||
     fallback.terms ||
-    "";
+    ""
+  );
+
+  const billingName = cleanStr(
+    editDoc.billingName ||
+    editDoc.billing_name ||
+    editDoc.form?.billingName ||
+    customer ||
+    ""
+  );
 
   return {
     ...fallback,
     ...(editDoc.form || {}),
     customer,
     partyId,
+    partyName: customer,
+    billingName,
     phone,
     billingAddress,
     shippingAddress,
-    invoiceNumber: String(invoiceNumber),
+    invoiceNumber: String(invoiceNumber || "1"),
     invoiceDate,
     stateOfSupply,
     paymentType,
@@ -449,8 +484,6 @@ function extractEditForm(editDoc, fallback = {}) {
     showTerms: Boolean(terms),
     termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
     showDescription: Boolean(description),
-    description,
-    paymentType,
   };
 }
 
@@ -1785,7 +1818,9 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const deliveryChallanConversions = !isPurchase ? location.state?.deliveryChallansConversion || [] : [];
   const deliveryChallanConversion = deliveryChallanConversions[0] || null;
   const conversionStorageKey = location.state?.proformaConversion ? "ledgerly:proformaInvoices.v1" : "ledgerly:estimateQuotations.v1";
-  const editInvoice = isPurchase ? location.state?.editPurchase || null : location.state?.editInvoice || null;
+  const editInvoice = isPurchase
+    ? (location.state?.editPurchase || location.state?.editBill || location.state?.editInvoice || null)
+    : (location.state?.editInvoice || location.state?.editSale || null);
   const localOnlyPurchase = isPurchase && (localOnly || location.state?.localOnlyPurchase);
   const onlineOrderConversion = !isPurchase ? location.state?.onlineOrderConversion : null;
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
@@ -1980,12 +2015,14 @@ function AddSale({ mode = "sale", localOnly = false }) {
 
   // If an edit invoice is loaded by ID, ensure all relational details and line items are fully hydrated from MySQL
   useEffect(() => {
-    if (!editInvoice?.id) return;
+    const targetId = editInvoice?.id || editInvoice?.invoiceId || editInvoice?._id;
+    if (!targetId) return;
     let active = true;
 
-    transactionsDb.getById(editInvoice.id)
+    transactionsDb.getById(targetId)
       .then((fullDoc) => {
         if (!active || !fullDoc) return;
+        setTransactionId(fullDoc.id || targetId);
         const mappedRows = normalizeEditRows(fullDoc);
         if (mappedRows.length > 0) {
           setRows(mappedRows);
@@ -2007,7 +2044,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
 
     return () => { active = false; };
-  }, [editInvoice?.id]);
+  }, [editInvoice?.id, editInvoice?.invoiceId]);
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
 
@@ -2175,7 +2212,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
       ? "Cash Sale"
       : (form.customer || form.partyName || resolvedParty?.name || resolvedParty?.partyName || "");
 
-    const mappedRows = rows.map((row, index) => {
+    const activeRows = rows.filter((row) => String(row.item || "").trim() || Number(row.qty || 0) > 0 || Number(row.price || 0) > 0);
+    const rowsToMap = activeRows.length > 0 ? activeRows : rows.slice(0, 1);
+
+    const mappedRows = rowsToMap.map((row, index) => {
       const matchedItem = items.find(
         (i) =>
           (row.sourceItemId && String(i.id) === String(row.sourceItemId)) ||
@@ -2446,8 +2486,17 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     if (editInvoice) {
       try {
+        const targetId = editInvoice.id || editInvoice.invoiceId || transactionId;
         const wasCancelled = Boolean(editInvoice.cancelled || editInvoice.isCancelled || editInvoice.invoiceStatus === "Cancelled");
-        const existingFields = { ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt, invoiceStatus: wasCancelled ? "Cancelled" : (editInvoice.invoiceStatus || "Active"), cancelled: wasCancelled, status: wasCancelled ? "Cancelled" : (editInvoice.status === "Draft" ? "Draft" : "Active") };
+        const existingFields = {
+          ...invoice,
+          id: targetId,
+          invoiceId: targetId,
+          createdAt: editInvoice.createdAt || invoice.createdAt || new Date().toISOString(),
+          invoiceStatus: wasCancelled ? "Cancelled" : (editInvoice.invoiceStatus || "Active"),
+          cancelled: wasCancelled,
+          status: wasCancelled ? "Cancelled" : (editInvoice.status === "Draft" ? "Draft" : "Active"),
+        };
         const savedInvoice = isPurchase
           ? await saveBusinessPurchaseBill(existingFields)
           : await saveBusinessSaleInvoice(existingFields);
@@ -2458,14 +2507,18 @@ function AddSale({ mode = "sale", localOnly = false }) {
             const cancelled = { ...(current.cancelled || {}) };
             delete edits[savedInvoice.id];
             delete cancelled[savedInvoice.id];
+            delete edits[targetId];
+            delete cancelled[targetId];
             writeTransactionValue(transactionStorageKeys.saleInvoiceUi, { ...current, edits, cancelled });
           } catch { /* The canonical invoice has already been saved. */ }
         }
         sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
-        setToast(`${isPurchase ? "Purchase bill" : "Sale"} updated in this browser.`);
+        notifyBusinessDataChanged();
+        setToast(`${isPurchase ? "Purchase bill" : "Sale"} updated successfully.`);
         navigate(returnPath);
       } catch (error) {
-        setToast(error.message || "Could not update this sale in local storage.");
+        console.error("Failed to update transaction:", error);
+        setToast(error.message || `Could not update this ${isPurchase ? "purchase bill" : "sale"}.`);
       }
       return;
     }

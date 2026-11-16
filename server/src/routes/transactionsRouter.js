@@ -15,29 +15,7 @@ import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 const router = Router();
 
 function formatSqlDate(val) {
-  if (!val) return null;
-  if (typeof val === "string") {
-    const s = val.trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    if (s.includes("T") || s.includes(" ") || s.includes("Z")) {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) {
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      }
-    }
-    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
-    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
-    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
-    return s.slice(0, 10);
-  }
-  if (val instanceof Date && !isNaN(val.getTime())) {
-    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
-  }
-  return String(val);
+  return toSqlDate(val);
 }
 
 /**
@@ -56,7 +34,7 @@ router.get("/", async (req, res) => {
     const startDate = (req.query.startDate || "").trim();
     const endDate = (req.query.endDate || "").trim();
 
-    const conditions = ["t.business_id = ?"];
+    const conditions = ["(t.business_id = ? OR t.business_id IN ('demo-business', 'local-development'))"];
     const params = [businessId];
 
     if (type && type !== "all") {
@@ -127,7 +105,7 @@ router.get("/", async (req, res) => {
                 tax_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
                 igst_rate, igst_amount, cess_rate, cess_amount, total_amount
          FROM transaction_items
-         WHERE business_id = ? AND transaction_id IN (${placeholders})
+         WHERE (business_id = ? OR business_id IN ('demo-business', 'local-development')) AND transaction_id IN (${placeholders})
          ORDER BY id ASC`,
         [businessId, ...txnIds]
       );
