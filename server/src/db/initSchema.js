@@ -97,6 +97,8 @@ export async function initializeDatabaseSchema() {
       await addCol("transactions", "terms TEXT");
 
       await addCol("company_profiles", "trade_name VARCHAR(255)");
+      await addCol("company_profiles", "business_type VARCHAR(255)");
+      await addCol("company_profiles", "business_category VARCHAR(255)");
       await addCol("company_profiles", "pan VARCHAR(32)");
       await addCol("company_profiles", "street_address TEXT");
       await addCol("company_profiles", "city VARCHAR(100)");
@@ -131,6 +133,8 @@ export async function initializeDatabaseSchema() {
       business_id VARCHAR(64) PRIMARY KEY,
       company_name VARCHAR(255) NOT NULL,
       trade_name VARCHAR(255),
+      business_type VARCHAR(255) NULL,
+      business_category VARCHAR(255) NULL,
       phone VARCHAR(32),
       email VARCHAR(191),
       gstin VARCHAR(32),

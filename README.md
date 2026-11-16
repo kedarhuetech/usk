@@ -104,14 +104,14 @@ py -3 -m venv server/.venv-image-to-layers
 server/.venv-image-to-layers/Scripts/python.exe -m pip install -r server/requirements-image-to-layers.txt
 ```
 
-Set `PYTHON_BIN` in `server/.env` to the venv interpreter path, for example `D:\vyapaar\server\.venv-image-to-layers\Scripts\python.exe`, then restart the backend. On first conversion, `rembg` downloads the ISNet model weights. The backend accepts PNG, JPG, and WebP images up to 8 MB. Without these dependencies the API returns a clear setup error instead of a successful empty conversion.
+Set `PYTHON_BIN` in `server/.env` to the venv interpreter path, for example `.venv-image-to-layers/Scripts/python.exe`, then restart the backend. On first conversion, `rembg` downloads the ISNet model weights. The backend accepts PNG, JPG, and WebP images up to 8 MB. Without these dependencies the API returns a clear setup error instead of a successful empty conversion.
 
 For more detailed, separate object masks, Image to Layers can optionally use Meta's SAM 2 automatic mask generator. SAM 2 is a larger model; install PyTorch for your CPU/GPU, install SAM 2 by following its [official repository instructions](https://github.com/facebookresearch/sam2), and download a SAM 2.1 tiny checkpoint from that repository's checkpoint links. Then add these settings to `server/.env` (adjust the checkpoint path):
 
 ```env
 MAGIC_LAYERS_SAM2_CHECKPOINT=D:\\vyapaar\\server\\models\\sam2.1_hiera_tiny.pt
 MAGIC_LAYERS_SAM2_CONFIG=configs/sam2.1/sam2.1_hiera_t.yaml
-PYTHON_BIN=D:\\vyapaar\\server\\.venv-image-to-layers\\Scripts\\python.exe
+PYTHON_BIN=.venv-image-to-layers/Scripts/python.exe
 ```
 
 Restart the backend after installing/configuring it. When the checkpoint is available, the conversion response identifies SAM 2 as the object segmenter; if it cannot load, the service falls back to ISNet and includes a warning. SAM 2 can propose many object masks, but no automatic model can perfectly separate every overlapping or visually merged element in every poster. RapidOCR remains responsible for text detection; replacing a detected text layer recreates its text and cannot guarantee an exact match for a decorative source font.
