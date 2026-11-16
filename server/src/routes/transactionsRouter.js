@@ -185,18 +185,10 @@ router.get("/", async (req, res) => {
         invoiceNumber: row.document_number,
         billNumber: row.document_number,
         orderNumber: row.document_number,
-<<<<<<< HEAD
         transactionDate: toSqlDate(row.transaction_date),
         invoiceDate: toSqlDate(row.transaction_date),
         billDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
-=======
-        transactionDate: txnDate,
-        invoiceDate: txnDate,
-        billDate: txnDate,
-        date: txnDate,
-        dueDate: dueDate,
->>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party: party,
@@ -249,11 +241,8 @@ router.get("/", async (req, res) => {
           dueDate: dueDate,
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
-<<<<<<< HEAD
           invoiceNumber: row.document_number,
           invoiceDate: toSqlDate(row.transaction_date),
-=======
->>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -398,18 +387,8 @@ router.get("/:id", async (req, res) => {
         type: row.transaction_type,
         documentNumber: row.document_number,
         invoiceNumber: row.document_number,
-<<<<<<< HEAD
         transactionDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
-=======
-        billNumber: row.document_number,
-        orderNumber: row.document_number,
-        transactionDate: txnDate,
-        invoiceDate: txnDate,
-        billDate: txnDate,
-        date: txnDate,
-        dueDate: dueDate,
->>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party,
@@ -459,11 +438,8 @@ router.get("/:id", async (req, res) => {
           dueDate: dueDate,
           billingAddress,
           shippingAddress,
-<<<<<<< HEAD
           invoiceNumber: row.document_number,
           invoiceDate: toSqlDate(row.transaction_date),
-=======
->>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -507,35 +483,11 @@ router.post("/", async (req, res) => {
       body.form?.billNumber ||
       "0"
     ).trim();
-<<<<<<< HEAD
-    const rawTxnDate =
-      body.transactionDate ||
-      body.invoiceDate ||
-      body.billDate ||
-      body.date ||
-      body.form?.invoiceDate ||
-      body.form?.billDate ||
-      new Date().toISOString().slice(0, 10);
-    const transactionDate = toSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
-    const dueDate = toSqlDate(body.dueDate || body.due_date || body.form?.dueDate);
-    const partyId = body.partyId || body.party_id || null;
-    const partyName =
-      (body.partyName ||
-      body.customerName ||
-      body.supplierName ||
-      body.party ||
-      body.customer ||
-      body.form?.customer ||
-      body.form?.partyName ||
-      body.form?.party ||
-      "").trim() ||
-=======
     const rawTxnDate = body.transactionDate || body.invoiceDate || body.billDate || body.date || body.form?.invoiceDate || new Date();
     const transactionDate = formatSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
     const dueDate = formatSqlDate(body.dueDate || body.form?.dueDate);
     const partyId = body.partyId || body.party_id || body.form?.partyId || body.customerId || null;
     const partyName = (body.partyName || body.party || body.customerName || body.customer || body.supplierName || body.form?.customer || body.form?.partyName || body.form?.party || "").trim() ||
->>>>>>> origin/main
       ((body.paymentMode === "Cash" || body.paymentType === "Cash" || body.form?.paymentType === "Cash" || transactionType === "pos") ? "Cash Sale" : null);
     const partyPhone = body.partyPhone || body.phone || body.mobile || body.customerPhone || body.form?.phone || null;
     const partyGstin = body.partyGstin || body.gstin || body.form?.gstin || null;
@@ -546,10 +498,6 @@ router.post("/", async (req, res) => {
       ? JSON.stringify(body.shippingAddress || body.shipping_address)
       : (body.shippingAddress || body.form?.shippingAddress || body.shipping_address || billingAddress || null);
 
-<<<<<<< HEAD
-   
-=======
->>>>>>> origin/main
     const rawItems = Array.isArray(body.items) && body.items.length
       ? body.items
       : (Array.isArray(body.rows) && body.rows.length ? body.rows : (Array.isArray(body.lineItems) ? body.lineItems : []));
