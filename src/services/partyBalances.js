@@ -26,7 +26,14 @@ export function transactionMatchesParty(record, party) {
 }
 
 function invoiceTotal(record) {
-  return amount(record?.totals?.finalTotal ?? record?.totals?.grandTotal ?? record?.totals?.amount ?? record?.totalAmount ?? record?.total ?? record?.grandTotal ?? record?.amount);
+  const direct = amount(record?.totals?.finalTotal ?? record?.totals?.grandTotal ?? record?.totals?.amount ?? record?.totalAmount ?? record?.total_amount ?? record?.total ?? record?.grandTotal ?? record?.amount);
+  if (direct > 0) return direct;
+  const items = Array.isArray(record?.rows) && record.rows.length ? record.rows : (Array.isArray(record?.items) ? record.items : []);
+  if (items.length) {
+    const sum = items.reduce((s, it) => s + amount(it.totalAmount ?? it.total_amount ?? it.amount ?? (Number(it.qty || it.quantity || 0) * Number(it.price || it.unitPrice || it.unit_price || 0))), 0);
+    if (sum > 0) return sum;
+  }
+  return direct;
 }
 
 function explicitPaid(record, kind) {

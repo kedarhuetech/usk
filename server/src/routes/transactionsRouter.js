@@ -30,32 +30,32 @@ router.get("/", async (req, res) => {
     const startDate = (req.query.startDate || "").trim();
     const endDate = (req.query.endDate || "").trim();
 
-    const conditions = ["business_id = ?"];
+    const conditions = ["t.business_id = ?"];
     const params = [businessId];
 
     if (type && type !== "all") {
-      conditions.push("transaction_type = ?");
+      conditions.push("t.transaction_type = ?");
       params.push(type);
     }
 
     if (partyId) {
-      conditions.push("party_id = ?");
+      conditions.push("t.party_id = ?");
       params.push(partyId);
     }
 
     if (search) {
-      conditions.push("(document_number LIKE ? OR party_name LIKE ? OR party_phone LIKE ?)");
+      conditions.push("(t.document_number LIKE ? OR t.party_name LIKE ? OR p.party_name LIKE ? OR t.party_phone LIKE ?)");
       const term = `%${search}%`;
-      params.push(term, term, term);
+      params.push(term, term, term, term);
     }
 
     if (startDate) {
-      conditions.push("transaction_date >= ?");
+      conditions.push("t.transaction_date >= ?");
       params.push(startDate);
     }
 
     if (endDate) {
-      conditions.push("transaction_date <= ?");
+      conditions.push("t.transaction_date <= ?");
       params.push(endDate);
     }
 
@@ -63,22 +63,28 @@ router.get("/", async (req, res) => {
 
     // Query 1: Total count for lazy loading
     const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS total FROM transactions WHERE ${whereClause}`,
+      `SELECT COUNT(*) AS total FROM transactions t LEFT JOIN parties p ON t.party_id = p.id WHERE ${whereClause}`,
       params
     );
     const total = countRows[0]?.total || 0;
 
-    // Query 2: Fetch paginated transaction headers
+    // Query 2: Fetch paginated transaction headers with resolved party fields
     const [rows] = await pool.query(
-      `SELECT id, business_id, transaction_type, document_number, transaction_date, due_date,
-              party_id, party_name, party_phone, party_gstin, billing_address, shipping_address,
-              subtotal, discount_percent, discount_amount, tax_amount, round_off, total_amount,
-              paid_amount, balance_amount, payment_mode, payment_status, payment_ref_no,
-              cash_tendered, change_returned, vehicle_no, e_way_bill_no, po_number, po_date,
-              notes, terms, created_at, updated_at
-       FROM transactions
+      `SELECT t.id, t.business_id, t.transaction_type, t.document_number, t.transaction_date, t.due_date,
+              t.party_id,
+              COALESCE(NULLIF(TRIM(t.party_name), ''), p.party_name, IF(t.payment_mode = 'Cash' OR t.transaction_type = 'pos', 'Cash Sale', '')) AS party_name,
+              COALESCE(NULLIF(TRIM(t.party_phone), ''), p.phone, '') AS party_phone,
+              COALESCE(NULLIF(TRIM(t.party_gstin), ''), p.gstin, '') AS party_gstin,
+              COALESCE(NULLIF(TRIM(t.billing_address), ''), p.billing_address, '') AS billing_address,
+              COALESCE(NULLIF(TRIM(t.shipping_address), ''), p.shipping_address, '') AS shipping_address,
+              t.subtotal, t.discount_percent, t.discount_amount, t.tax_amount, t.round_off, t.total_amount,
+              t.paid_amount, t.balance_amount, t.payment_mode, t.payment_status, t.payment_ref_no,
+              t.cash_tendered, t.change_returned, t.vehicle_no, t.e_way_bill_no, t.po_number, t.po_date,
+              t.notes, t.terms, t.created_at, t.updated_at
+       FROM transactions t
+       LEFT JOIN parties p ON t.party_id = p.id
        WHERE ${whereClause}
-       ORDER BY transaction_date DESC, created_at DESC
+       ORDER BY t.transaction_date DESC, t.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -137,69 +143,77 @@ router.get("/", async (req, res) => {
       }
     }
 
-    const transactions = rows.map((row) => ({
-      id: row.id,
-      transactionType: row.transaction_type,
-      type: row.transaction_type,
-      documentNumber: row.document_number,
-      invoiceNumber: row.document_number,
-      billNumber: row.document_number,
-      orderNumber: row.document_number,
-      transactionDate: row.transaction_date,
-      invoiceDate: row.transaction_date,
-      billDate: row.transaction_date,
-      dueDate: row.due_date,
-      partyId: row.party_id,
-      partyName: row.party_name || "",
-      party: row.party_name || "",
-      customerName: row.party_name || "",
-      supplierName: row.party_name || "",
-      partyPhone: row.party_phone || "",
-      phone: row.party_phone || "",
-      partyGstin: row.party_gstin || "",
-      billingAddress: row.billing_address || "",
-      shippingAddress: row.shipping_address || "",
-      subtotal: parseFloat(row.subtotal) || 0,
-      discountPercent: parseFloat(row.discount_percent) || 0,
-      discountAmount: parseFloat(row.discount_amount) || 0,
-      taxAmount: parseFloat(row.tax_amount) || 0,
-      roundOff: parseFloat(row.round_off) || 0,
-      totalAmount: parseFloat(row.total_amount) || 0,
-      total: parseFloat(row.total_amount) || 0,
-      amount: parseFloat(row.total_amount) || 0,
-      paidAmount: parseFloat(row.paid_amount) || 0,
-      receivedAmount: parseFloat(row.paid_amount) || 0,
-      balanceAmount: parseFloat(row.balance_amount) || 0,
-      balance: parseFloat(row.balance_amount) || 0,
-      paymentMode: row.payment_mode || "Cash",
-      paymentType: row.payment_mode || "Cash",
-      status: row.payment_status || "Completed",
-      paymentRefNo: row.payment_ref_no || "",
-      cashTendered: parseFloat(row.cash_tendered) || 0,
-      changeReturned: parseFloat(row.change_returned) || 0,
-      vehicleNo: row.vehicle_no || "",
-      eWayBillNo: row.e_way_bill_no || "",
-      poNumber: row.po_number || "",
-      poDate: row.po_date || null,
-      notes: row.notes || "",
-      terms: row.terms || "",
-      items: itemsMap.get(row.id) || [],
-      rows: itemsMap.get(row.id) || [],
-      customer: row.party_name || "",
-      customerPhone: row.party_phone || "",
-      form: {
-        customer: row.party_name || "",
-        partyName: row.party_name || "",
+    const transactions = rows.map((row) => {
+      const items = itemsMap.get(row.id) || [];
+      const itemsTotal = items.reduce((s, it) => s + (parseFloat(it.totalAmount || it.amount) || 0), 0);
+      const rawTotal = parseFloat(row.total_amount) || 0;
+      const effectiveTotal = rawTotal > 0 ? rawTotal : itemsTotal;
+      const party = row.party_name || (row.payment_mode === "Cash" || row.transaction_type === "pos" ? "Cash Sale" : "");
+
+      return {
+        id: row.id,
+        transactionType: row.transaction_type,
+        type: row.transaction_type,
+        documentNumber: row.document_number,
+        invoiceNumber: row.document_number,
+        billNumber: row.document_number,
+        orderNumber: row.document_number,
+        transactionDate: row.transaction_date,
+        invoiceDate: row.transaction_date,
+        billDate: row.transaction_date,
+        dueDate: row.due_date,
+        partyId: row.party_id,
+        partyName: party,
+        party: party,
+        customerName: party,
+        supplierName: party,
+        partyPhone: row.party_phone || "",
         phone: row.party_phone || "",
+        partyGstin: row.party_gstin || "",
         billingAddress: row.billing_address || "",
         shippingAddress: row.shipping_address || "",
-        invoiceNumber: row.document_number,
-        invoiceDate: row.transaction_date,
+        subtotal: parseFloat(row.subtotal) || effectiveTotal,
+        discountPercent: parseFloat(row.discount_percent) || 0,
+        discountAmount: parseFloat(row.discount_amount) || 0,
+        taxAmount: parseFloat(row.tax_amount) || 0,
+        roundOff: parseFloat(row.round_off) || 0,
+        totalAmount: effectiveTotal,
+        total: effectiveTotal,
+        amount: effectiveTotal,
+        paidAmount: parseFloat(row.paid_amount) || 0,
+        receivedAmount: parseFloat(row.paid_amount) || 0,
+        balanceAmount: parseFloat(row.balance_amount) || 0,
+        balance: parseFloat(row.balance_amount) || 0,
+        paymentMode: row.payment_mode || "Cash",
         paymentType: row.payment_mode || "Cash",
-      },
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+        status: row.payment_status || "Completed",
+        paymentRefNo: row.payment_ref_no || "",
+        cashTendered: parseFloat(row.cash_tendered) || 0,
+        changeReturned: parseFloat(row.change_returned) || 0,
+        vehicleNo: row.vehicle_no || "",
+        eWayBillNo: row.e_way_bill_no || "",
+        poNumber: row.po_number || "",
+        poDate: row.po_date || null,
+        notes: row.notes || "",
+        terms: row.terms || "",
+        items,
+        rows: items,
+        customer: party,
+        customerPhone: row.party_phone || "",
+        form: {
+          customer: party,
+          partyName: party,
+          phone: row.party_phone || "",
+          billingAddress: row.billing_address || "",
+          shippingAddress: row.shipping_address || "",
+          invoiceNumber: row.document_number,
+          invoiceDate: row.transaction_date,
+          paymentType: row.payment_mode || "Cash",
+        },
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
 
     return res.json({
       success: true,
@@ -254,7 +268,16 @@ router.get("/:id", async (req, res) => {
     const txnId = req.params.id;
 
     const [rows] = await pool.query(
-      `SELECT * FROM transactions WHERE business_id = ? AND id = ? LIMIT 1`,
+      `SELECT t.*,
+              COALESCE(NULLIF(TRIM(t.party_name), ''), p.party_name, IF(t.payment_mode = 'Cash' OR t.transaction_type = 'pos', 'Cash Sale', '')) AS resolved_party_name,
+              COALESCE(NULLIF(TRIM(t.party_phone), ''), p.phone, '') AS resolved_party_phone,
+              COALESCE(NULLIF(TRIM(t.party_gstin), ''), p.gstin, '') AS resolved_party_gstin,
+              COALESCE(NULLIF(TRIM(t.billing_address), ''), p.billing_address, '') AS resolved_billing_address,
+              COALESCE(NULLIF(TRIM(t.shipping_address), ''), p.shipping_address, '') AS resolved_shipping_address
+       FROM transactions t
+       LEFT JOIN parties p ON t.party_id = p.id
+       WHERE t.business_id = ? AND t.id = ?
+       LIMIT 1`,
       [businessId, txnId]
     );
 
@@ -301,6 +324,14 @@ router.get("/:id", async (req, res) => {
       totalAmount: parseFloat(item.total_amount) || 0,
     }));
 
+    const itemsTotal = items.reduce((s, it) => s + (parseFloat(it.totalAmount || it.amount) || 0), 0);
+    const rawTotal = parseFloat(row.total_amount) || 0;
+    const effectiveTotal = rawTotal > 0 ? rawTotal : itemsTotal;
+    const party = row.resolved_party_name || row.party_name || (row.payment_mode === "Cash" || row.transaction_type === "pos" ? "Cash Sale" : "");
+    const phone = row.resolved_party_phone || row.party_phone || "";
+    const billingAddress = row.resolved_billing_address || row.billing_address || "";
+    const shippingAddress = row.resolved_shipping_address || row.shipping_address || billingAddress || "";
+
     return res.json({
       success: true,
       data: {
@@ -312,17 +343,17 @@ router.get("/:id", async (req, res) => {
         transactionDate: row.transaction_date,
         dueDate: row.due_date,
         partyId: row.party_id,
-        partyName: row.party_name || "",
-        partyPhone: row.party_phone || "",
-        partyGstin: row.party_gstin || "",
-        billingAddress: row.billing_address || "",
-        shippingAddress: row.shipping_address || "",
-        subtotal: parseFloat(row.subtotal) || 0,
+        partyName: party,
+        partyPhone: phone,
+        partyGstin: row.resolved_party_gstin || row.party_gstin || "",
+        billingAddress,
+        shippingAddress,
+        subtotal: parseFloat(row.subtotal) || effectiveTotal,
         discountPercent: parseFloat(row.discount_percent) || 0,
         discountAmount: parseFloat(row.discount_amount) || 0,
         taxAmount: parseFloat(row.tax_amount) || 0,
         roundOff: parseFloat(row.round_off) || 0,
-        totalAmount: parseFloat(row.total_amount) || 0,
+        totalAmount: effectiveTotal,
         paidAmount: parseFloat(row.paid_amount) || 0,
         balanceAmount: parseFloat(row.balance_amount) || 0,
         paymentMode: row.payment_mode || "Cash",
@@ -338,18 +369,18 @@ router.get("/:id", async (req, res) => {
         terms: row.terms || "",
         items,
         rows: items,
-        customer: row.party_name || "",
-        customerName: row.party_name || "",
-        party: row.party_name || "",
-        customerPhone: row.party_phone || "",
-        phone: row.party_phone || "",
+        customer: party,
+        customerName: party,
+        party,
+        customerPhone: phone,
+        phone,
         paymentType: row.payment_mode || "Cash",
         form: {
-          customer: row.party_name || "",
-          partyName: row.party_name || "",
-          phone: row.party_phone || "",
-          billingAddress: row.billing_address || "",
-          shippingAddress: row.shipping_address || "",
+          customer: party,
+          partyName: party,
+          phone,
+          billingAddress,
+          shippingAddress,
           invoiceNumber: row.document_number,
           invoiceDate: row.transaction_date,
           paymentType: row.payment_mode || "Cash",
@@ -397,7 +428,7 @@ router.post("/", async (req, res) => {
     const dueDate = body.dueDate || null;
     const partyId = body.partyId || body.party_id || null;
     const partyName =
-      body.partyName ||
+      (body.partyName ||
       body.customerName ||
       body.supplierName ||
       body.party ||
@@ -405,7 +436,8 @@ router.post("/", async (req, res) => {
       body.form?.customer ||
       body.form?.partyName ||
       body.form?.party ||
-      null;
+      "").trim() ||
+      ((body.paymentMode === "Cash" || body.paymentType === "Cash" || body.form?.paymentType === "Cash" || transactionType === "pos") ? "Cash Sale" : null);
     const partyPhone =
       body.partyPhone ||
       body.phone ||
@@ -426,12 +458,16 @@ router.post("/", async (req, res) => {
       billingAddress ||
       null;
 
-    const subtotal = parseFloat(body.subtotal ?? body.totalAmount ?? body.amount ?? body.totals?.subtotal ?? body.totals?.taxableAmount ?? 0) || 0;
+    const rawItems = Array.isArray(body.items) && body.items.length ? body.items : (Array.isArray(body.rows) ? body.rows : []);
+    const itemsSum = rawItems.reduce((s, it) => s + (parseFloat(it.totalAmount ?? it.amount ?? (parseFloat(it.qty ?? it.quantity ?? 1) * parseFloat(it.price ?? it.unitPrice ?? 0))) || 0), 0);
+    const parsedTotal = parseFloat(body.totalAmount ?? body.total ?? body.amount ?? body.totals?.finalTotal ?? body.totals?.grandTotal ?? 0) || 0;
+    const totalAmount = parsedTotal > 0 ? parsedTotal : itemsSum;
+    const parsedSubtotal = parseFloat(body.subtotal ?? body.totals?.subtotal ?? body.totals?.taxableAmount ?? 0) || 0;
+    const subtotal = parsedSubtotal > 0 ? parsedSubtotal : (totalAmount > 0 ? totalAmount : itemsSum);
     const discountPercent = parseFloat(body.discountPercent ?? body.discount_percent ?? body.totals?.discountPercent ?? 0) || 0;
     const discountAmount = parseFloat(body.discountAmount ?? body.discount ?? body.totals?.discount ?? 0) || 0;
     const taxAmount = parseFloat(body.taxAmount ?? body.tax ?? body.totals?.totalTax ?? body.totals?.tax ?? 0) || 0;
     const roundOff = parseFloat(body.roundOff ?? body.round_off ?? body.totals?.roundOffAmount ?? 0) || 0;
-    const totalAmount = parseFloat(body.totalAmount ?? body.total ?? body.amount ?? body.totals?.finalTotal ?? body.totals?.grandTotal ?? 0) || 0;
     const paidAmount = parseFloat(body.paidAmount ?? body.receivedAmount ?? body.paid ?? body.totals?.received ?? 0) || 0;
     const balanceAmount = parseFloat(body.balanceAmount ?? body.balance ?? body.totals?.balance ?? (totalAmount - paidAmount)) || 0;
 

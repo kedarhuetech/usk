@@ -26,13 +26,16 @@ function MainLayout() {
   // Background Auto-Dispatcher for Service Due Date Reminders (Meta WhatsApp)
   useEffect(() => {
     let timer = null;
+    let lastToastAt = 0;
     const runAutoDispatch = async () => {
       try {
         const res = await autoDispatchDueRemindersViaMeta();
-        if (res?.dispatched > 0) {
+        const now = Date.now();
+        if (res?.dispatched > 0 && now - lastToastAt > 30000) {
+          lastToastAt = now;
           toast.success(
-            `⚡ Automatically sent ${res.dispatched} due service reminder${res.dispatched > 1 ? "s" : ""} via Meta WhatsApp!`,
-            { duration: 6000 }
+            `⚡ Automatically sent ${res.dispatched} due service reminder${res.dispatched > 1 ? "s" : ""} via WhatsApp!`,
+            { duration: 5000 }
           );
         }
       } catch {

@@ -254,17 +254,19 @@ function normalizeEditRows(editDoc) {
   if (!Array.isArray(candidateRows) || candidateRows.length === 0) return [];
 
   return candidateRows.map((row, idx) => {
+    const rawDiscPercent = row.discountPercent ?? row.discount_percent;
     const discPercent =
-      row.discountPercent != null && row.discountPercent !== "" && Number(row.discountPercent) !== 0
-        ? String(row.discountPercent)
+      rawDiscPercent != null && rawDiscPercent !== "" && Number(rawDiscPercent) !== 0
+        ? String(rawDiscPercent)
         : "";
+    const rawDiscAmount = row.discountAmount ?? row.discount_amount ?? row.discount;
     const discAmount =
-      row.discountAmount != null && row.discountAmount !== "" && Number(row.discountAmount) !== 0
-        ? String(row.discountAmount)
-        : (row.discount != null && row.discount !== "" && Number(row.discount) !== 0 ? String(row.discount) : "");
+      rawDiscAmount != null && rawDiscAmount !== "" && Number(rawDiscAmount) !== 0
+        ? String(rawDiscAmount)
+        : "";
     const discountMode = row.discountMode || (discAmount && !discPercent ? "amount" : "percent");
 
-    const rawTaxRate = row.taxRate != null && row.taxRate !== "" ? row.taxRate : (row.tax != null ? row.tax : "NONE");
+    const rawTaxRate = row.taxRate != null && row.taxRate !== "" ? row.taxRate : (row.tax_rate != null ? row.tax_rate : (row.tax != null ? row.tax : "NONE"));
     let taxRate = "NONE";
     if (rawTaxRate && rawTaxRate !== "NONE" && rawTaxRate !== "None" && rawTaxRate !== 0 && rawTaxRate !== "0") {
       const numTax = typeof rawTaxRate === "number" ? rawTaxRate : parseFloat(String(rawTaxRate).replace(/[^0-9.]/g, ""));
@@ -279,7 +281,7 @@ function normalizeEditRows(editDoc) {
 
     const serials = Array.isArray(row.serialNumbers)
       ? row.serialNumbers
-      : (row.serialNo ? [row.serialNo] : []);
+      : (row.serialNo || row.serial_no ? [row.serialNo || row.serial_no] : []);
 
     const qty =
       row.qty != null && row.qty !== ""
@@ -291,7 +293,9 @@ function normalizeEditRows(editDoc) {
         ? String(row.price)
         : (row.unitPrice != null && row.unitPrice !== ""
           ? String(row.unitPrice)
-          : (row.rate != null && row.rate !== "" ? String(row.rate) : ""));
+          : (row.unit_price != null && row.unit_price !== ""
+            ? String(row.unit_price)
+            : (row.rate != null && row.rate !== "" ? String(row.rate) : "0")));
 
     return {
       ...createRow(),
@@ -311,11 +315,11 @@ function normalizeEditRows(editDoc) {
       cessPercent:
         row.cessPercent != null && row.cessPercent !== "" && Number(row.cessPercent) !== 0
           ? String(row.cessPercent)
-          : (row.cessRate != null && Number(row.cessRate) !== 0 ? String(row.cessRate) : ""),
+          : (row.cessRate != null && Number(row.cessRate) !== 0 ? String(row.cessRate) : (row.cess_rate != null && Number(row.cess_rate) !== 0 ? String(row.cess_rate) : "")),
       cessAmount:
         row.cessAmount != null && row.cessAmount !== "" && Number(row.cessAmount) !== 0
           ? String(row.cessAmount)
-          : "",
+          : (row.cess_amount != null && Number(row.cess_amount) !== 0 ? String(row.cess_amount) : ""),
       sourceItemId: row.sourceItemId || row.itemId || row.item_id || "",
       batchNo: row.batchNo || row.batch_no || "",
       expDate: row.expDate || row.exp_date || "",
@@ -422,17 +426,19 @@ function extractEditForm(editDoc, fallback = {}) {
   return {
     ...fallback,
     ...(editDoc.form || {}),
-    customer,
-    phone,
-    billingAddress,
-    shippingAddress,
+    customer: customer || fallback.customer || "Cash Sale",
+    phone: phone || fallback.phone || "",
+    billingAddress: billingAddress || fallback.billingAddress || "",
+    shippingAddress: shippingAddress || fallback.shippingAddress || "",
     invoiceNumber: String(invoiceNumber),
     invoiceDate,
     stateOfSupply,
+    paymentType,
+    description,
+    terms,
     partyBalance: editDoc.partyBalance || editDoc.form?.partyBalance || fallback.partyBalance || "",
     showTerms: Boolean(terms),
     termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
-    terms,
     showDescription: Boolean(description),
     description,
     paymentType,
@@ -505,16 +511,17 @@ function TextArea({ error, className = "", ...props }) {
 function PartyPicker({ value, parties, error, onChange, onSelect, onAddParty, appSettings }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
-  const query = value.toLowerCase();
-  const filtered = parties.filter((party) => `${party.name} ${party.phone}`.toLowerCase().includes(query));
-  const exactMatch = parties.some((party) => (party.partyName || party.name || "").trim().toLowerCase() === value.trim().toLowerCase());
+  const safeVal = String(value || "");
+  const query = safeVal.toLowerCase();
+  const filtered = parties.filter((party) => `${party.name || party.partyName || ""} ${party.phone || ""}`.toLowerCase().includes(query));
+  const exactMatch = parties.some((party) => (party.partyName || party.name || "").trim().toLowerCase() === safeVal.trim().toLowerCase());
   useDismiss(open, rootRef, () => setOpen(false));
 
   return (
     <div ref={rootRef} className="relative">
       <TextInput
         error={error}
-        value={value}
+        value={safeVal}
         onFocus={() => setOpen(true)}
         onChange={(event) => {
           onChange(event.target.value);

@@ -51,11 +51,11 @@ function endOfMonth(date) { return new Date(date.getFullYear(), date.getMonth() 
 
 // This helper handles date logic.
 function invoiceDate(invoice) {
-  const value = invoice.form?.invoiceDate || invoice.createdAt;
+  const value = invoice.form?.invoiceDate || invoice.transactionDate || invoice.transaction_date || invoice.invoiceDate || invoice.date || invoice.createdAt;
   if (!value) return null;
   const s = String(value).trim();
   const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-  const normalized = dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : (s.length === 10 ? s : value);
+  const normalized = dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : (s.length >= 10 ? s.slice(0, 10) : value);
   const date = new Date(normalized.length === 10 ? `${normalized}T00:00:00` : normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -86,7 +86,7 @@ function formatMoney(value) {
 
 // This helper handles amount logic.
 function invoiceAmount(invoice) {
-  return Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? 0);
+  return Number(invoice.totals?.finalTotal ?? invoice.totals?.amount ?? invoice.totalAmount ?? invoice.total_amount ?? invoice.total ?? invoice.amount ?? 0);
 }
 
 // This helper handles store logic.
@@ -103,12 +103,19 @@ function invoiceUser(invoice) {
 
 // This helper handles received logic.
 function invoiceReceived(invoice) {
-  return calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() }).paid;
+  const calc = calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() });
+  const raw = invoice.paidAmount ?? invoice.paid_amount ?? invoice.receivedAmount ?? invoice.received;
+  return Number(calc.paid || raw || 0);
 }
 
 // This helper handles balance logic.
 function invoiceBalance(invoice) {
-  return calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() }).outstanding;
+  const calc = calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() });
+  const rawBal = invoice.balanceAmount ?? invoice.balance_amount ?? invoice.balance;
+  if (rawBal != null && !isNaN(rawBal)) return Number(rawBal);
+  const amt = invoiceAmount(invoice);
+  const rec = invoiceReceived(invoice);
+  return Math.max(0, amt - rec);
 }
 
 function invoiceStatus(invoice) {
@@ -329,8 +336,8 @@ function SaleInvoices() {
   const visibleInvoices = useMemo(() => shownInvoices.filter((invoice) => {
     const date = invoiceDate(invoice);
     const inSelectedPeriod = isInDateRange(date ? isoDate(date) : null, dateFrom, dateTo);
-    const party = invoice.form?.customer || "Cash Sale";
-    const number = invoice.form?.invoiceNumber || invoice.invoiceNumber || "";
+    const party = invoice.partyName || invoice.customerName || invoice.party || invoice.customer || invoice.form?.customer || "Cash Sale";
+    const number = invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.documentNumber || "";
     return inSelectedPeriod
       && (store === "All Stores" || store === invoiceStore(invoice))
       && (user === "All Users" || user === invoiceUser(invoice))
@@ -476,7 +483,9 @@ function SaleInvoices() {
           const amount = invoiceAmount(invoice); const balance = invoiceBalance(invoice); const cancelled = Boolean(invoice.cancelled || invoice.status === "Cancelled");
           const paymentType = invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit");
           const status = invoiceStatus(invoice);
-          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoice.form?.invoiceNumber || invoice.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{invoice.form?.customer || "Cash Sale"}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
+          const party = invoice.partyName || invoice.customerName || invoice.party || invoice.customer || invoice.form?.customer || "Cash Sale";
+          const invoiceNum = invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.documentNumber || "—";
+          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoiceNum}</td><td className="px-3 py-4 font-medium">{party}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
         })}</tbody></table></div> : <EmptyState onAddSale={openAddSale} />}
       </Card>
       {activeDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveDialog(null); }}><section className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{activeDialog.type === "edit" ? "View / Edit Invoice" : activeDialog.type}</h2><p className="mt-1 text-sm text-slate-500">Invoice {activeDialog.invoice.form?.invoiceNumber || activeDialog.invoice.invoiceNumber || "—"} · {activeDialog.invoice.form?.customer || "Cash Sale"}</p></div><button type="button" aria-label="Close" onClick={() => setActiveDialog(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header>

@@ -123,12 +123,20 @@ const localDate = (date = new Date()) =>
     date.getDate()
   ).padStart(2, "0")}`;
 
-const dateOf = (row) =>
-  row.form?.invoiceDate ||
-  row.form?.billDate ||
-  row.date ||
-  row.createdAt?.slice(0, 10) ||
-  "";
+const dateOf = (row) => {
+  const d =
+    row.transactionDate ||
+    row.transaction_date ||
+    row.invoiceDate ||
+    row.billDate ||
+    row.form?.invoiceDate ||
+    row.form?.billDate ||
+    row.date ||
+    row.createdAt ||
+    "";
+  if (!d) return "";
+  return typeof d === "string" ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10);
+};
 
 const storeOf = (row) =>
   row.form?.firm ||
@@ -146,14 +154,18 @@ const amountOf = (row) =>
     row.totals?.finalTotal ??
     row.totals?.grandTotal ??
     row.totalAmount ??
+    row.total_amount ??
     row.amount ??
-    (row.rows || []).reduce(
+    row.subtotal ??
+    (row.rows || row.items || []).reduce(
       (sum, line) =>
         sum +
         Number(
           line.amount ||
+          line.totalAmount ||
+          line.total_amount ||
           Number(line.qty || line.quantity || 0) *
-          Number(line.price || line.rate || 0)
+          Number(line.price || line.unitPrice || line.unit_price || line.rate || 0)
         ),
       0
     )
@@ -164,6 +176,8 @@ const receivedOf = (row) =>
     row.totals?.received ??
     row.received ??
     row.paid ??
+    row.paidAmount ??
+    row.receivedAmount ??
     (row.payments || []).reduce(
       (sum, payment) => sum + Number(payment.amount || 0),
       0
@@ -171,16 +185,22 @@ const receivedOf = (row) =>
   );
 
 const partyOf = (row) =>
+  row.partyName ||
+  row.party_name ||
+  row.customerName ||
+  row.customer_name ||
+  row.supplierName ||
   row.form?.customer ||
+  row.form?.partyName ||
   row.customer ||
-  row.form?.party ||
   row.supplier ||
   row.party ||
-  row.partyName ||
   row.name ||
   "Cash Sale";
 
 const referenceOf = (row) =>
+  row.documentNumber ||
+  row.document_number ||
   row.form?.invoiceNumber ||
   row.form?.billNumber ||
   row.invoiceNumber ||
@@ -1475,17 +1495,17 @@ function Reports({ defaultReport }) {
                             {cell(type)}
 
                             {cell(
-                              amount ? money(amount) : "—",
+                              amount != null && !isNaN(amount) ? money(amount) : "—",
                               "whitespace-nowrap text-right"
                             )}
 
                             {cell(
-                              received ? money(received) : "—",
+                              received != null && !isNaN(received) ? money(received) : "—",
                               "whitespace-nowrap text-right"
                             )}
 
                             {cell(
-                              amount ? money(balance) : "—",
+                              balance != null && !isNaN(balance) ? money(balance) : "—",
                               "whitespace-nowrap text-right"
                             )}
 
@@ -1539,11 +1559,11 @@ function Reports({ defaultReport }) {
                             {cell(party)}
                             {cell(paymentTypeOf(row))}
                             {cell(
-                              amount ? money(amount) : "—",
+                              amount != null && !isNaN(amount) ? money(amount) : "—",
                               "text-right"
                             )}
                             {cell(
-                              amount ? money(balance) : "—",
+                              balance != null && !isNaN(balance) ? money(balance) : "—",
                               "text-right"
                             )}
                             {cell(
@@ -1569,11 +1589,11 @@ function Reports({ defaultReport }) {
                             {cell(type)}
                             {cell(paymentTypeOf(row))}
                             {cell(
-                              amount ? money(amount) : "—",
+                              amount != null && !isNaN(amount) ? money(amount) : "—",
                               "text-right"
                             )}
                             {cell(
-                              amount ? money(balance) : "—",
+                              balance != null && !isNaN(balance) ? money(balance) : "—",
                               "text-right"
                             )}
                             {cell(

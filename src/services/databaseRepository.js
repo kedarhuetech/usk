@@ -336,12 +336,12 @@ export const transactionsDb = {
       const rawItems = doc.items || doc.rows || [];
       const rows = rawItems.map((r) => ({
         ...r,
-        item: r.item || r.name || r.itemName || "",
+        item: r.item || r.name || r.itemName || r.item_name || "",
         qty: r.qty != null ? String(r.qty) : (r.quantity != null ? String(r.quantity) : "1"),
-        price: r.price != null ? String(r.price) : (r.unitPrice != null ? String(r.unitPrice) : "0"),
-        sourceItemId: r.sourceItemId || r.itemId || "",
+        price: r.price != null ? String(r.price) : (r.unitPrice != null ? String(r.unitPrice) : (r.unit_price != null ? String(r.unit_price) : "0")),
+        sourceItemId: r.sourceItemId || r.itemId || r.item_id || "",
       }));
-      const party = doc.partyName || doc.customerName || doc.party || doc.customer || doc.form?.customer || "";
+      const party = doc.partyName || doc.customerName || doc.party || doc.customer || doc.form?.customer || "Cash Sale";
       const phone = doc.partyPhone || doc.phone || doc.mobile || doc.form?.phone || "";
       const form = {
         customer: party,
@@ -352,7 +352,7 @@ export const transactionsDb = {
         invoiceDate: doc.transactionDate || doc.invoiceDate || doc.form?.invoiceDate || "",
         paymentType: doc.paymentMode || doc.paymentType || doc.form?.paymentType || "Cash",
         ...(doc.form || {}),
-        customer: party || doc.form?.customer || "",
+        customer: party || doc.form?.customer || "Cash Sale",
         phone: phone || doc.form?.phone || "",
       };
       return {
