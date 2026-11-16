@@ -27,18 +27,188 @@ function writeInvoices(invoices) {
   writeTransactionCollection(SALE_INVOICES_KEY, invoices);
 }
 
+function normalizeDateStr(val, fallback) {
+  if (!val) return fallback || "";
+  if (typeof val === "string") {
+    const s = val.trim();
+    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) {
+      const [y, m, d] = s.split("-");
+      return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+    }
+    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
+    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+    if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
+    if (s.includes("T") || s.includes("Z") || s.includes(" ")) {
+      const d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+    }
+    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
+    return s.slice(0, 10);
+  }
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  return String(val);
+}
+
 // Makes the invoice value consistent.
-function normalizeInvoice(invoice = {}) {
+export function normalizeInvoice(invoice = {}) {
   const timestamp = invoice.createdAt || new Date().toISOString();
-  const invoiceNumber = invoice.form?.invoiceNumber || invoice.invoiceNumber || "1";
+  const invoiceNumber = String(
+    invoice.form?.invoiceNumber ||
+    invoice.invoiceNumber ||
+    invoice.documentNumber ||
+    invoice.number ||
+    "1"
+  );
   const id = invoice.id || invoice.invoiceId || `sale-${crypto.randomUUID()}`;
+
+  const isGenuineCash =
+    invoice.saleType === "cash" &&
+    (!invoice.form?.customer && !invoice.customer && !invoice.partyName && !invoice.customerName);
+
+  const partyName =
+    invoice.form?.customer ||
+    invoice.customer ||
+    invoice.partyName ||
+    invoice.customerName ||
+    invoice.party ||
+    (isGenuineCash ? "Cash Sale" : (invoice.saleType === "cash" ? "Cash Sale" : ""));
+
+  const partyId =
+    invoice.partyId ||
+    invoice.party_id ||
+    invoice.form?.partyId ||
+    invoice.customerId ||
+    null;
+
+  const phone =
+    invoice.partyPhone ||
+    invoice.phone ||
+    invoice.form?.phone ||
+    "";
+
+  const rawInvoiceDate =
+    invoice.form?.invoiceDate ||
+    invoice.invoiceDate ||
+    invoice.transactionDate ||
+    invoice.date ||
+    timestamp;
+
+  const invoiceDate = normalizeDateStr(rawInvoiceDate, timestamp.slice(0, 10));
+
+  const totalAmount = Number(
+    invoice.totals?.finalTotal ??
+    invoice.totalAmount ??
+    invoice.total ??
+    invoice.amount ??
+    0
+  );
+
+  const paidAmount = Number(
+    invoice.totals?.received ??
+    invoice.paidAmount ??
+    invoice.receivedAmount ??
+    invoice.paid ??
+    (invoice.saleType === "cash" ? totalAmount : 0)
+  );
+
+  const balanceAmount = Number(
+    invoice.totals?.balance ??
+    invoice.balanceAmount ??
+    Math.max(0, totalAmount - paidAmount)
+  );
+
+  const paymentMode =
+    invoice.form?.paymentType ||
+    invoice.paymentMode ||
+    invoice.paymentType ||
+    (invoice.saleType === "cash" ? "Cash" : "Credit");
+
+  // Reconcile rows & items
+  const rawRows = Array.isArray(invoice.rows) && invoice.rows.length > 0
+    ? invoice.rows
+    : (Array.isArray(invoice.items) ? invoice.items : []);
+
+  const rows = rawRows.map((r, idx) => {
+    const itemName = r.item || r.itemName || r.name || `Item ${idx + 1}`;
+    const itemId = r.sourceItemId || r.itemId || r.item_id || "";
+    const qty = r.qty ?? r.quantity ?? 1;
+    const price = r.price ?? r.unitPrice ?? 0;
+    return {
+      ...r,
+      id: r.id || `row-${idx}`,
+      item: itemName,
+      name: itemName,
+      itemName,
+      itemId,
+      sourceItemId: itemId,
+      qty: String(qty),
+      quantity: Number(qty),
+      price: String(price),
+      unitPrice: Number(price),
+      unit: r.unit || "PCS",
+    };
+  });
+
+  const form = {
+    customer: partyName,
+    partyId,
+    partyName,
+    phone,
+    invoiceNumber,
+    invoiceDate,
+    billingAddress: invoice.billingAddress || invoice.form?.billingAddress || "",
+    shippingAddress: invoice.shippingAddress || invoice.form?.shippingAddress || invoice.billingAddress || "",
+    paymentType: paymentMode,
+    ...(invoice.form || {}),
+  };
+  if (!form.customer && partyName) form.customer = partyName;
+  if (!form.partyId && partyId) form.partyId = partyId;
+
+  const totals = {
+    subtotal: Number(invoice.totals?.subtotal ?? invoice.subtotal ?? totalAmount),
+    discount: Number(invoice.totals?.discount ?? invoice.discountAmount ?? 0),
+    tax: Number(invoice.totals?.tax ?? invoice.taxAmount ?? 0),
+    roundOffAmount: Number(invoice.totals?.roundOffAmount ?? invoice.roundOff ?? 0),
+    finalTotal: totalAmount,
+    grandTotal: totalAmount,
+    received: paidAmount,
+    balance: balanceAmount,
+    ...(invoice.totals || {}),
+  };
 
   return {
     ...invoice,
     id,
     invoiceId: invoice.invoiceId || id,
     invoiceNumber,
+    documentNumber: invoiceNumber,
     transactionType: invoice.transactionType || "sale",
+    partyId,
+    partyName,
+    customer: partyName,
+    customerName: partyName,
+    phone,
+    partyPhone: phone,
+    invoiceDate,
+    transactionDate: invoiceDate,
+    date: invoiceDate,
+    totalAmount,
+    total: totalAmount,
+    paidAmount,
+    balanceAmount,
+    paymentMode,
+    paymentType: paymentMode,
+    form,
+    rows,
+    items: rows,
+    totals,
+    stockAdjustedAt: invoice.stockAdjustedAt || (invoice.createdAt ? invoice.createdAt : undefined),
     createdAt: timestamp,
     updatedAt: invoice.updatedAt || timestamp,
   };
@@ -56,7 +226,7 @@ export function getNextSaleInvoiceNumber() {
 }
 
 // Saves sale invoice.
-export function saveSaleInvoice(invoice) {
+export function saveSaleInvoice(invoice, options = {}) {
   if (!canUseStorage()) throw new Error("Browser storage is unavailable; the invoice was not saved.");
   const previousInvoices = window.localStorage.getItem(SALE_INVOICES_KEY);
   const previousItems = window.localStorage.getItem(inventoryItemsStorageKey);
@@ -198,16 +368,8 @@ export function saveSaleInvoice(invoice) {
     throw new Error("The invoice could not be verified after saving.");
   }
   notifyBusinessDataChanged();
-  if (isDatabaseMode()) {
-    transactionsDb.save({
-      ...normalized,
-      transactionType: "sale",
-      documentNumber: normalized.invoiceNumber,
-      transactionDate: normalized.invoiceDate || normalized.date,
-      totalAmount: normalized.totals?.finalTotal || normalized.totalAmount || 0,
-      paidAmount: normalized.totals?.receivedAmount || normalized.paidAmount || 0,
-      balanceAmount: normalized.totals?.balanceDue || normalized.balanceAmount || 0,
-    }).catch((err) => console.warn("[MySQL] Background sale sync notice:", err.message));
+  if (isDatabaseMode() && !options?.skipRemoteSync) {
+    transactionsDb.save(normalized).catch((err) => console.warn("[MySQL] Background sale sync notice:", err.message));
   }
   recordAuditTrail({
     action: existingInvoice ? "Sale Invoice Updated" : "Sale Invoice Created",
