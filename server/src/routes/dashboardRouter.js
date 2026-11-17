@@ -85,6 +85,44 @@ const getSummary = async (req, res) => {
       [businessId]
     );
 
+    // 6. Active sales for timeline graph
+    const [activeSalesRows] = await pool.query(
+      `SELECT id, 
+              document_number AS documentNumber, 
+              document_number AS invoiceNumber, 
+              transaction_date AS transactionDate, 
+              transaction_date AS invoiceDate, 
+              transaction_date AS date,
+              CAST(total_amount AS DECIMAL(12,2)) AS totalAmount, 
+              CAST(total_amount AS DECIMAL(12,2)) AS amount, 
+              CAST(total_amount AS DECIMAL(12,2)) AS total, 
+              CAST(paid_amount AS DECIMAL(12,2)) AS paidAmount, 
+              CAST(balance_amount AS DECIMAL(12,2)) AS balanceAmount,
+              status, 
+              party_name AS partyName, 
+              party_name AS customer, 
+              payment_mode AS paymentMode,
+              created_at AS createdAt
+       FROM transactions
+       WHERE business_id = ? 
+         AND transaction_type IN ('sale', 'pos') 
+         AND status NOT IN ('cancelled', 'canceled', 'void', 'deleted')
+       ORDER BY transaction_date ASC`,
+      [businessId]
+    );
+
+    const activeSales = (activeSalesRows || []).map((row) => ({
+      ...row,
+      totalAmount: parseFloat(row.totalAmount) || 0,
+      amount: parseFloat(row.amount) || 0,
+      total: parseFloat(row.total) || 0,
+      totals: {
+        finalTotal: parseFloat(row.totalAmount) || 0,
+        received: parseFloat(row.paidAmount) || 0,
+        balance: parseFloat(row.balanceAmount) || 0,
+      },
+    }));
+
     return res.json({
       success: true,
       data: {
@@ -114,6 +152,7 @@ const getSummary = async (req, res) => {
         bank: {
           totalBalance: parseFloat(bankSummary[0]?.totalBankBalance) || 0,
         },
+        activeSales,
         recentTransactions: recentTxns,
       },
     });
