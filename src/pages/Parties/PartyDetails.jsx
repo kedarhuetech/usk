@@ -15,7 +15,6 @@ import {
   FiPlus,
   FiPrinter,
   FiSearch,
-  FiSettings,
   FiStar,
   FiTrash2,
   FiUsers,
@@ -382,7 +381,6 @@ function AddPartyModal({ onClose, onSave, initialParty = null, appSettings = {} 
             )}
           </div>
           <div className="flex items-center gap-4 text-slate-500">
-            <FiSettings className="h-5 w-5" />
             <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-slate-100 cursor-pointer">
               <FiX className="h-6 w-6" />
             </button>

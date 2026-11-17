@@ -20,10 +20,14 @@ router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const limitParam = req.query.limit;
+    const limit = (limitParam === "all" || req.query.all === "true")
+      ? 10000
+      : Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 50));
     const offset = (page - 1) * limit;
     const search = (req.query.search || "").trim();
     const category = (req.query.category || "").trim();
+    const itemType = (req.query.type || req.query.item_type || "").trim();
     const lowStockOnly = req.query.lowStockOnly === "true";
 
     const conditions = ["business_id = ?"];
@@ -38,6 +42,17 @@ router.get("/", async (req, res) => {
     if (category && category !== "All") {
       conditions.push("category = ?");
       params.push(category);
+    }
+
+    if (itemType && itemType !== "all") {
+      conditions.push("item_type = ?");
+      params.push(itemType);
+    }
+
+    if (req.query.isActive !== undefined || req.query.is_active !== undefined) {
+      const activeVal = req.query.isActive !== undefined ? req.query.isActive : req.query.is_active;
+      conditions.push("is_active = ?");
+      params.push(activeVal === "true" || activeVal === "1" ? 1 : 0);
     }
 
     if (lowStockOnly) {
@@ -58,7 +73,7 @@ router.get("/", async (req, res) => {
       `SELECT id, business_id, name, item_code, barcode, category, hsn_code, unit,
               item_type, sale_price, purchase_price, tax_rate, cess_rate,
               opening_stock, current_stock, min_stock, is_batch_tracked,
-              is_serial_tracked, description, created_at, updated_at
+              is_serial_tracked, description, is_active, created_at, updated_at
        FROM inventory_items
        WHERE ${whereClause}
        ORDER BY name ASC
@@ -107,7 +122,9 @@ router.get("/", async (req, res) => {
       category: row.category || "General",
       hsnCode: row.hsn_code || "",
       unit: row.unit || "PCS",
+      type: row.item_type || "product",
       itemType: row.item_type || "product",
+      isActive: row.is_active !== 0,
       salePrice: parseFloat(row.sale_price) || 0,
       price: parseFloat(row.sale_price) || 0,
       purchasePrice: parseFloat(row.purchase_price) || 0,
@@ -253,6 +270,7 @@ const saveItemHandler = async (req, res) => {
     const isBatchTracked = body.isBatchTracked || body.is_batch_tracked ? 1 : 0;
     const isSerialTracked = body.isSerialTracked || body.is_serial_tracked ? 1 : 0;
     const description = body.description || null;
+    const isActive = body.isActive !== undefined ? (body.isActive ? 1 : 0) : (body.is_active !== undefined ? (body.is_active ? 1 : 0) : 1);
 
     // 1. Upsert Item Header (Pure columns)
     await conn.query(
@@ -260,8 +278,8 @@ const saveItemHandler = async (req, res) => {
         id, business_id, name, item_code, barcode, category, hsn_code, unit,
         item_type, sale_price, purchase_price, tax_rate, cess_rate,
         opening_stock, current_stock, min_stock, is_batch_tracked,
-        is_serial_tracked, description
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_serial_tracked, description, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         item_code = VALUES(item_code),
@@ -279,12 +297,13 @@ const saveItemHandler = async (req, res) => {
         is_batch_tracked = VALUES(is_batch_tracked),
         is_serial_tracked = VALUES(is_serial_tracked),
         description = VALUES(description),
+        is_active = VALUES(is_active),
         updated_at = CURRENT_TIMESTAMP`,
       [
         id, businessId, name, itemCode, barcode, category, hsnCode, unit,
         itemType, salePrice, purchasePrice, taxRate, cessRate,
         openingStock, currentStock, minStock, isBatchTracked,
-        isSerialTracked, description
+        isSerialTracked, description, isActive
       ]
     );
 
@@ -327,10 +346,14 @@ const saveItemHandler = async (req, res) => {
       data: {
         id,
         name,
+        itemName: name,
         itemCode,
         category,
         hsnCode,
         unit,
+        type: itemType,
+        itemType,
+        isActive: Boolean(isActive),
         salePrice,
         purchasePrice,
         taxRate,
@@ -353,25 +376,151 @@ router.put("/:id", saveItemHandler);
 
 /**
  * DELETE /api/items/:id
- * Removes an inventory item and all its related batch rows
+ * Removes an inventory item and all its related batch rows if unreferenced.
+ * If historical transactions or adjustments reference the item, deletion is blocked
+ * with a 409 Conflict status and an option to deactivate the item instead.
  */
 router.delete("/:id", async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    await conn.beginTransaction();
     const businessId = businessIdFromRequest(req);
     const itemId = req.params.id;
+
+    // 1. Verify item exists and belongs to this business
+    const [existing] = await conn.query(
+      `SELECT id, name, is_active FROM inventory_items WHERE business_id = ? AND id = ?`,
+      [businessId, itemId]
+    );
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found in the current business context."
+      });
+    }
+
+    const itemName = existing[0].name;
+
+    // 2. Check for historical transaction and inventory references
+    const [txRows] = await conn.query(
+      `SELECT COUNT(*) AS count FROM transaction_items WHERE business_id = ? AND item_id = ?`,
+      [businessId, itemId]
+    );
+    const txCount = txRows[0]?.count || 0;
+
+    const [adjRows] = await conn.query(
+      `SELECT COUNT(*) AS count FROM inventory_adjustments WHERE business_id = ? AND item_id = ?`,
+      [businessId, itemId]
+    );
+    const adjCount = adjRows[0]?.count || 0;
+
+    let jobWorkCount = 0;
+    try {
+      const [jwRows] = await conn.query(
+        `SELECT COUNT(*) AS count FROM purchase_job_work_items WHERE business_id = ? AND item_id = ?`,
+        [businessId, itemId]
+      );
+      jobWorkCount = jwRows[0]?.count || 0;
+    } catch {}
+
+    let storeOrderCount = 0;
+    try {
+      const [soRows] = await conn.query(
+        `SELECT COUNT(*) AS count FROM online_store_order_items WHERE business_id = ? AND item_id = ?`,
+        [businessId, itemId]
+      );
+      storeOrderCount = soRows[0]?.count || 0;
+    } catch {}
+
+    const totalReferences = txCount + adjCount + jobWorkCount + storeOrderCount;
+
+    if (totalReferences > 0) {
+      // Check if client requested deactivation instead of physical deletion
+      if (req.query.deactivate === "true") {
+        await conn.query(
+          `UPDATE inventory_items SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND id = ?`,
+          [businessId, itemId]
+        );
+        return res.json({
+          success: true,
+          action: "deactivated",
+          message: `Item "${itemName}" is referenced in historical records and has been deactivated instead of deleted.`
+        });
+      }
+
+      return res.status(409).json({
+        success: false,
+        code: "ITEM_REFERENCED",
+        canDeactivate: true,
+        references: {
+          transactions: txCount,
+          adjustments: adjCount,
+          jobWorks: jobWorkCount,
+          storeOrders: storeOrderCount,
+          total: totalReferences
+        },
+        message: `Cannot delete "${itemName}" because it is referenced in ${totalReferences} historical business record(s). Historical invoices and adjustments must be preserved. You can mark this item inactive instead.`
+      });
+    }
+
+    // 3. No references exist: Proceed with physical deletion in a transaction
+    await conn.beginTransaction();
 
     await conn.query(`DELETE FROM item_batches WHERE business_id = ? AND item_id = ?`, [businessId, itemId]);
     await conn.query(`DELETE FROM inventory_items WHERE business_id = ? AND id = ?`, [businessId, itemId]);
 
     await conn.commit();
-    return res.json({ success: true, message: "Item deleted successfully." });
+    return res.json({
+      success: true,
+      action: "deleted",
+      message: `Item "${itemName}" permanently deleted.`
+    });
   } catch (err) {
     await conn.rollback();
     return res.status(500).json({ success: false, message: err.message });
   } finally {
     conn.release();
+  }
+});
+
+/**
+ * PATCH /api/items/:id/deactivate
+ * Marks an item as inactive
+ */
+router.patch("/:id/deactivate", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const itemId = req.params.id;
+    const [result] = await pool.query(
+      `UPDATE inventory_items SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND id = ?`,
+      [businessId, itemId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Item not found in current business context." });
+    }
+    return res.json({ success: true, message: "Item deactivated successfully." });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * PATCH /api/items/:id/reactivate
+ * Marks an item as active
+ */
+router.patch("/:id/reactivate", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const itemId = req.params.id;
+    const [result] = await pool.query(
+      `UPDATE inventory_items SET is_active = 1, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND id = ?`,
+      [businessId, itemId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Item not found in current business context." });
+    }
+    return res.json({ success: true, message: "Item reactivated successfully." });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
   }
 });
 

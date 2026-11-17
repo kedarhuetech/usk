@@ -81,6 +81,7 @@ export async function initializeDatabaseSchema() {
       await addCol("inventory_items", "opening_stock DECIMAL(12,2) DEFAULT 0.00");
       await addCol("inventory_items", "is_serial_tracked TINYINT(1) DEFAULT 0");
       await addCol("inventory_items", "description TEXT");
+      await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
 
       await addCol("transactions", "party_gstin VARCHAR(32)");
       await addCol("transactions", "billing_address TEXT");
