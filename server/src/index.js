@@ -104,7 +104,7 @@ app.use((error, req, res, _next) => {
   return res.status(400).json({ success: false, message: "Invalid request." });
 });
 
-const server = app.listen(PORT, async () => {
+const server = app.listen(PORT, "0.0.0.0", async () => {
   console.log(`USK backend running on port ${PORT}`);
   try {
     await initializeDatabaseSchema();
