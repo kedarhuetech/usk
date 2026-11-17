@@ -70,6 +70,8 @@ export function writeTransactionCollection(key, records) {
 }
 
 export function readTransactionValue(key, fallback = null) {
+  if (memoryStore.has(key)) return memoryStore.get(key);
+  if (isDatabaseMode()) return fallback;
   if (typeof window === "undefined" || !window.localStorage) return fallback;
   const raw = window.localStorage.getItem(key);
   if (raw == null) return fallback;
@@ -78,7 +80,10 @@ export function readTransactionValue(key, fallback = null) {
 }
 
 export function writeTransactionValue(key, value) {
-  storage().setItem(key, JSON.stringify(value));
+  memoryStore.set(key, value);
+  if (!isDatabaseMode()) {
+    try { storage().setItem(key, JSON.stringify(value)); } catch {}
+  }
   return value;
 }
 

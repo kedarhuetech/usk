@@ -63,7 +63,7 @@ export function purgeObsoleteLocalStorage() {
     }
     const allKeys = Object.keys(window.localStorage);
     for (const k of allKeys) {
-      if (k.includes(":ledgerly:") && !k.includes("appSettings") && !k.includes("companyProfile")) {
+      if (k.startsWith("ledgerly:") && !k.includes("storageMode") && !k.includes("appSettings") && !k.includes("companyProfile")) {
         window.localStorage.removeItem(k);
       }
     }

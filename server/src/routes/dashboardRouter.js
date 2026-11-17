@@ -18,6 +18,7 @@ const router = Router();
 const getSummary = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
+    const bizClause = "(business_id = ? OR business_id IN ('demo-business', 'local-development'))";
     const today = new Date().toISOString().slice(0, 10);
 
     // 1. Sales & Purchases totals
@@ -28,7 +29,7 @@ const getSummary = async (req, res) => {
          COALESCE(SUM(paid_amount), 0) AS totalSalesReceived,
          COALESCE(SUM(balance_amount), 0) AS totalSalesPending
        FROM transactions 
-       WHERE business_id = ? AND transaction_type IN ('sale', 'pos')`,
+       WHERE ${bizClause} AND transaction_type IN ('sale', 'pos')`,
       [businessId]
     );
 
@@ -39,7 +40,7 @@ const getSummary = async (req, res) => {
          COALESCE(SUM(paid_amount), 0) AS totalPurchasePaid,
          COALESCE(SUM(balance_amount), 0) AS totalPurchasePending
        FROM transactions 
-       WHERE business_id = ? AND transaction_type = 'purchase'`,
+       WHERE ${bizClause} AND transaction_type = 'purchase'`,
       [businessId]
     );
 
@@ -48,21 +49,22 @@ const getSummary = async (req, res) => {
       `SELECT 
          COALESCE(SUM(CASE 
            WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN 0
-           WHEN balance_type IN ('to_receive', 'to-receive') OR (party_type = 'customer' AND balance_type NOT IN ('to_pay', 'to-pay')) THEN ABS(current_balance)
-           WHEN current_balance > 0 THEN current_balance
+           WHEN balance_type IN ('to_receive', 'to-receive') OR (party_type = 'customer' AND balance_type NOT IN ('to_pay', 'to-pay')) THEN ABS(opening_balance)
            ELSE 0
          END), 0) AS totalReceivable,
          COALESCE(SUM(CASE 
-           WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN ABS(current_balance)
-           WHEN current_balance < 0 THEN ABS(current_balance)
+           WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN ABS(opening_balance)
            ELSE 0
          END), 0) AS totalPayable,
          COUNT(CASE WHEN party_type = 'customer' THEN 1 END) AS customerCount,
          COUNT(CASE WHEN party_type = 'supplier' THEN 1 END) AS supplierCount
        FROM parties
-       WHERE business_id = ?`,
+       WHERE ${bizClause}`,
       [businessId]
     );
+
+    const totalReceivable = (parseFloat(partyBalances[0]?.totalReceivable) || 0) + (parseFloat(salesSummary[0]?.totalSalesPending) || 0);
+    const totalPayable = (parseFloat(partyBalances[0]?.totalPayable) || 0) + (parseFloat(purchaseSummary[0]?.totalPurchasePending) || 0);
 
     // 3. Stock value and low stock alert count
     const [stockSummary] = await pool.query(
@@ -71,7 +73,7 @@ const getSummary = async (req, res) => {
          COALESCE(SUM(current_stock * purchase_price), 0) AS totalStockValue,
          COUNT(CASE WHEN current_stock <= min_stock AND min_stock > 0 THEN 1 END) AS lowStockCount
        FROM inventory_items
-       WHERE business_id = ?`,
+       WHERE ${bizClause}`,
       [businessId]
     );
 
@@ -79,7 +81,7 @@ const getSummary = async (req, res) => {
     const [bankSummary] = await pool.query(
       `SELECT COALESCE(SUM(current_balance), 0) AS totalBankBalance 
        FROM bank_accounts 
-       WHERE business_id = ?`,
+       WHERE ${bizClause}`,
       [businessId]
     );
 
@@ -88,7 +90,7 @@ const getSummary = async (req, res) => {
       `SELECT id, transaction_type, document_number, transaction_date,
               party_name, total_amount, paid_amount, balance_amount, payment_mode
        FROM transactions
-       WHERE business_id = ?
+       WHERE ${bizClause}
        ORDER BY transaction_date DESC, created_at DESC
        LIMIT 5`,
       [businessId]
@@ -113,7 +115,7 @@ const getSummary = async (req, res) => {
               payment_mode AS paymentMode,
               created_at AS createdAt
        FROM transactions
-       WHERE business_id = ? 
+       WHERE ${bizClause}
          AND transaction_type IN ('sale', 'pos') 
          AND status NOT IN ('cancelled', 'canceled', 'void', 'deleted')
        ORDER BY transaction_date ASC`,
@@ -148,8 +150,10 @@ const getSummary = async (req, res) => {
           pendingAmount: parseFloat(purchaseSummary[0]?.totalPurchasePending) || 0,
         },
         balances: {
-          toReceive: parseFloat(partyBalances[0]?.totalReceivable) || 0,
-          toPay: parseFloat(partyBalances[0]?.totalPayable) || 0,
+          toReceive: totalReceivable,
+          toPay: totalPayable,
+          openingReceivable: parseFloat(partyBalances[0]?.totalReceivable) || 0,
+          openingPayable: parseFloat(partyBalances[0]?.totalPayable) || 0,
           customerCount: partyBalances[0]?.customerCount || 0,
           supplierCount: partyBalances[0]?.supplierCount || 0,
         },
