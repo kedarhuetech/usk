@@ -1,4 +1,5 @@
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   parseYMD,
@@ -26,12 +27,29 @@ export const transactionStorageKeys = Object.freeze({
   expenseItems: `${PREFIX}expenseItems.v1`,
 });
 
+// In-memory single source of truth store for active database session
+const memoryStore = new Map();
+
+export function setMemoryCollection(key, records) {
+  if (Array.isArray(records)) {
+    memoryStore.set(key, records);
+  }
+}
+
+export function clearMemoryCollections() {
+  memoryStore.clear();
+}
+
 function storage() {
   if (typeof window === "undefined" || !window.localStorage) throw new Error("Browser storage is unavailable.");
   return window.localStorage;
 }
 
 export function readTransactionCollection(key) {
+  if (memoryStore.has(key)) {
+    return memoryStore.get(key) || [];
+  }
+  if (isDatabaseMode()) return [];
   if (typeof window === "undefined" || !window.localStorage) return [];
   const raw = window.localStorage.getItem(key);
   if (raw == null) return [];
@@ -44,7 +62,10 @@ export function readTransactionCollection(key) {
 
 export function writeTransactionCollection(key, records) {
   if (!Array.isArray(records)) throw new Error("Transaction records must be an array.");
-  storage().setItem(key, JSON.stringify(records));
+  memoryStore.set(key, records);
+  if (!isDatabaseMode()) {
+    try { storage().setItem(key, JSON.stringify(records)); } catch {}
+  }
   return records;
 }
 

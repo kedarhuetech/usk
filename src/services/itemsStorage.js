@@ -20,8 +20,17 @@ function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+// In-memory cache for live database session
+let memoryItems = [];
+
+export function setMemoryItems(list) {
+  if (Array.isArray(list)) memoryItems = list.map((item) => normalizeInventoryItem(item));
+}
+
 // Reads items.
 function readItems() {
+  if (memoryItems.length > 0) return memoryItems;
+  if (isDatabaseMode()) return [];
   if (!canUseStorage()) return [];
   return safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), []);
 }
