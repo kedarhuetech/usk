@@ -148,15 +148,16 @@ export function isTransactionCancelled(rec, uiActions = {}) {
  * Resolves GST breakdown for an item line in an invoice or bill.
  */
 export function resolveRowGst(row = {}, isInterstate = false) {
-  const calculated = row.calculated || {};
-  const qty = Math.max(0, num(row.qty ?? calculated.qty));
-  const price = Math.max(0, num(row.price));
-  const taxRateNum = extractTaxRateNumber(row.taxRate ?? calculated.taxRate);
+  const safeRow = row || {};
+  const calculated = safeRow.calculated || {};
+  const qty = Math.max(0, num(safeRow.qty ?? calculated.qty));
+  const price = Math.max(0, num(safeRow.price));
+  const taxRateNum = extractTaxRateNumber(safeRow.taxRate ?? calculated.taxRate);
 
   let taxable;
   if (calculated.taxable != null) {
     taxable = num(calculated.taxable);
-  } else if (row.priceMode === "With Tax" && taxRateNum > 0) {
+  } else if (safeRow.priceMode === "With Tax" && taxRateNum > 0) {
     const gross = qty * price;
     taxable = gross / (1 + taxRateNum / 100);
   } else {
@@ -164,11 +165,11 @@ export function resolveRowGst(row = {}, isInterstate = false) {
   }
 
   // Deduct discount if not already deducted
-  if (calculated.taxable == null && (row.discountAmount || row.discountPercent)) {
-    const discPct = Math.min(100, Math.max(0, num(row.discountPercent)));
-    const discAmt = num(row.discountAmount);
+  if (calculated.taxable == null && (safeRow.discountAmount || safeRow.discountPercent)) {
+    const discPct = Math.min(100, Math.max(0, num(safeRow.discountPercent)));
+    const discAmt = num(safeRow.discountAmount);
     const effectiveDisc =
-      row.discountMode === "amount" && row.discountAmount !== ""
+      safeRow.discountMode === "amount" && safeRow.discountAmount !== ""
         ? discAmt
         : taxable * (discPct / 100);
     taxable = Math.max(0, taxable - effectiveDisc);
@@ -177,10 +178,10 @@ export function resolveRowGst(row = {}, isInterstate = false) {
   taxable = round2(taxable);
 
   // If explicit tax breakdown is provided on row or calculated
-  const rawCgst = row.cgstAmount ?? calculated.cgst ?? calculated.cgstAmount;
-  const rawSgst = row.sgstAmount ?? calculated.sgst ?? calculated.sgstAmount;
-  const rawIgst = row.igstAmount ?? calculated.igst ?? calculated.igstAmount;
-  const rawCess = row.cessAmount ?? calculated.cess ?? calculated.cessAmount ?? 0;
+  const rawCgst = safeRow.cgstAmount ?? calculated.cgst ?? calculated.cgstAmount;
+  const rawSgst = safeRow.sgstAmount ?? calculated.sgst ?? calculated.sgstAmount;
+  const rawIgst = safeRow.igstAmount ?? calculated.igst ?? calculated.igstAmount;
+  const rawCess = safeRow.cessAmount ?? calculated.cess ?? calculated.cessAmount ?? 0;
 
   if (rawCgst != null || rawSgst != null || rawIgst != null) {
     const cgst = round2(rawCgst);
@@ -211,7 +212,7 @@ export function resolveRowGst(row = {}, isInterstate = false) {
   const cess = round2(rawCess);
   totalTax = round2(totalTax + cess);
 
-  const isIgstRate = String(row.taxRate || "").toUpperCase().includes("IGST");
+  const isIgstRate = String(safeRow.taxRate || "").toUpperCase().includes("IGST");
   const effectiveInterstate = isInterstate || isIgstRate;
 
   let cgst = 0;
@@ -391,20 +392,26 @@ export function extractTransactionTaxLines(transaction, type = "Sale", options =
 /**
  * Compiles all active GST lines across Sale Invoices, Purchase Bills, and optional Returns.
  */
-export function compileGstData({
-  sales = [],
-  purchases = [],
-  saleReturns = [],
-  purchaseReturns = [],
-  parties = [],
-  companyProfile = null,
-  saleUiActions = {},
-}) {
+export function compileGstData(params = {}) {
+  const {
+    sales = [],
+    purchases = [],
+    saleReturns = [],
+    purchaseReturns = [],
+    parties = [],
+    companyProfile = null,
+    saleUiActions = {},
+  } = params || {};
+  const safeSales = Array.isArray(sales) ? sales : [];
+  const safePurchases = Array.isArray(purchases) ? purchases : [];
+  const safeSaleReturns = Array.isArray(saleReturns) ? saleReturns : [];
+  const safePurchaseReturns = Array.isArray(purchaseReturns) ? purchaseReturns : [];
+  const safeParties = Array.isArray(parties) ? parties : [];
   const homeState = (companyProfile?.state || "Maharashtra").trim().toLowerCase();
 
   // Create party lookup map
   const partyMap = new Map();
-  (parties || []).forEach((p) => {
+  safeParties.forEach((p) => {
     if (!p) return;
     const nameKey = String(p.partyName || p.name || "").trim().toLowerCase();
     const idKey = String(p.id || "").trim();
@@ -417,7 +424,7 @@ export function compileGstData({
 
   // 1. Sale Invoices (Outward Supplies)
   const seenSaleIds = new Set();
-  sales.forEach((s) => {
+  safeSales.forEach((s) => {
     if (isTransactionCancelled(s, saleUiActions)) return;
     const id = String(s.id || s.invoiceId || s.invoiceNumber || "");
     if (id && seenSaleIds.has(id)) return;
@@ -429,7 +436,7 @@ export function compileGstData({
 
   // 2. Purchase Bills (Inward Supplies)
   const seenPurchaseIds = new Set();
-  purchases.forEach((p) => {
+  safePurchases.forEach((p) => {
     if (isTransactionCancelled(p)) return;
     const id = String(p.id || p.invoiceId || p.billNumber || "");
     if (id && seenPurchaseIds.has(id)) return;
@@ -441,7 +448,7 @@ export function compileGstData({
 
   // 3. Sale Returns / Credit Notes
   const seenReturnIds = new Set();
-  (saleReturns || []).forEach((sr) => {
+  safeSaleReturns.forEach((sr) => {
     if (isTransactionCancelled(sr)) return;
     const id = String(sr.id || sr.returnNumber || "");
     if (id && seenReturnIds.has(id)) return;
@@ -453,7 +460,7 @@ export function compileGstData({
 
   // 4. Purchase Returns / Debit Notes
   const seenDebitIds = new Set();
-  (purchaseReturns || []).forEach((pr) => {
+  safePurchaseReturns.forEach((pr) => {
     if (isTransactionCancelled(pr)) return;
     const id = String(pr.id || pr.returnNumber || "");
     if (id && seenDebitIds.has(id)) return;
@@ -470,19 +477,20 @@ export function compileGstData({
  * Filters compiled GST lines by date range, transaction type, rate, and search.
  */
 export function filterGstLines(lines = [], filters = {}) {
+  const safeLines = Array.isArray(lines) ? lines : [];
   const {
     from = "",
     to = "",
     transactionType = "All", // "All" | "Sale" | "Purchase"
     rate = "All", // "All" | number (e.g. 18) | string ("18%")
     search = "",
-  } = filters;
+  } = filters || {};
 
   const q = search.trim().toLowerCase();
   const rateFilterNum =
     rate === "All" || rate === "" ? null : extractTaxRateNumber(rate);
 
-  return lines.filter((line) => {
+  return safeLines.filter((line) => {
     if (!line) return false;
 
     // Date range filter
@@ -533,6 +541,7 @@ export function filterGstLines(lines = [], filters = {}) {
  * Aggregates filtered GST lines by GST rate and computes report summary metrics.
  */
 export function calculateGstRateMetrics(filteredLines = []) {
+  const safeLines = Array.isArray(filteredLines) ? filteredLines : [];
   let totalTaxable = 0;
   let totalCgst = 0;
   let totalSgst = 0;
@@ -547,7 +556,7 @@ export function calculateGstRateMetrics(filteredLines = []) {
   const rateTxSet = new Map();
   const globalTxSet = new Set();
 
-  filteredLines.forEach((line) => {
+  safeLines.forEach((line) => {
     const isNegative =
       line.transactionType === "Credit Note" ||
       line.transactionType === "Debit Note";
@@ -639,6 +648,7 @@ export function calculateGstRateMetrics(filteredLines = []) {
  * Calculates comprehensive GST summary for Sales, Purchases, and Overall Net difference.
  */
 export function compileGstSummary(filteredLines = []) {
+  const safeLines = Array.isArray(filteredLines) ? filteredLines : [];
   const salesSummary = {
     taxable: 0,
     cgst: 0,
@@ -662,7 +672,7 @@ export function compileGstSummary(filteredLines = []) {
   const saleTxIds = new Set();
   const purchaseTxIds = new Set();
 
-  filteredLines.forEach((line) => {
+  safeLines.forEach((line) => {
     const isSale =
       line.transactionType === "Sale" || line.transactionType === "Credit Note";
     const isPurchase =
@@ -739,9 +749,10 @@ export function compileGstSummary(filteredLines = []) {
  * Consolidates lines into transaction-level voucher records.
  */
 export function groupLinesByTransaction(filteredLines = []) {
+  const safeLines = Array.isArray(filteredLines) ? filteredLines : [];
   const map = new Map();
 
-  filteredLines.forEach((line) => {
+  safeLines.forEach((line) => {
     const key = `${line.transactionType}-${line.transactionId}`;
     if (!map.has(key)) {
       map.set(key, {

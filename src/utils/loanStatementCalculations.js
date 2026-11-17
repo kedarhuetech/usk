@@ -162,9 +162,10 @@ export function calculateLoanOpeningBalance(loans = [], fromDate = "", loanIdFil
  * Note: Interest and charges do not reduce or increase the principal balance!
  */
 export function computeRunningBalances(entries = [], initialOpeningBalance = 0) {
+  const safeEntries = Array.isArray(entries) ? entries : [];
   let running = roundMoney(initialOpeningBalance);
 
-  return entries.map((entry) => {
+  return safeEntries.map((entry) => {
     if (entry.transactionType === "Loan Received") {
       running = roundMoney(running + entry.principalAmount);
     } else if (entry.transactionType === "Principal Repayment") {
@@ -182,12 +183,13 @@ export function computeRunningBalances(entries = [], initialOpeningBalance = 0) 
  * Filters entries by date range, store, user, loan account, and search keyword.
  */
 export function filterLoanStatementEntries(entries = [], filters = {}) {
-  const { from = "", to = "", store = "All Stores", user = "All Users", loanId = "All", search = "" } = filters;
+  const safeEntries = Array.isArray(entries) ? entries : [];
+  const { from = "", to = "", store = "All Stores", user = "All Users", loanId = "All", search = "" } = filters || {};
   const fromYMD = parseYMD(from);
   const toYMD = parseYMD(to);
   const query = String(search || "").trim().toLowerCase();
 
-  return entries.filter((row) => {
+  return safeEntries.filter((row) => {
     // Loan filter
     if (loanId && loanId !== "All" && row.loanId !== loanId) return false;
 
