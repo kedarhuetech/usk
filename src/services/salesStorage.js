@@ -339,7 +339,13 @@ export function saveSaleInvoice(invoice, options = {}) {
       if (existingInvoice.batchMovementId) reverseBatchMovement(existingInvoice.batchMovementId, "sale");
       else applyBatchRowsToInventory(reversalRows, "add", { allowCreate: false });
     } else if (existingInvoice.stockAdjustedAt) {
-      const invItems = JSON.parse(window.localStorage.getItem(inventoryItemsStorageKey) || "[]");
+      let invItems = [];
+      try {
+        invItems = JSON.parse(window.localStorage.getItem(inventoryItemsStorageKey) || "[]");
+        if (!Array.isArray(invItems)) invItems = [];
+      } catch {
+        invItems = [];
+      }
       const restored = invItems.map((item) => {
         const matching = (existingInvoice.rows || []).filter((r) => r.sourceItemId === item.id || (!r.sourceItemId && (r.item || "").trim().toLowerCase() === (item.itemName || "").trim().toLowerCase()));
         if (!matching.length) return item;

@@ -307,22 +307,30 @@ export function calculateItemDetailMovements({
 /**
  * Calculates stock movements summary across all inventory items for the selected period.
  */
-export function calculateAllItemsSummary({
-  inventoryItems = [],
-  sales = [],
-  purchases = [],
-  saleReturns = [],
-  purchaseReturns = [],
-  adjustments = [],
-  from = "",
-  to = "",
-  saleUiActions = {},
-}) {
+export function calculateAllItemsSummary(params = {}) {
+  const {
+    inventoryItems = [],
+    sales = [],
+    purchases = [],
+    saleReturns = [],
+    purchaseReturns = [],
+    adjustments = [],
+    from = "",
+    to = "",
+    saleUiActions = {},
+  } = params || {};
   const byId = new Map();
   const byName = new Map();
   const byCode = new Map();
 
-  const itemsList = (inventoryItems || []).map((item) => {
+  const safeInventoryItems = Array.isArray(inventoryItems) ? inventoryItems : [];
+  const safeSales = Array.isArray(sales) ? sales : [];
+  const safePurchases = Array.isArray(purchases) ? purchases : [];
+  const safeSaleReturns = Array.isArray(saleReturns) ? saleReturns : [];
+  const safePurchaseReturns = Array.isArray(purchaseReturns) ? purchaseReturns : [];
+  const safeAdjustments = Array.isArray(adjustments) ? adjustments : [];
+
+  const itemsList = safeInventoryItems.map((item) => {
     const id = String(item.id || "").trim();
     const name = String(item.itemName || item.name || "").trim();
     const code = String(item.itemCode || item.code || "").trim();
@@ -371,7 +379,7 @@ export function calculateAllItemsSummary({
   };
 
   // 1. Sales
-  (sales || []).forEach((s) => {
+  safeSales.forEach((s) => {
     if (isRecordCancelled(s, saleUiActions)) return;
     const d = parseYMD(s.form?.invoiceDate || s.invoiceDate || s.date || s.createdAt);
     (s.rows || []).forEach((r) => {
@@ -387,7 +395,7 @@ export function calculateAllItemsSummary({
   });
 
   // 2. Sale Returns
-  (saleReturns || []).forEach((sr) => {
+  safeSaleReturns.forEach((sr) => {
     if (isRecordCancelled(sr)) return;
     const d = parseYMD(sr.date || sr.createdAt);
     (sr.rows || []).forEach((r) => {
@@ -403,7 +411,7 @@ export function calculateAllItemsSummary({
   });
 
   // 3. Purchases
-  (purchases || []).forEach((p) => {
+  safePurchases.forEach((p) => {
     if (isRecordCancelled(p)) return;
     const d = parseYMD(p.form?.billDate || p.form?.invoiceDate || p.billDate || p.date || p.createdAt);
     (p.rows || []).forEach((r) => {
@@ -419,7 +427,7 @@ export function calculateAllItemsSummary({
   });
 
   // 4. Purchase Returns
-  (purchaseReturns || []).forEach((pr) => {
+  safePurchaseReturns.forEach((pr) => {
     if (isRecordCancelled(pr)) return;
     const d = parseYMD(pr.date || pr.createdAt);
     (pr.rows || []).forEach((r) => {
@@ -435,7 +443,7 @@ export function calculateAllItemsSummary({
   });
 
   // 5. Adjustments
-  (adjustments || []).forEach((adj) => {
+  safeAdjustments.forEach((adj) => {
     const target = findItem(adj);
     if (!target) return;
     const d = parseYMD(adj.date || adj.createdAt);

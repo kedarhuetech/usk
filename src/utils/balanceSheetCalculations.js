@@ -6,16 +6,22 @@ const dateOf = (row) => parseYMD(row?.form?.invoiceDate || row?.form?.billDate |
 const live = (row) => !isVoided(row) && !["cancelled", "canceled", "void", "deleted"].includes(String(row?.status || "").toLowerCase());
 const cents = (value) => Math.round((n(value) + Number.EPSILON) * 100) / 100;
 
-export function calculateBalanceSheet({ transactions = {}, accounts = [], bankAccounts = [], bankTransactions = [], bankUnavailable = false, loans = [], asOfDate }) {
+export function calculateBalanceSheet(params = {}) {
+  const { transactions = {}, accounts = [], bankAccounts = [], bankTransactions = [], bankUnavailable = false, loans = [], asOfDate } = params || {};
+  const safeTransactions = transactions || {};
+  const safeAccounts = Array.isArray(accounts) ? accounts : [];
+  const safeBankAccounts = Array.isArray(bankAccounts) ? bankAccounts : [];
+  const safeBankTransactions = Array.isArray(bankTransactions) ? bankTransactions : [];
+  const safeLoans = Array.isArray(loans) ? loans : [];
   const asOf = parseYMD(asOfDate);
   const before = (row) => { const date = dateOf(row); return live(row) && date && (!asOf || date <= asOf); };
-  const sales = (transactions.sales || []).filter(before);
-  const purchases = (transactions.purchases || []).filter(before);
-  const saleReturns = (transactions.saleReturns || []).filter(before);
-  const purchaseReturns = [...(transactions.purchaseReturns || []), ...(transactions.purchaseDebitNotes || [])].filter(before);
-  const paymentsIn = (transactions.paymentIns || []).filter(before);
-  const paymentsOut = (transactions.paymentOuts || []).filter(before);
-  const expenses = (transactions.expenses || []).filter(before);
+  const sales = (safeTransactions.sales || []).filter(before);
+  const purchases = (safeTransactions.purchases || []).filter(before);
+  const saleReturns = (safeTransactions.saleReturns || []).filter(before);
+  const purchaseReturns = [...(safeTransactions.purchaseReturns || []), ...(safeTransactions.purchaseDebitNotes || [])].filter(before);
+  const paymentsIn = (safeTransactions.paymentIns || []).filter(before);
+  const paymentsOut = (safeTransactions.paymentOuts || []).filter(before);
+  const expenses = (safeTransactions.expenses || []).filter(before);
   const receiptByInvoice = new Map();
   for (const p of paymentsIn) { const id = p.linkedInvoiceId || p.invoiceId; if (id) receiptByInvoice.set(String(id), (receiptByInvoice.get(String(id)) || 0) + amount(p)); }
   const paidByBill = new Map();
@@ -43,42 +49,42 @@ export function calculateBalanceSheet({ transactions = {}, accounts = [], bankAc
     const paid = Array.isArray(row.payments) ? row.payments.reduce((value, payment) => value + n(payment.amount), 0) : n(row.paid ?? row.received);
     return sum + Math.max(0, total - paid);
   }, 0);
-  const loanRows = loans.filter((loan) => loan.status === "Active" && (!asOf || !loan.startDate || loan.startDate <= asOf)).map((loan) => {
+  const loanRows = safeLoans.filter((loan) => loan?.status === "Active" && (!asOf || !loan.startDate || loan.startDate <= asOf)).map((loan) => {
     const repaid = (loan.repayments || []).filter((repayment) => !asOf || repayment.paymentDate <= asOf).reduce((sum, repayment) => sum + n(repayment.principalPaid), 0);
     return { id: `loan:${loan.id}`, name: `Loan — ${loan.loanName || loan.lenderName || "Account"}`, amount: cents(Math.max(0, n(loan.originalAmount) - repaid)) };
   }).filter((loan) => loan.amount > 0);
 
-  const cashEntries = buildCashFlowEntries({ sales: transactions.sales || [], purchases: transactions.purchases || [], paymentIns: transactions.paymentIns || [], paymentOuts: transactions.paymentOuts || [], expenses: transactions.expenses || [], adjustments: transactions.cashAdjustments || [], bankTransactions: [], saleInvoiceUi: transactions.saleUi || {} });
+  const cashEntries = buildCashFlowEntries({ sales: safeTransactions.sales || [], purchases: safeTransactions.purchases || [], paymentIns: safeTransactions.paymentIns || [], paymentOuts: safeTransactions.paymentOuts || [], expenses: safeTransactions.expenses || [], adjustments: safeTransactions.cashAdjustments || [], bankTransactions: [], saleInvoiceUi: safeTransactions.saleUi || {} });
   const cashPortion = (entry) => {
-    if (Array.isArray(entry.raw?.payments) && entry.raw.payments.length) return entry.raw.payments.filter((part) => String(part.type || "").toLowerCase() === "cash").reduce((sum, part) => sum + n(part.amount), 0);
-    return String(entry.paymentMethod || "").trim().toLowerCase() === "cash" ? n(entry.cashIn) + n(entry.cashOut) : 0;
+    if (Array.isArray(entry?.raw?.payments) && entry.raw.payments.length) return entry.raw.payments.filter((part) => String(part?.type || "").toLowerCase() === "cash").reduce((sum, part) => sum + n(part?.amount), 0);
+    return String(entry?.paymentMethod || "").trim().toLowerCase() === "cash" ? n(entry.cashIn) + n(entry.cashOut) : 0;
   };
-  const cash = cents(cashEntries.filter((entry) => {
-    const d = parseYMD(entry.date); return d && (!asOf || d <= asOf) && !entry.isDuplicate;
-  }).reduce((sum, entry) => sum + (entry.cashIn > 0 ? cashPortion(entry) : 0) - (entry.cashOut > 0 ? cashPortion(entry) : 0), 0) - paymentsOut.filter((payment) => payment.linkedCreditNoteId).filter((payment) => !asOf || dateOf(payment) <= asOf).reduce((sum, payment) => {
-    const cashRefund = Array.isArray(payment.payments)
-      ? payment.payments.filter((part) => String(part.type || "").toLowerCase() === "cash").reduce((total, part) => total + n(part.amount), 0)
-      : String(payment.paymentType || "").toLowerCase().includes("cash") ? amount(payment) : 0;
+  const cash = cents((cashEntries || []).filter((entry) => {
+    const d = parseYMD(entry?.date); return d && (!asOf || d <= asOf) && !entry?.isDuplicate;
+  }).reduce((sum, entry) => sum + (entry.cashIn > 0 ? cashPortion(entry) : 0) - (entry.cashOut > 0 ? cashPortion(entry) : 0), 0) - paymentsOut.filter((payment) => payment?.linkedCreditNoteId).filter((payment) => !asOf || dateOf(payment) <= asOf).reduce((sum, payment) => {
+    const cashRefund = Array.isArray(payment?.payments)
+      ? payment.payments.filter((part) => String(part?.type || "").toLowerCase() === "cash").reduce((total, part) => total + n(part?.amount), 0)
+      : String(payment?.paymentType || "").toLowerCase().includes("cash") ? amount(payment) : 0;
     return sum + cashRefund;
   }, 0));
-  const bankRows = bankAccounts.map((account) => {
-    const openingDate = parseYMD(account.openingBalanceDate);
-    const opening = !openingDate || !asOf || openingDate <= asOf ? n(account.openingBalance) : 0;
-    const movement = bankTransactions.filter((transaction) => transaction.accountId === account.id && parseYMD(transaction.date) && (!asOf || parseYMD(transaction.date) <= asOf))
-      .reduce((sum, transaction) => sum + (transaction.type === "money-in" ? 1 : transaction.type === "money-out" ? -1 : 0) * n(transaction.amount), 0);
-    return { id: `bank:${account.id}`, name: `Bank — ${account.accountName || account.bankName || "Account"}`, amount: cents(opening + movement) };
+  const bankRows = safeBankAccounts.map((account) => {
+    const openingDate = parseYMD(account?.openingBalanceDate);
+    const opening = !openingDate || !asOf || openingDate <= asOf ? n(account?.openingBalance) : 0;
+    const movement = safeBankTransactions.filter((transaction) => transaction?.accountId === account?.id && parseYMD(transaction.date) && (!asOf || parseYMD(transaction.date) <= asOf))
+      .reduce((sum, transaction) => sum + (transaction?.type === "money-in" ? 1 : transaction?.type === "money-out" ? -1 : 0) * n(transaction?.amount), 0);
+    return { id: `bank:${account?.id}`, name: `Bank — ${account?.accountName || account?.bankName || "Account"}`, amount: cents(opening + movement) };
   });
 
-  const inventoryRows = (transactions.items || []).filter((item) => String(item.type || "product").toLowerCase() === "product" && !item.deleted && !item.isDeleted);
+  const inventoryRows = (safeTransactions.items || []).filter((item) => String(item?.type || "product").toLowerCase() === "product" && !item?.deleted && !item?.isDeleted);
   const missingCosts = [];
   const inventory = inventoryRows.reduce((sum, item) => {
-    const qty = n(item.stock ?? item.openingQuantity ?? item.quantity);
-    const cost = n(item.purchasePrice ?? item.atPrice);
-    if (qty > 0 && cost <= 0) missingCosts.push(item.itemName || item.name || item.id || "Unnamed item");
+    const qty = n(item?.stock ?? item?.openingQuantity ?? item?.quantity);
+    const cost = n(item?.purchasePrice ?? item?.atPrice);
+    if (qty > 0 && cost <= 0) missingCosts.push(item?.itemName || item?.name || item?.id || "Unnamed item");
     return sum + Math.max(0, qty) * Math.max(0, cost);
   }, 0);
 
-  const custom = accounts.filter((account) => !account.openingBalanceDate || !asOf || account.openingBalanceDate <= asOf);
+  const custom = safeAccounts.filter((account) => !account?.openingBalanceDate || !asOf || account.openingBalanceDate <= asOf);
   const assets = [
     { id: "cash", name: "Cash in Hand", amount: cash },
     ...bankRows,
@@ -125,10 +131,11 @@ export const balanceSheetAccountGroups = [
   { value: "currentLiability", label: "Current Liability" }, { value: "nonCurrentLiability", label: "Long-Term Liability" }, { value: "equity", label: "Owner Capital / Drawings / Retained Earnings" },
 ];
 
-export function validateBalanceSheetAccount(account) {
-  if (!String(account.name || "").trim()) return "Enter an account name.";
-  if (!balanceSheetAccountGroups.some((group) => group.value === account.group)) return "Select an account type.";
-  if (!Number.isFinite(Number(account.openingBalance)) || Number(account.openingBalance) < 0) return "Opening balance must be zero or more.";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(account.openingBalanceDate || ""))) return "Select the date this opening balance applies.";
+export function validateBalanceSheetAccount(account = {}) {
+  const safeAccount = account || {};
+  if (!String(safeAccount.name || "").trim()) return "Enter an account name.";
+  if (!balanceSheetAccountGroups.some((group) => group.value === safeAccount.group)) return "Select an account type.";
+  if (!Number.isFinite(Number(safeAccount.openingBalance)) || Number(safeAccount.openingBalance) < 0) return "Opening balance must be zero or more.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(safeAccount.openingBalanceDate || ""))) return "Select the date this opening balance applies.";
   return "";
 }
