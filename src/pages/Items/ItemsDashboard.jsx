@@ -438,10 +438,7 @@ function ItemsDashboard() {
   }, [refresh]);
   useEffect(() => {
     const reloadLocalData = () => {
-      const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
-      setItems(applyItemUiOverrides(currentItems));
-      setSales(getSaleInvoices());
-      setPurchases(getPurchaseBills());
+      void refresh();
     };
     window.addEventListener(businessDataChangedEvent, reloadLocalData);
     window.addEventListener("storage", reloadLocalData);

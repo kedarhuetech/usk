@@ -28,7 +28,8 @@ import Input from "../../components/Common/Input";
 import ImportPartiesModal from "./ImportPartiesModal";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { getPartyDeletionBlockReason, getParties } from "../../services/partiesStorage";
-import { loadBusinessParties, saveBusinessParty, deleteBusinessParty } from "../../services/businessRecords";
+import { loadBusinessParties, saveBusinessParty, deleteBusinessParty, loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords";
+import { transactionsDb } from "../../services/databaseRepository";
 import { buildUnifiedStatementHtml } from "../../services/unifiedPrintService.js";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
@@ -612,61 +613,43 @@ function PartyDetails() {
     setTimeout(() => setImportNotice(""), 3500);
   };
 
-  useEffect(() => {
+  const fetchAllFromDatabase = useCallback(async () => {
     try {
-      setParties(getParties());
-      setInvoices(getSaleInvoices());
-      setPurchases(getPurchaseBills());
-      const readLocalList = (key) => {
-        try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
-        catch { return []; }
-      };
-      setPartyActivity({
-        estimates: readLocalList("ledgerly:estimateQuotations.v1"),
-        proformas: readLocalList("ledgerly:proformaInvoices.v1"),
-        payments: readLocalList("ledgerly:paymentIns.v1"),
-        paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
-        creditNotes: readLocalList("ledgerly:saleReturns.v1"),
-        debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
-        saleOrders: readLocalList("ledgerly:saleOrders.v1"),
-        purchaseOrders: readLocalList("ledgerly:purchaseOrders.v1"),
-        saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
-      });
+      const [partiesList, salesList, purchasesList, allTxns] = await Promise.all([
+        loadBusinessParties().catch(() => []),
+        loadSalesInvoices().catch(() => []),
+        loadPurchaseBills().catch(() => []),
+        transactionsDb.listAll().catch(() => []),
+      ]);
 
-      // Live fetch directly from MySQL database
-      loadBusinessParties().then((list) => {
-        if (Array.isArray(list) && list.length > 0) setParties(list);
-      }).catch(() => {});
+      if (Array.isArray(partiesList) && partiesList.length > 0) setParties(partiesList);
+      if (Array.isArray(salesList)) setInvoices(salesList);
+      if (Array.isArray(purchasesList)) setPurchases(purchasesList);
+
+      const txns = Array.isArray(allTxns) ? allTxns : [];
+      setPartyActivity({
+        estimates: txns.filter((t) => t.transactionType === "estimate" || t.type === "estimate"),
+        proformas: txns.filter((t) => t.transactionType === "proforma" || t.type === "proforma"),
+        payments: txns.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in"),
+        paymentsOut: txns.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out"),
+        creditNotes: txns.filter((t) => t.transactionType === "credit_note" || t.type === "credit_note" || t.transactionType === "sale_return"),
+        debitNotes: txns.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note" || t.transactionType === "purchase_return"),
+        saleOrders: txns.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order"),
+        purchaseOrders: txns.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order"),
+        saleUi: {},
+      });
     } catch (error) {
-      setLoadError(error.message || "Could not load saved parties from this browser.");
+      setLoadError(error.message || "Could not load data from database.");
     }
   }, []);
 
-  const reloadLocalData = useCallback(() => {
-    setParties(getParties());
-    setInvoices(getSaleInvoices());
-    setPurchases(getPurchaseBills());
+  useEffect(() => {
+    fetchAllFromDatabase();
+  }, [fetchAllFromDatabase]);
 
-    // Live fetch directly from MySQL database
-    loadBusinessParties().then((list) => {
-      if (Array.isArray(list) && list.length > 0) setParties(list);
-    }).catch(() => {});
-    const readLocalList = (key) => {
-      try { const value = JSON.parse(window.localStorage.getItem(key) || "[]"); return Array.isArray(value) ? value : []; }
-      catch { return []; }
-    };
-    setPartyActivity({
-      estimates: readLocalList("ledgerly:estimateQuotations.v1"),
-      proformas: readLocalList("ledgerly:proformaInvoices.v1"),
-      payments: readLocalList("ledgerly:paymentIns.v1"),
-      paymentsOut: readLocalList("ledgerly:paymentOuts.v1"),
-      creditNotes: readLocalList("ledgerly:saleReturns.v1"),
-      debitNotes: readLocalList("ledgerly:purchaseReturns.v1"),
-      saleOrders: readLocalList("ledgerly:saleOrders.v1"),
-      purchaseOrders: readLocalList("ledgerly:purchaseOrders.v1"),
-      saleUi: (() => { try { return JSON.parse(window.localStorage.getItem("ledgerly:saleInvoiceUiActions.v1") || "{}"); } catch { return {}; } })(),
-    });
-  }, []);
+  const reloadLocalData = useCallback(() => {
+    fetchAllFromDatabase();
+  }, [fetchAllFromDatabase]);
 
   useEffect(() => {
     window.addEventListener(businessDataChangedEvent, reloadLocalData);

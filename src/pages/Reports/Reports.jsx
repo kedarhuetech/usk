@@ -29,6 +29,7 @@ import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewM
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { toast } from "../../components/Common/Toast.jsx";
 import { isReportGroupVisible, isReportVisible } from "../../config/reportVisibility.js";
@@ -398,14 +399,22 @@ function Reports({ defaultReport }) {
   const [purchases, setPurchases] = useState(() => readLocal(transactionStorageKeys.purchases));
   const [paymentIns, setPaymentIns] = useState(() => readLocal(transactionStorageKeys.paymentIns));
   const [paymentOuts, setPaymentOuts] = useState(() => readLocal(transactionStorageKeys.paymentOuts));
+  const [allDbTransactions, setAllDbTransactions] = useState([]);
 
   useEffect(() => {
     let active = true;
     const reload = () => {
-      setSales(readLocal(transactionStorageKeys.sales));
-      setPurchases(readLocal(transactionStorageKeys.purchases));
-      setPaymentIns(readLocal(transactionStorageKeys.paymentIns));
-      setPaymentOuts(readLocal(transactionStorageKeys.paymentOuts));
+      transactionsDb.listAll()
+        .then((records) => {
+          if (active && Array.isArray(records) && records.length) {
+            setAllDbTransactions(records);
+            setSales(records.filter((t) => t.transactionType === "sale" || t.type === "sale" || t.transactionType === "pos"));
+            setPurchases(records.filter((t) => t.transactionType === "purchase" || t.type === "purchase"));
+            setPaymentIns(records.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in"));
+            setPaymentOuts(records.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out"));
+          }
+        })
+        .catch(() => {});
       loadSalesInvoices()
         .then((records) => {
           if (active && Array.isArray(records) && records.length) setSales(records);
@@ -418,17 +427,7 @@ function Reports({ defaultReport }) {
         .catch(() => {});
     };
 
-    loadSalesInvoices()
-      .then((records) => {
-        if (active && Array.isArray(records) && records.length) setSales(records);
-      })
-      .catch(() => {});
-
-    loadPurchaseBills()
-      .then((records) => {
-        if (active && Array.isArray(records) && records.length) setPurchases(records);
-      })
-      .catch(() => {});
+    reload();
 
     window.addEventListener(businessDataChangedEvent, reload);
     window.addEventListener("storage", reload);
@@ -439,49 +438,33 @@ function Reports({ defaultReport }) {
     };
   }, []);
 
-  const allLocalTransactions = useMemo(
-    () => [
+  const allLocalTransactions = useMemo(() => {
+    if (allDbTransactions.length > 0) {
+      return allDbTransactions.map((row) => {
+        const rawType = (row.transactionType || row.type || "").toLowerCase();
+        let reportType = "Sale";
+        if (rawType === "purchase") reportType = "Purchase";
+        else if (rawType.includes("sale_order") || rawType.includes("sale order")) reportType = "Sale Order";
+        else if (rawType.includes("purchase_order") || rawType.includes("purchase order")) reportType = "Purchase Order";
+        else if (rawType.includes("challan")) reportType = "Delivery Challan";
+        else if (rawType.includes("credit") || rawType.includes("sale_return")) reportType = "Credit Note";
+        else if (rawType.includes("debit") || rawType.includes("purchase_return")) reportType = "Debit Note";
+        else if (rawType.includes("estimate") || rawType.includes("quotation")) reportType = "Estimate";
+        else if (rawType.includes("proforma")) reportType = "Proforma Invoice";
+        else if (rawType === "payment_in") reportType = "Payment-In";
+        else if (rawType === "payment_out") reportType = "Payment-Out";
+        else if (rawType === "expense") reportType = "Expense";
+        return { ...row, reportType };
+      });
+    }
+
+    return [
       ...sales.map((row) => ({ ...row, reportType: "Sale" })),
       ...purchases.map((row) => ({ ...row, reportType: "Purchase" })),
-      ...localList("ledgerly:saleOrders.v1").map((row) => ({
-        ...row,
-        reportType: "Sale Order",
-      })),
-      ...localList("ledgerly:purchaseOrders.v1").map((row) => ({
-        ...row,
-        reportType: "Purchase Order",
-      })),
-      ...localList("ledgerly:deliveryChallans.v1").map((row) => ({
-        ...row,
-        reportType: "Delivery Challan",
-      })),
-      ...localList("ledgerly:saleReturns.v1").map((row) => ({
-        ...row,
-        reportType: "Credit Note",
-      })),
-      ...paymentIns.map((row) => ({
-        ...row,
-        reportType: "Payment-In",
-      })),
-      ...paymentOuts.map((row) => ({
-        ...row,
-        reportType: "Payment-Out",
-      })),
-      ...localList("ledgerly:expenses.v1").map((row) => ({
-        ...row,
-        reportType: "Expense",
-      })),
-      ...localList("ledgerly:cashAdjustments.v1").map((row) => ({
-        ...row,
-        reportType: row.type || "Cash Adjustment",
-      })),
-      ...localList("ledgerly:estimateQuotations.v1").map((row) => ({
-        ...row,
-        reportType: "Estimate",
-      })),
-    ],
-    [sales, purchases, paymentIns, paymentOuts]
-  );
+      ...paymentIns.map((row) => ({ ...row, reportType: "Payment-In" })),
+      ...paymentOuts.map((row) => ({ ...row, reportType: "Payment-Out" })),
+    ];
+  }, [allDbTransactions, sales, purchases, paymentIns, paymentOuts]);
 
   const records = useMemo(() => {
     if (["Purchase", "Purchase Bills"].includes(activeReport)) {

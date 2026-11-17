@@ -998,9 +998,8 @@ export async function syncAllFromDatabase() {
 if (typeof window !== "undefined") {
   setStorageMode("database");
   setTimeout(async () => {
-    await autoMigrateLocalDataToMySQL().catch(() => {});
     await syncAllFromDatabase().catch(() => {});
-  }, 50);
+  }, 10);
 
   // Re-sync when browser window regains focus to keep tabs/devices in sync
   if (typeof window.addEventListener === "function") {
