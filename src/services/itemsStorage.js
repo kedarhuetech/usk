@@ -57,7 +57,7 @@ function hasValue(value) {
 
 // This helper handles type logic.
 function itemType(item = {}) {
-  return String(item.type || "product").toLowerCase();
+  return String(item.type || item.itemType || item.item_type || "product").toLowerCase();
 }
 
 // Makes the discount type value consistent.
@@ -150,7 +150,11 @@ export function normalizeInventoryItem(itemForm = {}) {
     ? String(itemForm.openingQuantity)
     : hasValue(itemForm.stock)
       ? String(itemForm.stock)
-      : "";
+      : hasValue(itemForm.currentStock)
+        ? String(itemForm.currentStock)
+        : hasValue(itemForm.openingStock)
+          ? String(itemForm.openingStock)
+          : "";
   const openingQuantity = hasValue(itemForm.openingQuantity)
     ? String(itemForm.openingQuantity)
     : batches.length
@@ -199,6 +203,7 @@ export function normalizeInventoryItem(itemForm = {}) {
     initialOpeningQuantity,
     openingQuantity,
     stock: openingQuantity || "0",
+    currentStock: Number(itemForm.currentStock ?? openingQuantity ?? 0),
     atPrice: itemForm.atPrice || "",
     asOfDate: itemForm.asOfDate || "",
     location: itemForm.location || "",

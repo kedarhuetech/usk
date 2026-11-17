@@ -158,7 +158,7 @@ function money(value) {
 
 // This helper handles result logic.
 function quantity(item) {
-  return Number(item?.openingQuantity ?? item?.stock ?? 0) || 0;
+  return Number(item?.currentStock ?? item?.current_stock ?? item?.stock ?? item?.openingQuantity ?? 0) || 0;
 }
 
 // This helper handles value logic.
@@ -459,11 +459,13 @@ function ItemsDashboard() {
     return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
   }, []);
 
-  const categories = useMemo(() => ["All categories", ...new Set(items.filter((item) => item.type === activeTab && item.category).map((item) => item.category))], [items, activeTab]);
+  const getItemType = (item) => String(item?.type || item?.itemType || item?.item_type || "product").toLowerCase();
+
+  const categories = useMemo(() => ["All categories", ...new Set(items.filter((item) => getItemType(item) === activeTab && item.category).map((item) => item.category))], [items, activeTab]);
   const filteredItems = useMemo(() => {
     const unique = new Map();
     items.filter((item) => {
-      if (item.type !== activeTab || activeTab === "units") return false;
+      if (getItemType(item) !== activeTab || activeTab === "units") return false;
       if (enableItemCategory && category !== "All categories" && item.category !== category) return false;
       if (lowStockOnly && activeTab === "product" && quantity(item) > Number(item.minimumStock || 0)) return false;
       const q = search.trim().toLowerCase();

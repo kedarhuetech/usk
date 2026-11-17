@@ -19,7 +19,9 @@ export async function loadBusinessItems() {
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
     try {
       const dbItems = await itemsDb.listAll();
-      if (Array.isArray(dbItems)) return dbItems;
+      if (Array.isArray(dbItems)) {
+        return dbItems.map((item) => normalizeInventoryItem(item));
+      }
     } catch (e) {
       console.warn("[MySQL] Falling back to local items:", e.message);
     }
