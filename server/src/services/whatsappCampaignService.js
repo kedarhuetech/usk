@@ -18,6 +18,7 @@ export function normalizeApprovedTemplate(template = {}) {
     category: template.category,
     status: template.status,
     headerFormat,
+    components: template.components || [],
     friendlyName: headerFormat === "IMAGE" ? "Poster image message" : headerFormat ? `${headerFormat.toLowerCase()} message` : "Text message",
     variables: extractTemplateVariables(template).map((variable) => ({
       key: `${variable.componentType}:${variable.index}`,
