@@ -219,7 +219,10 @@ const savePartyHandler = async (req, res) => {
     const partyType = (body.partyType || body.party_type || "customer").toLowerCase();
     const openingBalance = parseFloat(body.openingBalance ?? body.opening_balance ?? 0) || 0;
     const currentBalance = parseFloat(body.currentBalance ?? body.balance ?? body.current_balance ?? openingBalance) || 0;
-    const balanceType = body.balanceType || (currentBalance >= 0 ? "to_receive" : "to_pay");
+    const rawBalanceType = String(body.balanceType || body.balance_type || body.openingBalanceType || body.opening_balance_type || "").trim().toLowerCase().replace("-", "_");
+    const balanceType = rawBalanceType === "to_pay" || rawBalanceType === "to_receive"
+      ? rawBalanceType
+      : (partyType === "supplier" ? "to_pay" : (currentBalance >= 0 ? "to_receive" : "to_pay"));
     const creditLimit = parseFloat(body.creditLimit ?? body.credit_limit ?? 0) || 0;
 
     const billingStreet = body.billingStreet || (typeof body.billingAddress === "string" ? body.billingAddress : (body.address || null));
@@ -322,9 +325,10 @@ function mapPartyRow(row) {
     pan: row.pan || "",
     partyType: row.party_type || "customer",
     openingBalance: parseFloat(row.opening_balance) || 0,
+    openingBalanceType: (row.balance_type || (row.party_type === "supplier" ? "to_pay" : "to_receive")).replace("_", "-"),
     currentBalance: parseFloat(row.current_balance) || 0,
     balance: parseFloat(row.current_balance) || 0,
-    balanceType: row.balance_type || "to_receive",
+    balanceType: row.balance_type || (row.party_type === "supplier" ? "to_pay" : "to_receive"),
     creditLimit: parseFloat(row.credit_limit) || 0,
     billingAddress: row.billing_street || "",
     address: row.billing_street || "",

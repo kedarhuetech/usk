@@ -46,8 +46,17 @@ const getSummary = async (req, res) => {
     // 2. Receivables & Payables from parties
     const [partyBalances] = await pool.query(
       `SELECT 
-         COALESCE(SUM(CASE WHEN current_balance > 0 THEN current_balance ELSE 0 END), 0) AS totalReceivable,
-         COALESCE(SUM(CASE WHEN current_balance < 0 THEN ABS(current_balance) ELSE 0 END), 0) AS totalPayable,
+         COALESCE(SUM(CASE 
+           WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN 0
+           WHEN balance_type IN ('to_receive', 'to-receive') OR (party_type = 'customer' AND balance_type NOT IN ('to_pay', 'to-pay')) THEN ABS(current_balance)
+           WHEN current_balance > 0 THEN current_balance
+           ELSE 0
+         END), 0) AS totalReceivable,
+         COALESCE(SUM(CASE 
+           WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN ABS(current_balance)
+           WHEN current_balance < 0 THEN ABS(current_balance)
+           ELSE 0
+         END), 0) AS totalPayable,
          COUNT(CASE WHEN party_type = 'customer' THEN 1 END) AS customerCount,
          COUNT(CASE WHEN party_type = 'supplier' THEN 1 END) AS supplierCount
        FROM parties
