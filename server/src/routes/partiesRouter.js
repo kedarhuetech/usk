@@ -201,12 +201,12 @@ router.get("/:id/statement", async (req, res) => {
  * POST /api/parties
  * Creates or updates a party record in pure SQL columns
  */
-router.post("/", async (req, res) => {
+const savePartyHandler = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const partyName = (body.partyName || body.name || body.party_name || "").trim();
     if (!partyName) {
       return res.status(400).json({ success: false, message: "Party name is required." });
@@ -284,7 +284,10 @@ router.post("/", async (req, res) => {
     console.error("[Parties POST Error]", err);
     return res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.post("/", savePartyHandler);
+router.put("/:id", savePartyHandler);
 
 /**
  * DELETE /api/parties/:id

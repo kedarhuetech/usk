@@ -438,7 +438,7 @@ router.get("/:id", async (req, res) => {
  * POST /api/transactions
  * Atomically saves transaction header and all transaction_items child rows in pure SQL columns
  */
-router.post("/", async (req, res) => {
+const saveTransactionHandler = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -446,7 +446,7 @@ router.post("/", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const transactionType = (body.transactionType || body.type || "sale").toLowerCase();
     const documentNumber = String(
       body.documentNumber ||
@@ -673,7 +673,10 @@ router.post("/", async (req, res) => {
   } finally {
     conn.release();
   }
-});
+};
+
+router.post("/", saveTransactionHandler);
+router.put("/:id", saveTransactionHandler);
 
 /**
  * DELETE /api/transactions/:id
