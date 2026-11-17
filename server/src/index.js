@@ -42,7 +42,7 @@ import { initializeDatabaseSchema } from "./db/initSchema.js";
 import { syncTransactionsFromGrowth } from "../scripts/syncTransactionsFromGrowth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../.env"), quiet: true });
+dotenv.config({ path: path.resolve(__dirname, "../.env"), override: true, quiet: true });
 dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 dotenv.config({ quiet: true });
 

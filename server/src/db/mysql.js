@@ -6,9 +6,8 @@ import { fileURLToPath } from "node:url";
 import mysql from "mysql2/promise";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
-dotenv.config({ path: path.resolve(process.cwd(), "server/.env"), quiet: true });
-dotenv.config({ path: path.resolve(process.cwd(), ".env"), quiet: true }); 
+dotenv.config({ path: path.resolve(__dirname, "../../.env"), override: true, quiet: true });
+dotenv.config({ path: path.resolve(process.cwd(), "server/.env"), override: true, quiet: true }); 
 
 
 

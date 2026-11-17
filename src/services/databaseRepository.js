@@ -155,16 +155,18 @@ export const itemsDb = {
    */
   async listAll() {
     try {
-      const res = await apiRequest("/items?limit=200");
+      const res = await apiRequest("/items?limit=1000");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         setMemoryItems(list);
+        writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), list);
+        writeLocal(INVENTORY_ITEMS_KEY, list);
         return list;
       }
-      return [];
+      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
     } catch (err) {
-      console.warn("[MySQL] Items fetch notice:", err.message);
-      return [];
+      console.warn("[MySQL] Falling back to scoped local cache for items:", err.message);
+      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
     }
   },
 
@@ -184,19 +186,49 @@ export const itemsDb = {
       body: JSON.stringify(item),
     });
     const saved = res?.data || res;
-    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
     const updated = [saved, ...current.filter((i) => String(i.id) !== String(saved.id))];
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
+    writeLocal(INVENTORY_ITEMS_KEY, updated);
     return saved;
   },
 
   /**
    * Deletes an item from MySQL
    */
-  async remove(id) {
-    const res = await apiRequest(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
-    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
-    writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), current.filter((i) => String(i.id) !== String(id)));
+  async remove(id, options = {}) {
+    const query = options.deactivate ? "?deactivate=true" : "";
+    const res = await apiRequest(`/items/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const updated = options.deactivate || res?.action === "deactivated"
+      ? current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: false } : i))
+      : current.filter((i) => String(i.id) !== String(id));
+    writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
+    writeLocal(INVENTORY_ITEMS_KEY, updated);
+    return res;
+  },
+
+  /**
+   * Explicitly deactivates an item in MySQL
+   */
+  async deactivate(id) {
+    const res = await apiRequest(`/items/${encodeURIComponent(id)}/deactivate`, { method: "PATCH" });
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const updated = current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: false } : i));
+    writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
+    writeLocal(INVENTORY_ITEMS_KEY, updated);
+    return res;
+  },
+
+  /**
+   * Reactivates an item in MySQL
+   */
+  async reactivate(id) {
+    const res = await apiRequest(`/items/${encodeURIComponent(id)}/reactivate`, { method: "PATCH" });
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const updated = current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: true } : i));
+    writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
+    writeLocal(INVENTORY_ITEMS_KEY, updated);
     return res;
   },
 };

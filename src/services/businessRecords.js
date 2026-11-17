@@ -1,5 +1,5 @@
 import { apiRequest } from "./apiClient.js";
-import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem } from "./itemsStorage.js";
+import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem, writeItems } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice, saleInvoicesStorageKey } from "./salesStorage.js";
 import { getParties, saveParty, deleteParty } from "./partiesStorage.js";
 import { getPurchaseBills, savePurchaseBill, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
@@ -8,6 +8,7 @@ import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { itemsDb, partiesDb, transactionsDb } from "./databaseRepository.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
 
 // This helper handles id logic.
 function withId(record = {}) {
@@ -20,7 +21,9 @@ export async function loadBusinessItems() {
     try {
       const dbItems = await itemsDb.listAll();
       if (Array.isArray(dbItems)) {
-        return dbItems.map((item) => normalizeInventoryItem(item));
+        const normalized = dbItems.map((item) => normalizeInventoryItem(item));
+        writeItems(normalized);
+        return normalized;
       }
     } catch (e) {
       console.warn("[MySQL] Falling back to local items:", e.message);
@@ -45,18 +48,28 @@ export async function saveBusinessItem(value) {
   return saved;
 }
 
-// Deletes business item directly from MySQL database
-export async function deleteBusinessItem(itemId) {
-  deleteInventoryItem(itemId);
-  if (isDatabaseMode()) {
-    try {
-      await itemsDb.remove(itemId);
-    } catch (e) {
-      console.warn("[MySQL] Item delete failure:", e.message);
-      throw e;
-    }
+// Deletes business item directly from MySQL database with awaited persistence
+export async function deleteBusinessItem(itemOrId, options = {}) {
+  const target = typeof itemOrId === "object" ? itemOrId : null;
+  const itemId = target?.id || itemOrId;
+  if (!itemId) throw new Error("Item ID is required for deletion.");
+
+  let result = null;
+  if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
+    // 1. MySQL is the primary source of truth: Await remote deletion first.
+    // If referenced in transactions, backend throws 409 Conflict.
+    result = await itemsDb.remove(itemId, options);
   }
+
+  // 2. Synchronize local cache after backend confirms success
+  if (result?.action === "deactivated" || options?.deactivate) {
+    saveInventoryItem({ ...(target || { id: itemId }), isActive: false });
+  } else {
+    deleteInventoryItem(itemOrId, { skipRemoteSync: true });
+  }
+
   notifyBusinessDataChanged();
+  return result || { success: true };
 }
 
 // Loads business parties directly from MySQL database repository
@@ -133,6 +146,7 @@ export async function loadSalesInvoices() {
       if (Array.isArray(dbSales)) {
         const normalized = dbSales.map(normalizeInvoice);
         try {
+          writeTransactionCollection(transactionStorageKeys.sales, normalized);
           if (typeof window !== "undefined" && window.localStorage) {
             window.localStorage.setItem(saleInvoicesStorageKey, JSON.stringify(normalized));
           }
@@ -198,6 +212,7 @@ export async function loadPurchaseBills() {
       const dbPurchases = await transactionsDb.listByType("purchase");
       if (Array.isArray(dbPurchases)) {
         try {
+          writeTransactionCollection(transactionStorageKeys.purchases, dbPurchases);
           if (typeof window !== "undefined" && window.localStorage) {
             window.localStorage.setItem(purchaseBillsStorageKey, JSON.stringify(dbPurchases));
           }

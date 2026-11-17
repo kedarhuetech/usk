@@ -1,0 +1,114 @@
+{
+  "success": true,
+  "message": "Migration completed successfully.",
+  "report": {
+    "batchId": "batch_1794900848689_vy0v5",
+    "businessId": "demo-business",
+    "totalDiscovered": 125,
+    "alreadyPresent": 24,
+    "newlyMigrated": 93,
+    "updated": 0,
+    "skipped": 32,
+    "conflicts": [
+      {
+        "type": "transaction_document_collision",
+        "sourceId": "8e81a964-72fe-4b6c-a362-ef8dd3c3676a",
+        "existingId": "vyapar-sale-1-3",
+        "documentNumber": "3",
+        "transactionType": "sale"
+      },
+      {
+        "type": "dummy_document_number_skipped",
+        "sourceId": "2a693285-ca00-4e27-bdf1-330f2b8ed950",
+        "documentNumber": "0",
+        "transactionType": "purchase",
+        "reason": "Dummy doc number 0 skipped per preservation policy"
+      },
+      {
+        "type": "dummy_document_number_skipped",
+        "sourceId": "fb165572-da88-477f-8b7e-cbd124c8bce9",
+        "documentNumber": "0",
+        "transactionType": "purchase",
+        "reason": "Dummy doc number 0 skipped per preservation policy"
+      },
+      {
+        "type": "dummy_document_number_skipped",
+        "sourceId": "522748a6-e00e-44d0-b9ea-9234ef443e57",
+        "documentNumber": "0",
+        "transactionType": "purchase",
+        "reason": "Dummy doc number 0 skipped per preservation policy"
+      },
+      {
+        "type": "dummy_document_number_skipped",
+        "sourceId": "bca805b4-bdfc-4b67-aa49-b7bd997ab51f",
+        "documentNumber": "0",
+        "transactionType": "purchase",
+        "reason": "Dummy doc number 0 skipped per preservation policy"
+      },
+      {
+        "type": "dummy_document_number_skipped",
+        "sourceId": "ddee47e0-dff4-4012-85a2-7b75180877d6",
+        "documentNumber": "0",
+        "transactionType": "purchase",
+        "reason": "Dummy doc number 0 skipped per preservation policy"
+      },
+      {
+        "type": "dummy_document_number_skipped",
+        "sourceId": "90bfb5b2-1565-4312-b4b0-0e41f4944214",
+        "documentNumber": "0",
+        "transactionType": "purchase",
+        "reason": "Dummy doc number 0 skipped per preservation policy"
+      },
+      {
+        "type": "transaction_document_collision",
+        "sourceId": "test-est-901",
+        "existingId": "3e3a7174-8e7e-4930-8267-96d3664472cc",
+        "documentNumber": "TEST-EST-901",
+        "transactionType": "sale"
+      }
+    ],
+    "failed": [],
+    "categories": {
+      "parties": {
+        "discovered": 49,
+        "migrated": 47,
+        "skipped": 2
+      },
+      "items": {
+        "discovered": 28,
+        "migrated": 22,
+        "skipped": 6
+      },
+      "unitConversions": {
+        "discovered": 1,
+        "migrated": 1,
+        "skipped": 0
+      },
+      "transactions": {
+        "discovered": 46,
+        "migrated": 22,
+        "skipped": 24
+      },
+      "cheques": {
+        "discovered": 0,
+        "migrated": 0,
+        "skipped": 0
+      },
+      "loans": {
+        "discovered": 0,
+        "migrated": 0,
+        "skipped": 0
+      },
+      "jobWorks": {
+        "discovered": 1,
+        "migrated": 1,
+        "skipped": 0
+      },
+      "balanceSheetAccounts": {
+        "discovered": 0,
+        "migrated": 0,
+        "skipped": 0
+      }
+    }
+  }
+}

@@ -1,15 +1,21 @@
 import { itemsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 const INVENTORY_ITEMS_KEY = "ledgerly:inventoryItems.v1";
 export const csvImportedItemsStorageKey = "ledgerly:itemsCsvImports.v1";
 export const itemUiOverridesStorageKey = "ledgerly:itemsUiOverrides.v1";
 export const itemTransactionActionsStorageKey = "ledgerly:itemsTransactionActions.v1";
 
+export function getItemsStorageKey() {
+  return getScopedStorageKey(INVENTORY_ITEMS_KEY);
+}
+
 // This helper handles parse logic.
 function safeParse(value, fallback) {
   try {
-    return JSON.parse(value) || fallback;
+    const parsed = JSON.parse(value);
+    return parsed !== null && parsed !== undefined ? parsed : fallback;
   } catch {
     return fallback;
   }
@@ -24,20 +30,40 @@ function canUseStorage() {
 let memoryItems = [];
 
 export function setMemoryItems(list) {
-  if (Array.isArray(list)) memoryItems = list.map((item) => normalizeInventoryItem(item));
+  if (Array.isArray(list)) {
+    memoryItems = list.map((item) => normalizeInventoryItem(item));
+    if (canUseStorage()) {
+      writeItems(memoryItems);
+    }
+  }
 }
 
-// Reads items.
-function readItems() {
+// Reads items from scoped active business cache with fallback to legacy key or in-memory cache.
+export function readItems() {
+  if (canUseStorage()) {
+    const scopedKey = getItemsStorageKey();
+    const scopedData = safeParse(window.localStorage.getItem(scopedKey), null);
+    if (Array.isArray(scopedData) && scopedData.length > 0) {
+      return scopedData;
+    }
+    const fallbackData = safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), null);
+    if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+      return fallbackData;
+    }
+    return Array.isArray(scopedData) ? scopedData : (Array.isArray(fallbackData) ? fallbackData : []);
+  }
   if (memoryItems.length > 0) return memoryItems;
-  if (isDatabaseMode()) return [];
-  if (!canUseStorage()) return [];
-  return safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), []);
+  return [];
 }
 
-// Writes items.
-function writeItems(items) {
+// Writes items to in-memory cache, scoped business key, and unscoped key to maintain consistency across all modules.
+export function writeItems(items) {
+  if (Array.isArray(items)) {
+    memoryItems = items.map((item) => normalizeInventoryItem(item));
+  }
   if (!canUseStorage()) return;
+  const scopedKey = getItemsStorageKey();
+  window.localStorage.setItem(scopedKey, JSON.stringify(items));
   window.localStorage.setItem(INVENTORY_ITEMS_KEY, JSON.stringify(items));
   try {
     window.dispatchEvent(new CustomEvent("inventory-items-changed", { detail: items }));
@@ -137,7 +163,7 @@ export function normalizeInventoryItem(itemForm = {}) {
   const barcode = itemForm.barcode || itemForm.barCode || itemForm.itemBarcode || itemCode || "";
   const subCategory = itemForm.subCategory || itemForm.sub_category || "";
   const serialNumbers = normalizeSerialNumbers(itemForm.serialNumbers);
-  const hsn = itemForm.hsn || itemForm.sac || "";
+  const hsn = itemForm.hsn || itemForm.hsnCode || itemForm.sac || "";
   const wholesale = itemForm.wholesale || null;
   const batches = filledBatches(itemForm.batches || []);
   const isBatchTracked = itemForm.enableBatchTracking !== undefined
@@ -354,12 +380,12 @@ export function sameInventoryItemIdentity(left = {}, right = {}) {
     && normalizedName(left.category) === normalizedName(right.category));
 }
 
-export function deleteInventoryItem(itemOrId) {
+export function deleteInventoryItem(itemOrId, options = {}) {
   const target = typeof itemOrId === "object" ? itemOrId : null;
   const itemId = target?.id || itemOrId;
   const nextItems = readItems().filter((item) => item.id !== itemId && !(target && sameInventoryItemIdentity(item, target)));
   writeItems(nextItems);
-  if (isDatabaseMode() && itemId) {
+  if (!options?.skipRemoteSync && isDatabaseMode() && itemId) {
     itemsDb.remove(itemId).catch((err) => console.warn("[MySQL] Background item delete notice:", err.message));
   }
   return nextItems;

@@ -3,6 +3,7 @@ import {
   csvImportedItemsStorageKey,
   itemUiOverridesStorageKey,
 } from "./itemsStorage.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 let deleting = false;
 
@@ -26,11 +27,17 @@ function inspectBrowser() {
 }
 
 export function previewDeleteAllInventoryItems() {
+  if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
+    throw new Error("Bulk deletion of items is disabled in database mode to protect historical transaction integrity.");
+  }
   const { items, csvItems } = inspectBrowser();
   return { local: items.length + csvItems.length };
 }
 
 export function deleteAllInventoryItems(expectedLocalCount) {
+  if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
+    throw new Error("Bulk deletion of items is disabled in database mode to protect historical transaction integrity. Delete items individually or mark them inactive.");
+  }
   if (deleting) throw new Error("An item deletion is already in progress.");
   deleting = true;
   try {

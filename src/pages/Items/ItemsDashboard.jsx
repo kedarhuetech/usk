@@ -15,12 +15,13 @@ import {
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
-import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem, deleteBusinessItem } from "../../services/businessRecords";
+import { deleteBusinessItem, loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
+import { isDatabaseMode } from "../../services/dataStorageConfig";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { cancelInventoryAdjustment, getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
 import { getSaleReturns } from "../../services/saleReturnsStorage";
-import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOverridesStorageKey, deleteInventoryItem, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
+import { csvImportedItemsStorageKey, itemTransactionActionsStorageKey, itemUiOverridesStorageKey, getInventoryItems, sameInventoryItemIdentity, saveInventoryItem } from "../../services/itemsStorage";
 import { addCustomUnit, addUnitConversion, getUnitConversions, getUnits } from "../../services/unitsStorage";
 import { deleteAllInventoryItems, previewDeleteAllInventoryItems } from "../../services/inventoryItemBulkDelete";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
@@ -411,15 +412,18 @@ function ItemsDashboard() {
   const refresh = useCallback(async () => {
     setLoadError("");
     const showItems = (loadedItems) => {
-      const allItems = [...loadedItems, ...readCsvImportedItems()];
+      const allItems = [...(loadedItems || []), ...readCsvImportedItems()];
       setItems(applyItemUiOverrides(allItems));
       setSelectedId((current) => current || allItems[0]?.id || "");
     };
 
-    // Render browser-local items immediately; transaction APIs are independent.
+    // Render local items immediately if available
     showItems(getInventoryItems());
     try {
-      showItems(await loadBusinessItems());
+      const dbItems = await loadBusinessItems();
+      if (Array.isArray(dbItems) && dbItems.length > 0) {
+        showItems(dbItems);
+      }
     } catch (error) {
       setLoadError(error.message || "Could not load item data.");
     }
@@ -437,16 +441,36 @@ function ItemsDashboard() {
     return () => window.clearTimeout(timer);
   }, [refresh]);
   useEffect(() => {
-    const reloadLocalData = () => {
-      void refresh();
+    let isMounted = true;
+    const reloadData = async () => {
+      if (isDatabaseMode()) {
+        try {
+          const dbItems = await loadBusinessItems();
+          if (isMounted && Array.isArray(dbItems)) {
+            const allItems = [...dbItems, ...readCsvImportedItems()];
+            setItems(applyItemUiOverrides(allItems));
+          }
+        } catch {
+          if (isMounted) {
+            const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
+            setItems(applyItemUiOverrides(currentItems));
+          }
+        }
+      } else {
+        const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
+        setItems(applyItemUiOverrides(currentItems));
+      }
+      setSales(getSaleInvoices());
+      setPurchases(getPurchaseBills());
     };
-    window.addEventListener(businessDataChangedEvent, reloadLocalData);
-    window.addEventListener("storage", reloadLocalData);
-    window.addEventListener("inventory-items-changed", reloadLocalData);
+    window.addEventListener(businessDataChangedEvent, reloadData);
+    window.addEventListener("storage", reloadData);
+    window.addEventListener("inventory-items-changed", reloadData);
     return () => {
-      window.removeEventListener(businessDataChangedEvent, reloadLocalData);
-      window.removeEventListener("storage", reloadLocalData);
-      window.removeEventListener("inventory-items-changed", reloadLocalData);
+      isMounted = false;
+      window.removeEventListener(businessDataChangedEvent, reloadData);
+      window.removeEventListener("storage", reloadData);
+      window.removeEventListener("inventory-items-changed", reloadData);
     };
   }, []);
   useEffect(() => {
@@ -665,6 +689,11 @@ function ItemsDashboard() {
   };
 
   const openDeleteAll = async () => {
+    if (isDatabaseMode()) {
+      setNotice("Delete All Items is disabled in database mode to protect historical transaction integrity. Delete items individually or mark them inactive.");
+      toast.info("Delete All Items is disabled in database mode to protect historical transactions.");
+      return;
+    }
     setDeleteAllError("");
     setLoadError("");
     setDeleteAllLoading(true);
@@ -675,7 +704,7 @@ function ItemsDashboard() {
       setDeleteAllOpen(true);
     } catch (error) {
       setDeleteAllError(error.message || "Could not verify the items to delete.");
-      setLoadError(error.message || "Could not verify local item storage.");
+      setLoadError(error.message || "Could not verify the items.");
     } finally { setDeleteAllLoading(false); }
   };
 
@@ -690,7 +719,7 @@ function ItemsDashboard() {
       setItems(currentItems);
       setSelectedId(currentItems[0]?.id || "");
       setSelectedBulkIds([]);
-      setNotice(`Deleted ${result.deletedLocal} browser-local item records. Historical invoices and other business records were preserved.`);
+      setNotice(`Deleted ${result.deletedLocal}  item records. Historical invoices and other business records were preserved.`);
     } catch (error) {
       setDeleteAllError(error.message || "Items could not be deleted from browser storage.");
     } finally { setDeleteAllLoading(false); }
@@ -738,7 +767,15 @@ function ItemsDashboard() {
                 <button type="button" aria-label="More item actions" onClick={() => setMenuOpen((open) => !open)} className="grid h-9 w-7 place-items-center text-slate-500 hover:text-slate-900"><FiMoreVertical /></button>
                 {menuOpen && <div className="absolute right-0 top-9 z-40 w-60 rounded-md border border-slate-200 bg-white p-1.5 text-slate-800 shadow-xl">{[{ id: "inactive", label: "Bulk Inactive" }, { id: "active", label: "Bulk Active" }, { id: "code", label: "Bulk Assign Code" }, { id: "units", label: "Assign Units" }, { id: "update", label: "Bulk Update Items" }].map((action) => <button key={action.id} type="button" onClick={() => action.id === "update" ? (setMenuOpen(false), navigate("/utilities/update-items-in-bulk")) : startBulkAction(action.id)} className="block w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-100">{action.label}</button>)}</div>}
               </div>
-              <button type="button" onClick={openDeleteAll} disabled={deleteAllLoading} className="h-10 w-full basis-full rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{deleteAllLoading ? "Checking…" : "Delete All Items"}</button>
+              <button
+                type="button"
+                onClick={openDeleteAll}
+                disabled={deleteAllLoading || isDatabaseMode()}
+                title={isDatabaseMode() ? "Bulk deletion is disabled in database mode to protect historical transactions." : undefined}
+                className="h-10 w-full basis-full rounded-md border border-rose-200 px-3 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDatabaseMode() ? "Delete All Items (Disabled in DB Mode)" : deleteAllLoading ? "Checking…" : "Delete All Items"}
+              </button>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold uppercase text-slate-500"><span>Item</span><span>{activeTab === "product" ? "Quantity" : "Unit"}</span><button type="button" aria-label="Filter items" onClick={() => setFiltersOpen((open) => !open)} className={`grid h-7 w-7 place-items-center rounded ${filtersOpen ? "bg-blue-100 text-blue-700" : "hover:bg-slate-200"}`}><FiFilter /></button></div>
             {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3">{enableItemCategory && <label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>}{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" />Low stock only</label>}</div>}
@@ -766,21 +803,49 @@ function ItemsDashboard() {
                         setRowMenu("");
                         setConfirmDialog({
                           title: "Delete Item",
-                          message: `Permanently delete ${item.itemName} and matching local copies? This operation cannot be undone.`,
+                          message: `Permanently delete "${item.itemName}"? This operation cannot be undone.`,
                           confirmText: "Delete",
                           danger: true,
-                          onConfirm: () => {
-                            deleteBusinessItem(item.id || item);
-                            const remaining = items.filter((entry) => !sameInventoryItemIdentity(entry, item));
-                            const csvItems = readCsvImportedItems().filter((entry) => !sameInventoryItemIdentity(entry, item));
-                            window.localStorage.setItem(ITEM_CSV_IMPORTS_KEY, JSON.stringify(csvItems));
-                            setItems(remaining);
-                            if (remaining.some((entry) => entry.id === selectedId) === false) {
-                              setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || "");
-                            }
-                            setNotice(`${item.itemName} deleted.`);
-                            toast.success(`${item.itemName} deleted.`);
+                          onConfirm: async () => {
                             setConfirmDialog(null);
+                            try {
+                              const result = await deleteBusinessItem(item);
+                              await refresh();
+                              if (result?.action === "deactivated") {
+                                setNotice(`${item.itemName} has active transactions and was deactivated.`);
+                                toast.success(`${item.itemName} marked inactive.`);
+                              } else {
+                                const modeSuffix = isDatabaseMode() ? "" : " from local storage";
+                                setNotice(`${item.itemName} deleted successfully${modeSuffix}.`);
+                                toast.success(`${item.itemName} deleted.`);
+                              }
+                            } catch (error) {
+                              console.error("Item delete error:", error);
+                              if (error?.status === 409 || error?.code === "ITEM_REFERENCED" || error?.message?.includes("referenced")) {
+                                setConfirmDialog({
+                                  title: "Item Has Historical Transactions",
+                                  message: `${error.message}\n\nWould you like to mark "${item.itemName}" as inactive instead? Inactive items are hidden from new sales but preserve all historical accounting records.`,
+                                  confirmText: "Mark Inactive",
+                                  danger: false,
+                                  onConfirm: async () => {
+                                    setConfirmDialog(null);
+                                    try {
+                                      await deleteBusinessItem(item, { deactivate: true });
+                                      await refresh();
+                                      setNotice(`${item.itemName} marked as inactive.`);
+                                      toast.success(`${item.itemName} marked inactive.`);
+                                    } catch (deactError) {
+                                      toast.error(`Could not deactivate item: ${deactError.message}`);
+                                      setLoadError(deactError.message);
+                                    }
+                                  },
+                                  onCancel: () => setConfirmDialog(null),
+                                });
+                              } else {
+                                toast.error(`Could not delete item: ${error.message}`);
+                                setLoadError(`Failed to delete ${item.itemName}: ${error.message}`);
+                              }
+                            }
                           },
                           onCancel: () => setConfirmDialog(null),
                         });
@@ -1008,7 +1073,7 @@ function ItemsDashboard() {
       {adjustItem && <AdjustmentModal item={adjustItem} onClose={() => setAdjustItem(null)} onSave={saveAdjustment} enableBatchTracking={enableBatchTracking} />}
       {transactionDetails && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransactionDetails(null); }}><section className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{transactionDetails.type} Details</h2><p className="mt-1 text-sm text-slate-500">{transactionDetails.invoice !== "-" ? `Invoice ${transactionDetails.invoice}` : transactionDetails.name}</p></div><button type="button" aria-label="Close transaction details" onClick={() => setTransactionDetails(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header><div className="max-h-[70vh] space-y-5 overflow-auto p-5"><div className="grid gap-4 sm:grid-cols-3">{[["Name", transactionDetails.name], ["Date", dateLabel(transactionDetails.date)], ["Status", transactionDetails.status], ["Quantity", `${transactionDetails.quantity} ${transactionDetails.unit}`], ["Price / Unit", transactionDetails.price === "-" ? "-" : money(transactionDetails.price)], ["Amount", transactionDetails.amount === "-" ? "-" : money(transactionDetails.amount)]].map(([label, value]) => <div key={label} className="rounded-md bg-slate-50 p-3"><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 font-medium text-slate-800">{value || "-"}</p></div>)}</div>{transactionDetails.source?.rows?.length > 0 && <div className="overflow-x-auto"><h3 className="mb-2 font-semibold text-slate-800">Invoice items</h3><table className="w-full min-w-[560px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr>{["Item", "Quantity", "Unit", "Price", "Discount", "Tax", "Amount"].map((label) => <th key={label} className="px-3 py-2">{label}</th>)}</tr></thead><tbody>{transactionDetails.source.rows.filter((entry) => entry.item || entry.qty).map((entry, index) => <tr key={entry.id || index} className="border-b border-slate-100"><td className="px-3 py-2">{entry.item || "-"}</td><td className="px-3 py-2">{entry.calculated?.qty || entry.qty || "-"}</td><td className="px-3 py-2">{entry.unit || "-"}</td><td className="px-3 py-2">{money(entry.price)}</td><td className="px-3 py-2">{money(entry.calculated?.discount)}</td><td className="px-3 py-2">{money(entry.calculated?.tax)}</td><td className="px-3 py-2">{money(entry.calculated?.amount)}</td></tr>)}</tbody></table></div>}{transactionDetails.source?.note && <p className="text-sm text-slate-600">Note: {transactionDetails.source.note}</p>}</div><footer className="flex justify-end border-t border-slate-200 px-5 py-3"><Button onClick={() => setTransactionDetails(null)} className="bg-slate-100 text-slate-700">Close</Button></footer></section></div>}
       {transactionHistory && <Modal title="Transaction History" onClose={() => setTransactionHistory(null)}><div className="space-y-3 p-5 text-sm text-slate-700"><p><b>Type:</b> {transactionHistory.type}</p><p><b>Invoice:</b> {transactionHistory.invoice}</p><p><b>Recorded:</b> {dateLabel(transactionHistory.date)}</p><p><b>Status:</b> {transactionHistory.status}</p><p className="text-slate-500">Local changes made from this menu are stored in this browser. Source invoice records are unchanged.</p><div className="flex justify-end"><Button onClick={() => setTransactionHistory(null)} className="bg-slate-100 text-slate-700">Close</Button></div></div></Modal>}
-      {deleteAllOpen && <Modal title="Delete All Items" onClose={() => { if (!deleteAllLoading) { setDeleteAllOpen(false); setDeleteAllError(""); } }}><div className="space-y-4 p-5"><p className="text-sm text-slate-700">This will permanently remove <b>{deleteAllCount?.local ?? 0} browser-local item records</b>.</p><div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This operation cannot be undone unless a backup exists. Historical invoices, purchase bills, payments, parties, reports and shared attachments will be preserved.</div><label className="block text-sm font-medium text-slate-700">Type <b>DELETE ALL ITEMS</b> to continue<input autoFocus value={deleteAllPhrase} onChange={(event) => setDeleteAllPhrase(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" /></label>{deleteAllError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{deleteAllError}</p>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button disabled={deleteAllLoading} onClick={() => setDeleteAllOpen(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button disabled={deleteAllPhrase !== "DELETE ALL ITEMS" || deleteAllLoading} onClick={confirmDeleteAll} className="bg-rose-600 text-white disabled:cursor-not-allowed disabled:opacity-50">{deleteAllLoading ? "Deleting…" : "Delete All Items"}</Button></div></div></Modal>}
+      {deleteAllOpen && <Modal title="Delete All Items" onClose={() => { if (!deleteAllLoading) { setDeleteAllOpen(false); setDeleteAllError(""); } }}><div className="space-y-4 p-5"><p className="text-sm text-slate-700">This will permanently remove <b>{deleteAllCount?.local ?? 0} item records</b>.</p><div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">This operation cannot be undone unless a backup exists. Historical invoices, purchase bills, payments, parties, reports and shared attachments will be preserved.</div><label className="block text-sm font-medium text-slate-700">Type <b>DELETE ALL ITEMS</b> to continue<input autoFocus value={deleteAllPhrase} onChange={(event) => setDeleteAllPhrase(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" /></label>{deleteAllError && <p role="alert" className="rounded border border-rose-200 bg-rose-50 p-2 text-sm text-rose-700">{deleteAllError}</p>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button disabled={deleteAllLoading} onClick={() => setDeleteAllOpen(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button disabled={deleteAllPhrase !== "DELETE ALL ITEMS" || deleteAllLoading} onClick={confirmDeleteAll} className="bg-rose-600 text-white disabled:cursor-not-allowed disabled:opacity-50">{deleteAllLoading ? "Deleting…" : "Delete All Items"}</Button></div></div></Modal>}
       {bulkSelectionOpen && <Modal title={bulkAction === "inactive" ? "Select Items to Inactivate" : bulkAction === "active" ? "Select Items to Activate" : bulkAction === "code" ? "Select Items for Code Assignment" : bulkAction === "units" ? "Select Items for Unit Assignment" : "Select Items to Bulk Update"} onClose={() => { setBulkSelectionOpen(false); setBulkAction(""); setSelectedBulkIds([]); }}><div className="space-y-4 p-5"><p className="text-sm text-slate-500">Choose the items this action should affect.</p><label className="flex cursor-pointer items-center gap-2 border-b border-slate-100 pb-3 text-sm font-semibold text-slate-700"><input type="checkbox" checked={filteredItems.length > 0 && filteredItems.every((item) => selectedBulkIds.includes(item.id))} onChange={(event) => setSelectedBulkIds(event.target.checked ? filteredItems.map((item) => item.id) : [])} className="h-4 w-4 accent-blue-600" />Select all shown items</label><div className="max-h-72 space-y-1 overflow-y-auto">{filteredItems.map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-3 rounded px-2 py-2.5 text-sm hover:bg-slate-50"><input type="checkbox" checked={selectedBulkIds.includes(item.id)} onChange={(event) => setSelectedBulkIds((current) => event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id))} className="h-4 w-4 accent-blue-600" /><span className="min-w-0 flex-1 truncate font-medium text-slate-700">{item.itemName}</span><span className="text-xs text-slate-400">{item.itemCode || "No code"}</span></label>)}</div><div className="flex items-center justify-between border-t border-slate-100 pt-4"><span className="text-sm text-slate-500">{selectedBulkItems.length} selected</span><div className="flex gap-2"><Button onClick={() => { setBulkSelectionOpen(false); setBulkAction(""); setSelectedBulkIds([]); }} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={continueBulkSelection} disabled={!selectedBulkItems.length} className="bg-blue-600 text-white">Continue</Button></div></div></div></Modal>}
       {bulkAction && !bulkSelectionOpen && <Modal title={bulkAction === "code" ? "Bulk Assign Code" : bulkAction === "units" ? "Assign Units" : "Bulk Update Items"} onClose={() => { setBulkAction(""); setSelectedBulkIds([]); }}><div className="space-y-4 p-5"><p className="text-sm text-slate-500">This action applies to {selectedBulkItems.length} selected {activeTab}{selectedBulkItems.length === 1 ? "" : "s"} and is saved only in this browser.</p>{bulkAction === "code" && <div className="max-h-72 space-y-3 overflow-y-auto">{selectedBulkItems.map((item) => <label key={item.id} className="block text-sm font-medium text-slate-600">{item.itemName}<input value={bulkCodes[item.id] || ""} onChange={(event) => setBulkCodes((current) => ({ ...current, [item.id]: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder={`Unique code for ${item.itemName}`} /></label>)}</div>}{bulkAction === "units" && <label className="block text-sm font-medium text-slate-600">Set the same unit for all selected items<select value={bulkUnit} onChange={(event) => setBulkUnit(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 bg-white px-3"><option value="">Choose a unit</option>{units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>}{bulkAction === "update" && <div className="space-y-3"><label className="block text-sm font-medium text-slate-600">Sale price<input value={bulkFields.salePrice} onChange={(event) => setBulkFields((current) => ({ ...current, salePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Purchase price<input value={bulkFields.purchasePrice} onChange={(event) => setBulkFields((current) => ({ ...current, purchasePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Category<input value={bulkFields.category} onChange={(event) => setBulkFields((current) => ({ ...current, category: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label></div>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button onClick={() => { setBulkAction(""); setSelectedBulkIds([]); }} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={saveBulkAction} disabled={(bulkAction === "units" && !bulkUnit) || (bulkAction === "code" && selectedBulkItems.some((item) => !String(bulkCodes[item.id] || "").trim()))} className="bg-blue-600 text-white">Apply</Button></div></div></Modal>}
       {unitModal && <Modal title="Add Unit" onClose={() => setUnitModal(false)}><div className="space-y-4 p-5"><label className="block text-sm font-semibold text-slate-600">Unit name<input autoFocus value={unitName} onChange={(event) => setUnitName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") createUnit(); }} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="e.g. Carton" /></label><div className="flex justify-end gap-2"><Button onClick={() => setUnitModal(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={createUnit} className="bg-blue-600 text-white">Save Unit</Button></div></div></Modal>}
