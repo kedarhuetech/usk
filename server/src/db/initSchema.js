@@ -169,7 +169,7 @@ export async function initializeDatabaseSchema() {
 
     // 4. Parties Table (Customers & Suppliers with discrete address and balance columns)
     `CREATE TABLE IF NOT EXISTS parties (
-      id VARCHAR(64) PRIMARY KEY,
+      id VARCHAR(64) NOT NULL,
       business_id VARCHAR(64) NOT NULL DEFAULT 'default',
       party_name VARCHAR(255) NOT NULL,
       phone VARCHAR(32),
@@ -192,6 +192,7 @@ export async function initializeDatabaseSchema() {
       is_active TINYINT(1) DEFAULT 1,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id, business_id),
       INDEX idx_parties_biz (business_id),
       INDEX idx_parties_name (business_id, party_name),
       INDEX idx_parties_phone (business_id, phone),
@@ -450,7 +451,7 @@ export async function initializeDatabaseSchema() {
       business_id VARCHAR(64) NOT NULL DEFAULT 'default',
       account_name VARCHAR(255) NOT NULL,
       lender_name VARCHAR(255) NOT NULL,
-      account_number VARCHAR(100) NOT NULL,
+      account_number VARCHAR(100) DEFAULT '',
       loan_type VARCHAR(50) DEFAULT 'Term Loan',
       principal_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
       current_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -667,7 +668,8 @@ export async function initializeDatabaseSchema() {
       `INSERT IGNORE INTO parties (
         id, business_id, party_name, gstin, party_type, opening_balance, current_balance, balance_type
       ) VALUES
-        ('933f31db-61eb-4c2b-a3d1-2c862c8fc888', 'local-development', 'rt fpharma', '987654567', 'customer', 0.00, 0.00, 'to_receive');`
+        ('933f31db-61eb-4c2b-a3d1-2c862c8fc888', 'local-development', 'rt fpharma', '987654567', 'customer', 0.00, 0.00, 'to_receive'),
+        ('933f31db-61eb-4c2b-a3d1-2c862c8fc888', 'demo-business', 'rt fpharma', '987654567', 'customer', 0.00, 0.00, 'to_receive');`
     );
   } catch {}
 

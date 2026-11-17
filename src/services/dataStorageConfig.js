@@ -35,8 +35,48 @@ export function isDatabaseMode() {
   return getStorageMode() === "database";
 }
 
+export function purgeObsoleteLocalStorage() {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const keysToRemove = [
+      "ledgerly:parties.v1",
+      "ledgerly:inventoryItems.v1",
+      "ledgerly:saleInvoices.v1",
+      "ledgerly:purchaseBills.v1",
+      "ledgerly:paymentIns.v1",
+      "ledgerly:paymentOuts.v1",
+      "ledgerly:estimateQuotations.v1",
+      "ledgerly:proformaInvoices.v1",
+      "ledgerly:deliveryChallans.v1",
+      "ledgerly:expenses.v1",
+      "ledgerly:purchaseReturns.v1",
+      "ledgerly:saleReturns.v1",
+      "ledgerly:saleOrders.v1",
+      "ledgerly:purchaseOrders.v1",
+      "ledgerly:saleInvoiceUiActions.v1",
+      "ledgerly:serviceReminderRecords.v1",
+      "ledgerly:bankAccounts.v1",
+      "ledgerly:csvImportedItems.v1",
+    ];
+    for (const key of keysToRemove) {
+      window.localStorage.removeItem(key);
+    }
+    const allKeys = Object.keys(window.localStorage);
+    for (const k of allKeys) {
+      if (k.startsWith("ledgerly:") && !k.includes("storageMode") && !k.includes("appSettings") && !k.includes("companyProfile")) {
+        window.localStorage.removeItem(k);
+      }
+    }
+  } catch (e) {
+    console.warn("Could not purge obsolete localStorage:", e);
+  }
+}
+
 // Global browser helpers for seamless developer toggle
 if (typeof window !== "undefined") {
   window.__getStorageMode = getStorageMode;
   window.__setStorageMode = setStorageMode;
+  window.__purgeObsoleteLocalStorage = purgeObsoleteLocalStorage;
+  // Automatically purge obsolete local storage on startup so only live database is used
+  purgeObsoleteLocalStorage();
 }

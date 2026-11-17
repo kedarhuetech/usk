@@ -10,6 +10,7 @@ import { loadPurchaseBills } from "../../services/businessRecords";
 import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentOuts } from "../../services/transactionRepository.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (value) => {
@@ -73,10 +74,11 @@ export default function PurchaseBills() {
       message: `Delete purchase bill ${bill.form?.invoiceNumber || bill.invoiceNumber || ""}?`,
       confirmText: "Delete",
       confirmColor: "red",
-      onConfirm: () => {
+      onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         try {
           refresh(records.filter((entry) => entry.id !== bill.id));
+          await transactionsDb.remove(bill.id);
           setMenuId("");
           toast.success("Purchase bill deleted.");
         } catch (error) {
@@ -85,10 +87,25 @@ export default function PurchaseBills() {
       },
     });
   };
-  const duplicate = (bill) => {
-    const copy = { ...bill, id: `purchase-${Date.now()}`, invoiceId: `purchase-${Date.now()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), form: { ...bill.form, invoiceNumber: String(records.length + 1) } };
+  const duplicate = async (bill) => {
+    const newId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `purchase-${Date.now()}`;
+    const copy = {
+      ...bill,
+      id: newId,
+      invoiceId: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      form: { ...bill.form, invoiceNumber: String(records.length + 1) },
+      invoiceNumber: String(records.length + 1),
+      documentNumber: String(records.length + 1),
+    };
     refresh([savePurchaseBill(copy), ...records]);
-    toast.success("Purchase bill duplicated.");
+    try {
+      await transactionsDb.save(copy);
+      toast.success("Purchase bill duplicated.");
+    } catch {
+      toast.success("Purchase bill duplicated locally.");
+    }
     setMenuId("");
   };
   const print = () => setPrintModalOpen(true);

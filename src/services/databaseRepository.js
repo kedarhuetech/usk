@@ -16,7 +16,9 @@
 import { apiRequest } from "./apiClient.js";
 import { getStorageMode, setStorageMode } from "./dataStorageConfig.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
-import { transactionStorageKeys } from "./transactionRepository.js";
+import { transactionStorageKeys, setMemoryCollection } from "./transactionRepository.js";
+import { setMemoryParties } from "./partiesStorage.js";
+import { setMemoryItems } from "./itemsStorage.js";
 import { getActiveBusinessId, getScopedStorageKey } from "../config/businessConfig.js";
 
 // Storage keys for local caching & migration
@@ -82,13 +84,13 @@ export const partiesDb = {
       const res = await apiRequest("/parties?limit=200");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
-        writeLocal(getScopedStorageKey(PARTIES_KEY), list);
+        setMemoryParties(list);
         return list;
       }
-      return readLocal(getScopedStorageKey(PARTIES_KEY), []);
+      return [];
     } catch (err) {
-      console.warn("[MySQL] Falling back to scoped local cache for parties:", err.message);
-      return readLocal(getScopedStorageKey(PARTIES_KEY), []);
+      console.warn("[MySQL] Parties fetch notice:", err.message);
+      return [];
     }
   },
 
@@ -156,13 +158,13 @@ export const itemsDb = {
       const res = await apiRequest("/items?limit=200");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
-        writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), list);
+        setMemoryItems(list);
         return list;
       }
-      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
+      return [];
     } catch (err) {
-      console.warn("[MySQL] Falling back to scoped local cache for items:", err.message);
-      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
+      console.warn("[MySQL] Items fetch notice:", err.message);
+      return [];
     }
   },
 
@@ -256,26 +258,26 @@ export const transactionsDb = {
         const saleOrders = list.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order");
         const purchaseOrders = list.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order");
 
-        if (sales.length > 0) writeLocal(SALE_INVOICES_KEY, sales);
-        if (purchases.length > 0) writeLocal(PURCHASE_BILLS_KEY, purchases);
-        if (paymentIns.length > 0) writeLocal(transactionStorageKeys.paymentIns, paymentIns);
-        if (paymentOuts.length > 0) writeLocal(transactionStorageKeys.paymentOuts, paymentOuts);
+        if (sales.length > 0) setMemoryCollection(SALE_INVOICES_KEY, sales);
+        if (purchases.length > 0) setMemoryCollection(PURCHASE_BILLS_KEY, purchases);
+        if (paymentIns.length > 0) setMemoryCollection(transactionStorageKeys.paymentIns, paymentIns);
+        if (paymentOuts.length > 0) setMemoryCollection(transactionStorageKeys.paymentOuts, paymentOuts);
         if (expenses.length > 0) {
-          writeLocal(transactionStorageKeys.expenses, expenses);
-          writeLocal("ledgerly:expenses.v1", expenses);
+          setMemoryCollection(transactionStorageKeys.expenses, expenses);
+          setMemoryCollection("ledgerly:expenses.v1", expenses);
         }
-        if (estimates.length > 0) writeLocal("ledgerly:estimateQuotations.v1", estimates);
-        if (proformas.length > 0) writeLocal("ledgerly:proformaInvoices.v1", proformas);
-        if (challans.length > 0) writeLocal("ledgerly:deliveryChallans.v1", challans);
-        if (debitNotes.length > 0) writeLocal("ledgerly:purchaseReturns.v1", debitNotes);
-        if (creditNotes.length > 0) writeLocal("ledgerly:saleReturns.v1", creditNotes);
-        if (saleOrders.length > 0) writeLocal("ledgerly:saleOrders.v1", saleOrders);
-        if (purchaseOrders.length > 0) writeLocal("ledgerly:purchaseOrders.v1", purchaseOrders);
+        if (estimates.length > 0) setMemoryCollection("ledgerly:estimateQuotations.v1", estimates);
+        if (proformas.length > 0) setMemoryCollection("ledgerly:proformaInvoices.v1", proformas);
+        if (challans.length > 0) setMemoryCollection("ledgerly:deliveryChallans.v1", challans);
+        if (debitNotes.length > 0) setMemoryCollection("ledgerly:purchaseReturns.v1", debitNotes);
+        if (creditNotes.length > 0) setMemoryCollection("ledgerly:saleReturns.v1", creditNotes);
+        if (saleOrders.length > 0) setMemoryCollection("ledgerly:saleOrders.v1", saleOrders);
+        if (purchaseOrders.length > 0) setMemoryCollection("ledgerly:purchaseOrders.v1", purchaseOrders);
         return list;
       }
       return [];
     } catch (err) {
-      console.warn("[MySQL] Falling back to local cache for transactions:", err.message);
+      console.warn("[MySQL] Transactions fetch notice:", err.message);
       return [];
     }
   },
@@ -998,9 +1000,8 @@ export async function syncAllFromDatabase() {
 if (typeof window !== "undefined") {
   setStorageMode("database");
   setTimeout(async () => {
-    await autoMigrateLocalDataToMySQL().catch(() => {});
     await syncAllFromDatabase().catch(() => {});
-  }, 50);
+  }, 10);
 
   // Re-sync when browser window regains focus to keep tabs/devices in sync
   if (typeof window.addEventListener === "function") {

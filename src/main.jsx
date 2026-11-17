@@ -4,11 +4,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
-import { ensureLocalTestData } from './services/localTransactionTestData.js'
 import { applyScreenZoom, checkAndRunAutoBackup, getAppSettings } from './services/appSettingsStorage.js'
 import { syncAllFromDatabase } from './services/databaseRepository.js'
 
-ensureLocalTestData();
 syncAllFromDatabase().catch(() => {});
 try {
   applyScreenZoom(getAppSettings().screenZoom);

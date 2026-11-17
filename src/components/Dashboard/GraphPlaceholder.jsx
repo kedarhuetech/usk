@@ -4,6 +4,7 @@ import { FiArrowUpRight, FiCalendar, FiChevronDown, FiTrendingUp } from "react-i
 import Card from "../Common/Card";
 import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { saleInvoicesStorageKey } from "../../services/salesStorage.js";
+import { loadSalesInvoices } from "../../services/businessRecords.js";
 
 const PERIODS = ["This Month", "Last 30 Days", "This Week", "This Year"];
 
@@ -21,7 +22,8 @@ function parseYMD(val) {
 }
 
 function parseInvoiceDate(invoice) {
-  const value = invoice.form?.invoiceDate || invoice.invoiceDate || invoice.date || invoice.createdAt;
+  if (!invoice) return null;
+  const value = invoice.transactionDate || invoice.transaction_date || invoice.invoiceDate || invoice.form?.invoiceDate || invoice.date || invoice.createdAt;
   if (!value) return null;
   const ymd = parseYMD(value);
   if (!ymd) return null;
@@ -30,11 +32,13 @@ function parseInvoiceDate(invoice) {
 }
 
 function parseInvoiceAmount(invoice) {
+  if (!invoice) return 0;
   const amount = Number(
+    invoice.totalAmount ??
+    invoice.total_amount ??
     invoice.totals?.finalTotal ??
     invoice.totals?.grandTotal ??
     invoice.totals?.amount ??
-    invoice.totalAmount ??
     invoice.total ??
     invoice.amount ??
     0
@@ -71,21 +75,37 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
 
   // Fetch sales if not provided via summary or refresh on businessDataChanged
   useEffect(() => {
-    const updateSales = () => {
+    let active = true;
+
+    if (Array.isArray(summary?.activeSales) && summary.activeSales.length > 0) {
+      setLocalSales(summary.activeSales);
+      setSalesLoading(false);
+      return;
+    }
+
+    const updateSales = async () => {
+      setSalesLoading(true);
       try {
-        const raw = window.localStorage.getItem(saleInvoicesStorageKey);
-        const invoices = raw == null ? [] : JSON.parse(raw);
-        if (!Array.isArray(invoices) || invoices.some((invoice) => !invoice || typeof invoice !== "object" || Array.isArray(invoice))) {
-          throw new Error("Saved sales invoice data is not a valid list.");
+        const invoices = await loadSalesInvoices();
+        if (active) {
+          setLocalSales(Array.isArray(invoices) ? invoices : []);
+          setSalesError("");
         }
-        invoices.forEach(parseInvoiceAmount);
-        setLocalSales(invoices || []);
-        setSalesError("");
       } catch (error) {
-        setLocalSales([]);
-        setSalesError(error.message || "Could not read saved sales invoices.");
+        if (active) {
+          try {
+            const raw = window.localStorage.getItem(saleInvoicesStorageKey);
+            const fallback = raw ? JSON.parse(raw) : [];
+            setLocalSales(Array.isArray(fallback) ? fallback : []);
+          } catch {
+            setLocalSales([]);
+          }
+          setSalesError(error.message || "Could not read saved sales invoices.");
+        }
       } finally {
-        setSalesLoading(false);
+        if (active) {
+          setSalesLoading(false);
+        }
       }
     };
     updateSales();
@@ -93,18 +113,22 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
     const onStorage = (event) => { if (event.key === saleInvoicesStorageKey) updateSales(); };
     window.addEventListener("storage", onStorage);
     return () => {
+      active = false;
       window.removeEventListener(businessDataChangedEvent, updateSales);
       window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [summary?.activeSales]);
 
-  // Active sales list: prefer summary.activeSales if available, otherwise localSales
+  // Active sales list: prefer summary.activeSales if available and populated, otherwise localSales
   const sales = useMemo(() => {
-    if (summary?.activeSales && Array.isArray(summary.activeSales)) {
+    if (Array.isArray(summary?.activeSales) && summary.activeSales.length > 0) {
       return summary.activeSales;
     }
-    return localSales.filter((inv) => !inv.isReturn && !inv.cancelled && !inv.deleted && !inv.isDeleted
-      && !["cancelled", "canceled", "void", "deleted"].includes(String(inv.status || "").trim().toLowerCase()));
+    if (Array.isArray(localSales) && localSales.length > 0) {
+      return localSales.filter((inv) => !inv.isReturn && !inv.cancelled && !inv.deleted && !inv.isDeleted
+        && !["cancelled", "canceled", "void", "deleted"].includes(String(inv.status || "").trim().toLowerCase()));
+    }
+    return [];
   }, [summary, localSales]);
 
   // Build timeline buckets based on selected period

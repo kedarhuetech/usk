@@ -5,6 +5,7 @@ import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
 import { calculateSaleReturnRow, getSaleReturns, saveSaleReturn } from "./saleReturnsStorage.js";
 import { getPurchaseJobWorks, savePurchaseJobWork } from "./purchaseJobWorkStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -40,6 +41,7 @@ function writeStorageList(key, list) {
  * - Completely idempotent (no duplicates on refresh or multiple runs).
  */
 export function ensureLocalTestData() {
+  if (isDatabaseMode()) return;
   if (!canUseStorage()) return;
 
   let changesMade = false;

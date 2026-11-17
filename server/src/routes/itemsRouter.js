@@ -102,6 +102,8 @@ router.get("/", async (req, res) => {
       id: row.id,
       name: row.name,
       itemName: row.name,
+      type: row.item_type || "product",
+      itemType: row.item_type || "product",
       itemCode: row.item_code || "",
       barcode: row.barcode || "",
       category: row.category || "General",

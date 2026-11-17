@@ -20,8 +20,17 @@ function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+// In-memory cache for live database session
+let memoryItems = [];
+
+export function setMemoryItems(list) {
+  if (Array.isArray(list)) memoryItems = list.map((item) => normalizeInventoryItem(item));
+}
+
 // Reads items.
 function readItems() {
+  if (memoryItems.length > 0) return memoryItems;
+  if (isDatabaseMode()) return [];
   if (!canUseStorage()) return [];
   return safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), []);
 }
@@ -48,7 +57,7 @@ function hasValue(value) {
 
 // This helper handles type logic.
 function itemType(item = {}) {
-  return String(item.type || "product").toLowerCase();
+  return String(item.type || item.itemType || item.item_type || "product").toLowerCase();
 }
 
 // Makes the discount type value consistent.
@@ -141,7 +150,11 @@ export function normalizeInventoryItem(itemForm = {}) {
     ? String(itemForm.openingQuantity)
     : hasValue(itemForm.stock)
       ? String(itemForm.stock)
-      : "";
+      : hasValue(itemForm.currentStock)
+        ? String(itemForm.currentStock)
+        : hasValue(itemForm.openingStock)
+          ? String(itemForm.openingStock)
+          : "";
   const openingQuantity = hasValue(itemForm.openingQuantity)
     ? String(itemForm.openingQuantity)
     : batches.length
@@ -190,6 +203,7 @@ export function normalizeInventoryItem(itemForm = {}) {
     initialOpeningQuantity,
     openingQuantity,
     stock: openingQuantity || "0",
+    currentStock: Number(itemForm.currentStock ?? openingQuantity ?? 0),
     atPrice: itemForm.atPrice || "",
     asOfDate: itemForm.asOfDate || "",
     location: itemForm.location || "",
