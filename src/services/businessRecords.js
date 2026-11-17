@@ -1,7 +1,7 @@
 import { apiRequest } from "./apiClient.js";
-import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "./itemsStorage.js";
+import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice } from "./salesStorage.js";
-import { getParties, saveParty } from "./partiesStorage.js";
+import { getParties, saveParty, deleteParty } from "./partiesStorage.js";
 import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
@@ -19,7 +19,7 @@ export async function loadBusinessItems() {
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
     try {
       const dbItems = await itemsDb.listAll();
-      if (Array.isArray(dbItems) && dbItems.length > 0) return dbItems;
+      if (Array.isArray(dbItems)) return dbItems;
     } catch (e) {
       console.warn("[MySQL] Falling back to local items:", e.message);
     }
@@ -27,15 +27,17 @@ export async function loadBusinessItems() {
   return getInventoryItems();
 }
 
-// Saves business item directly to MySQL database
+// Saves business item directly to MySQL database with awaited persistence
 export async function saveBusinessItem(value) {
   const normalized = normalizeInventoryItem(value);
   const saved = saveInventoryItem(normalized);
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
     try {
-      await itemsDb.save(saved);
+      const remote = await itemsDb.save(saved);
+      return { ...saved, ...(remote || {}) };
     } catch (e) {
-      console.warn("[MySQL] Item background save notice:", e.message);
+      console.warn("[MySQL] Item save failure:", e.message);
+      throw e;
     }
   }
   return saved;
@@ -46,7 +48,7 @@ export async function loadBusinessParties() {
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
     try {
       const dbParties = await partiesDb.listAll();
-      if (Array.isArray(dbParties) && dbParties.length > 0) return dbParties;
+      if (Array.isArray(dbParties)) return dbParties;
     } catch (e) {
       console.warn("[MySQL] Falling back to local parties:", e.message);
     }
@@ -81,18 +83,30 @@ export async function loadBusinessSummary() {
   return loadLocalDashboardSummary();
 }
 
-// Saves business party directly to MySQL database
+// Saves business party directly to MySQL database with awaited persistence
 export async function saveBusinessParty(value) {
   const party = withId(value);
   const saved = saveParty(party);
   if (isDatabaseMode()) {
     try {
-      await partiesDb.save(saved);
+      const remote = await partiesDb.save(saved);
+      return { ...saved, ...(remote || {}) };
     } catch (e) {
-      console.warn("[MySQL] Party background save notice:", e.message);
+      // Rollback local party on database failure
+      try { deleteParty(saved.id); } catch {}
+      console.warn("[MySQL] Party save failure:", e.message);
+      throw e;
     }
   }
   return saved;
+}
+
+// Deletes business party with backend confirmation
+export async function deleteBusinessParty(partyId) {
+  deleteParty(partyId);
+  if (isDatabaseMode()) {
+    await partiesDb.remove(partyId);
+  }
 }
 
 // Loads sales invoices directly from MySQL database transactions table
@@ -100,7 +114,7 @@ export async function loadSalesInvoices() {
   if (isDatabaseMode()) {
     try {
       const dbSales = await transactionsDb.listByType("sale");
-      if (Array.isArray(dbSales) && dbSales.length > 0) {
+      if (Array.isArray(dbSales)) {
         for (const invoice of dbSales) {
           try { saveSaleInvoice(invoice, { skipRemoteSync: true }); } catch {}
         }

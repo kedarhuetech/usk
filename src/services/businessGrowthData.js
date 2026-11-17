@@ -1,4 +1,5 @@
 // Provides the business growth data application service.
+import { getActiveBusinessId } from "../config/businessConfig.js";
 import { businessGrowthApi, API_BASE_URL } from "./apiClient.js";
 import { getInventoryItems, normalizeInventoryItem, sameInventoryItemIdentity, saveInventoryItem } from "./itemsStorage.js";
 import { normalizeSmartAdsCampaign, getSmartAdsCampaigns, saveSmartAdsCampaign, deleteSmartAdsCampaign } from "./smartAdsStorage.js";
@@ -29,7 +30,7 @@ export function normalizePersistedAssetUrls(value) {
   if (typeof value === "string") {
     const normalized = value.replace("/api/api/business-growth/assets/", "/api/business-growth/assets/");
     if (!normalized.includes("/api/business-growth/assets/") || normalized.includes("businessId=")) return normalized;
-    return `${normalized}${normalized.includes("?") ? "&" : "?"}businessId=${encodeURIComponent(import.meta.env.VITE_BUSINESS_ID || "demo-business")}`;
+    return `${normalized}${normalized.includes("?") ? "&" : "?"}businessId=${encodeURIComponent(getActiveBusinessId())}`;
   }
   if (Array.isArray(value)) return value.map(normalizePersistedAssetUrls);
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, normalizePersistedAssetUrls(entry)]));
@@ -71,7 +72,7 @@ export async function persistInlineImages(value, entityType, entityId, cache = g
     const blob = await (await fetch(value)).blob();
     const file = new File([blob], `${entityId}-${Date.now()}.${mime.split("/")[1] || "png"}`, { type: mime });
     const asset = await businessGrowthApi.upload(file, entityType, entityId);
-    const url = `${API_BASE_URL.replace(/\/api\/?$/, "")}${asset.url}?businessId=${encodeURIComponent(import.meta.env.VITE_BUSINESS_ID || "demo-business")}`;
+    const url = `${API_BASE_URL.replace(/\/api\/?$/, "")}${asset.url}?businessId=${encodeURIComponent(getActiveBusinessId())}`;
     rememberInlineAsset(cache, value, url);
     return url;
   }

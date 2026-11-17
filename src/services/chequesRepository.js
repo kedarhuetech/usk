@@ -1,11 +1,12 @@
 import { initialChequeStatus, validateCheque, validateChequeStatusChange } from "./cheques.js";
 import { cashBankDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getActiveBusinessId } from "../config/businessConfig.js";
 
 export const CHEQUE_STORAGE_KEY = "usv.cheques.v1";
 
 export function getChequeStorageKey() {
-  const companyId = String(import.meta.env?.VITE_BUSINESS_ID || "").trim();
+  const companyId = getActiveBusinessId();
   return companyId ? `${CHEQUE_STORAGE_KEY}:${encodeURIComponent(companyId)}` : CHEQUE_STORAGE_KEY;
 }
 
@@ -41,6 +42,23 @@ function event(status, note = "") {
 }
 
 export async function getAllCheques() {
+  if (isDatabaseMode()) {
+    try {
+      const res = await cashBankDb.getCheques();
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        const mapped = list.map((r) => ({
+          ...r,
+          type: r.chequeType ? (r.chequeType.charAt(0).toUpperCase() + r.chequeType.slice(1)) : "Received",
+          status: r.status ? (r.status.charAt(0).toUpperCase() + r.status.slice(1)) : "Pending",
+        }));
+        writeRecords(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("[Cheques] Failed to fetch from MySQL:", err.message);
+    }
+  }
   return readRecords().sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
 }
 
@@ -62,9 +80,9 @@ export async function createCheque(cheque) {
     history: [event(cheque.status)],
   };
   if (records.some((record) => record.id === saved.id)) throw new Error("This cheque was already saved.");
-  writeRecords([saved, ...records]);
+
   if (isDatabaseMode()) {
-    cashBankDb.saveCheque({
+    await cashBankDb.saveCheque({
       id: saved.id,
       partyId: saved.partyId || null,
       partyName: saved.partyName || "Party",
@@ -75,8 +93,9 @@ export async function createCheque(cheque) {
       chequeType: (saved.type || "received").toLowerCase(),
       status: (saved.status || "pending").toLowerCase(),
       notes: saved.notes || "",
-    }).catch((err) => console.warn("[MySQL] Cheque background sync:", err.message));
+    });
   }
+  writeRecords([saved, ...records]);
   return saved;
 }
 

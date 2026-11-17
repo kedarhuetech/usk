@@ -113,7 +113,7 @@ export async function initializeDatabaseSchema() {
 
       await addCol("bank_accounts", "account_type VARCHAR(50) DEFAULT 'Savings'");
       await addCol("bank_accounts", "branch_name VARCHAR(100)");
-    } catch (e) {
+    } catch (_e) {
       // Continue even if drop column was already done
     }
   };
@@ -125,7 +125,7 @@ export async function initializeDatabaseSchema() {
     `CREATE TABLE IF NOT EXISTS businesses (
       id VARCHAR(64) PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
@@ -153,7 +153,7 @@ export async function initializeDatabaseSchema() {
       signature_url TEXT,
       logo_url TEXT,
       terms_and_conditions TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
@@ -162,7 +162,7 @@ export async function initializeDatabaseSchema() {
       business_id VARCHAR(64) NOT NULL,
       setting_key VARCHAR(100) NOT NULL,
       setting_value TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (business_id, setting_key)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -190,7 +190,7 @@ export async function initializeDatabaseSchema() {
       shipping_state VARCHAR(100),
       shipping_pincode VARCHAR(20),
       is_active TINYINT(1) DEFAULT 1,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_parties_biz (business_id),
       INDEX idx_parties_name (business_id, party_name),
@@ -205,7 +205,7 @@ export async function initializeDatabaseSchema() {
       name VARCHAR(100) NOT NULL,
       short_name VARCHAR(50) NOT NULL,
       precision_dec INT DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_units_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -232,7 +232,7 @@ export async function initializeDatabaseSchema() {
       is_serial_tracked TINYINT(1) DEFAULT 0,
       description TEXT,
       is_active TINYINT(1) DEFAULT 1,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_items_biz (business_id),
       INDEX idx_items_name (business_id, name),
@@ -254,7 +254,7 @@ export async function initializeDatabaseSchema() {
       sale_price DECIMAL(12,2) DEFAULT 0.00,
       purchase_price DECIMAL(12,2) DEFAULT 0.00,
       mrp DECIMAL(12,2) DEFAULT 0.00,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_batch_item (business_id, item_id),
       INDEX idx_batch_no (business_id, batch_no)
@@ -272,7 +272,7 @@ export async function initializeDatabaseSchema() {
       total_value DECIMAL(12,2) DEFAULT 0.00,
       reason VARCHAR(255),
       adjustment_date DATE NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_adj_biz (business_id, adjustment_date DESC)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
@@ -309,7 +309,7 @@ export async function initializeDatabaseSchema() {
       po_date DATE,
       notes TEXT,
       terms TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_txns_biz_type (business_id, transaction_type),
       INDEX idx_txns_party (business_id, party_id),
@@ -347,7 +347,7 @@ export async function initializeDatabaseSchema() {
       cess_rate DECIMAL(5,2) DEFAULT 0.00,
       cess_amount DECIMAL(12,2) DEFAULT 0.00,
       total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_txn_items_txn (business_id, transaction_id),
       INDEX idx_txn_items_item (business_id, item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -368,7 +368,7 @@ export async function initializeDatabaseSchema() {
       last_notified_channel VARCHAR(50),
       last_notified_due_date DATE,
       notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_srv_biz (business_id),
       INDEX idx_srv_due (business_id, service_due_date),
@@ -403,7 +403,7 @@ export async function initializeDatabaseSchema() {
       account_type VARCHAR(50) DEFAULT 'Savings',
       as_of_date DATE,
       is_default TINYINT(1) DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_bank_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -420,7 +420,7 @@ export async function initializeDatabaseSchema() {
       reference_type VARCHAR(50),
       reference_no VARCHAR(100),
       description TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_cash_biz (business_id, entry_date DESC)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
@@ -439,7 +439,7 @@ export async function initializeDatabaseSchema() {
       deposit_date DATE,
       clearance_date DATE,
       notes TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_cheques_biz (business_id, status)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -458,7 +458,7 @@ export async function initializeDatabaseSchema() {
       term_months INT DEFAULT 12,
       emi_amount DECIMAL(12,2) DEFAULT 0.00,
       start_date DATE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_loan_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -469,7 +469,7 @@ export async function initializeDatabaseSchema() {
       business_id VARCHAR(64) NOT NULL DEFAULT 'default',
       category_name VARCHAR(100) NOT NULL,
       expense_type VARCHAR(50) DEFAULT 'indirect',
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_expcat_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
@@ -485,7 +485,7 @@ export async function initializeDatabaseSchema() {
       is_store_enabled TINYINT(1) DEFAULT 1,
       delivery_charges DECIMAL(10,2) DEFAULT 0.00,
       min_order_amount DECIMAL(10,2) DEFAULT 0.00,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
@@ -503,7 +503,7 @@ export async function initializeDatabaseSchema() {
       payment_status VARCHAR(50) DEFAULT 'unpaid',
       payment_method VARCHAR(50) DEFAULT 'cod',
       order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_store_orders (business_id, order_date DESC)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -537,7 +537,7 @@ export async function initializeDatabaseSchema() {
       impressions INT DEFAULT 0,
       clicks INT DEFAULT 0,
       spend DECIMAL(12,2) DEFAULT 0.00,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_ads_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -552,8 +552,98 @@ export async function initializeDatabaseSchema() {
       user_name VARCHAR(100) DEFAULT 'Admin',
       details TEXT,
       ip_address VARCHAR(45),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_audit_biz (business_id, created_at DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 23. Unit Conversions Table
+    `CREATE TABLE IF NOT EXISTS unit_conversions (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      unit VARCHAR(50) NOT NULL,
+      to_unit VARCHAR(50) NOT NULL,
+      factor DECIMAL(15, 4) NOT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_unit_conv_biz (business_id),
+      INDEX idx_unit_conv_pair (business_id, unit, to_unit)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 24. Purchase Job Works Header Table
+    `CREATE TABLE IF NOT EXISTS purchase_job_works (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      order_number VARCHAR(100) NOT NULL,
+      party_name VARCHAR(255) NOT NULL,
+      party_id VARCHAR(64) NULL,
+      order_date DATE NULL,
+      status VARCHAR(50) DEFAULT 'Pending',
+      charges DECIMAL(12, 2) DEFAULT 0.00,
+      notes TEXT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_job_works_biz (business_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 25. Purchase Job Work Items Child Table (Normalized Rows & Columns)
+    `CREATE TABLE IF NOT EXISTS purchase_job_work_items (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      job_work_id VARCHAR(64) NOT NULL,
+      item_type ENUM('sent', 'received') NOT NULL,
+      item_id VARCHAR(64) NOT NULL,
+      item_name VARCHAR(255) NOT NULL,
+      quantity DECIMAL(12, 2) NOT NULL,
+      unit VARCHAR(50) DEFAULT 'PCS',
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_job_work_items (business_id, job_work_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 26. Loan Repayments Child Table
+    `CREATE TABLE IF NOT EXISTS loan_repayments (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      loan_id VARCHAR(64) NOT NULL,
+      payment_date DATE NOT NULL,
+      amount_paid DECIMAL(12, 2) NOT NULL,
+      principal_paid DECIMAL(12, 2) DEFAULT 0.00,
+      interest_paid DECIMAL(12, 2) DEFAULT 0.00,
+      payment_mode VARCHAR(32) DEFAULT 'bank',
+      reference VARCHAR(100) NULL,
+      notes TEXT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_loan_repay_biz (business_id),
+      INDEX idx_loan_repay_loan (loan_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 27. Balance Sheet Chart of Accounts Table
+    `CREATE TABLE IF NOT EXISTS balance_sheet_accounts (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      account_name VARCHAR(150) NOT NULL,
+      account_type VARCHAR(64) NOT NULL,
+      opening_balance DECIMAL(12, 2) DEFAULT 0.00,
+      balance_type VARCHAR(20) DEFAULT 'debit',
+      notes TEXT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_bs_accounts_biz (business_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 28. Migration Logs Table (Audit trail of localStorage to MySQL migration batches)
+    `CREATE TABLE IF NOT EXISTS migration_logs (
+      id VARCHAR(64) PRIMARY KEY,
+      batch_id VARCHAR(64) NOT NULL,
+      business_id VARCHAR(64) NOT NULL,
+      entity_type VARCHAR(64) NOT NULL,
+      source_id VARCHAR(64) NOT NULL,
+      target_table VARCHAR(64) NOT NULL,
+      target_id VARCHAR(64) NOT NULL,
+      action ENUM('inserted', 'updated', 'skipped', 'conflict', 'failed') NOT NULL,
+      details TEXT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_mig_batch (batch_id),
+      INDEX idx_mig_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`
   ];
 
@@ -571,7 +661,15 @@ export async function initializeDatabaseSchema() {
     await pool.query(
       `INSERT IGNORE INTO businesses (id, name) VALUES ('demo-business', 'Sai Kirana Stores');`
     );
+    // Safely seed the missing RT Pharmacy party for 'local-development' to resolve the orphaned foreign key
+    // reference on the two existing sales invoices without mutating or moving transactions.
+    await pool.query(
+      `INSERT IGNORE INTO parties (
+        id, business_id, party_name, gstin, party_type, opening_balance, current_balance, balance_type
+      ) VALUES
+        ('933f31db-61eb-4c2b-a3d1-2c862c8fc888', 'local-development', 'rt fpharma', '987654567', 'customer', 0.00, 0.00, 'to_receive');`
+    );
   } catch {}
 
-  console.log("[MySQL Schema] All 22 production tables verified successfully (ZERO JSON columns, pure rows & columns).");
+  console.log("[MySQL Schema] All 28 production tables verified successfully (ZERO JSON columns, pure rows & columns).");
 }

@@ -25,6 +25,7 @@ import {
 } from "../../services/itemsStorage";
 import { getParties, saveParty, partiesStorageKey } from "../../services/partiesStorage";
 import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey } from "../../services/salesStorage";
+import { saveBusinessSaleInvoice } from "../../services/businessRecords";
 import {
   addPosBill,
   closePosBill,
@@ -831,7 +832,7 @@ export default function PointOfSale() {
     showToast(`Loaded ${bill.invoiceNo}`);
   }
 
-  function saveBill(print = false) {
+  async function saveBill(print = false) {
     if (!activeBill) {
       showToast("Start a new bill before saving.", "warning");
       return;
@@ -883,7 +884,7 @@ export default function PointOfSale() {
     const saleType = bill.due > 0 || bill.paymentMode === "Credit" ? "credit" : "cash";
 
     try {
-      const savedInvoice = saveSaleInvoice({
+      const savedInvoice = await saveBusinessSaleInvoice({
         id: transactionId,
         transactionType: "sale",
         saleType,
@@ -919,15 +920,15 @@ export default function PointOfSale() {
           amount: it.total,
         })),
       });
-      if (!savedInvoice?.id || !getSaleInvoices().some((invoice) => invoice.id === savedInvoice.id)) {
-        throw new Error("The sale invoice could not be verified in local storage.");
+      if (!savedInvoice?.id) {
+        throw new Error("The sale invoice could not be verified after saving.");
       }
 
       const savedBill = { ...bill, id: draft.id, invoiceId: savedInvoice.id, savedAt: new Date().toISOString(), savedSnapshot: billDraftSignature(draft) };
       setBills((current) => [savedBill, ...current.filter((entry) => entry.id !== savedBill.id && entry.invoiceNo !== savedBill.invoiceNo)]);
       updateDraft({ savedAt: savedBill.savedAt, invoiceId: savedInvoice.id });
       setProducts(loadProducts());
-      showToast(`Bill ${bill.invoiceNo} saved to local storage!`);
+      showToast(`Bill ${bill.invoiceNo} saved successfully!`);
 
       // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
       try {

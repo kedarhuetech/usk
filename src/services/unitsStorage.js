@@ -42,10 +42,34 @@ export function getUnitConversions(unit) {
   return conversions.filter((conversion) => conversion.unit === unit);
 }
 
+// Live fetch unit conversions directly from MySQL backend
+export async function fetchUnitConversionsFromDb(unit) {
+  if (isDatabaseMode()) {
+    try {
+      const remote = await unitsDb.listConversions(unit);
+      if (Array.isArray(remote)) {
+        window.localStorage.setItem(UNIT_CONVERSIONS_KEY, JSON.stringify(remote));
+        return remote;
+      }
+    } catch (err) {
+      console.warn("[Units] Failed to fetch conversions from MySQL:", err.message);
+    }
+  }
+  return getUnitConversions(unit);
+}
+
 // This helper handles unit conversion logic.
-export function addUnitConversion(unit, conversion) {
-  const conversions = readList(UNIT_CONVERSIONS_KEY);
+export async function addUnitConversion(unit, conversion) {
   const entry = { id: crypto.randomUUID(), unit, ...conversion, createdAt: new Date().toISOString() };
+  if (isDatabaseMode()) {
+    try {
+      await unitsDb.saveConversion(entry);
+    } catch (err) {
+      console.warn("[Units] Failed to persist conversion to MySQL:", err.message);
+      throw err;
+    }
+  }
+  const conversions = readList(UNIT_CONVERSIONS_KEY);
   window.localStorage.setItem(UNIT_CONVERSIONS_KEY, JSON.stringify([...conversions, entry]));
   return entry;
 }

@@ -311,10 +311,170 @@ router.put("/loan-accounts/:id", saveLoanHandler);
 router.delete("/loan-accounts/:id", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
+    await pool.query(`DELETE FROM loan_repayments WHERE business_id = ? AND loan_id = ?`, [businessId, req.params.id]);
     await pool.query(`DELETE FROM loan_accounts WHERE business_id = ? AND id = ?`, [businessId, req.params.id]);
-    return res.json({ success: true, message: "Loan account deleted." });
+    return res.json({ success: true, message: "Loan account and associated repayments deleted." });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==================== LOAN REPAYMENTS ====================
+
+/**
+ * GET /api/cash-bank/loan-accounts/:id/repayments
+ */
+router.get("/loan-accounts/:id/repayments", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const loanId = req.params.id;
+
+    const [rows] = await pool.query(
+      `SELECT * FROM loan_repayments WHERE business_id = ? AND loan_id = ? ORDER BY payment_date DESC, created_at DESC`,
+      [businessId, loanId]
+    );
+
+    return res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        loanId: r.loan_id,
+        paymentDate: r.payment_date,
+        amountPaid: parseFloat(r.amount_paid) || 0,
+        principalPaid: parseFloat(r.principal_paid) || 0,
+        interestPaid: parseFloat(r.interest_paid) || 0,
+        paymentMode: r.payment_mode,
+        reference: r.reference || "",
+        notes: r.notes || "",
+        createdAt: r.created_at,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * POST /api/cash-bank/loan-accounts/:id/repayments
+ */
+router.post("/loan-accounts/:id/repayments", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const businessId = businessIdFromRequest(req);
+    const loanId = req.params.id;
+    const body = req.body || {};
+
+    const id = body.id || `repay_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const paymentDate = body.paymentDate || body.date || new Date().toISOString().slice(0, 10);
+    const amountPaid = parseFloat(body.amountPaid ?? body.amount ?? 0) || 0;
+    const principalPaid = parseFloat(body.principalPaid ?? amountPaid) || 0;
+    const interestPaid = parseFloat(body.interestPaid ?? (amountPaid - principalPaid)) || 0;
+    const paymentMode = body.paymentMode || body.paymentType || "bank";
+    const reference = body.reference || body.refNo || null;
+    const notes = body.notes || body.description || null;
+
+    if (amountPaid <= 0) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "Repayment amount must be greater than zero." });
+    }
+
+    // Verify loan exists
+    const [loanRows] = await conn.query(
+      `SELECT id, current_balance FROM loan_accounts WHERE business_id = ? AND id = ?`,
+      [businessId, loanId]
+    );
+    if (!loanRows.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: "Loan account not found." });
+    }
+
+    // Check if repayment already exists to handle differential balance accounting
+    const [existingRepayRows] = await conn.query(
+      `SELECT principal_paid FROM loan_repayments WHERE business_id = ? AND id = ?`,
+      [businessId, id]
+    );
+    const existingPrincipalPaid = existingRepayRows.length ? (parseFloat(existingRepayRows[0].principal_paid) || 0) : 0;
+    const netPrincipalDelta = principalPaid - existingPrincipalPaid;
+
+    // Insert or update repayment
+    await conn.query(
+      `INSERT INTO loan_repayments (
+        id, business_id, loan_id, payment_date, amount_paid,
+        principal_paid, interest_paid, payment_mode, reference, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        amount_paid = VALUES(amount_paid),
+        principal_paid = VALUES(principal_paid),
+        interest_paid = VALUES(interest_paid),
+        reference = VALUES(reference),
+        notes = VALUES(notes)`,
+      [id, businessId, loanId, paymentDate, amountPaid, principalPaid, interestPaid, paymentMode, reference, notes]
+    );
+
+    // Atomically adjust loan outstanding balance by net principal change
+    if (netPrincipalDelta !== 0) {
+      await conn.query(
+        `UPDATE loan_accounts
+         SET current_balance = GREATEST(0, current_balance - ?),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE business_id = ? AND id = ?`,
+        [netPrincipalDelta, businessId, loanId]
+      );
+    }
+
+    await conn.commit();
+
+    return res.json({
+      success: true,
+      message: "Loan repayment recorded successfully.",
+      data: { id, loanId, amountPaid, principalPaid, interestPaid },
+    });
+  } catch (err) {
+    await conn.rollback();
+    return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+/**
+ * DELETE /api/cash-bank/loan-accounts/:id/repayments/:repayId
+ */
+router.delete("/loan-accounts/:id/repayments/:repayId", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const businessId = businessIdFromRequest(req);
+    const { id: loanId, repayId } = req.params;
+
+    const [rows] = await conn.query(
+      `SELECT principal_paid FROM loan_repayments WHERE business_id = ? AND loan_id = ? AND id = ?`,
+      [businessId, loanId, repayId]
+    );
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: "Repayment entry not found." });
+    }
+
+    const principalToRevert = parseFloat(rows[0].principal_paid) || 0;
+    await conn.query(`DELETE FROM loan_repayments WHERE business_id = ? AND id = ?`, [businessId, repayId]);
+
+    if (principalToRevert > 0) {
+      await conn.query(
+        `UPDATE loan_accounts SET current_balance = current_balance + ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND id = ?`,
+        [principalToRevert, businessId, loanId]
+      );
+    }
+
+    await conn.commit();
+    return res.json({ success: true, message: "Loan repayment deleted and balance restored." });
+  } catch (err) {
+    await conn.rollback();
+    return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    conn.release();
   }
 });
 

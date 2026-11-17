@@ -8,6 +8,7 @@ import { getParties, saveParty } from "../../services/partiesStorage";
 import { businessDataApi } from "../../services/apiClient";
 import { getAppSettings } from "../../services/appSettingsStorage";
 import { getSaleOrders, saveSaleOrders, getOrderFulfillmentSummary } from "../../services/transactionRepository.js";
+import { transactionsDb, saleOrdersDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import OrderPartialConvertModal from "../../components/Common/OrderPartialConvertModal.jsx";
 import {
@@ -155,12 +156,89 @@ export default function SaleOrders() {
   const [historyModal, setHistoryModal] = useState(null);
   const parties = useMemo(() => getParties(), []);
 
-  // Listen to remote changes or other tab updates
+  // Synchronize with MySQL backend and safely migrate local orders
   useEffect(() => {
+    let active = true;
+    const syncRemote = async () => {
+      try {
+        const remote = await transactionsDb.listByType("sale_order");
+        if (!active) return;
+        const local = readOrders();
+
+        if (Array.isArray(remote) && remote.length > 0) {
+          const remoteNormalized = remote.map(normalizeSaleOrder);
+          const remoteIdSet = new Set(remoteNormalized.map((r) => String(r.id || r.number)));
+
+          // Check for any unmigrated local records
+          const unmigrated = local.filter((l) => !remoteIdSet.has(String(l.id)) && !remoteIdSet.has(String(l.number)));
+          if (unmigrated.length > 0) {
+            for (const order of unmigrated) {
+              try {
+                await transactionsDb.save({
+                  ...order,
+                  transactionType: "sale_order",
+                  type: "sale_order",
+                  documentNumber: String(order.number || "").trim(),
+                  number: String(order.number || "").trim(),
+                  transactionDate: order.date || localDate(),
+                  partyName: order.customer,
+                  customer: order.customer,
+                  amount: order.amount,
+                  totalAmount: order.amount,
+                  status: order.status || "Open",
+                  rows: order.rows,
+                  items: order.rows,
+                });
+              } catch (saveErr) {
+                console.warn("[SaleOrders] Unmigrated order sync warning:", saveErr?.message);
+              }
+            }
+          }
+
+          const mergedMap = new Map();
+          remoteNormalized.forEach((r) => mergedMap.set(String(r.id || r.number), r));
+          unmigrated.forEach((u) => {
+            const key = String(u.id || u.number);
+            if (!mergedMap.has(key)) mergedMap.set(key, u);
+          });
+          const merged = [...mergedMap.values()];
+          setOrders(merged);
+          saveSaleOrders(merged);
+        } else if (local.length > 0) {
+          // One-time migration of existing local orders to MySQL
+          for (const order of local) {
+            try {
+              await transactionsDb.save({
+                ...order,
+                transactionType: "sale_order",
+                type: "sale_order",
+                documentNumber: String(order.number || "").trim(),
+                number: String(order.number || "").trim(),
+                transactionDate: order.date || localDate(),
+                partyName: order.customer,
+                customer: order.customer,
+                amount: order.amount,
+                totalAmount: order.amount,
+                status: order.status || "Open",
+                rows: order.rows,
+                items: order.rows,
+              });
+            } catch (saveErr) {
+              console.warn("[SaleOrders] Initial migration notice:", saveErr?.message);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[SaleOrders] Falling back to local cache:", err?.message);
+      }
+    };
+    syncRemote();
+
     const handleUpdate = () => setOrders(readOrders());
     window.addEventListener(businessDataChangedEvent, handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
+      active = false;
       window.removeEventListener(businessDataChangedEvent, handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
@@ -193,7 +271,7 @@ export default function SaleOrders() {
   const visible = orders.filter((order) => `${order.customer} ${order.number} ${order.status}`.toLowerCase().includes(search.toLowerCase()));
   const amount = (order) => Number(order.amount || (order.rows || []).reduce((sum, row) => sum + rowAmount(row), 0));
   const beginNew = () => setEditor({ mode: "new", value: { id: "", number: String(Math.max(0, ...orders.map((order) => Number(order.number) || 0)) + 1), customer: "", phone: "", date: localDate(), dueDate: localDate(), state: "Select", rows: [newRow(), newRow()], payments: [newPayment()], roundOff: true, roundOffValue: "", terms: "", description: "", status: "Open", linkedOrderIds: [] } });
-  const save = () => {
+  const save = async () => {
     const value = editor.value;
     if (!value.customer.trim()) { toast.error("Select or enter a customer."); return; }
     if (!(value.rows || []).some((row) => row.item.trim() && Number(row.qty) > 0)) { toast.error("Add at least one item and quantity."); return; }
@@ -202,9 +280,53 @@ export default function SaleOrders() {
     if (!parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.customer.trim().toLowerCase())) {
       saveParty({ partyName: value.customer.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-receive" });
     }
-    const saved = { ...value, id: value.id || `sale-order-${Date.now()}`, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
+    const orderId = value.id || `sale-order-${Date.now()}`;
+    const saved = { ...value, id: orderId, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
     persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]);
-    toast.success(editor.mode === "edit" ? "Sale order updated." : "Sale order created.");
+    setEditor(null);
+
+    // Persist to MySQL backend with clear failure distinction
+    try {
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "sale_order",
+        type: "sale_order",
+        documentNumber: String(saved.number || "").trim(),
+        number: String(saved.number || "").trim(),
+        transactionDate: saved.date || localDate(),
+        date: saved.date || localDate(),
+        dueDate: saved.dueDate || saved.date || localDate(),
+        partyId: saved.partyId || null,
+        partyName: saved.customer,
+        customer: saved.customer,
+        customerName: saved.customer,
+        phone: saved.phone || "",
+        partyPhone: saved.phone || "",
+        billingAddress: saved.billingAddress || null,
+        shippingAddress: saved.shippingAddress || null,
+        subtotal,
+        totalAmount: amount,
+        total: amount,
+        amount,
+        paidAmount: 0,
+        receivedAmount: 0,
+        balanceAmount: amount,
+        status: saved.status || "Open",
+        paymentMode: "Credit",
+        paymentType: "Credit",
+        notes: saved.description || "",
+        description: saved.description || "",
+        terms: saved.terms || "",
+        roundOff: saved.roundOff,
+        roundOffValue: saved.roundOffValue,
+        rows: saved.rows,
+        items: saved.rows,
+      });
+      toast.success(editor.mode === "edit" ? "Sale order updated in database." : "Sale order saved to database.");
+    } catch (err) {
+      console.warn("[SaleOrders] Remote database save failed:", err?.message);
+      toast.warning("Saved locally. MySQL sync pending (server unreachable).");
+    }
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -224,8 +346,6 @@ export default function SaleOrders() {
     } catch {
       // Non-blocking
     }
-
-    setEditor(null);
   };
   const openSelector = (mode) => {
     setSelectedIds([]); setSelectorSearch(""); setSelectorParty(editor?.value.customer || ""); setSelectorPreset("This Month"); setSelectorFrom(localDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1))); setSelectorTo(localDate(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0))); setSelector(mode);
@@ -282,16 +402,52 @@ export default function SaleOrders() {
         message: `Delete sale order ${order.number}?`,
         confirmText: "Delete",
         confirmColor: "red",
-        onConfirm: () => {
+        onConfirm: async () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
           persist(orders.filter((entry) => entry.id !== order.id));
-          toast.success(`Sale order ${order.number} deleted.`);
+          try {
+            await transactionsDb.remove(order.id);
+            toast.success(`Sale order ${order.number} deleted from database.`);
+          } catch (err) {
+            console.warn("[SaleOrders] Remote delete failed:", err?.message);
+            toast.warning(`Deleted locally. MySQL removal pending.`);
+          }
         },
       });
     }
     if (action === "Duplicate") {
-      persist([{ ...order, id: `sale-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", createdAt: new Date().toISOString(), history: [] }, ...orders]);
-      toast.success("Sale order duplicated.");
+      const newNumber = String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1);
+      const newId = `sale-order-${Date.now()}`;
+      const duplicated = {
+        ...order,
+        id: newId,
+        number: newNumber,
+        status: "Open",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        history: [{ action: "Duplicated sale order", at: new Date().toISOString() }],
+      };
+      persist([duplicated, ...orders]);
+      try {
+        transactionsDb.save({
+          ...duplicated,
+          transactionType: "sale_order",
+          type: "sale_order",
+          documentNumber: newNumber,
+          number: newNumber,
+          partyName: duplicated.customer,
+          customer: duplicated.customer,
+          rows: duplicated.rows,
+          items: duplicated.rows,
+        }).then(() => {
+          toast.success("Sale order duplicated and saved to database.");
+        }).catch((err) => {
+          console.warn("[SaleOrders] Duplicate remote sync notice:", err?.message);
+          toast.warning("Duplicated locally. MySQL sync pending.");
+        });
+      } catch (err) {
+        toast.warning("Duplicated locally. MySQL sync pending.");
+      }
     }
     if (["Preview", "Open PDF", "Print"].includes(action)) {
       const rows = (order.rows || []).map((row) => ({

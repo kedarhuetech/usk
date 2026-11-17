@@ -27,8 +27,8 @@ import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import ImportPartiesModal from "./ImportPartiesModal";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
-import { deleteParty, getPartyDeletionBlockReason, getParties, saveParty as savePartyLocally } from "../../services/partiesStorage";
-import { loadBusinessParties } from "../../services/businessRecords";
+import { getPartyDeletionBlockReason, getParties } from "../../services/partiesStorage";
+import { loadBusinessParties, saveBusinessParty, deleteBusinessParty } from "../../services/businessRecords";
 import { buildUnifiedStatementHtml } from "../../services/unifiedPrintService.js";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
@@ -683,12 +683,18 @@ function PartyDetails() {
     return () => window.clearTimeout(timer);
   }, [statementOpen, printStatementOnOpen]);
 
-  // Saves party.
+  // Saves party directly to MySQL database
   const saveParty = async (party) => {
-    const saved = savePartyLocally(party);
-    setParties((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
-    setPartyBeingEdited(null);
-    return saved;
+    try {
+      const saved = await saveBusinessParty(party);
+      setParties((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setPartyBeingEdited(null);
+      toast.success("Party saved successfully.");
+      return saved;
+    } catch (err) {
+      toast.error(err.message || "Failed to save party.");
+      throw err;
+    }
   };
 
   const removeParty = () => {
@@ -1609,13 +1615,18 @@ function PartyDetails() {
           confirmText="Delete Party"
           cancelText="Cancel"
           danger={true}
-          onConfirm={() => {
-            deleteParty(deletePartyConfirm.id);
-            setParties((current) => current.filter((party) => String(party.id) !== String(deletePartyConfirm.id)));
-            setSelectedPartyId("cash-sale");
-            setLoadError("");
-            toast.success(`Party "${deletePartyConfirm.partyName}" deleted.`);
-            setDeletePartyConfirm(null);
+          onConfirm={async () => {
+            try {
+              await deleteBusinessParty(deletePartyConfirm.id);
+              setParties((current) => current.filter((party) => String(party.id) !== String(deletePartyConfirm.id)));
+              setSelectedPartyId("cash-sale");
+              setLoadError("");
+              toast.success(`Party "${deletePartyConfirm.partyName}" deleted.`);
+            } catch (err) {
+              toast.error(err.message || "Failed to delete party.");
+            } finally {
+              setDeletePartyConfirm(null);
+            }
           }}
           onCancel={() => setDeletePartyConfirm(null)}
         />

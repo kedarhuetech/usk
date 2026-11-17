@@ -6,6 +6,7 @@ import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
 import { getPurchaseOrders, savePurchaseOrders, getOrderFulfillmentSummary } from "../../services/transactionRepository.js";
+import { transactionsDb, purchaseOrdersDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import OrderPartialConvertModal from "../../components/Common/OrderPartialConvertModal.jsx";
 import {
@@ -159,12 +160,91 @@ export default function PurchaseOrders() {
     });
   };
 
-  // Listen to remote changes or other tab updates
+  // Synchronize with MySQL backend and safely migrate local orders
   useEffect(() => {
+    let active = true;
+    const syncRemote = async () => {
+      try {
+        const remote = await transactionsDb.listByType("purchase_order");
+        if (!active) return;
+        const local = readOrders();
+
+        if (Array.isArray(remote) && remote.length > 0) {
+          const remoteNormalized = remote.map(normalizePurchaseOrder);
+          const remoteIdSet = new Set(remoteNormalized.map((r) => String(r.id || r.number)));
+
+          // Check for any unmigrated local records
+          const unmigrated = local.filter((l) => !remoteIdSet.has(String(l.id)) && !remoteIdSet.has(String(l.number)));
+          if (unmigrated.length > 0) {
+            for (const order of unmigrated) {
+              try {
+                await transactionsDb.save({
+                  ...order,
+                  transactionType: "purchase_order",
+                  type: "purchase_order",
+                  documentNumber: String(order.number || "").trim(),
+                  number: String(order.number || "").trim(),
+                  transactionDate: order.date || today(),
+                  partyName: order.supplier,
+                  supplier: order.supplier,
+                  supplierName: order.supplier,
+                  amount: order.amount,
+                  totalAmount: order.amount,
+                  status: order.status || "Open",
+                  rows: order.rows,
+                  items: order.rows,
+                });
+              } catch (saveErr) {
+                console.warn("[PurchaseOrders] Unmigrated order sync warning:", saveErr?.message);
+              }
+            }
+          }
+
+          const mergedMap = new Map();
+          remoteNormalized.forEach((r) => mergedMap.set(String(r.id || r.number), r));
+          unmigrated.forEach((u) => {
+            const key = String(u.id || u.number);
+            if (!mergedMap.has(key)) mergedMap.set(key, u);
+          });
+          const merged = [...mergedMap.values()];
+          setOrders(merged);
+          savePurchaseOrders(merged);
+        } else if (local.length > 0) {
+          // One-time migration of existing local orders to MySQL
+          for (const order of local) {
+            try {
+              await transactionsDb.save({
+                ...order,
+                transactionType: "purchase_order",
+                type: "purchase_order",
+                documentNumber: String(order.number || "").trim(),
+                number: String(order.number || "").trim(),
+                transactionDate: order.date || today(),
+                partyName: order.supplier,
+                supplier: order.supplier,
+                supplierName: order.supplier,
+                amount: order.amount,
+                totalAmount: order.amount,
+                status: order.status || "Open",
+                rows: order.rows,
+                items: order.rows,
+              });
+            } catch (saveErr) {
+              console.warn("[PurchaseOrders] Initial migration notice:", saveErr?.message);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[PurchaseOrders] Falling back to local cache:", err?.message);
+      }
+    };
+    syncRemote();
+
     const handleUpdate = () => setOrders(readOrders());
     window.addEventListener(businessDataChangedEvent, handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
+      active = false;
       window.removeEventListener(businessDataChangedEvent, handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
@@ -191,16 +271,59 @@ export default function PurchaseOrders() {
   const subtotal = editor?.value.rows.reduce((sum, row) => sum + lineTotal(row), 0) || 0;
   const total = editor ? (editor.value.roundOff ? Math.round(subtotal) + (Number(editor.value.roundOffValue) || 0) : subtotal) : 0;
 
-  const save = () => {
+  const save = async () => {
     const value = editor.value;
     if (!value.supplier.trim()) { toast.error("Select or enter a supplier."); return; }
     if (!value.rows.some((row) => row.item.trim() && Number(row.qty) > 0)) { toast.error("Add at least one item and quantity."); return; }
     const existingParty = parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.supplier.trim().toLowerCase());
     if (!existingParty) saveParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
-    const saved = { ...value, id: value.id || `purchase-order-${Date.now()}`, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
+    const orderId = value.id || `purchase-order-${Date.now()}`;
+    const saved = { ...value, id: orderId, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
     saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
-    toast.success(editor.mode === "edit" ? "Purchase order updated." : "Purchase order created.");
     setEditor(null);
+
+    // Persist to MySQL backend with clear failure distinction
+    try {
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "purchase_order",
+        type: "purchase_order",
+        documentNumber: String(saved.number || "").trim(),
+        number: String(saved.number || "").trim(),
+        transactionDate: saved.date || today(),
+        date: saved.date || today(),
+        dueDate: saved.dueDate || saved.date || today(),
+        partyId: saved.partyId || null,
+        partyName: saved.supplier,
+        supplier: saved.supplier,
+        supplierName: saved.supplier,
+        phone: saved.phone || "",
+        partyPhone: saved.phone || "",
+        billingAddress: saved.billingAddress || null,
+        shippingAddress: saved.shippingAddress || null,
+        subtotal,
+        totalAmount: total,
+        total,
+        amount: total,
+        paidAmount: 0,
+        receivedAmount: 0,
+        balanceAmount: total,
+        status: saved.status || "Open",
+        paymentMode: "Credit",
+        paymentType: "Credit",
+        notes: saved.description || "",
+        description: saved.description || "",
+        terms: saved.terms || "",
+        roundOff: saved.roundOff,
+        roundOffValue: saved.roundOffValue,
+        rows: saved.rows,
+        items: saved.rows,
+      });
+      toast.success(editor.mode === "edit" ? "Purchase order updated in database." : "Purchase order saved to database.");
+    } catch (err) {
+      console.warn("[PurchaseOrders] Remote database save failed:", err?.message);
+      toast.warning("Saved locally. MySQL sync pending (server unreachable).");
+    }
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -230,16 +353,53 @@ export default function PurchaseOrders() {
         message: `Delete purchase order ${order.number}?`,
         confirmText: "Delete",
         confirmColor: "red",
-        onConfirm: () => {
+        onConfirm: async () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
           saveList(orders.filter((entry) => entry.id !== order.id));
-          toast.success(`Purchase order ${order.number} deleted.`);
+          try {
+            await transactionsDb.remove(order.id);
+            toast.success(`Purchase order ${order.number} deleted from database.`);
+          } catch (err) {
+            console.warn("[PurchaseOrders] Remote delete failed:", err?.message);
+            toast.warning(`Deleted locally. MySQL removal pending.`);
+          }
         },
       });
     }
     if (name === "Duplicate") {
-      saveList([{ ...order, id: `purchase-order-${Date.now()}`, number: String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1), status: "Open", history: [], createdAt: new Date().toISOString() }, ...orders]);
-      toast.success("Purchase order duplicated.");
+      const newNumber = String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1);
+      const newId = `purchase-order-${Date.now()}`;
+      const duplicated = {
+        ...order,
+        id: newId,
+        number: newNumber,
+        status: "Open",
+        history: [{ action: "Duplicated purchase order", at: new Date().toISOString() }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveList([duplicated, ...orders]);
+      try {
+        transactionsDb.save({
+          ...duplicated,
+          transactionType: "purchase_order",
+          type: "purchase_order",
+          documentNumber: newNumber,
+          number: newNumber,
+          partyName: duplicated.supplier,
+          supplier: duplicated.supplier,
+          supplierName: duplicated.supplier,
+          rows: duplicated.rows,
+          items: duplicated.rows,
+        }).then(() => {
+          toast.success("Purchase order duplicated and saved to database.");
+        }).catch((err) => {
+          console.warn("[PurchaseOrders] Duplicate remote sync notice:", err?.message);
+          toast.warning("Duplicated locally. MySQL sync pending.");
+        });
+      } catch (err) {
+        toast.warning("Duplicated locally. MySQL sync pending.");
+      }
     }
     if (name === "Convert to Purchase") {
       const summary = getOrderFulfillmentSummary(order);

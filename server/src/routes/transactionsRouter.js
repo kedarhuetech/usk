@@ -19,6 +19,34 @@ function formatSqlDate(val) {
 }
 
 /**
+ * Calculates signed party balance impact for a transaction.
+ * Positive = party current_balance increases
+ * Negative = party current_balance decreases
+ */
+function getPartyBalanceImpact(type, balAmt, pdAmt) {
+  const normType = String(type || "").toLowerCase();
+  if (normType === "sale" || normType === "pos") {
+    return Number(balAmt) || 0;
+  }
+  if (normType === "payment_in") {
+    return -(Number(pdAmt) || 0);
+  }
+  if (normType === "purchase") {
+    return -(Number(balAmt) || 0);
+  }
+  if (normType === "payment_out") {
+    return Number(pdAmt) || 0;
+  }
+  if (normType === "sale_return") {
+    return -(Number(balAmt) || 0);
+  }
+  if (normType === "purchase_return") {
+    return Number(balAmt) || 0;
+  }
+  return 0;
+}
+
+/**
  * GET /api/transactions
  * Retrieves paginated list of transactions with normalized line items.
  */
@@ -122,10 +150,12 @@ router.get("/", async (req, res) => {
           name: item.item_name,
           itemName: item.item_name,
           itemCode: item.item_code || "",
+          size: item.item_code || "",
           hsn: item.hsn_code || "",
           hsnCode: item.hsn_code || "",
           batchNo: item.batch_no || "",
           serialNo: item.serial_no || "",
+          description: item.serial_no || "",
           qty: parseFloat(item.quantity) || 0,
           quantity: parseFloat(item.quantity) || 0,
           freeQty: parseFloat(item.free_qty) || 0,
@@ -155,11 +185,30 @@ router.get("/", async (req, res) => {
       const rawTotal = parseFloat(row.total_amount) || 0;
       const effectiveTotal = rawTotal > 0 ? rawTotal : itemsTotal;
       const party = row.party_name || (row.payment_mode === "Cash" || row.transaction_type === "pos" ? "Cash Sale" : "");
+      const payments = items.length > 0
+        ? items.map((it) => ({
+            id: it.id,
+            type: it.itemName || it.item || "Cash",
+            amount: String(it.totalAmount || it.amount || 0),
+            reference: it.itemCode || it.reference || "",
+            chequeDate: it.serialNo || it.chequeDate || "",
+          }))
+        : [
+            {
+              id: `pay-${row.id}`,
+              type: row.payment_mode || "Cash",
+              amount: String(row.paid_amount || effectiveTotal),
+              reference: row.payment_ref_no || "",
+              chequeDate: "",
+            },
+          ];
+
       return {
         id: row.id,
         transactionType: row.transaction_type,
         type: row.transaction_type,
         documentNumber: row.document_number,
+        number: row.document_number,
         invoiceNumber: row.document_number,
         billNumber: row.document_number,
         orderNumber: row.document_number,
@@ -173,6 +222,7 @@ router.get("/", async (req, res) => {
         customer: party,
         customerName: party,
         supplierName: party,
+        supplier: party,
         partyPhone: row.party_phone || "",
         phone: row.party_phone || "",
         partyGstin: row.party_gstin || "",
@@ -183,11 +233,13 @@ router.get("/", async (req, res) => {
         discountAmount: parseFloat(row.discount_amount) || 0,
         taxAmount: parseFloat(row.tax_amount) || 0,
         roundOff: parseFloat(row.round_off) || 0,
+        roundOffValue: String(row.round_off ?? ""),
         totalAmount: effectiveTotal,
         total: effectiveTotal,
         amount: effectiveTotal,
         paidAmount: parseFloat(row.paid_amount) || 0,
         receivedAmount: parseFloat(row.paid_amount) || 0,
+        received: parseFloat(row.paid_amount) || 0,
         balanceAmount: parseFloat(row.balance_amount) || 0,
         balance: parseFloat(row.balance_amount) || 0,
         paymentMode: row.payment_mode || "Cash",
@@ -199,9 +251,12 @@ router.get("/", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         eWayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
+        linkedInvoiceId: row.po_number || "",
         poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
+        description: row.notes || "",
         terms: row.terms || "",
+        payments,
         items,
         rows: items.map((it) => ({
           ...it,
@@ -322,10 +377,12 @@ router.get("/:id", async (req, res) => {
       name: item.item_name,
       itemName: item.item_name,
       itemCode: item.item_code || "",
+      size: item.item_code || "",
       hsn: item.hsn_code || "",
       hsnCode: item.hsn_code || "",
       batchNo: item.batch_no || "",
       serialNo: item.serial_no || "",
+      description: item.serial_no || "",
       qty: parseFloat(item.quantity) || 0,
       quantity: parseFloat(item.quantity) || 0,
       freeQty: parseFloat(item.free_qty) || 0,
@@ -355,6 +412,24 @@ router.get("/:id", async (req, res) => {
     const billingAddress = row.resolved_billing_address || row.billing_address || "";
     const shippingAddress = row.resolved_shipping_address || row.shipping_address || billingAddress || "";
 
+    const payments = items.length > 0
+      ? items.map((it) => ({
+          id: it.id,
+          type: it.itemName || it.item || "Cash",
+          amount: String(it.totalAmount || it.amount || 0),
+          reference: it.itemCode || it.reference || "",
+          chequeDate: it.serialNo || it.chequeDate || "",
+        }))
+      : [
+          {
+            id: `pay-${row.id}`,
+            type: row.payment_mode || "Cash",
+            amount: String(row.paid_amount || effectiveTotal),
+            reference: row.payment_ref_no || "",
+            chequeDate: "",
+          },
+        ];
+
     return res.json({
       success: true,
       data: {
@@ -362,6 +437,7 @@ router.get("/:id", async (req, res) => {
         transactionType: row.transaction_type,
         type: row.transaction_type,
         documentNumber: row.document_number,
+        number: row.document_number,
         invoiceNumber: row.document_number,
         transactionDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
@@ -371,6 +447,7 @@ router.get("/:id", async (req, res) => {
         customer: party,
         customerName: party,
         supplierName: party,
+        supplier: party,
         partyPhone: phone,
         phone,
         partyGstin: row.resolved_party_gstin || row.party_gstin || "",
@@ -381,9 +458,11 @@ router.get("/:id", async (req, res) => {
         discountAmount: parseFloat(row.discount_amount) || 0,
         taxAmount: parseFloat(row.tax_amount) || 0,
         roundOff: parseFloat(row.round_off) || 0,
+        roundOffValue: String(row.round_off ?? ""),
         totalAmount: effectiveTotal,
         paidAmount: parseFloat(row.paid_amount) || 0,
         receivedAmount: parseFloat(row.paid_amount) || 0,
+        received: parseFloat(row.paid_amount) || 0,
         balanceAmount: parseFloat(row.balance_amount) || 0,
         paymentMode: row.payment_mode || "Cash",
         paymentType: row.payment_mode || "Cash",
@@ -394,9 +473,12 @@ router.get("/:id", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         eWayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
+        linkedInvoiceId: row.po_number || "",
         poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
+        description: row.notes || "",
         terms: row.terms || "",
+        payments,
         items,
         rows: items.map((it) => ({
           ...it,
@@ -460,8 +542,9 @@ const saveTransactionHandler = async (req, res) => {
     const rawTxnDate = body.transactionDate || body.invoiceDate || body.billDate || body.date || body.form?.invoiceDate || new Date();
     const transactionDate = formatSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
     const dueDate = formatSqlDate(body.dueDate || body.form?.dueDate);
-    const partyId = body.partyId || body.party_id || body.form?.partyId || body.customerId || null;
-    const partyName = (body.partyName || body.party || body.customerName || body.customer || body.supplierName || body.form?.customer || body.form?.partyName || body.form?.party || "").trim() ||
+    const rawPartyId = body.partyId || body.party_id || body.form?.partyId || body.customerId || null;
+    const partyId = (rawPartyId && rawPartyId !== "null" && rawPartyId !== "undefined" && String(rawPartyId).trim()) ? String(rawPartyId).trim() : null;
+    const partyName = (body.partyName || body.party || body.customerName || body.customer || body.supplierName || body.supplier || body.form?.customer || body.form?.supplier || body.form?.partyName || body.form?.party || "").trim() ||
       ((body.paymentMode === "Cash" || body.paymentType === "Cash" || body.form?.paymentType === "Cash" || transactionType === "pos") ? "Cash Sale" : null);
     const partyPhone = body.partyPhone || body.phone || body.mobile || body.customerPhone || body.form?.phone || null;
     const partyGstin = body.partyGstin || body.gstin || body.form?.gstin || null;
@@ -472,9 +555,47 @@ const saveTransactionHandler = async (req, res) => {
       ? JSON.stringify(body.shippingAddress || body.shipping_address)
       : (body.shippingAddress || body.form?.shippingAddress || body.shipping_address || billingAddress || null);
 
-    const rawItems = Array.isArray(body.items) && body.items.length
+    // Party integrity validation: verify party exists under this business if partyId is provided
+    if (partyId) {
+      const [partyCheck] = await conn.query(
+        `SELECT id, party_name FROM parties WHERE business_id = ? AND id = ? LIMIT 1`,
+        [businessId, partyId]
+      );
+      if (!partyCheck.length) {
+        await conn.rollback();
+        return res.status(400).json({
+          success: false,
+          message: `Party validation failed: Party '${partyName || partyId}' (ID: ${partyId}) does not exist under business '${businessId}'.`,
+        });
+      }
+    }
+
+    const rawPayments = Array.isArray(body.payments) && body.payments.length > 0 ? body.payments : [];
+    let rawItems = Array.isArray(body.items) && body.items.length
       ? body.items
-      : (Array.isArray(body.rows) && body.rows.length ? body.rows : (Array.isArray(body.lineItems) ? body.lineItems : []));
+      : (Array.isArray(body.rows) && body.rows.length
+          ? body.rows
+          : (Array.isArray(body.lineItems) && body.lineItems.length ? body.lineItems : []));
+
+    if ((transactionType === "payment_in" || transactionType === "payment_out") && rawItems.length === 0) {
+      if (rawPayments.length > 0) {
+        rawItems = rawPayments.map((p, idx) => ({
+          id: p.id || `${id}_pay_${idx + 1}`,
+          itemName: p.type || "Cash",
+          item: p.type || "Cash",
+          unit: "TXN",
+          quantity: 1,
+          qty: 1,
+          unitPrice: parseFloat(p.amount) || 0,
+          price: parseFloat(p.amount) || 0,
+          totalAmount: parseFloat(p.amount) || 0,
+          amount: parseFloat(p.amount) || 0,
+          itemCode: p.reference || "",
+          serialNo: p.chequeDate || "",
+        }));
+      }
+    }
+
     const itemsSum = rawItems.reduce((s, it) => s + (parseFloat(it.totalAmount ?? it.amount ?? (parseFloat(it.qty ?? it.quantity ?? 1) * parseFloat(it.price ?? it.unitPrice ?? 0))) || 0), 0);
     const parsedTotal = parseFloat(body.totalAmount ?? body.total ?? body.amount ?? body.totals?.finalTotal ?? body.totals?.grandTotal ?? 0) || 0;
     const totalAmount = parsedTotal > 0 ? parsedTotal : itemsSum;
@@ -483,21 +604,48 @@ const saveTransactionHandler = async (req, res) => {
     const discountPercent = parseFloat(body.discountPercent ?? body.discount_percent ?? body.totals?.discountPercent ?? 0) || 0;
     const discountAmount = parseFloat(body.discountAmount ?? body.discount ?? body.totals?.discount ?? 0) || 0;
     const taxAmount = parseFloat(body.taxAmount ?? body.tax ?? body.totals?.totalTax ?? body.totals?.tax ?? 0) || 0;
-    const roundOff = parseFloat(body.roundOff ?? body.round_off ?? body.totals?.roundOffAmount ?? 0) || 0;
-    const paidAmount = parseFloat(body.paidAmount ?? body.receivedAmount ?? body.paid ?? body.totals?.received ?? 0) || 0;
-    const balanceAmount = parseFloat(body.balanceAmount ?? body.balance ?? body.totals?.balance ?? (totalAmount - paidAmount)) || 0;
+    const roundOff = parseFloat(body.roundOffValue ?? (typeof body.roundOff === 'number' ? body.roundOff : null) ?? body.round_off ?? body.totals?.roundOffAmount ?? 0) || 0;
+    const paidAmount = parseFloat(body.paidAmount ?? body.receivedAmount ?? body.received ?? body.paid ?? body.totals?.received ?? (transactionType === "payment_in" || transactionType === "payment_out" ? totalAmount : 0)) || 0;
+    const balanceAmount = parseFloat(body.balanceAmount ?? body.balance ?? body.totals?.balance ?? (transactionType === "payment_in" || transactionType === "payment_out" ? 0 : (totalAmount - paidAmount))) || 0;
 
     const paymentMode = body.paymentMode || body.paymentType || body.form?.paymentType || "Cash";
-    const paymentStatus = body.status || (balanceAmount <= 0.001 ? "Paid" : (paidAmount > 0 ? "Partial" : "Unpaid"));
+    const paymentStatus = body.status || body.paymentStatus || (balanceAmount <= 0.001 ? "Paid" : (paidAmount > 0 ? "Partial" : "Unpaid"));
     const paymentRefNo = body.paymentRefNo || body.refNo || null;
     const cashTendered = parseFloat(body.cashTendered ?? body.tendered ?? 0) || 0;
     const changeReturned = parseFloat(body.changeReturned ?? body.change ?? 0) || 0;
     const vehicleNo = body.vehicleNo || null;
     const eWayBillNo = body.eWayBillNo || null;
-    const poNumber = body.poNumber || null;
+    const poNumber = body.poNumber || body.linkedInvoiceId || null;
     const poDate = toSqlDate(body.poDate || body.po_date || body.form?.poDate);
-    const notes = body.notes || null;
+    const notes = body.notes || body.description || null;
     const terms = body.terms || null;
+
+    if ((transactionType === "payment_in" || transactionType === "payment_out") && rawItems.length === 0) {
+      rawItems = [{
+        id: `${id}_pay_1`,
+        itemName: paymentMode || "Cash",
+        item: paymentMode || "Cash",
+        unit: "TXN",
+        quantity: 1,
+        qty: 1,
+        unitPrice: totalAmount,
+        price: totalAmount,
+        totalAmount: totalAmount,
+        amount: totalAmount,
+        itemCode: paymentRefNo || "",
+        serialNo: "",
+      }];
+    }
+
+    // Check if transaction already exists in MySQL for safe differential accounting
+    const [existingRows] = await conn.query(
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount
+       FROM transactions
+       WHERE business_id = ? AND id = ?
+       FOR UPDATE`,
+      [businessId, id]
+    );
+    const existingTxn = existingRows[0] || null;
 
     // 1. Upsert Transaction Header (Pure SQL columns)
     await conn.query(
@@ -550,7 +698,37 @@ const saveTransactionHandler = async (req, res) => {
       ]
     );
 
-    // 2. Clear existing line items for update and re-insert into transaction_items table (pure rows & columns)
+    // 2. Revert previous inventory movements if this is an update, then re-insert fresh lines
+    if (existingTxn) {
+      const [oldLines] = await conn.query(
+        `SELECT item_id, batch_no, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
+        [businessId, id]
+      );
+      for (const line of oldLines) {
+        if (line.item_id) {
+          const qty = (parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0);
+          let revertStock = 0;
+          if (existingTxn.transaction_type === "sale" || existingTxn.transaction_type === "pos" || existingTxn.transaction_type === "delivery_challan" || existingTxn.transaction_type === "purchase_return") {
+            revertStock = +qty;
+          } else if (existingTxn.transaction_type === "purchase" || existingTxn.transaction_type === "sale_return") {
+            revertStock = -qty;
+          }
+          if (revertStock !== 0) {
+            await conn.query(
+              `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
+              [revertStock, businessId, line.item_id]
+            );
+            if (line.batch_no) {
+              await conn.query(
+                `UPDATE item_batches SET current_qty = current_qty + ? WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
+                [revertStock, businessId, line.item_id, line.batch_no]
+              );
+            }
+          }
+        }
+      }
+    }
+
     await conn.query(`DELETE FROM transaction_items WHERE business_id = ? AND transaction_id = ?`, [businessId, id]);
 
     let itemIdx = 0;
@@ -559,19 +737,19 @@ const saveTransactionHandler = async (req, res) => {
       const lineId = item.id || `${id}_item_${itemIdx}_${Math.random().toString(36).substring(2, 6)}`;
       const itemId = item.itemId || item.sourceItemId || item.inventoryItemId || item.item_id || null;
       const itemName = (item.item || item.itemName || item.name || "Item").trim();
-      const itemCode = item.itemCode || item.code || item.item_code || null;
+      const itemCode = item.itemCode || item.code || item.size || item.item_code || null;
       const hsnCode = item.hsnCode || item.hsn || item.hsn_code || null;
       const batchNo = item.batchNo || item.batch || item.batch_no || null;
       const serialNo = Array.isArray(item.serialNumbers)
         ? item.serialNumbers.join(",")
-        : (item.serialNo || item.serial || null);
+        : (item.serialNo || item.serial || item.description || null);
       const quantity = parseFloat(item.qty ?? item.quantity ?? 1) || 1;
       const freeQty = parseFloat(item.freeQty ?? 0) || 0;
       const unit = item.unit || "PCS";
       const unitPrice = parseFloat(item.price ?? item.unitPrice ?? item.rate ?? 0) || 0;
       const purchasePrice = parseFloat(item.purchasePrice ?? item.purchase_price ?? 0) || 0;
-      const itemDiscountPercent = parseFloat(item.discountPercent ?? item.discount_percent ?? (item.discountMode !== "amount" ? item.discount : 0) ?? 0) || 0;
-      const itemDiscountAmount = parseFloat(item.discountAmount ?? item.discount_amount ?? (item.discountMode === "amount" ? item.discount : 0) ?? 0) || 0;
+      const itemDiscountPercent = parseFloat(item.discountPercent ?? item.discount_percent ?? (item.discountMode !== "amount" && item.discountType !== "amount" ? item.discount : 0) ?? 0) || 0;
+      const itemDiscountAmount = parseFloat(item.discountAmount ?? item.discount_amount ?? (item.discountMode === "amount" || item.discountType === "amount" ? item.discount : 0) ?? 0) || 0;
       const itemTaxRate = parseFloat(item.taxRate ?? item.tax_rate ?? (item.tax && item.tax !== "NONE" ? String(item.tax).replace(/[^0-9.]/g, "") : 0) ?? 0) || 0;
       const itemTaxAmount = parseFloat(item.taxAmount ?? item.tax_amount ?? 0) || 0;
       const cgstRate = parseFloat(item.cgstRate ?? (itemTaxRate / 2)) || 0;
@@ -581,7 +759,7 @@ const saveTransactionHandler = async (req, res) => {
       const igstRate = parseFloat(item.igstRate ?? 0) || 0;
       const igstAmount = parseFloat(item.igstAmount ?? 0) || 0;
       const cessRate = parseFloat(item.cessRate ?? item.cessPercent ?? 0) || 0;
-      const cessAmount = parseFloat(item.cessAmount ?? 0) || 0;
+      const cessAmount = parseFloat(item.cessAmount ?? item.cess ?? 0) || 0;
       const itemTotalAmount = parseFloat(item.calculated?.amount ?? item.amount ?? item.totalAmount ?? (quantity * unitPrice - itemDiscountAmount)) || 0;
 
       await conn.query(
@@ -602,7 +780,7 @@ const saveTransactionHandler = async (req, res) => {
       // 3. Atomically adjust stock if linked to inventory item
       if (itemId) {
         let stockDelta = 0;
-        if (transactionType === "sale" || transactionType === "pos" || transactionType === "delivery_challan") {
+        if (transactionType === "sale" || transactionType === "pos" || transactionType === "delivery_challan" || transactionType === "purchase_return") {
           stockDelta = -(quantity + freeQty);
         } else if (transactionType === "purchase" || transactionType === "sale_return") {
           stockDelta = (quantity + freeQty);
@@ -628,25 +806,47 @@ const saveTransactionHandler = async (req, res) => {
       }
     }
 
-    // 4. Atomically update party ledger balance
-    if (partyId) {
-      let balanceDelta = 0;
-      if (transactionType === "sale" || transactionType === "pos") {
-        balanceDelta = balanceAmount;
-      } else if (transactionType === "payment_in") {
-        balanceDelta = -paidAmount;
-      } else if (transactionType === "purchase") {
-        balanceDelta = -balanceAmount;
-      } else if (transactionType === "payment_out") {
-        balanceDelta = paidAmount;
-      }
+    // 4. Atomically update party ledger balance with strict differential accounting
+    const newImpact = getPartyBalanceImpact(transactionType, balanceAmount, paidAmount);
 
-      if (balanceDelta !== 0) {
+    if (existingTxn) {
+      const oldImpact = getPartyBalanceImpact(
+        existingTxn.transaction_type,
+        parseFloat(existingTxn.balance_amount) || 0,
+        parseFloat(existingTxn.paid_amount) || 0
+      );
+      const oldPartyId = existingTxn.party_id;
+
+      if (oldPartyId === partyId) {
+        // Same party: apply only the difference between new impact and old impact
+        const netDelta = newImpact - oldImpact;
+        if (netDelta !== 0 && partyId) {
+          await conn.query(
+            `UPDATE parties SET current_balance = current_balance + ? WHERE business_id = ? AND id = ?`,
+            [netDelta, businessId, partyId]
+          );
+        }
+      } else {
+        // Party changed: revert old impact from old party, apply new impact to new party
+        if (oldPartyId && oldImpact !== 0) {
+          await conn.query(
+            `UPDATE parties SET current_balance = current_balance - ? WHERE business_id = ? AND id = ?`,
+            [oldImpact, businessId, oldPartyId]
+          );
+        }
+        if (partyId && newImpact !== 0) {
+          await conn.query(
+            `UPDATE parties SET current_balance = current_balance + ? WHERE business_id = ? AND id = ?`,
+            [newImpact, businessId, partyId]
+          );
+        }
+      }
+    } else {
+      // Brand new transaction: apply full impact
+      if (partyId && newImpact !== 0) {
         await conn.query(
-          `UPDATE parties
-           SET current_balance = current_balance + ?
-           WHERE business_id = ? AND id = ?`,
-          [balanceDelta, businessId, partyId]
+          `UPDATE parties SET current_balance = current_balance + ? WHERE business_id = ? AND id = ?`,
+          [newImpact, businessId, partyId]
         );
       }
     }
@@ -680,7 +880,7 @@ router.put("/:id", saveTransactionHandler);
 
 /**
  * DELETE /api/transactions/:id
- * Removes a transaction and its normalized lines atomically
+ * Removes a transaction and its normalized lines atomically, safely reverting party balance and inventory movements
  */
 router.delete("/:id", async (req, res) => {
   const conn = await pool.getConnection();
@@ -689,8 +889,62 @@ router.delete("/:id", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const txnId = req.params.id;
 
-    await conn.query(`DELETE FROM transaction_items WHERE business_id = ? AND transaction_id = ?`, [businessId, txnId]);
-    await conn.query(`DELETE FROM transactions WHERE business_id = ? AND id = ?`, [businessId, txnId]);
+    const [existingRows] = await conn.query(
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount
+       FROM transactions
+       WHERE business_id = ? AND id = ?
+       FOR UPDATE`,
+      [businessId, txnId]
+    );
+
+    if (existingRows.length > 0) {
+      const existing = existingRows[0];
+      const impact = getPartyBalanceImpact(
+        existing.transaction_type,
+        parseFloat(existing.balance_amount) || 0,
+        parseFloat(existing.paid_amount) || 0
+      );
+
+      // Revert party balance adjustment
+      if (existing.party_id && impact !== 0) {
+        await conn.query(
+          `UPDATE parties SET current_balance = current_balance - ? WHERE business_id = ? AND id = ?`,
+          [impact, businessId, existing.party_id]
+        );
+      }
+
+      // Revert inventory stock adjustments
+      const [oldLines] = await conn.query(
+        `SELECT item_id, batch_no, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
+        [businessId, txnId]
+      );
+      for (const line of oldLines) {
+        if (line.item_id) {
+          const qty = (parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0);
+          let revertStock = 0;
+          if (existing.transaction_type === "sale" || existing.transaction_type === "pos" || existing.transaction_type === "delivery_challan" || existing.transaction_type === "purchase_return") {
+            revertStock = +qty;
+          } else if (existing.transaction_type === "purchase" || existing.transaction_type === "sale_return") {
+            revertStock = -qty;
+          }
+          if (revertStock !== 0) {
+            await conn.query(
+              `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
+              [revertStock, businessId, line.item_id]
+            );
+            if (line.batch_no) {
+              await conn.query(
+                `UPDATE item_batches SET current_qty = current_qty + ? WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
+                [revertStock, businessId, line.item_id, line.batch_no]
+              );
+            }
+          }
+        }
+      }
+
+      await conn.query(`DELETE FROM transaction_items WHERE business_id = ? AND transaction_id = ?`, [businessId, txnId]);
+      await conn.query(`DELETE FROM transactions WHERE business_id = ? AND id = ?`, [businessId, txnId]);
+    }
 
     await conn.commit();
     return res.json({ success: true, message: "Transaction deleted successfully." });

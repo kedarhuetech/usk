@@ -280,31 +280,41 @@ export default function DeliveryChallans() {
   const startNew = () => setEditor({ mode: "new", value: { id: "", number: String(Math.max(0, ...challans.map((entry) => Number(entry.number) || 0)) + 1), party: "", phone: "", date: today(), dueDate: today(), state: "Select", rows: [freshRow(), freshRow()], description: "", status: "Open" } });
   const change = (key, value) => setEditor((current) => ({ ...current, value: { ...current.value, [key]: value } }));
   const changeRow = (id, key, value) => setEditor((current) => ({ ...current, value: { ...current.value, rows: current.value.rows.map((row) => row.id === id ? { ...row, [key]: value } : row) } }));
-  const save = () => {
-    if (!editor.value.party.trim()) return;
+  const save = async () => {
+    if (!editor.value.party.trim()) {
+      toast.error("Please enter or select a Party Name.");
+      return;
+    }
     const saved = { ...editor.value, id: editor.value.id || crypto.randomUUID(), rows: editor.value.rows.filter((row) => row.item || row.qty), total: subtotal };
-    persist(editor.mode === "edit" ? challans.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...challans]);
-    setEditor(null);
 
-    // Save directly to MySQL transactions table
-    transactionsDb.save({
-      ...saved,
-      transactionType: "delivery_challan",
-      type: "delivery_challan",
-      documentNumber: saved.number,
-      transactionDate: saved.date,
-      dueDate: saved.dueDate,
-      partyName: saved.party,
-      totalAmount: Number(saved.total || 0),
-      items: (saved.rows || []).map((r) => ({
-        itemName: r.item,
-        description: r.description,
-        quantity: Number(r.qty || 1),
-        unitPrice: Number(r.price || 0),
-        discountPercent: Number(r.discount || 0),
-        totalAmount: rowAmount(r),
-      })),
-    }).catch((err) => console.warn("[Challan] MySQL save notice:", err.message));
+    try {
+      // Save directly to MySQL transactions table
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "delivery_challan",
+        type: "delivery_challan",
+        documentNumber: saved.number,
+        transactionDate: saved.date,
+        dueDate: saved.dueDate,
+        partyName: saved.party,
+        totalAmount: Number(saved.total || 0),
+        items: (saved.rows || []).map((r) => ({
+          itemName: r.item,
+          description: r.description,
+          quantity: Number(r.qty || 1),
+          unitPrice: Number(r.price || 0),
+          discountPercent: Number(r.discount || 0),
+          totalAmount: rowAmount(r),
+        })),
+      });
+
+      persist(editor.mode === "edit" ? challans.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...challans]);
+      setEditor(null);
+      toast.success(editor.mode === "edit" ? "Delivery challan updated." : "Delivery challan created.");
+    } catch (err) {
+      toast.error(err.message || "Failed to persist delivery challan.");
+      return;
+    }
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {

@@ -16,6 +16,7 @@ import {
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
 import { businessGrowthApi } from "../../services/apiClient";
+import { getActiveBusinessId } from "../../config/businessConfig";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -220,7 +221,7 @@ export default function EditProfile() {
     setErrorMessage("");
 
     try {
-      const businessId = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
+      const businessId = getActiveBusinessId();
       let finalLogoUrl = formData.logoUrl || formData.logo || "";
       let finalSignatureUrl = formData.signatureUrl || formData.signature || "";
 

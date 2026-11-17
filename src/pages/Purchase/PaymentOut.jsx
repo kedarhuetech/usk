@@ -5,6 +5,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
 import { getPaymentOuts, savePaymentOuts } from "../../services/transactionRepository.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 import {
   buildUnifiedDocumentHtml,
   getEffectiveCompanyInfo,
@@ -140,6 +141,36 @@ export default function PaymentOut() {
   });
 
   const parties = useMemo(() => getParties(), [editor]);
+
+  // Synchronize with MySQL backend
+  useEffect(() => {
+    let active = true;
+    const fetchRemote = async () => {
+      try {
+        const remote = await transactionsDb.listByType("payment_out");
+        if (active && Array.isArray(remote) && remote.length > 0) {
+          const normalized = remote.map(normalizePayment);
+          setRecords(normalized);
+          savePaymentOuts(normalized);
+        }
+      } catch (err) {
+        console.warn("[PaymentOut] Falling back to local cache:", err?.message);
+      }
+    };
+    fetchRemote();
+
+    const handleSync = () => {
+      setRecords(readPayments());
+    };
+    window.addEventListener("ledgerly:business-data-changed", handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      active = false;
+      window.removeEventListener("ledgerly:business-data-changed", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }, []);
+
   const visible = useMemo(() => records.filter((entry) => {
     const text = `${entry.partyName || ""} ${entry.number || ""} ${entry.paymentType || ""}`.toLowerCase();
     return (!dateFrom || entry.date >= dateFrom) && (!dateTo || entry.date <= dateTo)
@@ -151,17 +182,48 @@ export default function PaymentOut() {
 
   const persist = (next) => { setRecords(next); savePaymentOuts(next); };
   const newPayment = () => setEditor({ mode: "new", entry: { number: String(records.length + 1), date: today(), payments: [blankPayment()], description: "", partyId: "", partyName: "", received: "" } });
-  const savePayment = () => {
+  const savePayment = async () => {
     const entry = editor.entry;
     if (!entry.partyName.trim()) { toast.error("Select or enter a party."); return; }
     const amount = (entry.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
     if (amount <= 0) { toast.error("Enter an amount greater than zero."); return; }
     const now = new Date().toISOString();
     const defaultFirm = getEffectiveCompanyInfo().name || "Company";
-    const saved = { ...entry, id: entry.id || `payment-out-${Date.now()}`, amount, received: amount, paymentType: [...new Set(entry.payments.map((payment) => payment.type))].join(", "), status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || defaultFirm, user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated payment" : "Created payment", at: now }] };
+    const paymentId = entry.id || `payment-out-${Date.now()}`;
+    const paymentType = [...new Set(entry.payments.map((payment) => payment.type))].join(", ");
+    const saved = { ...entry, id: paymentId, amount, received: amount, paymentType, status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || defaultFirm, user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated payment" : "Created payment", at: now }] };
     persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
-    toast.success(editor.mode === "edit" ? "Payment updated successfully." : "Payment-Out recorded.");
-    setEditor(null);
+
+    try {
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "payment_out",
+        type: "payment_out",
+        documentNumber: String(saved.number || "").trim(),
+        number: String(saved.number || "").trim(),
+        transactionDate: saved.date || today(),
+        date: saved.date || today(),
+        partyId: saved.partyId || null,
+        partyName: saved.partyName,
+        supplierName: saved.partyName,
+        totalAmount: amount,
+        subtotal: amount,
+        paidAmount: amount,
+        receivedAmount: amount,
+        balanceAmount: 0,
+        paymentMode: paymentType || "Cash",
+        paymentType: paymentType || "Cash",
+        status: saved.status || "Completed",
+        notes: saved.description || "",
+        description: saved.description || "",
+        linkedInvoiceId: saved.linkedInvoiceId || null,
+        payments: saved.payments || [],
+      });
+      toast.success(editor.mode === "edit" ? "Payment updated successfully." : "Payment-Out recorded.");
+    } catch (err) {
+      console.warn("[PaymentOut MySQL Save Notice]", err?.message);
+      toast.error(`Saved locally, but backend sync failed: ${err.message}`);
+    }
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -181,6 +243,8 @@ export default function PaymentOut() {
         }
       }
     } catch {}
+
+    setEditor(null);
   };
   const toggleMenu = (entry, event) => {
     if (openMenu === entry.id) { setOpenMenu(""); return; }
@@ -189,7 +253,36 @@ export default function PaymentOut() {
     setMenuPosition({ top: rect.bottom + menuHeight > window.innerHeight ? Math.max(8, rect.top - menuHeight) : rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) });
     setOpenMenu(entry.id);
   };
-  const duplicate = (entry) => { const copy = { ...entry, id: `payment-out-${Date.now()}`, number: String(records.length + 1), status: "Unused", linkedInvoiceId: "", history: [{ action: "Duplicated payment", at: new Date().toISOString() }] }; persist([copy, ...records]); toast.success("Payment duplicated."); setOpenMenu(""); };
+  const duplicate = async (entry) => {
+    const newId = `payment-out-${Date.now()}`;
+    const newNumber = String(records.length + 1);
+    const copy = { ...entry, id: newId, number: newNumber, status: "Unused", linkedInvoiceId: "", history: [{ action: "Duplicated payment", at: new Date().toISOString() }] };
+    persist([copy, ...records]);
+    try {
+      await transactionsDb.save({
+        ...copy,
+        transactionType: "payment_out",
+        type: "payment_out",
+        documentNumber: newNumber,
+        number: newNumber,
+        transactionDate: copy.date || today(),
+        date: copy.date || today(),
+        partyId: copy.partyId || null,
+        partyName: copy.partyName,
+        supplierName: copy.partyName,
+        totalAmount: copy.amount,
+        paidAmount: copy.received ?? copy.amount,
+        balanceAmount: 0,
+        paymentMode: copy.paymentType || "Cash",
+        payments: copy.payments || [],
+      });
+      toast.success("Payment duplicated.");
+    } catch (err) {
+      console.warn("[PaymentOut MySQL Duplicate Notice]", err?.message);
+      toast.success("Payment duplicated locally.");
+    }
+    setOpenMenu("");
+  };
   const remove = (entry) => {
     setConfirmModal({
       isOpen: true,
@@ -197,10 +290,16 @@ export default function PaymentOut() {
       message: `Delete Payment-Out payment ${entry.number}?`,
       confirmText: "Delete",
       confirmColor: "red",
-      onConfirm: () => {
+      onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         persist(records.filter((record) => record.id !== entry.id));
-        toast.success(`Payment ${entry.number} deleted.`);
+        try {
+          await transactionsDb.remove(entry.id);
+          toast.success(`Payment ${entry.number} deleted.`);
+        } catch (err) {
+          console.warn("[PaymentOut MySQL Delete Notice]", err?.message);
+          toast.error(`Deleted locally, but backend delete failed: ${err.message}`);
+        }
       },
     });
     setOpenMenu("");

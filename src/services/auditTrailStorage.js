@@ -1,5 +1,7 @@
 // Manages the Audit Trail timeline of actions across the application.
 import { getAppSettings } from "./appSettingsStorage.js";
+import { auditTrailDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 export const AUDIT_TRAIL_KEY = "ledgerly:auditTrail.v1";
 export const AUDIT_TRAIL_UPDATED_EVENT = "ledgerly:audit-trail-updated";
@@ -64,6 +66,15 @@ export function recordAuditTrail({ action, entity = "General", details = "", use
     const next = [entry, ...existing].slice(0, 200); // keep last 200 logs
     window.localStorage.setItem(AUDIT_TRAIL_KEY, JSON.stringify(next));
     window.dispatchEvent(new CustomEvent(AUDIT_TRAIL_UPDATED_EVENT, { detail: entry }));
+
+    if (isDatabaseMode()) {
+      auditTrailDb.log({
+        actionType: action,
+        entityType: entity,
+        details,
+        userName: user,
+      }).catch((err) => console.warn("[AuditTrail] Background sync notice:", err.message));
+    }
   } catch (error) {
     console.warn("Could not record audit trail entry", error);
   }
