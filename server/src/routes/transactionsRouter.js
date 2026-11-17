@@ -62,7 +62,7 @@ router.get("/", async (req, res) => {
     const startDate = (req.query.startDate || "").trim();
     const endDate = (req.query.endDate || "").trim();
 
-    const conditions = ["(t.business_id = ? OR t.business_id IN ('demo-business', 'local-development'))"];
+    const conditions = ["t.business_id = ?"];
     const params = [businessId];
 
     if (type && type !== "all") {
@@ -133,7 +133,7 @@ router.get("/", async (req, res) => {
                 tax_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
                 igst_rate, igst_amount, cess_rate, cess_amount, total_amount
          FROM transaction_items
-         WHERE (business_id = ? OR business_id IN ('demo-business', 'local-development')) AND transaction_id IN (${placeholders})
+         WHERE business_id = ? AND transaction_id IN (${placeholders})
          ORDER BY id ASC`,
         [businessId, ...txnIds]
       );
@@ -352,7 +352,7 @@ router.get("/:id", async (req, res) => {
               COALESCE(NULLIF(TRIM(t.shipping_address), ''), p.shipping_address, '') AS resolved_shipping_address
        FROM transactions t
        LEFT JOIN parties p ON t.party_id = p.id
-       WHERE (t.business_id = ? OR t.business_id IN ('demo-business', 'local-development')) AND t.id = ?
+       WHERE t.business_id = ? AND t.id = ?
        LIMIT 1`,
       [businessId, txnId]
     );
@@ -365,7 +365,7 @@ router.get("/:id", async (req, res) => {
 
     // Fetch line items from normalized transaction_items table
     const [itemRows] = await pool.query(
-      `SELECT * FROM transaction_items WHERE (business_id = ? OR business_id IN ('demo-business', 'local-development')) AND transaction_id = ? ORDER BY id ASC`,
+      `SELECT * FROM transaction_items WHERE business_id = ? AND transaction_id = ? ORDER BY id ASC`,
       [businessId, txnId]
     );
 

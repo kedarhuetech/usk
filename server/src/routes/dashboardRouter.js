@@ -18,7 +18,7 @@ const router = Router();
 const getSummary = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const bizClause = "(business_id = ? OR business_id IN ('demo-business', 'local-development'))";
+    const bizClause = "business_id = ?";
     const today = new Date().toISOString().slice(0, 10);
 
     // 1. Sales & Purchases totals
