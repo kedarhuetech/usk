@@ -55,12 +55,12 @@ router.get("/cash-in-hand", async (req, res) => {
 /**
  * POST /api/cash-bank/cash-in-hand
  */
-router.post("/cash-in-hand", async (req, res) => {
+const saveCashHandler = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `cash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `cash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const entryDate = body.entryDate || body.date || new Date().toISOString().slice(0, 10);
     const entryType = (body.entryType || body.type || "in").toLowerCase();
     const amount = parseFloat(body.amount) || 0;
@@ -74,11 +74,40 @@ router.post("/cash-in-hand", async (req, res) => {
       `INSERT INTO cash_in_hand (
         id, business_id, entry_date, entry_type, amount,
         party_id, party_name, reference_type, reference_no, description
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        entry_date = VALUES(entry_date),
+        entry_type = VALUES(entry_type),
+        amount = VALUES(amount),
+        party_id = VALUES(party_id),
+        party_name = VALUES(party_name),
+        reference_type = VALUES(reference_type),
+        reference_no = VALUES(reference_no),
+        description = VALUES(description)`,
       [id, businessId, entryDate, entryType, amount, partyId, partyName, referenceType, referenceNo, description]
     );
 
     return res.json({ success: true, message: "Cash entry recorded.", data: { id, amount, entryType } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+router.post("/cash-in-hand", saveCashHandler);
+router.put("/cash-in-hand/:id", saveCashHandler);
+
+/**
+ * DELETE /api/cash-bank/cash-in-hand/:id
+ */
+router.delete("/cash-in-hand/:id", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const { id } = req.params;
+    await pool.query(
+      `DELETE FROM cash_in_hand WHERE id = ? AND business_id = ?`,
+      [id, businessId]
+    );
+    return res.json({ success: true, message: "Cash entry deleted successfully." });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -124,12 +153,12 @@ router.get("/cheques", async (req, res) => {
 /**
  * POST /api/cash-bank/cheques
  */
-router.post("/cheques", async (req, res) => {
+const saveChequeHandler = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `chq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `chq_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const partyId = body.partyId || null;
     const partyName = (body.partyName || "Party").trim();
     const chequeNumber = (body.chequeNumber || body.number || "").trim();
@@ -170,7 +199,10 @@ router.post("/cheques", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.post("/cheques", saveChequeHandler);
+router.put("/cheques/:id", saveChequeHandler);
 
 /**
  * DELETE /api/cash-bank/cheques/:id
@@ -224,12 +256,12 @@ router.get("/loan-accounts", async (req, res) => {
 /**
  * POST /api/cash-bank/loan-accounts
  */
-router.post("/loan-accounts", async (req, res) => {
+const saveLoanHandler = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `loan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `loan_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const accountName = (body.accountName || body.name || "Loan Account").trim();
     const lenderName = (body.lenderName || body.lender || "Bank").trim();
     const accountNumber = (body.accountNumber || body.accountNo || "").trim();
@@ -268,7 +300,10 @@ router.post("/loan-accounts", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.post("/loan-accounts", saveLoanHandler);
+router.put("/loan-accounts/:id", saveLoanHandler);
 
 /**
  * DELETE /api/cash-bank/loan-accounts/:id

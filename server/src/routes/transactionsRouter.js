@@ -15,29 +15,7 @@ import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 const router = Router();
 
 function formatSqlDate(val) {
-  if (!val) return null;
-  if (typeof val === "string") {
-    const s = val.trim();
-    if (!s) return null;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-    if (s.includes("T") || s.includes(" ") || s.includes("Z")) {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) {
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      }
-    }
-    const dmySlash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (dmySlash) return `${dmySlash[3]}-${dmySlash[2].padStart(2, "0")}-${dmySlash[1].padStart(2, "0")}`;
-    const dmyDash = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
-    if (dmyDash) return `${dmyDash[3]}-${dmyDash[2].padStart(2, "0")}-${dmyDash[1].padStart(2, "0")}`;
-    const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
-    return s.slice(0, 10);
-  }
-  if (val instanceof Date && !isNaN(val.getTime())) {
-    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
-  }
-  return String(val);
+  return toSqlDate(val);
 }
 
 /**
@@ -56,7 +34,7 @@ router.get("/", async (req, res) => {
     const startDate = (req.query.startDate || "").trim();
     const endDate = (req.query.endDate || "").trim();
 
-    const conditions = ["t.business_id = ?"];
+    const conditions = ["(t.business_id = ? OR t.business_id IN ('demo-business', 'local-development'))"];
     const params = [businessId];
 
     if (type && type !== "all") {
@@ -127,7 +105,7 @@ router.get("/", async (req, res) => {
                 tax_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
                 igst_rate, igst_amount, cess_rate, cess_amount, total_amount
          FROM transaction_items
-         WHERE business_id = ? AND transaction_id IN (${placeholders})
+         WHERE (business_id = ? OR business_id IN ('demo-business', 'local-development')) AND transaction_id IN (${placeholders})
          ORDER BY id ASC`,
         [businessId, ...txnIds]
       );
@@ -185,18 +163,10 @@ router.get("/", async (req, res) => {
         invoiceNumber: row.document_number,
         billNumber: row.document_number,
         orderNumber: row.document_number,
-<<<<<<< HEAD
         transactionDate: toSqlDate(row.transaction_date),
         invoiceDate: toSqlDate(row.transaction_date),
         billDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
-=======
-        transactionDate: txnDate,
-        invoiceDate: txnDate,
-        billDate: txnDate,
-        date: txnDate,
-        dueDate: dueDate,
->>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party: party,
@@ -249,11 +219,6 @@ router.get("/", async (req, res) => {
           dueDate: dueDate,
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
-<<<<<<< HEAD
-          invoiceNumber: row.document_number,
-          invoiceDate: toSqlDate(row.transaction_date),
-=======
->>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -398,18 +363,8 @@ router.get("/:id", async (req, res) => {
         type: row.transaction_type,
         documentNumber: row.document_number,
         invoiceNumber: row.document_number,
-<<<<<<< HEAD
         transactionDate: toSqlDate(row.transaction_date),
         dueDate: toSqlDate(row.due_date),
-=======
-        billNumber: row.document_number,
-        orderNumber: row.document_number,
-        transactionDate: txnDate,
-        invoiceDate: txnDate,
-        billDate: txnDate,
-        date: txnDate,
-        dueDate: dueDate,
->>>>>>> origin/main
         partyId: row.party_id,
         partyName: party,
         party,
@@ -459,11 +414,6 @@ router.get("/:id", async (req, res) => {
           dueDate: dueDate,
           billingAddress,
           shippingAddress,
-<<<<<<< HEAD
-          invoiceNumber: row.document_number,
-          invoiceDate: toSqlDate(row.transaction_date),
-=======
->>>>>>> origin/main
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -488,7 +438,7 @@ router.get("/:id", async (req, res) => {
  * POST /api/transactions
  * Atomically saves transaction header and all transaction_items child rows in pure SQL columns
  */
-router.post("/", async (req, res) => {
+const saveTransactionHandler = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -496,7 +446,7 @@ router.post("/", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const transactionType = (body.transactionType || body.type || "sale").toLowerCase();
     const documentNumber = String(
       body.documentNumber ||
@@ -507,35 +457,11 @@ router.post("/", async (req, res) => {
       body.form?.billNumber ||
       "0"
     ).trim();
-<<<<<<< HEAD
-    const rawTxnDate =
-      body.transactionDate ||
-      body.invoiceDate ||
-      body.billDate ||
-      body.date ||
-      body.form?.invoiceDate ||
-      body.form?.billDate ||
-      new Date().toISOString().slice(0, 10);
-    const transactionDate = toSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
-    const dueDate = toSqlDate(body.dueDate || body.due_date || body.form?.dueDate);
-    const partyId = body.partyId || body.party_id || null;
-    const partyName =
-      (body.partyName ||
-      body.customerName ||
-      body.supplierName ||
-      body.party ||
-      body.customer ||
-      body.form?.customer ||
-      body.form?.partyName ||
-      body.form?.party ||
-      "").trim() ||
-=======
     const rawTxnDate = body.transactionDate || body.invoiceDate || body.billDate || body.date || body.form?.invoiceDate || new Date();
     const transactionDate = formatSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
     const dueDate = formatSqlDate(body.dueDate || body.form?.dueDate);
     const partyId = body.partyId || body.party_id || body.form?.partyId || body.customerId || null;
     const partyName = (body.partyName || body.party || body.customerName || body.customer || body.supplierName || body.form?.customer || body.form?.partyName || body.form?.party || "").trim() ||
->>>>>>> origin/main
       ((body.paymentMode === "Cash" || body.paymentType === "Cash" || body.form?.paymentType === "Cash" || transactionType === "pos") ? "Cash Sale" : null);
     const partyPhone = body.partyPhone || body.phone || body.mobile || body.customerPhone || body.form?.phone || null;
     const partyGstin = body.partyGstin || body.gstin || body.form?.gstin || null;
@@ -546,10 +472,6 @@ router.post("/", async (req, res) => {
       ? JSON.stringify(body.shippingAddress || body.shipping_address)
       : (body.shippingAddress || body.form?.shippingAddress || body.shipping_address || billingAddress || null);
 
-<<<<<<< HEAD
-   
-=======
->>>>>>> origin/main
     const rawItems = Array.isArray(body.items) && body.items.length
       ? body.items
       : (Array.isArray(body.rows) && body.rows.length ? body.rows : (Array.isArray(body.lineItems) ? body.lineItems : []));
@@ -652,10 +574,10 @@ router.post("/", async (req, res) => {
       const itemDiscountAmount = parseFloat(item.discountAmount ?? item.discount_amount ?? (item.discountMode === "amount" ? item.discount : 0) ?? 0) || 0;
       const itemTaxRate = parseFloat(item.taxRate ?? item.tax_rate ?? (item.tax && item.tax !== "NONE" ? String(item.tax).replace(/[^0-9.]/g, "") : 0) ?? 0) || 0;
       const itemTaxAmount = parseFloat(item.taxAmount ?? item.tax_amount ?? 0) || 0;
-      const cgstRate = parseFloat(item.cgstRate ?? (itemTaxRate / 2) ?? 0) || 0;
-      const cgstAmount = parseFloat(item.cgstAmount ?? (itemTaxAmount / 2) ?? 0) || 0;
-      const sgstRate = parseFloat(item.sgstRate ?? (itemTaxRate / 2) ?? 0) || 0;
-      const sgstAmount = parseFloat(item.sgstAmount ?? (itemTaxAmount / 2) ?? 0) || 0;
+      const cgstRate = parseFloat(item.cgstRate ?? (itemTaxRate / 2)) || 0;
+      const cgstAmount = parseFloat(item.cgstAmount ?? (itemTaxAmount / 2)) || 0;
+      const sgstRate = parseFloat(item.sgstRate ?? (itemTaxRate / 2)) || 0;
+      const sgstAmount = parseFloat(item.sgstAmount ?? (itemTaxAmount / 2)) || 0;
       const igstRate = parseFloat(item.igstRate ?? 0) || 0;
       const igstAmount = parseFloat(item.igstAmount ?? 0) || 0;
       const cessRate = parseFloat(item.cessRate ?? item.cessPercent ?? 0) || 0;
@@ -751,7 +673,10 @@ router.post("/", async (req, res) => {
   } finally {
     conn.release();
   }
-});
+};
+
+router.post("/", saveTransactionHandler);
+router.put("/:id", saveTransactionHandler);
 
 /**
  * DELETE /api/transactions/:id

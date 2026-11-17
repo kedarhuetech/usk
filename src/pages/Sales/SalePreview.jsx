@@ -1065,6 +1065,19 @@ function SalePreview() {
     });
   };
 
+  const handleShareEmail = () => {
+    if (!normalized) return;
+    const subject = encodeURIComponent(`Invoice ${normalized.invoiceNumber} from ${companyProfile?.companyName || "Sai Kirana Stores"}`);
+    const body = encodeURIComponent(`Dear Customer,\n\nPlease find your invoice ${normalized.invoiceNumber} for amount ₹${normalized.totalAmount}.\n\nThank you for your business!`);
+    window.open(`mailto:${normalized.email || ""}?subject=${subject}&body=${body}`, "_blank");
+  };
+
+  const handleShareSms = () => {
+    if (!normalized) return;
+    const body = encodeURIComponent(`Invoice ${normalized.invoiceNumber} for ₹${normalized.totalAmount} has been generated. Thank you for your business!`);
+    window.open(`sms:${normalized.phone || ""}?body=${body}`, "_blank");
+  };
+
   if (!normalized) {
     return (
       <div className="grid min-h-[80vh] place-items-center bg-slate-100 p-6">
@@ -1160,7 +1173,7 @@ function SalePreview() {
         <aside className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2 xl:col-span-1 print:hidden">
           <div className="rounded-lg bg-blue-50 p-4 text-center">
             <p className="font-bold text-slate-800">Accept Online Payments</p>
-            <Button className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-[13px] text-white">Start Now</Button>
+            <Button onClick={() => navigate("/business-growth/online-store")} className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-[13px] text-white hover:bg-blue-700">Start Now</Button>
           </div>
           <div>
             <h2 className="mb-3 font-bold text-slate-900">Share Invoice</h2>
@@ -1174,8 +1187,8 @@ function SalePreview() {
                 <FiMessageCircle className="mx-auto mb-2 h-5 w-5 text-green-500" />
                 WhatsApp
               </button>
-              <button type="button" className="rounded-md p-2 hover:bg-slate-50"><FiMail className="mx-auto mb-2 h-5 w-5 text-red-500" />Gmail</button>
-              <button type="button" className="rounded-md p-2 hover:bg-slate-50"><FiShare2 className="mx-auto mb-2 h-5 w-5 text-blue-500" />Message</button>
+              <button type="button" onClick={handleShareEmail} className="rounded-md p-2 hover:bg-slate-50 cursor-pointer" title="Share via Email"><FiMail className="mx-auto mb-2 h-5 w-5 text-red-500" />Gmail</button>
+              <button type="button" onClick={handleShareSms} className="rounded-md p-2 hover:bg-slate-50 cursor-pointer" title="Share via SMS"><FiShare2 className="mx-auto mb-2 h-5 w-5 text-blue-500" />Message</button>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center text-[13px]">

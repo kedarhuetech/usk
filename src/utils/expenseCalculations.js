@@ -118,7 +118,7 @@ export function normalizeExpense(record, index = 0) {
     0
   );
 
-  let paidAmount = 0;
+  let paidAmount;
   if (record.paid !== undefined && record.paid !== null && record.paid !== "") {
     paidAmount = Number(record.paid);
   } else if (sumEnteredPayments > 0) {
@@ -133,7 +133,7 @@ export function normalizeExpense(record, index = 0) {
 
   const balance = Math.max(0, amount - paidAmount);
 
-  let status = "Paid";
+  let status;
   if (record.status === "Cancelled" || record.cancelled) {
     status = "Cancelled";
   } else if (balance === 0) {

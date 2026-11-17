@@ -406,20 +406,32 @@ router.post("/templates/request-approval", async (req, res) => {
     });
   }
 
-  const templateKey = req.body?.templateType || req.body?.templateName || "service_reminder";
-  const predefined = PREDEFINED_TEMPLATES[templateKey] || Object.values(PREDEFINED_TEMPLATES).find((t) => t.name === templateKey);
-  const templateDef = predefined || {
-    name: req.body?.templateName || "business_notification",
-    category: req.body?.category || "UTILITY",
-    language: req.body?.language || "en",
-    components: req.body?.components || [
-      {
-        type: "BODY",
-        text: req.body?.text || "Dear {{1}},\nThis is an automated update from {{2}} regarding {{3}}.\n\nThank you!",
-        example: { body_text: [["Customer", "Our Business", "Update"]] },
-      },
-    ],
-  };
+  let templateDef;
+  if (req.body?.components && Array.isArray(req.body.components) && req.body.components.length > 0) {
+    templateDef = {
+      name: (req.body?.templateName || req.body?.name || "store_marketing_promo").toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 512),
+      category: req.body?.category || "MARKETING",
+      language: req.body?.language || "en_US",
+      components: req.body.components,
+      image: req.body?.image || req.body?.imagePreview || req.body?.imageData || "",
+    };
+  } else {
+    const templateKey = req.body?.templateType || req.body?.templateName || "service_reminder";
+    const predefined = PREDEFINED_TEMPLATES[templateKey] || Object.values(PREDEFINED_TEMPLATES).find((t) => t.name === templateKey);
+    templateDef = predefined || {
+      name: req.body?.templateName || "business_notification",
+      category: req.body?.category || "UTILITY",
+      language: req.body?.language || "en",
+      image: req.body?.image || req.body?.imagePreview || "",
+      components: req.body?.components || [
+        {
+          type: "BODY",
+          text: req.body?.text || "Dear {{1}},\nThis is an automated update from {{2}} regarding {{3}}.\n\nThank you!",
+          example: { body_text: [["Customer", "Our Business", "Update"]] },
+        },
+      ],
+    };
+  }
 
   try {
     const result = await requestWhatsAppTemplateApproval({
@@ -427,6 +439,16 @@ router.post("/templates/request-approval", async (req, res) => {
       wabaId,
       template: templateDef,
     });
+
+    // Refresh connection templates snapshot so the newly submitted template shows up in assets
+    try {
+      const refreshedAssets = await fetchWhatsAppAssets({
+        accessToken: connection.token.accessToken,
+        businessId: connection.selection?.businessId,
+        wabaId,
+      });
+      updateWhatsAppConnectionSnapshot({ assets: refreshedAssets });
+    } catch {}
 
     return res.json({
       success: true,

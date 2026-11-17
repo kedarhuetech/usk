@@ -130,7 +130,7 @@ router.get("/", async (req, res) => {
  * POST /api/service-reminders
  * Atomically saves reminder header and normalized history rows in pure SQL columns
  */
-router.post("/", async (req, res) => {
+const saveReminderHandler = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -138,7 +138,7 @@ router.post("/", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `srv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `srv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const partyId = body.partyId || body.party_id || null;
     const customerName = (body.customerName || body.name || "").trim();
     if (!customerName) {
@@ -232,7 +232,10 @@ router.post("/", async (req, res) => {
   } finally {
     conn.release();
   }
-});
+};
+
+router.post("/", saveReminderHandler);
+router.put("/:id", saveReminderHandler);
 
 /**
  * DELETE /api/service-reminders/:id

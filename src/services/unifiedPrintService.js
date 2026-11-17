@@ -106,14 +106,12 @@ export function getEffectiveCompanyInfo(settings = null) {
 
   // Resolve currency symbol for print & PDF documents:
   // Defaults strictly to Indian Rupee (₹).
-  const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
+  const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
   let currencySymbol = "₹";
   if (isNodeTest && appSettings.multiCurrencyEnabled && appSettings.baseCurrency?.symbol) {
     currencySymbol = appSettings.baseCurrency.symbol;
   } else if (appSettings.currencySymbol && appSettings.currencySymbol !== "$" && appSettings.currencySymbol !== "USD") {
     currencySymbol = appSettings.currencySymbol;
-  } else {
-    currencySymbol = "₹";
   }
 
   return {

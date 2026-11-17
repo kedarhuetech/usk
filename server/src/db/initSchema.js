@@ -63,6 +63,7 @@ export async function initializeDatabaseSchema() {
       };
 
       await addCol("parties", "pan VARCHAR(32)");
+      await addCol("service_reminders", "party_id VARCHAR(64) DEFAULT NULL AFTER business_id");
       await addCol("parties", "billing_street TEXT");
       await addCol("parties", "billing_city VARCHAR(100)");
       await addCol("parties", "billing_state VARCHAR(100)");

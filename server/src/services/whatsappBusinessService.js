@@ -414,14 +414,21 @@ function buildTemplateComponents(template, variables = {}, options = {}) {
   const requiredVariables = extractTemplateVariables(template);
   const grouped = new Map();
 
-  // If template has an image header, supply a valid image URL for Meta
+  // If template has an image header, supply image parameter
   const headerComponent = (template.components || []).find((c) => String(c.type || "").toUpperCase() === "HEADER");
   if (headerComponent && String(headerComponent.format || "").toUpperCase() === "IMAGE") {
-    const imageUrl = options.imageUrl || variables["header:image"] || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80";
-    components.push({
-      type: "header",
-      parameters: [{ type: "image", image: { link: imageUrl } }],
-    });
+    if (options.imageParam) {
+      components.push({
+        type: "header",
+        parameters: [options.imageParam],
+      });
+    } else {
+      const imageUrl = options.imageUrl || variables["header:image"] || "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80";
+      components.push({
+        type: "header",
+        parameters: [{ type: "image", image: { link: imageUrl } }],
+      });
+    }
   }
 
   requiredVariables.forEach((variable) => {
@@ -446,13 +453,82 @@ function buildTemplateComponents(template, variables = {}, options = {}) {
   return components;
 }
 
+/**
+ * Uploads a binary/base64 image directly to WhatsApp Cloud API media endpoint /{phoneNumberId}/media
+ * Returns media ID string.
+ */
+export async function uploadWhatsAppMedia({ accessToken, phoneNumberId, imageInput, mimeType = "image/png" }) {
+  let buffer;
+  let detectedMime = mimeType;
+
+  if (Buffer.isBuffer(imageInput)) {
+    buffer = imageInput;
+  } else if (typeof imageInput === "string") {
+    if (imageInput.startsWith("data:")) {
+      const match = imageInput.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        detectedMime = match[1] || detectedMime;
+        buffer = Buffer.from(match[2], "base64");
+      } else {
+        buffer = Buffer.from(imageInput);
+      }
+    } else {
+      try {
+        buffer = Buffer.from(imageInput, "base64");
+      } catch {
+        buffer = Buffer.from(imageInput);
+      }
+    }
+  }
+
+  if (!buffer || buffer.length === 0) return null;
+
+  try {
+    const form = new FormData();
+    form.append("file", new Blob([buffer], { type: detectedMime }), "image.png");
+    form.append("type", detectedMime);
+    form.append("messaging_product", "whatsapp");
+
+    const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/media`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: form,
+    });
+    const data = await res.json();
+    if (data?.id) {
+      return data.id;
+    }
+  } catch {}
+  return null;
+}
+
 // Sends whats app template message.
 export async function sendWhatsAppTemplateMessage({ accessToken, phoneNumberId, template, recipient, variables = {}, imageUrl = "" }) {
   if (!phoneNumberId) throw createWhatsAppError("Select a WhatsApp business phone number before sending.", "NO_PHONE_NUMBER");
   if (!template?.name || template.status !== "APPROVED") throw createWhatsAppError("Select an approved WhatsApp message template.", "TEMPLATE_NOT_APPROVED");
   if (!recipient) throw createWhatsAppError("Enter a valid recipient phone number.", "INVALID_RECIPIENT");
 
-  const components = buildTemplateComponents(template, variables, { imageUrl });
+  // Resolve image parameter if template has an IMAGE header
+  let imageParam = null;
+  const headerComponent = (template.components || []).find((c) => String(c.type || "").toUpperCase() === "HEADER");
+  if (headerComponent && String(headerComponent.format || "").toUpperCase() === "IMAGE") {
+    const rawImage = imageUrl || variables["header:image"] || "";
+    if (rawImage.startsWith("http://") || rawImage.startsWith("https://")) {
+      imageParam = { type: "image", image: { link: rawImage } };
+    } else if (rawImage.startsWith("data:") || rawImage.length > 100) {
+      const mediaId = await uploadWhatsAppMedia({ accessToken, phoneNumberId, imageInput: rawImage });
+      if (mediaId) {
+        imageParam = { type: "image", image: { id: mediaId } };
+      }
+    }
+    if (!imageParam) {
+      imageParam = { type: "image", image: { link: "https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&q=80" } };
+    }
+  }
+
+  const components = buildTemplateComponents(template, variables, { imageUrl, imageParam });
   const payload = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -676,6 +752,83 @@ export const PREDEFINED_TEMPLATES = {
 };
 
 /**
+ * Uploads a sample image file to Meta's Resumable Upload API to get a header_handle
+ * required for WhatsApp templates with an IMAGE header.
+ */
+export async function uploadMetaMediaHandle({ accessToken, appId, imageInput, mimeType = "image/png", fileName = "header_image.png" }) {
+  const metaAppId = appId || process.env.META_APP_ID || "3779589768855537";
+  if (!metaAppId) throw createWhatsAppError("META_APP_ID is required for template media upload", "CONFIG_MISSING");
+
+  let buffer;
+  let detectedMime = mimeType;
+
+  if (Buffer.isBuffer(imageInput)) {
+    buffer = imageInput;
+  } else if (typeof imageInput === "string") {
+    if (imageInput.startsWith("data:")) {
+      const match = imageInput.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        detectedMime = match[1] || detectedMime;
+        buffer = Buffer.from(match[2], "base64");
+      } else {
+        buffer = Buffer.from(imageInput);
+      }
+    } else if (imageInput.startsWith("http://") || imageInput.startsWith("https://")) {
+      try {
+        const resp = await fetch(imageInput);
+        const arrayBuffer = await resp.arrayBuffer();
+        buffer = Buffer.from(arrayBuffer);
+        const ct = resp.headers.get("content-type");
+        if (ct) detectedMime = ct.split(";")[0].trim();
+      } catch {}
+    } else if (imageInput.startsWith("<svg") || imageInput.includes("</svg>")) {
+      detectedMime = "image/svg+xml";
+      buffer = Buffer.from(imageInput, "utf8");
+    } else if (imageInput) {
+      try {
+        buffer = Buffer.from(imageInput, "base64");
+      } catch {
+        buffer = Buffer.from(imageInput);
+      }
+    }
+  }
+
+  // Fallback minimal PNG banner if empty
+  if (!buffer || buffer.length === 0) {
+    const fallbackBase64 = "iVBORw0KGgoAAAANSUhEUgAAAyAAAAJYCAYAAAC5GK5QAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAD/SURBVHgB7cEBDQAAAMKg909tDwcUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgDcbSAABt7c3/wAAAABJRU5ErkJggg==";
+    buffer = Buffer.from(fallbackBase64, "base64");
+    detectedMime = "image/png";
+  }
+
+  // 1. Create upload session
+  const sessionUrl = `https://graph.facebook.com/v20.0/${metaAppId}/uploads?file_length=${buffer.length}&file_type=${encodeURIComponent(detectedMime)}&file_name=${encodeURIComponent(fileName)}&access_token=${accessToken}`;
+  const sRes = await fetch(sessionUrl, { method: "POST" });
+  const sData = await sRes.json();
+  if (sData.error) {
+    throw createWhatsAppError(sData.error.message || "Failed to create Meta upload session", "UPLOAD_SESSION_FAILED", sData.error);
+  }
+  const uploadSessionId = sData.id;
+
+  // 2. Upload file bytes to session
+  const uploadUrl = `https://graph.facebook.com/v20.0/${uploadSessionId}`;
+  const uRes = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `OAuth ${accessToken}`,
+      file_offset: "0",
+      "Content-Type": "application/octet-stream",
+    },
+    body: buffer,
+  });
+  const uData = await uRes.json();
+  if (uData.error) {
+    throw createWhatsAppError(uData.error.message || "Failed to upload image to Meta session", "UPLOAD_FAILED", uData.error);
+  }
+
+  return uData.h;
+}
+
+/**
  * Sends a request to Meta WhatsApp Graph API to create and approve a message template.
  * Endpoint: POST /{wabaId}/message_templates
  */
@@ -700,6 +853,33 @@ export async function requestWhatsAppTemplateApproval({ accessToken, wabaId, tem
       },
     ],
   };
+
+  // Automatically handle IMAGE header requirements using Meta Resumable Upload
+  for (const component of payload.components) {
+    if (String(component?.type || "").toUpperCase() === "HEADER" && String(component?.format || "").toUpperCase() === "IMAGE") {
+      if (!component.example?.header_handle || !component.example.header_handle.length) {
+        const imageSource =
+          template.image ||
+          template.imagePreview ||
+          template.imageData ||
+          component.example?.header_url?.[0] ||
+          component.example?.image ||
+          "";
+        try {
+          const handle = await uploadMetaMediaHandle({
+            accessToken,
+            appId: template.appId || process.env.META_APP_ID,
+            imageInput: imageSource,
+          });
+          component.example = {
+            header_handle: [handle],
+          };
+        } catch (uploadErr) {
+          console.warn("[WhatsApp Template] Automatic media upload failed, fallback:", uploadErr.message);
+        }
+      }
+    }
+  }
 
   try {
     let response;

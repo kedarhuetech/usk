@@ -250,8 +250,13 @@ function saleItemFromInventory(item = {}) {
 // Normalizes and maps rows from an existing transaction or database items into AddSale row format
 function normalizeEditRows(editDoc) {
   if (!editDoc) return [];
-  const candidateRows = editDoc.rows || editDoc.items || editDoc.lineItems || [];
+  let candidateRows = editDoc.rows || editDoc.items || editDoc.lineItems || editDoc.transaction_items || [];
+  if (typeof candidateRows === "string") {
+    try { candidateRows = JSON.parse(candidateRows); } catch { candidateRows = []; }
+  }
   if (!Array.isArray(candidateRows) || candidateRows.length === 0) return [];
+
+  const inventory = getInventoryItems();
 
   return candidateRows.map((row, idx) => {
     const rawDiscPercent = row.discountPercent ?? row.discount_percent;
@@ -283,6 +288,11 @@ function normalizeEditRows(editDoc) {
       ? row.serialNumbers
       : (row.serialNo || row.serial_no ? [row.serialNo || row.serial_no] : []);
 
+    const sourceItemId = row.sourceItemId || row.itemId || row.item_id || "";
+    const matched = inventory.find((i) => (sourceItemId && i.id === sourceItemId) || (row.item && String(i.itemName || "").trim().toLowerCase() === String(row.item).trim().toLowerCase()));
+
+    const resolvedItem = row.item || row.itemName || row.item_name || row.name || matched?.itemName || "";
+
     const qty =
       row.qty != null && row.qty !== ""
         ? String(row.qty)
@@ -295,23 +305,25 @@ function normalizeEditRows(editDoc) {
           ? String(row.unitPrice)
           : (row.unit_price != null && row.unit_price !== ""
             ? String(row.unit_price)
-            : (row.rate != null && row.rate !== "" ? String(row.rate) : "0")));
+            : (row.rate != null && row.rate !== "" ? String(row.rate) : (matched?.salePrice != null ? String(matched.salePrice) : "0"))));
+
+    const unit = row.unit || matched?.unit || "PCS";
 
     return {
       ...createRow(),
       ...row,
       id: row.id || `edit-row-${idx}-${Date.now()}`,
-      item: row.item || row.itemName || row.item_name || row.name || "",
+      item: resolvedItem,
       description: row.description || "",
       qty,
-      unit: row.unit || "PCS",
+      unit,
       price,
       priceMode: row.priceMode || "Without Tax",
       discountPercent: discPercent,
       discountAmount: discAmount,
       discountMode,
       taxRate,
-      hsn: row.hsn || row.hsnCode || row.hsn_code || "",
+      hsn: row.hsn || row.hsnCode || row.hsn_code || matched?.hsn || "",
       cessPercent:
         row.cessPercent != null && row.cessPercent !== "" && Number(row.cessPercent) !== 0
           ? String(row.cessPercent)
@@ -320,7 +332,7 @@ function normalizeEditRows(editDoc) {
         row.cessAmount != null && row.cessAmount !== "" && Number(row.cessAmount) !== 0
           ? String(row.cessAmount)
           : (row.cess_amount != null && Number(row.cess_amount) !== 0 ? String(row.cess_amount) : ""),
-      sourceItemId: row.sourceItemId || row.itemId || row.item_id || "",
+      sourceItemId: sourceItemId || matched?.id || "",
       batchNo: row.batchNo || row.batch_no || "",
       expDate: row.expDate || row.exp_date || "",
       serialNumbers: serials,
@@ -331,6 +343,12 @@ function normalizeEditRows(editDoc) {
 // Extracts form fields from an existing transaction header, supporting both local and MySQL schemas
 function extractEditForm(editDoc, fallback = {}) {
   if (!editDoc) return fallback;
+
+  const cleanStr = (val) => {
+    if (val == null) return "";
+    const s = String(val).trim();
+    return s === "null" || s === "undefined" ? "" : s;
+  };
 
   const rawCustomer =
     editDoc.partyName ||
@@ -344,7 +362,7 @@ function extractEditForm(editDoc, fallback = {}) {
     editDoc.form?.partyName ||
     fallback.customer ||
     "";
-  const customer = typeof rawCustomer === "string" ? rawCustomer.trim() : String(rawCustomer || "");
+  const customer = cleanStr(rawCustomer);
 
   const partyId =
     editDoc.form?.partyId ??
@@ -364,24 +382,26 @@ function extractEditForm(editDoc, fallback = {}) {
     editDoc.form?.phone ||
     fallback.phone ||
     "";
-  const phone = typeof rawPhone === "string" ? rawPhone.trim() : String(rawPhone || "");
+  const phone = cleanStr(rawPhone);
 
-  const billingAddress =
+  const billingAddress = cleanStr(
     editDoc.billingAddress ||
     editDoc.billing_address ||
     editDoc.form?.billingAddress ||
     fallback.billingAddress ||
-    "";
+    ""
+  );
 
-  const shippingAddress =
+  const shippingAddress = cleanStr(
     editDoc.shippingAddress ||
     editDoc.shipping_address ||
     editDoc.form?.shippingAddress ||
     billingAddress ||
     fallback.shippingAddress ||
-    "";
+    ""
+  );
 
-  const invoiceNumber =
+  const invoiceNumber = cleanStr(
     editDoc.documentNumber ||
     editDoc.document_number ||
     editDoc.invoiceNumber ||
@@ -390,7 +410,8 @@ function extractEditForm(editDoc, fallback = {}) {
     editDoc.number ||
     editDoc.form?.invoiceNumber ||
     fallback.invoiceNumber ||
-    "1";
+    "1"
+  );
 
   const rawDate =
     editDoc.transactionDate ||
@@ -403,43 +424,57 @@ function extractEditForm(editDoc, fallback = {}) {
     currentLocalDate();
   const invoiceDate = typeof rawDate === "string" ? rawDate.slice(0, 10) : String(rawDate);
 
-  const stateOfSupply =
+  const stateOfSupply = cleanStr(
     editDoc.stateOfSupply ||
     editDoc.state ||
     editDoc.form?.stateOfSupply ||
     fallback.stateOfSupply ||
-    "None";
+    "None"
+  );
 
-  const paymentType =
+  const paymentType = cleanStr(
     editDoc.paymentMode ||
     editDoc.paymentType ||
     editDoc.payment_mode ||
     editDoc.form?.paymentType ||
     fallback.paymentType ||
-    "Cash";
+    "Cash"
+  );
 
-  const description =
+  const description = cleanStr(
     editDoc.description ||
     editDoc.notes ||
     editDoc.form?.description ||
     fallback.description ||
-    "";
+    ""
+  );
 
-  const terms =
+  const terms = cleanStr(
     editDoc.terms ||
     editDoc.form?.terms ||
     fallback.terms ||
-    "";
+    ""
+  );
+
+  const billingName = cleanStr(
+    editDoc.billingName ||
+    editDoc.billing_name ||
+    editDoc.form?.billingName ||
+    customer ||
+    ""
+  );
 
   return {
     ...fallback,
     ...(editDoc.form || {}),
     customer,
     partyId,
+    partyName: customer,
+    billingName,
     phone,
     billingAddress,
     shippingAddress,
-    invoiceNumber: String(invoiceNumber),
+    invoiceNumber: String(invoiceNumber || "1"),
     invoiceDate,
     stateOfSupply,
     paymentType,
@@ -449,8 +484,6 @@ function extractEditForm(editDoc, fallback = {}) {
     showTerms: Boolean(terms),
     termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
     showDescription: Boolean(description),
-    description,
-    paymentType,
   };
 }
 
@@ -719,8 +752,8 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           <TextArea value={form.billingAddress} onChange={(event) => setField("billingAddress", event.target.value)} placeholder="Billing Address" className="h-20 w-full sm:h-24 lg:h-20" />
           {form.billingAddress && (
             <div className="mt-2 flex justify-end gap-4 text-xs">
-              <button type="button" onClick={() => setField("billingAddress", "")} className="text-slate-500">Remove</button>
-              <button type="button" className="text-blue-600">Change</button>
+              <button type="button" onClick={() => setField("billingAddress", "")} className="text-slate-500 hover:text-slate-700">Remove</button>
+              <button type="button" onClick={() => document.querySelector('textarea[placeholder="Billing Address"]')?.focus()} className="text-blue-600 hover:underline">Change</button>
             </div>
           )}
         </div>
@@ -729,8 +762,8 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             <TextArea value={form.shippingAddress} onChange={(event) => setField("shippingAddress", event.target.value)} placeholder="Shipping Address" className="h-20 w-full sm:h-24 lg:h-20" />
             {form.shippingAddress && (
               <div className="mt-2 flex justify-end gap-4 text-xs">
-                <button type="button" onClick={() => setField("shippingAddress", "")} className="text-slate-500">Remove</button>
-                <button type="button" className="text-blue-600">Change</button>
+                <button type="button" onClick={() => setField("shippingAddress", "")} className="text-slate-500 hover:text-slate-700">Remove</button>
+                <button type="button" onClick={() => document.querySelector('textarea[placeholder="Shipping Address"]')?.focus()} className="text-blue-600 hover:underline">Change</button>
               </div>
             )}
           </div>
@@ -1429,6 +1462,7 @@ function TermsTitlePicker({ value, templates, onSelect, onAddNew }) {
 
 // Renders the payment selector interface.
 function PaymentSelector({ value, onChange }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   useDismiss(open, rootRef, () => setOpen(false));
@@ -1441,7 +1475,7 @@ function PaymentSelector({ value, onChange }) {
       </button>
       {open && (
         <div className="absolute z-40 mt-1.5 w-full rounded-lg border border-slate-200 bg-white py-1.5 shadow-xl">
-          <button type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
+          <button type="button" onClick={() => { setOpen(false); navigate("/cash-bank/bank-accounts"); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
             <FiPlus /> Add Bank A/C
           </button>
           {paymentTypes.map((type) => (
@@ -1545,7 +1579,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
               <span className="mb-1 block text-[13px] text-slate-500">Payment Type</span>
               <PaymentSelector value={form.paymentType} onChange={(value) => setField("paymentType", value)} />
             </label>
-            <button type="button" className="text-[13px] font-semibold text-blue-600">+ Add Payment type</button>
+            <button type="button" onClick={() => navigate("/settings?tab=transaction")} className="text-[13px] font-semibold text-blue-600 hover:underline">+ Add Payment type</button>
           </div>
         )}
         {!form.showDescription ? (
@@ -1659,6 +1693,7 @@ function ShareMenu({ actions = shareActions, onAction }) {
 
 // Renders the settings drawer interface.
 function SettingsDrawer({ settings, setSettings, billingType, setBillingType, onClose }) {
+  const navigate = useNavigate();
   useEffect(() => {
     // Handles key down.
     const handleKeyDown = (event) => {
@@ -1693,7 +1728,7 @@ function SettingsDrawer({ settings, setSettings, billingType, setBillingType, on
           </div>
         </div>
         <footer className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
-          <button type="button" className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600"><FiSettings /> More Settings</button>
+          <button type="button" onClick={() => { onClose(); navigate("/settings?tab=transaction"); }} className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600 hover:underline"><FiSettings /> More Settings</button>
         </footer>
       </aside>
     </div>
@@ -1704,6 +1739,9 @@ function SettingsDrawer({ settings, setSettings, billingType, setBillingType, on
 function BusinessModal({ mode, business, setBusiness, onClose }) {
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState("");
+  const [firmTab, setFirmTab] = useState("business");
+  const logoInputRef = useRef(null);
+  const sigInputRef = useRef(null);
 
   useEffect(() => {
     // Handles key down.
@@ -1730,6 +1768,24 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
     setSuccess(`${mode} details saved for demo.`);
   };
 
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setBusinessField("logo", reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSigUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setBusinessField("signature", reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onClick={onClose}>
       <Card className="max-h-[86vh] w-full max-w-2xl overflow-y-auto p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -1742,7 +1798,10 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
         </div>
         {success && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] font-semibold text-emerald-700">{success}</div>}
         <div className="grid gap-5 md:grid-cols-[260px_1fr]">
-          <button type="button" className="flex h-28 w-28 items-center justify-center justify-self-center rounded-lg border border-dashed border-slate-300 text-base font-semibold text-slate-400">Add Logo</button>
+          <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+          <button type="button" onClick={() => logoInputRef.current?.click()} className="flex h-28 w-28 items-center justify-center justify-self-center overflow-hidden rounded-lg border border-dashed border-slate-300 text-base font-semibold text-slate-400 hover:border-blue-400 hover:text-blue-600">
+            {business.logo ? <img src={business.logo} alt="Logo" className="h-full w-full object-contain" /> : "Add Logo"}
+          </button>
           <div className="grid gap-3">
             <label><span className="mb-1 block text-xs text-slate-500">Business Name *</span><TextInput error={errors.name} value={business.name} onChange={(event) => setBusinessField("name", event.target.value)} /></label>
             <label><span className="mb-1 block text-xs text-blue-600">GSTIN</span><TextInput error={errors.gstin} value={business.gstin} onChange={(event) => setBusinessField("gstin", event.target.value)} />{errors.gstin && <span className="mt-1 block text-xs text-rose-600">{errors.gstin}</span>}</label>
@@ -1750,19 +1809,32 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
             <TextInput value={business.email} onChange={(event) => setBusinessField("email", event.target.value)} placeholder="Email ID" />
           </div>
         </div>
-        <div className="mt-5 border-b border-slate-200">
-          <button type="button" className="border-b-2 border-blue-600 px-4 py-2.5 text-[13px] font-bold text-blue-600">Business Details</button>
-          <button type="button" className="px-4 py-2.5 text-[13px] font-bold text-slate-400">Additional Fields</button>
+        <div className="mt-5 border-b border-slate-200 flex gap-2">
+          <button type="button" onClick={() => setFirmTab("business")} className={`px-4 py-2.5 text-[13px] font-bold ${firmTab === "business" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-400 hover:text-slate-600"}`}>Business Details</button>
+          <button type="button" onClick={() => setFirmTab("additional")} className={`px-4 py-2.5 text-[13px] font-bold ${firmTab === "additional" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-400 hover:text-slate-600"}`}>Additional Fields</button>
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <TextArea value={business.address} onChange={(event) => setBusinessField("address", event.target.value)} placeholder="Business Address" className="h-24" />
-          <label><span className="mb-1 block text-xs text-slate-500">Business Type</span><SelectInput value={business.type} onChange={(value) => setBusinessField("type", value)} options={["None", "Retail", "Wholesale", "Service"]} /></label>
-          <TextInput value={business.pincode} onChange={(event) => setBusinessField("pincode", event.target.value)} placeholder="Pincode" />
-          <TextInput value={business.category} onChange={(event) => setBusinessField("category", event.target.value)} placeholder="Business Category" />
-          <label><span className="mb-1 block text-xs text-slate-500">State</span><SelectInput value={business.state} onChange={(value) => setBusinessField("state", value)} options={stateOfSupplyOptions} /></label>
-          <button type="button" className="flex h-20 items-center justify-center rounded-lg border border-dashed border-slate-300 text-[13px] text-slate-400">Add Signature</button>
-          <TextInput value={business.description} onChange={(event) => setBusinessField("description", event.target.value.slice(0, 160))} placeholder="Business Description" />
-        </div>
+        {firmTab === "business" ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <TextArea value={business.address} onChange={(event) => setBusinessField("address", event.target.value)} placeholder="Business Address" className="h-24" />
+            <label><span className="mb-1 block text-xs text-slate-500">Business Type</span><SelectInput value={business.type} onChange={(value) => setBusinessField("type", value)} options={["None", "Retail", "Wholesale", "Service"]} /></label>
+            <TextInput value={business.pincode} onChange={(event) => setBusinessField("pincode", event.target.value)} placeholder="Pincode" />
+            <TextInput value={business.category} onChange={(event) => setBusinessField("category", event.target.value)} placeholder="Business Category" />
+            <label><span className="mb-1 block text-xs text-slate-500">State</span><SelectInput value={business.state} onChange={(value) => setBusinessField("state", value)} options={stateOfSupplyOptions} /></label>
+            <div>
+              <input ref={sigInputRef} type="file" accept="image/*" className="hidden" onChange={handleSigUpload} />
+              <button type="button" onClick={() => sigInputRef.current?.click()} className="flex h-20 w-full items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 text-[13px] text-slate-400 hover:border-blue-400 hover:text-blue-600">
+                {business.signature ? <img src={business.signature} alt="Signature" className="h-full w-full object-contain" /> : "Add Signature"}
+              </button>
+            </div>
+            <TextInput value={business.description} onChange={(event) => setBusinessField("description", event.target.value.slice(0, 160))} placeholder="Business Description" />
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <TextInput value={business.upiId || ""} onChange={(e) => setBusinessField("upiId", e.target.value)} placeholder="UPI ID (e.g. business@upi)" />
+            <TextInput value={business.bankAccount || ""} onChange={(e) => setBusinessField("bankAccount", e.target.value)} placeholder="Default Bank Account" />
+            <TextArea value={business.terms || ""} onChange={(e) => setBusinessField("terms", e.target.value)} placeholder="Default Terms & Conditions" className="h-24" />
+          </div>
+        )}
         <footer className="mt-5 flex justify-end">
           <Button onClick={save} className="rounded-md bg-blue-600 px-9 py-2 text-[13px] text-white hover:bg-blue-700">Save</Button>
         </footer>
@@ -1785,7 +1857,9 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const deliveryChallanConversions = !isPurchase ? location.state?.deliveryChallansConversion || [] : [];
   const deliveryChallanConversion = deliveryChallanConversions[0] || null;
   const conversionStorageKey = location.state?.proformaConversion ? "ledgerly:proformaInvoices.v1" : "ledgerly:estimateQuotations.v1";
-  const editInvoice = isPurchase ? location.state?.editPurchase || null : location.state?.editInvoice || null;
+  const editInvoice = isPurchase
+    ? (location.state?.editPurchase || location.state?.editBill || location.state?.editInvoice || null)
+    : (location.state?.editInvoice || location.state?.editSale || null);
   const localOnlyPurchase = isPurchase && (localOnly || location.state?.localOnlyPurchase);
   const onlineOrderConversion = !isPurchase ? location.state?.onlineOrderConversion : null;
   const returnPath = typeof location.state?.from === "string" && location.state.from !== location.pathname ? location.state.from : config.backPath;
@@ -1980,12 +2054,14 @@ function AddSale({ mode = "sale", localOnly = false }) {
 
   // If an edit invoice is loaded by ID, ensure all relational details and line items are fully hydrated from MySQL
   useEffect(() => {
-    if (!editInvoice?.id) return;
+    const targetId = editInvoice?.id || editInvoice?.invoiceId || editInvoice?._id;
+    if (!targetId) return;
     let active = true;
 
-    transactionsDb.getById(editInvoice.id)
+    transactionsDb.getById(targetId)
       .then((fullDoc) => {
         if (!active || !fullDoc) return;
+        setTransactionId(fullDoc.id || targetId);
         const mappedRows = normalizeEditRows(fullDoc);
         if (mappedRows.length > 0) {
           setRows(mappedRows);
@@ -2007,7 +2083,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
 
     return () => { active = false; };
-  }, [editInvoice?.id]);
+  }, [editInvoice?.id, editInvoice?.invoiceId]);
 
   useDismiss(shareOpen, shareRef, () => setShareOpen(false));
 
@@ -2175,7 +2251,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
       ? "Cash Sale"
       : (form.customer || form.partyName || resolvedParty?.name || resolvedParty?.partyName || "");
 
-    const mappedRows = rows.map((row, index) => {
+    const activeRows = rows.filter((row) => String(row.item || "").trim() || Number(row.qty || 0) > 0 || Number(row.price || 0) > 0);
+    const rowsToMap = activeRows.length > 0 ? activeRows : rows.slice(0, 1);
+
+    const mappedRows = rowsToMap.map((row, index) => {
       const matchedItem = items.find(
         (i) =>
           (row.sourceItemId && String(i.id) === String(row.sourceItemId)) ||
@@ -2446,8 +2525,17 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     if (editInvoice) {
       try {
+        const targetId = editInvoice.id || editInvoice.invoiceId || transactionId;
         const wasCancelled = Boolean(editInvoice.cancelled || editInvoice.isCancelled || editInvoice.invoiceStatus === "Cancelled");
-        const existingFields = { ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt, invoiceStatus: wasCancelled ? "Cancelled" : (editInvoice.invoiceStatus || "Active"), cancelled: wasCancelled, status: wasCancelled ? "Cancelled" : (editInvoice.status === "Draft" ? "Draft" : "Active") };
+        const existingFields = {
+          ...invoice,
+          id: targetId,
+          invoiceId: targetId,
+          createdAt: editInvoice.createdAt || invoice.createdAt || new Date().toISOString(),
+          invoiceStatus: wasCancelled ? "Cancelled" : (editInvoice.invoiceStatus || "Active"),
+          cancelled: wasCancelled,
+          status: wasCancelled ? "Cancelled" : (editInvoice.status === "Draft" ? "Draft" : "Active"),
+        };
         const savedInvoice = isPurchase
           ? await saveBusinessPurchaseBill(existingFields)
           : await saveBusinessSaleInvoice(existingFields);
@@ -2458,14 +2546,18 @@ function AddSale({ mode = "sale", localOnly = false }) {
             const cancelled = { ...(current.cancelled || {}) };
             delete edits[savedInvoice.id];
             delete cancelled[savedInvoice.id];
+            delete edits[targetId];
+            delete cancelled[targetId];
             writeTransactionValue(transactionStorageKeys.saleInvoiceUi, { ...current, edits, cancelled });
           } catch { /* The canonical invoice has already been saved. */ }
         }
         sessionStorage.setItem(config.storageKey, JSON.stringify(savedInvoice));
-        setToast(`${isPurchase ? "Purchase bill" : "Sale"} updated in this browser.`);
+        notifyBusinessDataChanged();
+        setToast(`${isPurchase ? "Purchase bill" : "Sale"} updated successfully.`);
         navigate(returnPath);
       } catch (error) {
-        setToast(error.message || "Could not update this sale in local storage.");
+        console.error("Failed to update transaction:", error);
+        setToast(error.message || `Could not update this ${isPurchase ? "purchase bill" : "sale"}.`);
       }
       return;
     }

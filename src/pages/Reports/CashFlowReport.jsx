@@ -210,18 +210,19 @@ export default function CashFlowReport() {
 
     if (action === "View/Edit") {
       const t = row.type.toLowerCase();
+      const rawDoc = { ...(row.raw || row), id: row.raw?.id || row.id };
       if (t.includes("sale") || t.includes("pos")) {
-        navigate("/sales/sale-invoices/new", { state: { editInvoice: row.raw } });
+        navigate("/sales/sale-invoices/new", { state: { editInvoice: rawDoc } });
       } else if (t.includes("purchase")) {
         navigate("/purchase-expense/purchase-bills/new", {
-          state: { editPurchase: row.raw, editBill: row.raw, editInvoice: row.raw },
+          state: { editPurchase: rawDoc, editBill: rawDoc, editInvoice: rawDoc },
         });
       } else if (t.includes("payment-in")) {
-        navigate("/sales/payment-in", { state: { editPayment: row.raw } });
+        navigate("/sales/payment-in", { state: { editPayment: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("payment-out")) {
-        navigate("/purchase-expense/payment-out", { state: { editPayment: row.raw } });
+        navigate("/purchase-expense/payment-out", { state: { editPayment: rawDoc, editPurchase: rawDoc } });
       } else if (t.includes("expense")) {
-        navigate("/purchase-expense/expenses", { state: { editExpense: row.raw } });
+        navigate("/purchase-expense/expenses", { state: { editExpense: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("cash")) {
         navigate("/cash-bank/cash-in-hand");
       }

@@ -84,7 +84,9 @@ function PageHeader({ connected, onRefresh, onDisconnect }) {
         </button>
         <button
           type="button"
+          onClick={() => window.location.href = "/settings"}
           className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50"
+          title="Settings"
         >
           <FiSettings className="h-4 w-4" />
         </button>

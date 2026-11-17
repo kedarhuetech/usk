@@ -75,7 +75,9 @@ export function normalizeInvoice(invoice = {}) {
     invoice.form?.customer ||
     invoice.customer ||
     invoice.partyName ||
+    invoice.party_name ||
     invoice.customerName ||
+    invoice.customer_name ||
     invoice.party ||
     (isGenuineCash ? "Cash Sale" : (invoice.saleType === "cash" ? "Cash Sale" : ""));
 
@@ -88,7 +90,10 @@ export function normalizeInvoice(invoice = {}) {
 
   const phone =
     invoice.partyPhone ||
+    invoice.party_phone ||
     invoice.phone ||
+    invoice.customerPhone ||
+    invoice.customer_phone ||
     invoice.form?.phone ||
     "";
 
@@ -155,6 +160,12 @@ export function normalizeInvoice(invoice = {}) {
     };
   });
 
+  const cleanStr = (val) => {
+    if (val == null) return "";
+    const s = String(val).trim();
+    return s === "null" || s === "undefined" ? "" : s;
+  };
+
   const form = {
     customer: partyName,
     partyId,
@@ -162,8 +173,8 @@ export function normalizeInvoice(invoice = {}) {
     phone,
     invoiceNumber,
     invoiceDate,
-    billingAddress: invoice.billingAddress || invoice.form?.billingAddress || "",
-    shippingAddress: invoice.shippingAddress || invoice.form?.shippingAddress || invoice.billingAddress || "",
+    billingAddress: cleanStr(invoice.billingAddress || invoice.billing_address || invoice.form?.billingAddress || ""),
+    shippingAddress: cleanStr(invoice.shippingAddress || invoice.shipping_address || invoice.form?.shippingAddress || invoice.billingAddress || invoice.billing_address || ""),
     paymentType: paymentMode,
     ...(invoice.form || {}),
   };

@@ -132,34 +132,35 @@ export default function AllTransactionsReport() {
 
     if (action === "View/Edit") {
       const t = row.type.toLowerCase();
+      const rawDoc = { ...(row.raw || row), id: row.raw?.id || row.id };
       if (t === "sale order" || t.includes("sale order")) {
-        navigate("/sales/sale-order", { state: { editOrder: row.raw, editInvoice: row.raw } });
+        navigate("/sales/sale-order", { state: { editOrder: rawDoc, editInvoice: rawDoc } });
       } else if (t === "purchase order" || t.includes("purchase order")) {
-        navigate("/purchase-expense/purchase-order", { state: { editOrder: row.raw, editPurchase: row.raw } });
+        navigate("/purchase-expense/purchase-order", { state: { editOrder: rawDoc, editPurchase: rawDoc } });
       } else if (t.includes("delivery") || t.includes("challan")) {
-        navigate("/sales/delivery-challan", { state: { editChallan: row.raw, editInvoice: row.raw } });
+        navigate("/sales/delivery-challan", { state: { editChallan: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("credit note") || t.includes("sale return")) {
-        navigate("/sales/sale-return-credit-note", { state: { editReturn: row.raw, editInvoice: row.raw } });
+        navigate("/sales/sale-return-credit-note", { state: { editReturn: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("debit note") || t.includes("purchase return")) {
-        navigate("/purchase-expense/purchase-return", { state: { editReturn: row.raw, editPurchase: row.raw } });
+        navigate("/purchase-expense/purchase-return", { state: { editReturn: rawDoc, editPurchase: rawDoc } });
       } else if (t.includes("sale") || t.includes("pos")) {
-        navigate("/sales/sale-invoices/new", { state: { editInvoice: row.raw } });
+        navigate("/sales/sale-invoices/new", { state: { editInvoice: rawDoc } });
       } else if (t.includes("purchase")) {
         navigate("/purchase-expense/purchase-bills/new", {
-          state: { editPurchase: row.raw, editBill: row.raw, editInvoice: row.raw },
+          state: { editPurchase: rawDoc, editBill: rawDoc, editInvoice: rawDoc },
         });
       } else if (t.includes("payment-in")) {
-        navigate("/sales/payment-in", { state: { editPayment: row.raw, editInvoice: row.raw } });
+        navigate("/sales/payment-in", { state: { editPayment: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("payment-out")) {
-        navigate("/purchase-expense/payment-out", { state: { editPayment: row.raw, editPurchase: row.raw } });
+        navigate("/purchase-expense/payment-out", { state: { editPayment: rawDoc, editPurchase: rawDoc } });
       } else if (t.includes("expense")) {
-        navigate("/purchase-expense/expenses", { state: { editExpense: row.raw, editInvoice: row.raw } });
+        navigate("/purchase-expense/expenses", { state: { editExpense: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("estimate") || t.includes("quotation")) {
-        navigate("/sales/estimate-quotation", { state: { editEstimate: row.raw, editInvoice: row.raw } });
+        navigate("/sales/estimate-quotation", { state: { editEstimate: rawDoc, editInvoice: rawDoc } });
       } else if (t.includes("proforma")) {
-        navigate("/sales/proforma-invoice", { state: { editProforma: row.raw, editInvoice: row.raw } });
+        navigate("/sales/proforma-invoice", { state: { editProforma: rawDoc, editInvoice: rawDoc } });
       } else {
-        navigate("/sales/sale-invoices/new", { state: { editInvoice: row.raw } });
+        navigate("/sales/sale-invoices/new", { state: { editInvoice: rawDoc } });
       }
       return;
     }

@@ -194,52 +194,53 @@ export default function TransactionActionMenu({
     const source = transaction.source || "Transaction";
     const num = transaction.number || "—";
     const rawId = raw.id || transaction.id?.replace(/^[a-z\-]+:/i, "");
+    const rawWithId = { ...raw, id: rawId };
 
     // 1. View / Edit
     if (action === "View/Edit") {
       if (source === "Sale Order") {
         navigate("/sales/sale-order", {
-          state: { from: location.pathname, editOrder: raw },
+          state: { from: location.pathname, editOrder: rawWithId },
         });
       } else if (source === "Purchase Order") {
         navigate("/purchase-expense/purchase-order", {
-          state: { from: location.pathname, editOrder: raw },
+          state: { from: location.pathname, editOrder: rawWithId },
         });
       } else if (source === "Sale") {
         navigate("/sales/sale-invoices/new", {
-          state: { from: location.pathname, editInvoice: raw },
+          state: { from: location.pathname, editInvoice: rawWithId },
         });
       } else if (source === "Purchase") {
         navigate("/purchase-expense/purchase-bills/new", {
-          state: { from: location.pathname, editPurchase: raw, editBill: raw, editInvoice: raw },
+          state: { from: location.pathname, editPurchase: rawWithId, editBill: rawWithId, editInvoice: rawWithId },
         });
       } else if (source === "Payment-In") {
         navigate("/sales/payment-in", {
-          state: { from: location.pathname, editPayment: raw },
+          state: { from: location.pathname, editPayment: rawWithId },
         });
       } else if (source === "Payment-Out" || source === "Credit Note Refund") {
         navigate("/purchase-expense/payment-out", {
-          state: { from: location.pathname, editPayment: raw },
+          state: { from: location.pathname, editPayment: rawWithId },
         });
       } else if (source.includes("Estimate")) {
         navigate("/sales/estimate-quotation", {
-          state: { from: location.pathname, editEstimate: raw, editInvoice: raw },
+          state: { from: location.pathname, editEstimate: rawWithId, editInvoice: rawWithId },
         });
       } else if (source.includes("Proforma")) {
         navigate("/sales/proforma-invoice", {
-          state: { from: location.pathname, editProforma: raw, editInvoice: raw },
+          state: { from: location.pathname, editProforma: rawWithId, editInvoice: rawWithId },
         });
       } else if (source === "Credit Note") {
         navigate("/sales/sale-return-credit-note", {
-          state: { from: location.pathname, editReturn: raw, editCreditNote: raw },
+          state: { from: location.pathname, editReturn: rawWithId, editCreditNote: rawWithId },
         });
       } else if (source === "Debit Note") {
         navigate("/purchase-expense/purchase-return-debit-note", {
-          state: { from: location.pathname, editReturn: raw, editDebitNote: raw },
+          state: { from: location.pathname, editReturn: rawWithId, editDebitNote: rawWithId },
         });
       } else {
         navigate("/sales/sale-invoices/new", {
-          state: { from: location.pathname, editInvoice: raw },
+          state: { from: location.pathname, editInvoice: rawWithId },
         });
       }
       return;

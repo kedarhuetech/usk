@@ -6,7 +6,7 @@ export function parseYMD(val) {
   if (typeof val === "string") {
     const s = val.trim();
     // 1. YYYY-MM-DD or YYYY/MM/DD
-    const ymd = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    const ymd = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (ymd) {
       return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
     }

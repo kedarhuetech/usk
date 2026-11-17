@@ -152,22 +152,23 @@ export default function PartyStatementReport() {
 
   // Handle clicking a transaction row to view/edit
   const handleRowClick = (txn) => {
-    if (!txn?.raw) return;
-    const t = txn.type;
-    if (t === "Sale") {
-      navigate("/sales/sale-invoices/new", { state: { editInvoice: txn.raw } });
-    } else if (t === "Purchase") {
+    if (!txn) return;
+    const rawDoc = { ...(txn.raw || txn), id: txn.raw?.id || txn.id?.replace(/^[a-z\-]+:/i, "") };
+    const t = txn.type || txn.source;
+    if (t === "Sale" || t?.toLowerCase().includes("sale")) {
+      navigate("/sales/sale-invoices/new", { state: { editInvoice: rawDoc } });
+    } else if (t === "Purchase" || t?.toLowerCase().includes("purchase")) {
       navigate("/purchase-expense/purchase-bills/new", {
-        state: { editPurchase: txn.raw, editBill: txn.raw, editInvoice: txn.raw },
+        state: { editPurchase: rawDoc, editBill: rawDoc, editInvoice: rawDoc },
       });
-    } else if (t === "Payment-In") {
-      navigate("/sales/payment-in", { state: { editPayment: txn.raw } });
-    } else if (t === "Payment-Out") {
-      navigate("/purchase-expense/payment-out", { state: { editPayment: txn.raw } });
-    } else if (t === "Credit Note") {
-      navigate("/sales/sale-return-credit-note", { state: { editInvoice: txn.raw, editReturn: txn.raw } });
-    } else if (t === "Debit Note") {
-      navigate("/purchase-expense/purchase-return", { state: { editBill: txn.raw, editReturn: txn.raw, editPurchase: txn.raw } });
+    } else if (t === "Payment-In" || t?.toLowerCase().includes("payment-in")) {
+      navigate("/sales/payment-in", { state: { editPayment: rawDoc, editInvoice: rawDoc } });
+    } else if (t === "Payment-Out" || t?.toLowerCase().includes("payment-out")) {
+      navigate("/purchase-expense/payment-out", { state: { editPayment: rawDoc, editPurchase: rawDoc } });
+    } else if (t === "Credit Note" || t?.toLowerCase().includes("credit note")) {
+      navigate("/sales/sale-return-credit-note", { state: { editInvoice: rawDoc, editReturn: rawDoc } });
+    } else if (t === "Debit Note" || t?.toLowerCase().includes("debit note")) {
+      navigate("/purchase-expense/purchase-return", { state: { editBill: rawDoc, editReturn: rawDoc, editPurchase: rawDoc } });
     }
   };
 
