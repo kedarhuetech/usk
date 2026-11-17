@@ -18,7 +18,16 @@ const linkedPartySources = [
 let memoryParties = [];
 
 export function setMemoryParties(list) {
-  if (Array.isArray(list)) memoryParties = list;
+  if (Array.isArray(list)) {
+    memoryParties = list.map((party) => {
+      const isInactive = party?.status === "inactive" || party?.isActive === false;
+      return {
+        ...party,
+        status: isInactive ? "inactive" : "active",
+        isActive: !isInactive,
+      };
+    });
+  }
 }
 
 // Reads parties.
@@ -66,7 +75,14 @@ export async function fetchPartiesFromDb() {
 
 // Saves party.
 export function saveParty(party) {
-  const saved = { ...party, id: party.id || crypto.randomUUID(), updatedAt: new Date().toISOString() };
+  const isInactive = party?.status === "inactive" || party?.isActive === false;
+  const saved = {
+    ...party,
+    status: isInactive ? "inactive" : "active",
+    isActive: !isInactive,
+    id: party.id || crypto.randomUUID(),
+    updatedAt: new Date().toISOString(),
+  };
   const next = [saved, ...readParties().filter((entry) => String(entry.id) !== String(saved.id))];
   if (typeof window !== "undefined" && window.localStorage) {
     window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));

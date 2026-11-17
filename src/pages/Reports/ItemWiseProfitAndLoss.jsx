@@ -3,6 +3,9 @@ import { FiPrinter } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { isDatabaseMode } from "../../services/dataStorageConfig";
+import { transactionsDb } from "../../services/databaseRepository";
+import { loadBusinessItems } from "../../services/businessRecords";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -49,24 +52,79 @@ export default function ItemWiseProfitAndLoss() {
   const [itemsHavingSaleOnly, setItemsHavingSaleOnly] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  const [dbTransactions, setDbTransactions] = useState([]);
+  const [dbItems, setDbItems] = useState([]);
+
   useEffect(() => {
-    const handler = () => setRefreshTrigger((k) => k + 1);
+    let mounted = true;
+    const fetchDb = async () => {
+      if (isDatabaseMode()) {
+        try {
+          const [txs, items] = await Promise.all([
+            transactionsDb.listAll(),
+            loadBusinessItems(),
+          ]);
+          if (mounted) {
+            if (Array.isArray(txs)) setDbTransactions(txs);
+            if (Array.isArray(items)) setDbItems(items);
+          }
+        } catch (e) {
+          console.warn("[ItemWise P&L] Failed to fetch database records:", e);
+        }
+      }
+    };
+    fetchDb();
+    const handler = () => {
+      setRefreshTrigger((k) => k + 1);
+      fetchDb();
+    };
     window.addEventListener("ledgerly:business-data-changed", handler);
     window.addEventListener("storage", handler);
     return () => {
+      mounted = false;
       window.removeEventListener("ledgerly:business-data-changed", handler);
       window.removeEventListener("storage", handler);
     };
   }, []);
 
   const inventoryItems = useMemo(() => {
+    if (isDatabaseMode() && dbItems.length) return dbItems;
     try { return getInventoryItems() || []; } catch { return []; }
-  }, [refreshTrigger]);
+  }, [dbItems, refreshTrigger]);
 
-  const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
-  const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
-  const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
-  const purchaseReturns = useMemo(() => readLocal("ledgerly:purchaseReturns.v1", "ledgerly:purchaseReturnsDebitNotes.v1"), [refreshTrigger]);
+  const sales = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "sale");
+    }
+    return readLocal("ledgerly:saleInvoices.v1");
+  }, [dbTransactions, refreshTrigger]);
+
+  const purchases = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "purchase");
+    }
+    return readLocal("ledgerly:purchaseBills.v1");
+  }, [dbTransactions, refreshTrigger]);
+
+  const saleReturns = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => {
+        const tp = (t.transactionType || t.transaction_type || t.type || "").toLowerCase();
+        return tp === "credit_note" || tp === "credit note" || tp === "sale_return";
+      });
+    }
+    return readLocal("ledgerly:saleReturns.v1");
+  }, [dbTransactions, refreshTrigger]);
+
+  const purchaseReturns = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => {
+        const tp = (t.transactionType || t.transaction_type || t.type || "").toLowerCase();
+        return tp === "debit_note" || tp === "debit note" || tp === "purchase_return";
+      });
+    }
+    return readLocal("ledgerly:purchaseReturns.v1", "ledgerly:purchaseReturnsDebitNotes.v1");
+  }, [dbTransactions, refreshTrigger]);
 
   /* ── Compute per-item financials ── */
   const rows = useMemo(() => {

@@ -42,6 +42,8 @@ import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
+export const isPartyInactive = (p) => p?.status === "inactive" || p?.isActive === false;
+
 // Renders the select field interface.
 function SelectField({ label, value, onChange, options }) {
   return (
@@ -342,13 +344,15 @@ function AddPartyModal({ onClose, onSave, initialParty = null, appSettings = {} 
     setSaving(true);
     setError("");
     try {
+      const isInactive = isPartyInactive(form);
       await onSave({
         ...form,
         partyName: form.partyName.trim(),
-        status: form.status || "active",
+        status: isInactive ? "inactive" : "active",
+        isActive: !isInactive,
       });
       if (resetAfterSave) {
-        setForm({ ...partyFormDefaults, status: "active", loyaltyPoints: 0 });
+        setForm({ ...partyFormDefaults, status: "active", isActive: true, loyaltyPoints: 0 });
         setShowShipping(false);
       } else {
         onClose();
@@ -369,15 +373,19 @@ function AddPartyModal({ onClose, onSave, initialParty = null, appSettings = {} 
             {(appSettings.managePartyStatus ?? true) && (
               <button
                 type="button"
-                onClick={() => setField("status", (form.status || "active") === "inactive" ? "active" : "inactive")}
+                onClick={() => {
+                  const currentlyInactive = isPartyInactive(form);
+                  setField("status", currentlyInactive ? "active" : "inactive");
+                  setField("isActive", currentlyInactive);
+                }}
                 className={`rounded-full px-3 py-1 text-xs font-bold transition cursor-pointer ${
-                  form.status === "inactive"
+                  isPartyInactive(form)
                     ? "bg-rose-100 text-rose-700 border border-rose-200 hover:bg-rose-200"
                     : "bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200"
                 }`}
                 title="Click to toggle Active / Inactive"
               >
-                ● {form.status === "inactive" ? "Inactive" : "Active"}
+                ● {isPartyInactive(form) ? "Inactive" : "Active"}
               </button>
             )}
           </div>
@@ -667,11 +675,23 @@ function PartyDetails() {
   // Saves party directly to MySQL database
   const saveParty = async (party) => {
     try {
-      const saved = await saveBusinessParty(party);
-      setParties((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      const isInactive = isPartyInactive(party);
+      const partyToSave = {
+        ...party,
+        status: isInactive ? "inactive" : "active",
+        isActive: !isInactive,
+      };
+      const saved = await saveBusinessParty(partyToSave);
+      const merged = {
+        ...partyToSave,
+        ...saved,
+        status: isInactive ? "inactive" : "active",
+        isActive: !isInactive,
+      };
+      setParties((current) => [merged, ...current.filter((item) => item.id !== merged.id)]);
       setPartyBeingEdited(null);
       toast.success("Party saved successfully.");
-      return saved;
+      return merged;
     } catch (err) {
       toast.error(err.message || "Failed to save party.");
       throw err;
@@ -723,9 +743,9 @@ function PartyDetails() {
 
     // Party Status setting check
     if ((appSettings.managePartyStatus ?? true) && statusFilter !== "all") {
-      const s = party.status || "active";
-      if (statusFilter === "active" && s === "inactive") return false;
-      if (statusFilter === "inactive" && s !== "inactive") return false;
+      const isInactive = isPartyInactive(party);
+      if (statusFilter === "active" && isInactive) return false;
+      if (statusFilter === "inactive" && !isInactive) return false;
     }
 
     const info = getPartyBalanceInfo(party);
@@ -910,7 +930,7 @@ function PartyDetails() {
 
             {filteredParties.map((party) => {
               const info = getPartyBalanceInfo(party);
-              const isInactive = party.status === "inactive";
+              const isInactive = isPartyInactive(party);
               return (
                 <button
                   key={party.id}
@@ -1005,17 +1025,18 @@ function PartyDetails() {
                   <button
                     type="button"
                     onClick={() => {
-                      const nextStatus = selectedParty.status === "inactive" ? "active" : "inactive";
-                      saveParty({ ...selectedParty, status: nextStatus });
+                      const wasInactive = isPartyInactive(selectedParty);
+                      const nextStatus = wasInactive ? "active" : "inactive";
+                      saveParty({ ...selectedParty, status: nextStatus, isActive: wasInactive });
                     }}
                     className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold border transition cursor-pointer ${
-                      selectedParty.status === "inactive"
+                      isPartyInactive(selectedParty)
                         ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
                         : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                     }`}
                     title="Click to toggle Active / Inactive status"
                   >
-                    ● {selectedParty.status === "inactive" ? "Inactive" : "Active"}
+                    ● {isPartyInactive(selectedParty) ? "Inactive" : "Active"}
                   </button>
                 )}
                 {selectedParty && (

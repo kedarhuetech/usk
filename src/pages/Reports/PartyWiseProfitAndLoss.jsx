@@ -17,6 +17,9 @@ import { getSaleInvoices } from "../../services/salesStorage.js";
 import { getSaleReturns } from "../../services/saleReturnsStorage.js";
 import { getInventoryItems } from "../../services/itemsStorage.js";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage.js";
+import { isDatabaseMode } from "../../services/dataStorageConfig.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { loadBusinessParties, loadBusinessItems } from "../../services/businessRecords.js";
 import {
   calculatePartyWiseProfit,
   formatPercentage,
@@ -69,12 +72,39 @@ export default function PartyWiseProfitAndLoss() {
   // Drill-down Modal State
   const [detailParty, setDetailParty] = useState(null);
 
-  // Reactive reload on business data changes
+  const [dbParties, setDbParties] = useState([]);
+  const [dbTransactions, setDbTransactions] = useState([]);
+  const [dbItems, setDbItems] = useState([]);
+
   useEffect(() => {
-    const handleUpdate = () => setRefreshKey((k) => k + 1);
+    let mounted = true;
+    const fetchDb = async () => {
+      if (isDatabaseMode()) {
+        try {
+          const [txs, parties, items] = await Promise.all([
+            transactionsDb.listAll(),
+            loadBusinessParties(),
+            loadBusinessItems(),
+          ]);
+          if (mounted) {
+            if (Array.isArray(txs)) setDbTransactions(txs);
+            if (Array.isArray(parties)) setDbParties(parties);
+            if (Array.isArray(items)) setDbItems(items);
+          }
+        } catch (e) {
+          console.warn("[PartyWise P&L] Failed to fetch database records:", e);
+        }
+      }
+    };
+    fetchDb();
+    const handleUpdate = () => {
+      setRefreshKey((k) => k + 1);
+      fetchDb();
+    };
     window.addEventListener("ledgerly:business-data-changed", handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
+      mounted = false;
       window.removeEventListener("ledgerly:business-data-changed", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
@@ -82,49 +112,58 @@ export default function PartyWiseProfitAndLoss() {
 
   // Load raw data sources
   const partiesMaster = useMemo(() => {
+    if (isDatabaseMode() && dbParties.length) return dbParties;
     try {
       const direct = getParties();
       if (Array.isArray(direct) && direct.length > 0) return direct;
     } catch {}
     return safeReadLocal("ledgerly:parties.v1");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [dbParties, refreshKey]);
 
   const salesInvoices = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "sale");
+    }
     try {
       const direct = getSaleInvoices();
       if (Array.isArray(direct) && direct.length > 0) return direct;
     } catch {}
     return safeReadLocal("ledgerly:saleInvoices.v1", "ledgerly:sales.v1");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [dbTransactions, refreshKey]);
 
   const saleReturns = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => {
+        const tp = (t.transactionType || t.transaction_type || t.type || "").toLowerCase();
+        return tp === "credit_note" || tp === "credit note" || tp === "sale_return";
+      });
+    }
     try {
       const direct = getSaleReturns();
       if (Array.isArray(direct) && direct.length > 0) return direct;
     } catch {}
     return safeReadLocal("ledgerly:saleReturns.v1");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [dbTransactions, refreshKey]);
 
   const inventoryItems = useMemo(() => {
+    if (isDatabaseMode() && dbItems.length) return dbItems;
     try {
       const direct = getInventoryItems();
       if (Array.isArray(direct) && direct.length > 0) return direct;
     } catch {}
     return safeReadLocal("ledgerly:inventoryItems.v1");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [dbItems, refreshKey]);
 
   const purchaseBills = useMemo(() => {
+    if (isDatabaseMode() && dbTransactions.length) {
+      return dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "purchase");
+    }
     try {
       const direct = getPurchaseBills();
       if (Array.isArray(direct) && direct.length > 0) return direct;
     } catch {}
     return safeReadLocal("ledgerly:purchaseBills.v1", "ledgerly:purchases.v1");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey]);
+  }, [dbTransactions, refreshKey]);
 
   // Handle Preset Period Changes
   const handlePeriodChange = (val) => {

@@ -235,14 +235,20 @@ const savePartyHandler = async (req, res) => {
     const shippingState = body.shippingState || null;
     const shippingPincode = body.shippingPincode || null;
 
+    const rawActive = body.status !== undefined
+      ? (String(body.status).toLowerCase() !== "inactive")
+      : (body.isActive !== undefined ? Boolean(body.isActive) : true);
+    const isActive = rawActive ? 1 : 0;
+
     // Pure SQL UPSERT
     await pool.query(
       `INSERT INTO parties (
         id, business_id, party_name, phone, email, gstin, pan, party_type,
         opening_balance, current_balance, balance_type, credit_limit,
         billing_street, billing_city, billing_state, billing_pincode,
-        shipping_street, shipping_city, shipping_state, shipping_pincode
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        shipping_street, shipping_city, shipping_state, shipping_pincode,
+        is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         party_name = VALUES(party_name),
         phone = VALUES(phone),
@@ -261,12 +267,14 @@ const savePartyHandler = async (req, res) => {
         shipping_city = VALUES(shipping_city),
         shipping_state = VALUES(shipping_state),
         shipping_pincode = VALUES(shipping_pincode),
+        is_active = VALUES(is_active),
         updated_at = CURRENT_TIMESTAMP`,
       [
         id, businessId, partyName, phone, email, gstin, pan, partyType,
         openingBalance, currentBalance, balanceType, creditLimit,
         billingStreet, billingCity, billingState, billingPincode,
-        shippingStreet, shippingCity, shippingState, shippingPincode
+        shippingStreet, shippingCity, shippingState, shippingPincode,
+        isActive
       ]
     );
 
@@ -281,6 +289,8 @@ const savePartyHandler = async (req, res) => {
         gstin,
         partyType,
         currentBalance,
+        isActive: isActive === 1,
+        status: isActive === 1 ? "active" : "inactive",
       },
     });
   } catch (err) {
@@ -344,7 +354,8 @@ function mapPartyRow(row) {
     shippingCity: row.shipping_city || "",
     shippingState: row.shipping_state || "",
     shippingPincode: row.shipping_pincode || "",
-    isActive: Boolean(row.is_active),
+    isActive: row.is_active === null || row.is_active === undefined ? true : Boolean(row.is_active),
+    status: (row.is_active === null || row.is_active === undefined || Boolean(row.is_active)) ? "active" : "inactive",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
