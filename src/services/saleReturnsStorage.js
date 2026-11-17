@@ -4,6 +4,7 @@ import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { applyBatchRowsToInventory } from "./itemsStorage.js";
 import { batchMovementStorageKey, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
 import { getAppSettings } from "./appSettingsStorage.js";
+import { readTransactionCollection, writeTransactionCollection } from "./transactionRepository.js";
 
 export const saleReturnsStorageKey = "ledgerly:saleReturns.v1";
 const inventoryHistoryKey = "ledgerly:inventoryAdjustments.v1";

@@ -1,8 +1,8 @@
 import { apiRequest } from "./apiClient.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem, writeItems } from "./itemsStorage.js";
-import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice } from "./salesStorage.js";
+import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice, saleInvoicesStorageKey } from "./salesStorage.js";
 import { getParties, saveParty, deleteParty } from "./partiesStorage.js";
-import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
+import { getPurchaseBills, savePurchaseBill, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
@@ -95,7 +95,7 @@ export async function loadBusinessSummary() {
         return {
           sales: data.sales?.totalAmount || 0,
           totalSales: data.sales?.totalAmount || 0,
-          activeSales: [],
+          activeSales: Array.isArray(data.activeSales) ? data.activeSales : [],
           salesCount: data.sales?.count || 0,
           received: data.sales?.receivedAmount || 0,
           receivable: data.balances?.toReceive || 0,
@@ -147,6 +147,9 @@ export async function loadSalesInvoices() {
         const normalized = dbSales.map(normalizeInvoice);
         try {
           writeTransactionCollection(transactionStorageKeys.sales, normalized);
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem(saleInvoicesStorageKey, JSON.stringify(normalized));
+          }
         } catch {}
         return normalized;
       }
@@ -188,6 +191,20 @@ export async function saveBusinessSaleInvoice(value) {
   return saved;
 }
 
+// Deletes sales invoice directly from MySQL database transactions table
+export async function deleteBusinessSaleInvoice(invoiceId) {
+  deleteSaleInvoice(invoiceId);
+  if (isDatabaseMode()) {
+    try {
+      await transactionsDb.remove(invoiceId);
+    } catch (e) {
+      console.warn("[MySQL] Sale invoice delete failure:", e.message);
+      throw e;
+    }
+  }
+  notifyBusinessDataChanged();
+}
+
 // Loads purchase bills directly from MySQL database transactions table
 export async function loadPurchaseBills() {
   if (isDatabaseMode()) {
@@ -196,6 +213,9 @@ export async function loadPurchaseBills() {
       if (Array.isArray(dbPurchases)) {
         try {
           writeTransactionCollection(transactionStorageKeys.purchases, dbPurchases);
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem(purchaseBillsStorageKey, JSON.stringify(dbPurchases));
+          }
         } catch {}
         return dbPurchases;
       }

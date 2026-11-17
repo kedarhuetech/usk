@@ -79,14 +79,23 @@ function App() {
           <Route path="company-profile" element={<EditProfile />} />
           <Route path="edit-profile" element={<EditProfile />} />
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="parties" element={<Navigate to="/parties/party-details" replace />} />
+          <Route path="sales" element={<Navigate to="/sales/sale-invoices" replace />} />
+          <Route path="purchase" element={<Navigate to="/purchase-expense/purchase-bills" replace />} />
+          <Route path="purchase-expense" element={<Navigate to="/purchase-expense/purchase-bills" replace />} />
+          <Route path="cash-bank" element={<Navigate to="/cash-bank/bank-accounts" replace />} />
+          <Route path="business-growth" element={<Navigate to="/business-growth/google-profile-manager" replace />} />
+          <Route path="sync-share-backup" element={<Navigate to="/sync-share-backup/backup-to-computer" replace />} />
+          <Route path="utilities" element={<Navigate to="/utilities/import-items" replace />} />
+          <Route path="inventory" element={<Navigate to="/items" replace />} />
           <Route path="cash-bank/bank-accounts" element={<BankAccounts />} />
           <Route path="cash-bank/cash-in-hand" element={<CashInHand />} />
           <Route path="cash-bank/cheques" element={<Cheques />} />
           <Route path="cash-bank/loan-accounts" element={<LoanAccounts />} />
           <Route path="items" element={<ItemsDashboard />} />
           <Route path="parties/party-details" element={<PartyDetails />} />
-          <Route path="parties/whatsapp-connect" element={<Navigate to="/parties/party-details" replace />} />
-          <Route path="parties/business-network" element={<Navigate to="/parties/party-details" replace />} />
+          <Route path="parties/whatsapp-connect" element={<WhatsAppConnect />} />
+          <Route path="parties/business-network" element={<Navigate to="/parties/usk-network" replace />} />
           <Route path="parties/usk-network" element={<USKNetwork />} />
 
           {/* Protected Business Growth Section */}
@@ -155,6 +164,10 @@ function App() {
           <Route path="sync-share-backup/backup-to-drive" element={<BackupToDrive />} />
           <Route path="sync-share-backup/restore-backup" element={<RestoreBackup />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="reports/sale" element={<Reports defaultReport="Sale" />} />
+          <Route path="reports/sale-report" element={<Reports defaultReport="Sale" />} />
+          <Route path="reports/purchase" element={<Reports defaultReport="Purchase" />} />
+          <Route path="reports/purchase-report" element={<Reports defaultReport="Purchase" />} />
           <Route path="reports/all-transactions" element={<Reports defaultReport="All Transactions" />} />
           <Route path="reports/profit-and-loss" element={<Reports defaultReport="Profit And Loss" />} />
           <Route path="reports/bill-wise-profit" element={<Reports defaultReport="Bill Wise Profit" />} />
@@ -164,6 +177,8 @@ function App() {
           <Route path="reports/all-parties" element={<Reports defaultReport="All parties" />} />
           <Route path="reports/party-statement" element={<Reports defaultReport="Party Statement" />} />
           <Route path="reports/party-report-by-item" element={<Reports defaultReport="Party Report By Item" />} />
+          <Route path="reports/party-wise-profit-and-loss" element={<Reports defaultReport="Party Wise Profit And Loss" />} />
+          <Route path="reports/batch-expiry" element={<Reports defaultReport="Batch Expiry Report" />} />
           <Route path="reports/sale-purchase-by-party" element={<Reports defaultReport="Sale Purchase By Party" />} />
           <Route path="reports/sale-purchase-by-party-group" element={<Reports defaultReport="Sale Purchase By Party Group" />} />
           <Route path="reports/stock-summary" element={<Reports defaultReport="Stock summary" />} />

@@ -14,8 +14,17 @@ const linkedPartySources = [
   ["ledgerly:proformaInvoices.v1", "proforma invoices"],
 ];
 
+// In-memory cache for live database session
+let memoryParties = [];
+
+export function setMemoryParties(list) {
+  if (Array.isArray(list)) memoryParties = list;
+}
+
 // Reads parties.
 function readParties() {
+  if (memoryParties.length > 0) return memoryParties;
+  if (isDatabaseMode()) return [];
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
     const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
@@ -26,6 +35,7 @@ function readParties() {
 }
 
 function readList(key) {
+  if (isDatabaseMode()) return [];
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
     const value = JSON.parse(window.localStorage.getItem(key) || "[]");

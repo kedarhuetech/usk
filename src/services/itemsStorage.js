@@ -26,23 +26,41 @@ function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
-// Reads items from scoped active business cache with fallback to legacy key.
-export function readItems() {
-  if (!canUseStorage()) return [];
-  const scopedKey = getItemsStorageKey();
-  const scopedData = safeParse(window.localStorage.getItem(scopedKey), null);
-  if (Array.isArray(scopedData) && scopedData.length > 0) {
-    return scopedData;
+// In-memory cache for live database session
+let memoryItems = [];
+
+export function setMemoryItems(list) {
+  if (Array.isArray(list)) {
+    memoryItems = list.map((item) => normalizeInventoryItem(item));
+    if (canUseStorage()) {
+      writeItems(memoryItems);
+    }
   }
-  const fallbackData = safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), null);
-  if (Array.isArray(fallbackData) && fallbackData.length > 0) {
-    return fallbackData;
-  }
-  return Array.isArray(scopedData) ? scopedData : (Array.isArray(fallbackData) ? fallbackData : []);
 }
 
-// Writes items to both scoped business key and unscoped key to maintain consistency across all modules.
+// Reads items from scoped active business cache with fallback to legacy key or in-memory cache.
+export function readItems() {
+  if (canUseStorage()) {
+    const scopedKey = getItemsStorageKey();
+    const scopedData = safeParse(window.localStorage.getItem(scopedKey), null);
+    if (Array.isArray(scopedData) && scopedData.length > 0) {
+      return scopedData;
+    }
+    const fallbackData = safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), null);
+    if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+      return fallbackData;
+    }
+    return Array.isArray(scopedData) ? scopedData : (Array.isArray(fallbackData) ? fallbackData : []);
+  }
+  if (memoryItems.length > 0) return memoryItems;
+  return [];
+}
+
+// Writes items to in-memory cache, scoped business key, and unscoped key to maintain consistency across all modules.
 export function writeItems(items) {
+  if (Array.isArray(items)) {
+    memoryItems = items.map((item) => normalizeInventoryItem(item));
+  }
   if (!canUseStorage()) return;
   const scopedKey = getItemsStorageKey();
   window.localStorage.setItem(scopedKey, JSON.stringify(items));
@@ -65,7 +83,7 @@ function hasValue(value) {
 
 // This helper handles type logic.
 function itemType(item = {}) {
-  return String(item.type || item.itemType || "product").toLowerCase();
+  return String(item.type || item.itemType || item.item_type || "product").toLowerCase();
 }
 
 // Makes the discount type value consistent.
@@ -158,7 +176,11 @@ export function normalizeInventoryItem(itemForm = {}) {
     ? String(itemForm.openingQuantity)
     : hasValue(itemForm.stock)
       ? String(itemForm.stock)
-      : "";
+      : hasValue(itemForm.currentStock)
+        ? String(itemForm.currentStock)
+        : hasValue(itemForm.openingStock)
+          ? String(itemForm.openingStock)
+          : "";
   const openingQuantity = hasValue(itemForm.openingQuantity)
     ? String(itemForm.openingQuantity)
     : batches.length
@@ -207,6 +229,7 @@ export function normalizeInventoryItem(itemForm = {}) {
     initialOpeningQuantity,
     openingQuantity,
     stock: openingQuantity || "0",
+    currentStock: Number(itemForm.currentStock ?? openingQuantity ?? 0),
     atPrice: itemForm.atPrice || "",
     asOfDate: itemForm.asOfDate || "",
     location: itemForm.location || "",
