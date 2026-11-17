@@ -38,13 +38,13 @@ router.get("/", async (req, res) => {
 /**
  * POST /api/bank-accounts
  */
-router.post("/", async (req, res) => {
+const saveBankAccountHandler = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `bank_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const accountName = (body.accountName || body.name || "").trim();
+    const id = req.params?.id || body.id || `bank_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const accountName = (body.accountName || body.accountDisplayName || body.name || "").trim();
     if (!accountName) {
       return res.status(400).json({ success: false, message: "Account name is required." });
     }
@@ -89,7 +89,10 @@ router.post("/", async (req, res) => {
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
-});
+};
+
+router.post("/", saveBankAccountHandler);
+router.put("/:id", saveBankAccountHandler);
 
 /**
  * DELETE /api/bank-accounts/:id

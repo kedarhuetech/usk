@@ -76,7 +76,7 @@ export function extractSaleCashMovement(rawSale, saleUi = {}) {
   const isCashSale = sale.saleType === "cash";
   const statusLower = String(sale.status || "").trim().toLowerCase();
 
-  let received = 0;
+  let received;
   if (isCashSale) {
     if (statusLower === "unpaid") {
       received = Number(sale.totals?.received ?? sale.receivedAmount ?? sale.form?.receivedAmount ?? 0);
@@ -127,7 +127,7 @@ export function extractPurchaseCashMovement(purchase) {
   const statusLower = String(purchase.status || "").trim().toLowerCase();
   const isCashPurchase = purchase.purchaseType === "cash" || purchase.saleType === "cash";
 
-  let paid = 0;
+  let paid;
   if (statusLower === "unpaid") {
     // Explicitly marked unpaid in purchase bills
     paid = Number(purchase.totals?.received ?? purchase.paidAmount ?? purchase.form?.paidAmount ?? 0);
@@ -174,7 +174,7 @@ export function extractPurchaseCashMovement(purchase) {
 export function extractPaymentInMovement(paymentIn) {
   if (!paymentIn || isVoided(paymentIn)) return null;
 
-  let amt = 0;
+  let amt;
   if (Array.isArray(paymentIn.payments) && paymentIn.payments.length > 0) {
     amt = paymentIn.payments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
   } else {
@@ -209,7 +209,7 @@ export function extractPaymentInMovement(paymentIn) {
 export function extractPaymentOutMovement(paymentOut) {
   if (!paymentOut || isVoided(paymentOut)) return null;
 
-  let amt = 0;
+  let amt;
   if (Array.isArray(paymentOut.payments) && paymentOut.payments.length > 0) {
     amt = paymentOut.payments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
   } else {
@@ -256,7 +256,7 @@ export function extractExpenseMovement(expense) {
   total = Math.max(0, total);
 
   const statusLower = String(expense.status || "").trim().toLowerCase();
-  let paid = 0;
+  let paid;
 
   if (Array.isArray(expense.payments) && expense.payments.length > 0) {
     paid = expense.payments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
@@ -323,22 +323,31 @@ export function extractCashAdjustmentMovement(adj) {
 /**
  * Builds the complete list of cash flow entries, resolving duplicate payments.
  */
-export function buildCashFlowEntries({
-  sales = [],
-  purchases = [],
-  paymentIns = [],
-  paymentOuts = [],
-  expenses = [],
-  adjustments = [],
-  bankTransactions = [],
-  saleInvoiceUi = {},
-} = {}) {
+export function buildCashFlowEntries(params = {}) {
+  const {
+    sales = [],
+    purchases = [],
+    paymentIns = [],
+    paymentOuts = [],
+    expenses = [],
+    adjustments = [],
+    bankTransactions = [],
+    saleInvoiceUi = {},
+  } = params || {};
   const list = [];
+  const safeSales = Array.isArray(sales) ? sales : [];
+  const safePurchases = Array.isArray(purchases) ? purchases : [];
+  const safePaymentIns = Array.isArray(paymentIns) ? paymentIns : [];
+  const safePaymentOuts = Array.isArray(paymentOuts) ? paymentOuts : [];
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
+  const safeAdjustments = Array.isArray(adjustments) ? adjustments : [];
+  const safeBankTransactions = Array.isArray(bankTransactions) ? bankTransactions : [];
+  const safeUi = saleInvoiceUi || {};
 
   // 1. Sales
   const processedSales = [];
-  for (const s of sales) {
-    const entry = extractSaleCashMovement(s, saleInvoiceUi);
+  for (const s of safeSales) {
+    const entry = extractSaleCashMovement(s, safeUi);
     if (entry) {
       processedSales.push(entry);
       list.push(entry);
@@ -346,8 +355,8 @@ export function buildCashFlowEntries({
   }
 
   // Also include duplicated sales from UI actions if present
-  if (saleInvoiceUi.duplicates && Array.isArray(saleInvoiceUi.duplicates)) {
-    for (const dup of saleInvoiceUi.duplicates) {
+  if (safeUi.duplicates && Array.isArray(safeUi.duplicates)) {
+    for (const dup of safeUi.duplicates) {
       const entry = extractSaleCashMovement(dup, {});
       if (entry) {
         processedSales.push(entry);
@@ -358,7 +367,7 @@ export function buildCashFlowEntries({
 
   // 2. Purchases
   const processedPurchases = [];
-  for (const p of purchases) {
+  for (const p of safePurchases) {
     const entry = extractPurchaseCashMovement(p);
     if (entry) {
       processedPurchases.push(entry);
@@ -367,7 +376,7 @@ export function buildCashFlowEntries({
   }
 
   // 3. Payment-Ins (with duplicate prevention for linked sales)
-  for (const pi of paymentIns) {
+  for (const pi of safePaymentIns) {
     const entry = extractPaymentInMovement(pi);
     if (!entry) continue;
 
@@ -392,7 +401,7 @@ export function buildCashFlowEntries({
   }
 
   // 4. Payment-Outs (with duplicate prevention for linked purchases / credit notes)
-  for (const po of paymentOuts) {
+  for (const po of safePaymentOuts) {
     const entry = extractPaymentOutMovement(po);
     if (!entry) continue;
 
@@ -417,19 +426,19 @@ export function buildCashFlowEntries({
   }
 
   // 5. Expenses
-  for (const exp of expenses) {
+  for (const exp of safeExpenses) {
     const entry = extractExpenseMovement(exp);
     if (entry) list.push(entry);
   }
 
   // 6. Cash Adjustments
-  for (const adj of adjustments) {
+  for (const adj of safeAdjustments) {
     const entry = extractCashAdjustmentMovement(adj);
     if (entry) list.push(entry);
   }
 
   // 7. Bank Transactions (if any)
-  for (const bt of bankTransactions) {
+  for (const bt of safeBankTransactions) {
     if (!bt || isVoided(bt)) continue;
     const amt = Math.max(0, Number(bt.amount || 0));
     if (amt <= 0) continue;

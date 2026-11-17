@@ -222,7 +222,7 @@ router.get("/:id", async (req, res) => {
  * POST /api/items
  * Atomically saves an item and its batch rows in pure SQL columns
  */
-router.post("/", async (req, res) => {
+const saveItemHandler = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -230,7 +230,7 @@ router.post("/", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const name = (body.name || body.itemName || "").trim();
     if (!name) {
       await conn.rollback();
@@ -346,7 +346,10 @@ router.post("/", async (req, res) => {
   } finally {
     conn.release();
   }
-});
+};
+
+router.post("/", saveItemHandler);
+router.put("/:id", saveItemHandler);
 
 /**
  * DELETE /api/items/:id

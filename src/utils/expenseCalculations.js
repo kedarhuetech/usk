@@ -85,11 +85,12 @@ export function getPresetDateRange(preset) {
   }
 }
 
-export function rowAmount(row, gst = false) {
-  const base = (Number(row.qty) || 0) * (Number(row.price) || 0);
-  const discount = base * ((Number(row.discount) || 0) / 100);
+export function rowAmount(row = {}, gst = false) {
+  const safeRow = row || {};
+  const base = (Number(safeRow.qty) || 0) * (Number(safeRow.price) || 0);
+  const discount = base * ((Number(safeRow.discount) || 0) / 100);
   const discounted = Math.max(0, base - discount);
-  const tax = gst ? discounted * ((Number(row.tax) || 0) / 100) : 0;
+  const tax = gst ? discounted * ((Number(safeRow.tax) || 0) / 100) : 0;
   return discounted + tax;
 }
 
@@ -118,7 +119,7 @@ export function normalizeExpense(record, index = 0) {
     0
   );
 
-  let paidAmount = 0;
+  let paidAmount;
   if (record.paid !== undefined && record.paid !== null && record.paid !== "") {
     paidAmount = Number(record.paid);
   } else if (sumEnteredPayments > 0) {
@@ -133,7 +134,7 @@ export function normalizeExpense(record, index = 0) {
 
   const balance = Math.max(0, amount - paidAmount);
 
-  let status = "Paid";
+  let status;
   if (record.status === "Cancelled" || record.cancelled) {
     status = "Cancelled";
   } else if (balance === 0) {
@@ -206,7 +207,8 @@ export function normalizeExpense(record, index = 0) {
 /**
  * Filters a list of normalized expenses by date range, category, party, payment mode, and search.
  */
-export function filterExpenses(expenses, filters = {}) {
+export function filterExpenses(expenses = [], filters = {}) {
+  const safeExpenses = Array.isArray(expenses) ? expenses : [];
   const {
     from = "",
     to = "",
@@ -215,11 +217,11 @@ export function filterExpenses(expenses, filters = {}) {
     paymentMode = "All",
     status = "All",
     search = "",
-  } = filters;
+  } = filters || {};
 
   const q = search.trim().toLowerCase();
 
-  return expenses
+  return safeExpenses
     .filter((exp) => {
       if (!exp || exp.deleted) return false;
 
@@ -285,6 +287,7 @@ export function filterExpenses(expenses, filters = {}) {
  * Calculates summary metrics and breakdowns from a list of filtered expenses.
  */
 export function calculateExpenseMetrics(filteredExpenses = []) {
+  const safeFilteredExpenses = Array.isArray(filteredExpenses) ? filteredExpenses : [];
   let totalExpenses = 0;
   let paidTotal = 0;
   let balanceTotal = 0;
@@ -294,7 +297,7 @@ export function calculateExpenseMetrics(filteredExpenses = []) {
   const paymentModeMap = new Map();
   const partyMap = new Map();
 
-  filteredExpenses.forEach((exp) => {
+  safeFilteredExpenses.forEach((exp) => {
     if (!exp || exp.status === "Cancelled" || exp.cancelled || exp.deleted) {
       return;
     }
@@ -386,7 +389,7 @@ export function calculateExpenseMetrics(filteredExpenses = []) {
     }
   });
 
-  const activeTransactions = filteredExpenses.filter(
+  const activeTransactions = safeFilteredExpenses.filter(
     (e) => e && e.status !== "Cancelled" && !e.cancelled && !e.deleted
   );
   const transactionCount = activeTransactions.length;

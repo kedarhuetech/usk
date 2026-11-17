@@ -7,20 +7,11 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
-function formatSqlDate(val) {
-  if (!val) return null;
-  if (val instanceof Date) {
-    const y = val.getFullYear();
-    const m = String(val.getMonth() + 1).padStart(2, "0");
-    const d = String(val.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  return String(val).slice(0, 10);
-}
+const formatSqlDate = toSqlDate;
 
 /**
  * GET /api/service-reminders
@@ -139,7 +130,7 @@ router.get("/", async (req, res) => {
  * POST /api/service-reminders
  * Atomically saves reminder header and normalized history rows in pure SQL columns
  */
-router.post("/", async (req, res) => {
+const saveReminderHandler = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -147,7 +138,7 @@ router.post("/", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = body.id || `srv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = req.params?.id || body.id || `srv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const partyId = body.partyId || body.party_id || null;
     const customerName = (body.customerName || body.name || "").trim();
     if (!customerName) {
@@ -241,7 +232,10 @@ router.post("/", async (req, res) => {
   } finally {
     conn.release();
   }
-});
+};
+
+router.post("/", saveReminderHandler);
+router.put("/:id", saveReminderHandler);
 
 /**
  * DELETE /api/service-reminders/:id

@@ -8,15 +8,17 @@
  *    while preserving existing records in other businesses (like 'local-development').
  * 4. Auditability: Logs every migration operation in migration_logs with batch_id.
  * 5. Full Reversibility: Rollback endpoint allows undoing a batch cleanly.
+ * 6. Backward Compatibility: Preserves /migrate-from-local for existing client auto-migration.
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
 
 /**
  * POST /api/migration/migrate-local-data
+ * Advanced batch migration engine with audit logging and rollback readiness.
  */
 router.post("/migrate-local-data", async (req, res) => {
   const conn = await pool.getConnection();
@@ -142,11 +144,11 @@ router.post("/migrate-local-data", async (req, res) => {
     report.totalDiscovered += rawConversions.length;
 
     for (const uc of rawConversions) {
-      if (!uc || !uc.unit || !uc.toUnit) continue;
+      if (!uc || !uc.unit) continue;
+      const unit = String(uc.unit).trim();
+      const toUnit = String(uc.toUnit || "PCS").trim();
+      const factor = parseFloat(uc.conversionFactor ?? uc.factor ?? 1) || 1;
       const id = String(uc.id || `uconv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-      const unit = String(uc.unit).trim().toUpperCase();
-      const toUnit = String(uc.toUnit).trim().toUpperCase();
-      const factor = parseFloat(uc.factor) || 1;
 
       const [existing] = await conn.query(
         `SELECT id FROM unit_conversions WHERE business_id = ? AND unit = ? AND to_unit = ? LIMIT 1`,
@@ -157,32 +159,44 @@ router.post("/migrate-local-data", async (req, res) => {
         report.alreadyPresent += 1;
         report.skipped += 1;
         report.categories.unitConversions.skipped += 1;
-        await logMigration("unit_conversion", id, "unit_conversions", existing[0].id, "skipped", "Conversion exists");
+        await logMigration("unit_conversion", id, "unit_conversions", existing[0].id, "skipped", `Conversion already exists`);
       } else {
         await conn.query(
-          `INSERT INTO unit_conversions (id, business_id, unit, to_unit, factor) VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO unit_conversions (id, business_id, unit, to_unit, conversion_factor)
+           VALUES (?, ?, ?, ?, ?)`,
           [id, businessId, unit, toUnit, factor]
         );
         report.newlyMigrated += 1;
         report.categories.unitConversions.migrated += 1;
-        await logMigration("unit_conversion", id, "unit_conversions", id, "inserted", `${unit} -> ${toUnit}`);
+        await logMigration("unit_conversion", id, "unit_conversions", id, "inserted", `Migrated unit conversion ${unit} -> ${toUnit}`);
       }
     }
 
-    // 4. Migrate Transactions (Sales, Purchases, Payments, Orders, Quotations, Challans)
+    // 4. Migrate Transactions & Line Items
     const rawTxns = Array.isArray(payload.transactions) ? payload.transactions : [];
     report.categories.transactions = { discovered: rawTxns.length, migrated: 0, skipped: 0 };
     report.totalDiscovered += rawTxns.length;
 
     for (const t of rawTxns) {
-      if (!t || !t.id) continue;
-      const id = String(t.id);
+      if (!t || (!t.id && !t.documentNumber && !t.invoiceNumber && !t.billNumber)) continue;
+      const id = String(t.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
       const transactionType = (t.transactionType || t.type || "sale").toLowerCase();
-      const documentNumber = String(t.documentNumber || t.invoiceNumber || t.number || "0").trim();
-      const transactionDate = t.transactionDate || t.invoiceDate || t.date || new Date().toISOString().slice(0, 10);
-      const partyId = t.partyId || t.party_id || null;
-      const partyName = t.partyName || t.customer || t.supplier || "Cash Sale";
-      const totalAmount = parseFloat(t.totalAmount ?? t.total ?? t.amount ?? 0) || 0;
+      const documentNumber = String(
+        t.documentNumber ??
+        t.docNumber ??
+        t.invoiceNumber ??
+        t.billNumber ??
+        t.orderNumber ??
+        t.form?.invoiceNumber ??
+        t.form?.billNumber ??
+        t.id
+      ).trim();
+
+      const rawTxnDate = t.transactionDate || t.invoiceDate || t.billDate || t.date || new Date().toISOString().slice(0, 10);
+      const transactionDate = toSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
+      const partyId = t.partyId && t.partyId !== "null" && t.partyId !== "undefined" ? String(t.partyId) : null;
+      const partyName = t.partyName || t.customer || t.supplier || t.party || t.form?.customer || t.form?.supplier || null;
+      const totalAmount = parseFloat(t.totalAmount ?? t.total ?? t.amount ?? t.totals?.total ?? t.totals?.finalTotal ?? 0) || 0;
       const paidAmount = parseFloat(t.paidAmount ?? t.receivedAmount ?? totalAmount) || 0;
       const balanceAmount = parseFloat(t.balanceAmount ?? (totalAmount - paidAmount)) || 0;
       const paymentMode = t.paymentMode || t.paymentType || "Cash";
@@ -260,7 +274,7 @@ router.post("/migrate-local-data", async (req, res) => {
       const roundOff = parseFloat(t.roundOff ?? t.totals?.roundOffAmount ?? 0) || 0;
       const partyPhone = t.partyPhone || t.phone || t.form?.phone || null;
       const partyGstin = t.partyGstin || t.gstin || t.form?.gstin || null;
-      const dueDate = t.dueDate || t.form?.dueDate || null;
+      const dueDate = toSqlDate(t.dueDate || t.form?.dueDate);
       const notes = t.notes || t.form?.notes || null;
 
       // Insert transaction header with full financial fields
@@ -297,10 +311,10 @@ router.post("/migrate-local-data", async (req, res) => {
         const itemDiscountAmount = parseFloat(line.discountAmount ?? line.discount ?? 0) || 0;
         const itemTaxRate = parseFloat(line.taxRate ?? line.tax ?? 0) || 0;
         const itemTaxAmount = parseFloat(line.taxAmount ?? 0) || 0;
-        const cgstRate = parseFloat(line.cgstRate ?? itemTaxRate / 2) || 0;
-        const cgstAmount = parseFloat(line.cgstAmount ?? itemTaxAmount / 2) || 0;
-        const sgstRate = parseFloat(line.sgstRate ?? itemTaxRate / 2) || 0;
-        const sgstAmount = parseFloat(line.sgstAmount ?? itemTaxAmount / 2) || 0;
+        const cgstRate = parseFloat(line.cgstRate ?? (itemTaxRate / 2)) || 0;
+        const cgstAmount = parseFloat(line.cgstAmount ?? (itemTaxAmount / 2)) || 0;
+        const sgstRate = parseFloat(line.sgstRate ?? (itemTaxRate / 2)) || 0;
+        const sgstAmount = parseFloat(line.sgstAmount ?? (itemTaxAmount / 2)) || 0;
         const lineTotal = parseFloat(line.amount ?? line.totalAmount ?? (qty * price - itemDiscountAmount)) || 0;
 
         let lineItemId = line.itemId || line.sourceItemId || null;
@@ -350,12 +364,13 @@ router.post("/migrate-local-data", async (req, res) => {
         report.categories.cheques.skipped += 1;
         await logMigration("cheque", id, "cheques", id, "skipped", "Cheque already in DB");
       } else {
+        const chequeDate = c.chequeDate ? toSqlDate(c.chequeDate) : new Date().toISOString().slice(0, 10);
         await conn.query(
           `INSERT INTO cheques (
             id, business_id, party_name, party_id, cheque_number, bank_name,
             amount, cheque_date, cheque_type, status, notes
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, businessId, c.partyName || "Party", c.partyId || null, c.chequeNumber || "", c.bankName || "", parseFloat(c.amount) || 0, c.chequeDate || new Date().toISOString().slice(0, 10), (c.type || "received").toLowerCase(), (c.status || "pending").toLowerCase(), c.notes || ""]
+          [id, businessId, c.partyName || "Party", c.partyId || null, c.chequeNumber || "", c.bankName || "", parseFloat(c.amount) || 0, chequeDate, (c.type || "received").toLowerCase(), (c.status || "pending").toLowerCase(), c.notes || ""]
         );
         report.newlyMigrated += 1;
         report.categories.cheques.migrated += 1;
@@ -407,11 +422,12 @@ router.post("/migrate-local-data", async (req, res) => {
         const repId = String(rep.id);
         const [repExisting] = await conn.query(`SELECT id FROM loan_repayments WHERE business_id = ? AND id = ? LIMIT 1`, [businessId, repId]);
         if (!repExisting.length) {
+          const paymentDate = rep.paymentDate ? toSqlDate(rep.paymentDate) : new Date().toISOString().slice(0, 10);
           await conn.query(
             `INSERT INTO loan_repayments (
               id, business_id, loan_id, payment_date, amount_paid, principal_paid, interest_paid, reference, notes
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [repId, businessId, id, rep.paymentDate || new Date().toISOString().slice(0, 10), parseFloat(rep.amountPaid) || 0, parseFloat(rep.principalPaid) || 0, parseFloat(rep.interestPaid) || 0, rep.reference || "", rep.notes || ""]
+            [repId, businessId, id, paymentDate, parseFloat(rep.amountPaid) || 0, parseFloat(rep.principalPaid) || 0, parseFloat(rep.interestPaid) || 0, rep.reference || "", rep.notes || ""]
           );
           await logMigration("loan_repayment", repId, "loan_repayments", repId, "inserted", `Migrated repayment for loan ${id}`);
         }
@@ -433,11 +449,12 @@ router.post("/migrate-local-data", async (req, res) => {
         report.categories.jobWorks.skipped += 1;
         await logMigration("job_work", id, "purchase_job_works", id, "skipped", "Job work already in DB");
       } else {
+        const orderDate = jw.date ? toSqlDate(jw.date) : null;
         await conn.query(
           `INSERT INTO purchase_job_works (
             id, business_id, order_number, party_name, party_id, order_date, status, charges, notes
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [id, businessId, jw.number || "JW-1", jw.party || "Vendor", jw.partyId || null, jw.date || null, jw.status || "Pending", parseFloat(jw.charges) || 0, jw.notes || ""]
+          [id, businessId, jw.number || "JW-1", jw.party || "Vendor", jw.partyId || null, orderDate, jw.status || "Pending", parseFloat(jw.charges) || 0, jw.notes || ""]
         );
 
         // Migrate child job work items
@@ -509,7 +526,7 @@ router.post("/migrate-local-data", async (req, res) => {
 
 /**
  * POST /api/migration/rollback-batch/:batchId
- * Safely rolls back records inserted during a specific migration batch
+ * Safely rolls back records inserted during a specific migration batch in reverse-topological order
  */
 router.post("/rollback-batch/:batchId", async (req, res) => {
   const conn = await pool.getConnection();
@@ -577,6 +594,494 @@ router.post("/rollback-batch/:batchId", async (req, res) => {
   } catch (err) {
     await conn.rollback();
     return res.status(500).json({ success: false, message: `Rollback failed: ${err.message}` });
+  } finally {
+    conn.release();
+  }
+});
+
+/**
+ * POST /api/migration/migrate-from-local
+ * Backward-compatible auto-migration endpoint for client startup auto-migration (origin/partiesanditems).
+ */
+router.post("/migrate-from-local", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const businessId = businessIdFromRequest(req);
+    const {
+      parties = [],
+      items = [],
+      transactions = [],
+      serviceReminders = [],
+      bankAccounts = [],
+      settings = {},
+      companyProfile = {},
+    } = req.body || {};
+
+    let partiesCount = 0;
+    let itemsCount = 0;
+    let transactionsCount = 0;
+    let remindersCount = 0;
+
+    // 1. Ingest Parties (Pure SQL columns)
+    for (const p of parties) {
+      if (!p.id && !p.name && !p.partyName) continue;
+      const id = p.id || `party_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const name = p.partyName || p.name || "Customer";
+      const phone = p.phone || p.mobile || null;
+      const email = p.email || null;
+      const gstin = p.gstin || p.gstNumber || null;
+      const pan = p.pan || null;
+      const type = (p.partyType || "customer").toLowerCase();
+      const openBal = parseFloat(p.openingBalance ?? 0) || 0;
+      const currBal = parseFloat(p.currentBalance ?? p.balance ?? openBal) || 0;
+      const balType = p.balanceType || (currBal >= 0 ? "to_receive" : "to_pay");
+      const creditLimit = parseFloat(p.creditLimit ?? 0) || 0;
+      const billingStreet = p.billingStreet || (typeof p.billingAddress === "string" ? p.billingAddress : (p.address || null));
+      const billingCity = p.billingCity || p.city || null;
+      const billingState = p.billingState || p.state || null;
+      const billingPincode = p.billingPincode || p.pincode || null;
+      const shippingStreet = p.shippingStreet || (typeof p.shippingAddress === "string" ? p.shippingAddress : null);
+      const shippingCity = p.shippingCity || null;
+      const shippingState = p.shippingState || null;
+      const shippingPincode = p.shippingPincode || null;
+
+      await conn.query(
+        `INSERT INTO parties (
+          id, business_id, party_name, phone, email, gstin, pan, party_type,
+          opening_balance, current_balance, balance_type, credit_limit,
+          billing_street, billing_city, billing_state, billing_pincode,
+          shipping_street, shipping_city, shipping_state, shipping_pincode
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          party_name = VALUES(party_name),
+          phone = VALUES(phone),
+          email = VALUES(email),
+          gstin = VALUES(gstin),
+          current_balance = VALUES(current_balance),
+          balance_type = VALUES(balance_type)`,
+        [
+          id, businessId, name, phone, email, gstin, pan, type,
+          openBal, currBal, balType, creditLimit,
+          billingStreet, billingCity, billingState, billingPincode,
+          shippingStreet, shippingCity, shippingState, shippingPincode
+        ]
+      );
+      partiesCount++;
+    }
+
+    // 2. Ingest Items & Batches
+    for (const item of items) {
+      if (!item.id && !item.name && !item.itemName) continue;
+      const id = item.id || `item_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const name = item.name || item.itemName || "Item";
+      const code = item.itemCode || item.item_code || null;
+      const barcode = item.barcode || null;
+      const cat = item.category || "General";
+      const hsn = item.hsnCode || item.hsn_code || null;
+      const unit = item.unit || "PCS";
+      const itemType = item.itemType || "product";
+      const sale = parseFloat(item.salePrice ?? item.price ?? 0) || 0;
+      const purchase = parseFloat(item.purchasePrice ?? 0) || 0;
+      const tax = parseFloat(item.taxRate ?? item.tax ?? 0) || 0;
+      const cess = parseFloat(item.cessRate ?? 0) || 0;
+      const openStock = parseFloat(item.openingStock ?? 0) || 0;
+      const stock = parseFloat(item.currentStock ?? item.stock ?? openStock) || 0;
+      const minStock = parseFloat(item.minStock ?? 0) || 0;
+      const isBatch = item.isBatchTracked ? 1 : 0;
+      const isSerial = item.isSerialTracked ? 1 : 0;
+      const desc = item.description || null;
+
+      await conn.query(
+        `INSERT INTO inventory_items (
+          id, business_id, name, item_code, barcode, category, hsn_code, unit,
+          item_type, sale_price, purchase_price, tax_rate, cess_rate,
+          opening_stock, current_stock, min_stock, is_batch_tracked,
+          is_serial_tracked, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          name = VALUES(name),
+          sale_price = VALUES(sale_price),
+          purchase_price = VALUES(purchase_price),
+          tax_rate = VALUES(tax_rate),
+          current_stock = VALUES(current_stock)`,
+        [
+          id, businessId, name, code, barcode, cat, hsn, unit,
+          itemType, sale, purchase, tax, cess,
+          openStock, stock, minStock, isBatch, isSerial, desc
+        ]
+      );
+
+      // Ingest Batches child rows if batch-tracked
+      if (Array.isArray(item.batches) && item.batches.length > 0) {
+        for (const b of item.batches) {
+          if (!b.batchNo) continue;
+          const batchId = b.id || `batch_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          await conn.query(
+            `INSERT INTO item_batches (
+              id, item_id, business_id, batch_no, mfg_date, exp_date,
+              opening_qty, current_qty, purchase_price, sale_price
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              current_qty = VALUES(current_qty)`,
+            [
+              batchId, id, businessId, b.batchNo,
+              toSqlDate(b.mfgDate), toSqlDate(b.expDate),
+              parseFloat(b.openingQty ?? 0) || 0,
+              parseFloat(b.currentQty ?? b.stock ?? 0) || 0,
+              parseFloat(b.purchasePrice ?? 0) || 0,
+              parseFloat(b.salePrice ?? 0) || 0
+            ]
+          );
+        }
+      }
+      itemsCount++;
+    }
+
+    // 3. Ingest Transactions & Line Items
+    for (const txn of transactions) {
+      if (!txn.id && !txn.documentNumber && !txn.invoiceNumber) continue;
+      const id = txn.id || `txn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const type = (txn.transactionType || txn.type || "sale").toLowerCase();
+      const docNo = txn.documentNumber || txn.invoiceNumber || txn.billNumber || txn.number || "0";
+      const rawDate = txn.transactionDate || txn.invoiceDate || txn.billDate || txn.date || new Date().toISOString().slice(0, 10);
+      const date = toSqlDate(rawDate) || new Date().toISOString().slice(0, 10);
+      const dueDate = toSqlDate(txn.dueDate);
+      const pId = txn.partyId || txn.party_id || null;
+      const pName = txn.partyName || txn.party || txn.customerName || txn.supplierName || null;
+      const pPhone = txn.partyPhone || txn.phone || null;
+      const pGstin = txn.partyGstin || txn.gstin || null;
+      const bAddr = typeof txn.billingAddress === "object" ? JSON.stringify(txn.billingAddress) : (txn.billingAddress || null);
+      const sAddr = typeof txn.shippingAddress === "object" ? JSON.stringify(txn.shippingAddress) : (txn.shippingAddress || null);
+
+      const subtotal = parseFloat(txn.subtotal ?? txn.totalAmount ?? txn.amount ?? 0) || 0;
+      const discountPercent = parseFloat(txn.discountPercent ?? 0) || 0;
+      const discount = parseFloat(txn.discountAmount ?? txn.discount ?? 0) || 0;
+      const tax = parseFloat(txn.taxAmount ?? txn.tax ?? 0) || 0;
+      const roundOff = parseFloat(txn.roundOff ?? 0) || 0;
+      const total = parseFloat(txn.totalAmount ?? txn.total ?? txn.amount ?? 0) || 0;
+      const paid = parseFloat(txn.paidAmount ?? txn.receivedAmount ?? txn.paid ?? 0) || 0;
+      const bal = parseFloat(txn.balanceAmount ?? txn.balance ?? (total - paid)) || 0;
+      const mode = txn.paymentMode || txn.paymentType || "Cash";
+      const status = txn.status || "Completed";
+      const refNo = txn.paymentRefNo || null;
+      const cashTendered = parseFloat(txn.cashTendered ?? 0) || 0;
+      const changeReturned = parseFloat(txn.changeReturned ?? 0) || 0;
+      const vehicleNo = txn.vehicleNo || null;
+      const eWayBillNo = txn.eWayBillNo || null;
+      const poNumber = txn.poNumber || null;
+      const poDate = toSqlDate(txn.poDate);
+      const notes = txn.notes || null;
+      const terms = txn.terms || null;
+
+      await conn.query(
+        `INSERT INTO transactions (
+          id, business_id, transaction_type, document_number, transaction_date, due_date,
+          party_id, party_name, party_phone, party_gstin, billing_address, shipping_address,
+          subtotal, discount_percent, discount_amount, tax_amount, round_off,
+          total_amount, paid_amount, balance_amount, payment_mode, payment_status,
+          payment_ref_no, cash_tendered, change_returned, vehicle_no, e_way_bill_no,
+          po_number, po_date, notes, terms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          total_amount = VALUES(total_amount),
+          paid_amount = VALUES(paid_amount),
+          balance_amount = VALUES(balance_amount),
+          payment_status = VALUES(payment_status)`,
+        [
+          id, businessId, type, docNo, date, dueDate,
+          pId, pName, pPhone, pGstin, bAddr, sAddr,
+          subtotal, discountPercent, discount, tax, roundOff,
+          total, paid, bal, mode, status,
+          refNo, cashTendered, changeReturned, vehicleNo, eWayBillNo,
+          poNumber, poDate, notes, terms
+        ]
+      );
+
+      // Ingest child line items
+      const rawRows = Array.isArray(txn.rows) ? txn.rows : (Array.isArray(txn.items) ? txn.items : []);
+      if (rawRows.length > 0) {
+        for (let idx = 0; idx < rawRows.length; idx++) {
+          const row = rawRows[idx];
+          const lineId = row.id || `${id}_line_${idx + 1}`;
+          const itemName = row.item || row.name || row.itemName || "Item";
+          const itemCode = row.itemCode || row.code || null;
+          const hsnCode = row.hsnCode || row.hsn || null;
+          const batchNo = row.batchNo || row.batch || null;
+          const serialNo = row.serialNo || row.serial || null;
+          const qty = parseFloat(row.qty ?? row.quantity ?? 1) || 1;
+          const freeQty = parseFloat(row.freeQty ?? 0) || 0;
+          const unit = row.unit || "PCS";
+          const price = parseFloat(row.price ?? row.unitPrice ?? 0) || 0;
+          const purchasePrice = parseFloat(row.purchasePrice ?? 0) || 0;
+          const discountPercent = parseFloat(row.discountPercent ?? 0) || 0;
+          const discountAmount = parseFloat(row.discountAmount ?? row.discount ?? 0) || 0;
+          const taxRate = parseFloat(row.taxRate ?? row.tax ?? 0) || 0;
+          const taxAmount = parseFloat(row.taxAmount ?? 0) || 0;
+          const cgstRate = parseFloat(row.cgstRate ?? (taxRate / 2)) || 0;
+          const cgstAmount = parseFloat(row.cgstAmount ?? (taxAmount / 2)) || 0;
+          const sgstRate = parseFloat(row.sgstRate ?? (taxRate / 2)) || 0;
+          const sgstAmount = parseFloat(row.sgstAmount ?? (taxAmount / 2)) || 0;
+          const igstRate = parseFloat(row.igstRate ?? 0) || 0;
+          const igstAmount = parseFloat(row.igstAmount ?? 0) || 0;
+          const cessRate = parseFloat(row.cessRate ?? 0) || 0;
+          const cessAmount = parseFloat(row.cessAmount ?? 0) || 0;
+          const lineTotal = parseFloat(row.amount ?? row.totalAmount ?? (qty * price - discountAmount)) || 0;
+
+          await conn.query(
+            `INSERT INTO transaction_items (
+              id, transaction_id, business_id, item_id, item_name, item_code, hsn_code,
+              batch_no, serial_no, quantity, free_qty, unit, unit_price, purchase_price,
+              discount_percent, discount_amount, tax_rate, tax_amount, cgst_rate, cgst_amount,
+              sgst_rate, sgst_amount, igst_rate, igst_amount, cess_rate, cess_amount, total_amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+              quantity = VALUES(quantity),
+              unit_price = VALUES(unit_price),
+              total_amount = VALUES(total_amount)`,
+            [
+              lineId, id, businessId, row.itemId || row.sourceItemId || null, itemName, itemCode, hsnCode,
+              batchNo, serialNo, qty, freeQty, unit, price, purchasePrice,
+              discountPercent, discountAmount, taxRate, taxAmount, cgstRate, cgstAmount,
+              sgstRate, sgstAmount, igstRate, igstAmount, cessRate, cessAmount, lineTotal
+            ]
+          );
+        }
+      }
+      transactionsCount++;
+    }
+
+    // 4. Ingest Service Reminders
+    for (const s of serviceReminders) {
+      if (!s.id && !s.customerName) continue;
+      const id = s.id || `srv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const cName = s.customerName || "Customer";
+      const cPhone = s.customerPhone || null;
+      const cEmail = s.customerEmail || null;
+      const sName = s.serviceName || "Service";
+      const sDate = toSqlDate(s.serviceDate) || new Date().toISOString().slice(0, 10);
+      const sDueDate = toSqlDate(s.serviceDueDate || s.dueDate) || sDate;
+      const status = s.status || "Active";
+      const lastNotifiedAt = s.lastNotifiedAt ? new Date(s.lastNotifiedAt) : null;
+      const lastChannel = s.lastNotifiedChannel || null;
+      const lastDueDate = toSqlDate(s.lastNotifiedDueDate);
+      const notes = s.notes || null;
+
+      await conn.query(
+        `INSERT INTO service_reminders (
+          id, business_id, customer_name, customer_phone, customer_email,
+          service_name, service_date, service_due_date, status,
+          last_notified_at, last_notified_channel, last_notified_due_date, notes
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          customer_name = VALUES(customer_name),
+          status = VALUES(status)`,
+        [id, businessId, cName, cPhone, cEmail, sName, sDate, sDueDate, status, lastNotifiedAt, lastChannel, lastDueDate, notes]
+      );
+
+      // Ingest Reminder History rows
+      if (Array.isArray(s.notificationHistory) && s.notificationHistory.length > 0) {
+        for (const h of s.notificationHistory) {
+          const hId = h.id || `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          await conn.query(
+            `INSERT IGNORE INTO service_reminder_history (
+              id, reminder_id, business_id, channel, recipient, message_text, status, sent_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              hId, id, businessId, h.channel || "whatsapp",
+              h.recipient || cPhone || "", h.message || h.text || "",
+              h.status || "Sent", new Date(h.sentAt || h.at || new Date())
+            ]
+          );
+        }
+      }
+      remindersCount++;
+    }
+
+    // 5. Ingest Bank Accounts
+    for (const b of bankAccounts) {
+      if (!b.id && !b.accountName && !b.name) continue;
+      const id = b.id || `bank_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      await conn.query(
+        `INSERT INTO bank_accounts (
+          id, business_id, account_name, account_number, bank_name, ifsc_code,
+          branch_name, opening_balance, current_balance, account_type, as_of_date, is_default
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          account_name = VALUES(account_name),
+          current_balance = VALUES(current_balance)`,
+        [
+          id, businessId, b.accountName || b.name || "Bank Account",
+          b.accountNumber || b.accountNo || null, b.bankName || null,
+          b.ifscCode || null, b.branchName || null,
+          parseFloat(b.openingBalance ?? 0) || 0,
+          parseFloat(b.currentBalance ?? b.balance ?? 0) || 0,
+          b.accountType || "Savings", b.asOfDate || null, b.isDefault ? 1 : 0
+        ]
+      );
+    }
+
+    // 6. Ingest Settings (pure TEXT values)
+    if (settings && typeof settings === "object") {
+      for (const [k, v] of Object.entries(settings)) {
+        const textVal = typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
+        await conn.query(
+          `INSERT INTO app_settings (business_id, setting_key, setting_value)
+           VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+          [businessId, k, textVal]
+        );
+      }
+    }
+
+    // 7. Ingest Company Profile
+    if (companyProfile && typeof companyProfile === "object" && Object.keys(companyProfile).length > 0) {
+      const [existingRows] = await conn.query(
+        "SELECT * FROM company_profiles WHERE business_id = ? LIMIT 1",
+        [businessId]
+      );
+      const existing = existingRows && existingRows.length ? existingRows[0] : null;
+
+      const hasOwn = (obj, key) => Boolean(obj && Object.prototype.hasOwnProperty.call(obj, key));
+
+      const resolveMigrateField = (aliases, existingValue) => {
+        const presentAlias = aliases.find((key) => hasOwn(companyProfile, key));
+        if (presentAlias !== undefined) {
+          const definedAlias = aliases.find((key) => hasOwn(companyProfile, key) && companyProfile[key] !== undefined) ?? presentAlias;
+          const raw = companyProfile[definedAlias];
+          if (raw == null) return null;
+          const str = String(raw).trim();
+          return str === "" ? null : str;
+        }
+        return existingValue ?? null;
+      };
+
+      const resolveMigrateBankField = (fieldName, existingValue) => {
+        const bankDetails = companyProfile.bankDetails;
+        const hasRoot = hasOwn(companyProfile, fieldName);
+        const hasNested = Boolean(bankDetails && typeof bankDetails === "object" && hasOwn(bankDetails, fieldName));
+
+        if (hasRoot || hasNested) {
+          let raw;
+          if (hasRoot && companyProfile[fieldName] !== undefined) {
+            raw = companyProfile[fieldName];
+          } else if (hasNested && bankDetails[fieldName] !== undefined) {
+            raw = bankDetails[fieldName];
+          } else if (hasRoot) {
+            raw = companyProfile[fieldName];
+          } else {
+            raw = bankDetails[fieldName];
+          }
+          if (raw == null) return null;
+          const str = String(raw).trim();
+          return str === "" ? null : str;
+        }
+        return existingValue ?? null;
+      };
+
+      let companyName;
+      const hasCompanyName = hasOwn(companyProfile, "companyName") || hasOwn(companyProfile, "businessName");
+      if (hasCompanyName) {
+        const raw = (hasOwn(companyProfile, "companyName") && companyProfile.companyName !== undefined)
+          ? companyProfile.companyName
+          : companyProfile.businessName;
+        const trimmed = raw != null ? String(raw).trim() : "";
+        companyName = trimmed || (existing?.company_name || "");
+      } else {
+        companyName = existing?.company_name || "";
+      }
+
+      const tradeName = resolveMigrateField(["tradeName"], existing?.trade_name);
+      const businessType = resolveMigrateField(["businessType"], existing?.business_type);
+      const businessCategory = resolveMigrateField(["businessCategory"], existing?.business_category);
+
+      const phone = resolveMigrateField(["phone", "phoneNumber"], existing?.phone);
+      const email = resolveMigrateField(["email", "emailId"], existing?.email);
+      const gstin = resolveMigrateField(["gstin"], existing?.gstin);
+      const pan = resolveMigrateField(["pan"], existing?.pan);
+
+      const streetAddress = resolveMigrateField(["streetAddress", "businessAddress", "address"], existing?.street_address);
+      const city = resolveMigrateField(["city"], existing?.city);
+      const state = resolveMigrateField(["state"], existing?.state);
+      const pincode = resolveMigrateField(["pincode"], existing?.pincode);
+
+      let country;
+      if (hasOwn(companyProfile, "country")) {
+        country = companyProfile.country != null && String(companyProfile.country).trim() !== ""
+          ? String(companyProfile.country).trim()
+          : "India";
+      } else {
+        country = existing?.country || "India";
+      }
+
+      const bankName = resolveMigrateBankField("bankName", existing?.bank_name);
+      const accountNumber = resolveMigrateBankField("accountNumber", existing?.account_number);
+      const ifscCode = resolveMigrateBankField("ifscCode", existing?.ifsc_code);
+      const branchName = resolveMigrateBankField("branchName", existing?.branch_name);
+      const upiId = resolveMigrateBankField("upiId", existing?.upi_id);
+
+      const signatureUrl = resolveMigrateField(["signatureUrl", "signature"], existing?.signature_url);
+      const logoUrl = resolveMigrateField(["logoUrl", "logo"], existing?.logo_url);
+      const termsAndConditions = resolveMigrateField(["termsAndConditions"], existing?.terms_and_conditions);
+
+      await conn.query(
+        `INSERT INTO company_profiles (
+          business_id, company_name, trade_name, business_type, business_category,
+          phone, email, gstin, pan,
+          street_address, city, state, pincode, country,
+          bank_name, account_number, ifsc_code, branch_name, upi_id,
+          signature_url, logo_url, terms_and_conditions
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          company_name = VALUES(company_name),
+          trade_name = VALUES(trade_name),
+          business_type = VALUES(business_type),
+          business_category = VALUES(business_category),
+          phone = VALUES(phone),
+          email = VALUES(email),
+          gstin = VALUES(gstin),
+          pan = VALUES(pan),
+          street_address = VALUES(street_address),
+          city = VALUES(city),
+          state = VALUES(state),
+          pincode = VALUES(pincode),
+          country = VALUES(country),
+          bank_name = VALUES(bank_name),
+          account_number = VALUES(account_number),
+          ifsc_code = VALUES(ifsc_code),
+          branch_name = VALUES(branch_name),
+          upi_id = VALUES(upi_id),
+          signature_url = VALUES(signature_url),
+          logo_url = VALUES(logo_url),
+          terms_and_conditions = VALUES(terms_and_conditions),
+          updated_at = CURRENT_TIMESTAMP`,
+        [
+          businessId, companyName, tradeName, businessType, businessCategory,
+          phone, email, gstin, pan,
+          streetAddress, city, state, pincode, country,
+          bankName, accountNumber, ifscCode, branchName, upiId,
+          signatureUrl, logoUrl, termsAndConditions
+        ]
+      );
+    }
+
+    await conn.commit();
+
+    return res.json({
+      success: true,
+      message: "Data migrated successfully into pure relational tables.",
+      ingested: {
+        parties: partiesCount,
+        items: itemsCount,
+        transactions: transactionsCount,
+        serviceReminders: remindersCount,
+      },
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[Migration POST Error]", err);
+    return res.status(500).json({ success: false, message: err.message });
   } finally {
     conn.release();
   }

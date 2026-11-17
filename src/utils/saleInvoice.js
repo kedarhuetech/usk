@@ -13,29 +13,30 @@ export function taxPercent(option = "") {
 }
 
 // Calculates row with GST, Cess, and Composition scheme considerations.
-export function calculateRow(row, customSettings) {
+export function calculateRow(row = {}, customSettings) {
+  const safeRow = row || {};
   const settings = customSettings || getAppSettings();
-  const qty = Math.max(toNumber(row.qty), 0);
-  const freeQty = Math.max(toNumber(row.freeQty), 0);
-  const price = Math.max(toNumber(row.price), 0);
+  const qty = Math.max(toNumber(safeRow.qty), 0);
+  const freeQty = Math.max(toNumber(safeRow.freeQty), 0);
+  const price = Math.max(toNumber(safeRow.price), 0);
 
   // If GST is disabled globally or composite scheme is active, tax collected from customer is 0
   const isTaxApplicable = settings.enableGst !== false && !settings.compositeScheme;
-  const rate = isTaxApplicable ? taxPercent(row.taxRate) / 100 : 0;
+  const rate = isTaxApplicable ? taxPercent(safeRow.taxRate) / 100 : 0;
 
   const gross = qty * price;
-  const baseAmount = row.priceMode === "With Tax" && rate > 0 ? gross / (1 + rate) : gross;
-  const percentDiscount = baseAmount * (Math.min(Math.max(toNumber(row.discountPercent), 0), 100) / 100);
-  const fixedDiscount = Math.min(Math.max(toNumber(row.discountAmount), 0), baseAmount);
-  const discount = row.discountMode === "amount" && row.discountAmount !== "" ? fixedDiscount : percentDiscount;
+  const baseAmount = safeRow.priceMode === "With Tax" && rate > 0 ? gross / (1 + rate) : gross;
+  const percentDiscount = baseAmount * (Math.min(Math.max(toNumber(safeRow.discountPercent), 0), 100) / 100);
+  const fixedDiscount = Math.min(Math.max(toNumber(safeRow.discountAmount), 0), baseAmount);
+  const discount = safeRow.discountMode === "amount" && safeRow.discountAmount !== "" ? fixedDiscount : percentDiscount;
   const taxable = Math.max(baseAmount - discount, 0);
   const baseTax = taxable * rate;
 
   // Additional Cess calculation
   let cess = 0;
   if (settings.additionalCessOnItem) {
-    const cessPct = Math.max(toNumber(row.cessPercent || row.cessRate), 0) / 100;
-    const cessFixed = Math.max(toNumber(row.cessAmount), 0);
+    const cessPct = Math.max(toNumber(safeRow.cessPercent || safeRow.cessRate), 0) / 100;
+    const cessFixed = Math.max(toNumber(safeRow.cessAmount), 0);
     cess = (taxable * cessPct) + cessFixed;
   }
 
@@ -106,7 +107,7 @@ export function calculateInvoiceTotals(
 
   const manualRoundOff = roundOffValue !== "";
   const step = Number(settings.roundOffTo) || 1;
-  let autoRounded = baseBeforeRound;
+  let autoRounded;
   if (settings.roundOffMode === "Upward") {
     autoRounded = Math.ceil(baseBeforeRound / step) * step;
   } else if (settings.roundOffMode === "Downward") {

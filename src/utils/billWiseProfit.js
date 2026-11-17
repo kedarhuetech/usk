@@ -6,7 +6,7 @@ export function parseYMD(val) {
   if (typeof val === "string") {
     const s = val.trim();
     // 1. YYYY-MM-DD or YYYY/MM/DD
-    const ymd = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    const ymd = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (ymd) {
       return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
     }
@@ -87,20 +87,21 @@ function normalizedItemName(value) {
  * @returns {{ purchasePrice: number | null, source: string }}
  */
 export function resolveItemPurchaseCost(row = {}, inventoryItems = [], purchaseBills = []) {
+  const safeRow = row || {};
   // 1. Direct snapshot on row if explicitly recorded
-  if (isValidCost(row.purchasePrice)) {
-    return { purchasePrice: Number(row.purchasePrice), source: "row_snapshot" };
+  if (isValidCost(safeRow.purchasePrice)) {
+    return { purchasePrice: Number(safeRow.purchasePrice), source: "row_snapshot" };
   }
-  if (isValidCost(row.costPrice)) {
-    return { purchasePrice: Number(row.costPrice), source: "row_snapshot" };
+  if (isValidCost(safeRow.costPrice)) {
+    return { purchasePrice: Number(safeRow.costPrice), source: "row_snapshot" };
   }
-  if (isValidCost(row.cost)) {
-    return { purchasePrice: Number(row.cost), source: "row_snapshot" };
+  if (isValidCost(safeRow.cost)) {
+    return { purchasePrice: Number(safeRow.cost), source: "row_snapshot" };
   }
 
-  const rowItemId = String(row.sourceItemId || row.itemId || row.productId || "").trim();
+  const rowItemId = String(safeRow.sourceItemId || safeRow.itemId || safeRow.productId || "").trim();
   const rowItemName = normalizedItemName(
-    row.item || row.name || row.itemName || row.productName || row.itemNameSnapshot || ""
+    safeRow.item || safeRow.name || safeRow.itemName || safeRow.productName || safeRow.itemNameSnapshot || ""
   );
 
   // 2. Lookup in Inventory Items Master
@@ -213,12 +214,13 @@ export function resolveItemPurchaseCost(row = {}, inventoryItems = [], purchaseB
  * @param {Array} purchaseBills
  */
 export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purchaseBills = [], partiesMaster = []) {
+  const safeInvoice = invoice || {};
   const invoiceNumber = String(
-    invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.number || invoice.id || "—"
+    safeInvoice.form?.invoiceNumber || safeInvoice.invoiceNumber || safeInvoice.number || safeInvoice.id || "—"
   );
-  const partyId = invoice.form?.partyId || invoice.partyId || invoice.form?.customerId || invoice.customerId || "";
+  const partyId = safeInvoice.form?.partyId || safeInvoice.partyId || safeInvoice.form?.customerId || safeInvoice.customerId || "";
   let partyName = String(
-    invoice.form?.customer || invoice.customer || invoice.partyName || invoice.party || ""
+    safeInvoice.form?.customer || safeInvoice.customer || safeInvoice.partyName || safeInvoice.party || ""
   ).trim();
 
   if ((!partyName || partyName.toLowerCase() === "cash sale") && partyId && Array.isArray(partiesMaster)) {
@@ -229,12 +231,12 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
   }
   if (!partyName) partyName = "Cash Sale";
   const rawDate =
-    invoice.form?.invoiceDate || invoice.invoiceDate || invoice.date || invoice.createdAt || "";
+    safeInvoice.form?.invoiceDate || safeInvoice.invoiceDate || safeInvoice.date || safeInvoice.createdAt || "";
   const dateYmd = parseYMD(rawDate);
   const formattedDate = formatDateDisplay(rawDate);
 
   // Line items - filter out genuinely blank/empty template rows
-  const allRows = invoice.rows || invoice.items || invoice.lineItems || [];
+  const allRows = safeInvoice.rows || safeInvoice.items || safeInvoice.lineItems || [];
   const validRows = allRows.filter((r) => {
     if (!r || typeof r !== "object") return false;
     const name = String(r.item || r.name || r.itemName || r.productName || r.itemNameSnapshot || "").trim();
@@ -304,31 +306,31 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
   );
 
   const saleAmount = Number(
-    invoice.totals?.finalTotal ??
-      invoice.totals?.grandTotal ??
-      invoice.totalAmount ??
-      invoice.amount ??
+    safeInvoice.totals?.finalTotal ??
+      safeInvoice.totals?.grandTotal ??
+      safeInvoice.totalAmount ??
+      safeInvoice.amount ??
       (rowSum > 0 ? rowSum : 0)
   );
 
   // Tax Payable (Tax collected on this sale)
   const taxPayable = Number(
-    invoice.totals?.tax ??
-      invoice.totals?.totalTax ??
+    safeInvoice.totals?.tax ??
+      safeInvoice.totals?.totalTax ??
       validRows.reduce((sum, r) => sum + Number(r.calculated?.tax ?? r.taxAmount ?? 0), 0) ??
       0
   );
 
   // TDS Receivable
   const tdsReceivable = Number(
-    invoice.tdsReceivable ?? invoice.tdsAmount ?? invoice.totals?.tds ?? invoice.form?.tds ?? 0
+    safeInvoice.tdsReceivable ?? safeInvoice.tdsAmount ?? safeInvoice.totals?.tds ?? safeInvoice.form?.tds ?? 0
   );
 
   // Additional Charges
   const additionalCharges = Number(
-    invoice.totals?.additionalCharges ??
-      invoice.additionalCharges ??
-      invoice.form?.additionalCharges ??
+    safeInvoice.totals?.additionalCharges ??
+      safeInvoice.additionalCharges ??
+      safeInvoice.form?.additionalCharges ??
       0
   );
 
@@ -344,8 +346,8 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
   }
 
   return {
-    id: invoice.id || invoice.invoiceId || invoiceNumber,
-    rawInvoice: invoice,
+    id: safeInvoice.id || safeInvoice.invoiceId || invoiceNumber,
+    rawInvoice: safeInvoice,
     invoiceNumber,
     partyId,
     partyName,

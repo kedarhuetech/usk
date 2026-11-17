@@ -414,7 +414,7 @@ function loadPartyRecipients() {
 
 // This helper handles header format logic.
 function templateHeaderFormat(template = {}) {
-  // Handles result.
+  if (template.headerFormat) return String(template.headerFormat).toUpperCase();
   const header = (template.components || []).find((component) => String(component.type || "").toUpperCase() === "HEADER");
   return String(header?.format || "").toUpperCase();
 }
@@ -1935,13 +1935,16 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
   async function handleRequestMarketingTemplate() {
     setRequestingTemplate(true);
     try {
-      const storeName = draft.values?.businessName || "Sai Kirana Stores";
+      const storeName = draft.values?.businessName || "USV Test Trade";
       const cleanStore = storeName.toLowerCase().replace(/[^a-z0-9]/g, "_").slice(0, 20);
       const templateName = `${cleanStore}_marketing_${Date.now().toString().slice(-4)}`;
+      const promoCaption = (messageDraft.caption || draft.values?.whatsappText || draft.values?.additionalText || "Special festival update and offers for you.").trim();
+
       const res = await requestWhatsAppTemplateApproval({
         templateName,
         category: "MARKETING",
         language: "en_US",
+        image: draft.imagePreview || draft.template?.image || "",
         components: [
           {
             type: "HEADER",
@@ -1954,7 +1957,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
             type: "BODY",
             text: `Hello {{1}},\n\nSpecial update from ${storeName}: {{2}}\n\nReply to this message to order!`,
             example: {
-              body_text: [["Customer", "Special festival discount on all daily grocery items."]],
+              body_text: [["Customer", promoCaption.slice(0, 100)]],
             },
           },
           {
@@ -1999,6 +2002,7 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
             optInConfirmed: true,
             variables: messageDraft.variables,
             templateId: effectiveTemplateId || selectedMetaTemplate?.id,
+            imageUrl: draft.imagePreview || draft.template?.image || "",
           });
           if (res?.success) {
             metaSentCount++;

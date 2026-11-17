@@ -349,11 +349,19 @@ function SaleInvoices() {
     ...invoices,
     ...(invoiceUi.duplicates || []),
     ...(invoiceUi.returns || []),
-  ].filter((invoice) => !(invoiceUi.deleted || []).includes(invoice.id)).map((invoice) => ({
-    ...invoice,
-    ...(invoiceUi.edits?.[invoice.id] || {}),
-    cancelled: Boolean(invoiceUi.cancelled?.[invoice.id] || invoice.cancelled),
-  })), [invoices, invoiceUi]);
+  ].filter((invoice) => !(invoiceUi.deleted || []).includes(invoice.id)).map((invoice) => {
+    const localEdits = invoiceUi.edits?.[invoice.id];
+    const hasValidEdits = localEdits && (
+      (Array.isArray(localEdits.rows) && localEdits.rows.length > 0) ||
+      (Array.isArray(localEdits.items) && localEdits.items.length > 0) ||
+      Boolean(localEdits.partyName || localEdits.customer)
+    );
+    return {
+      ...invoice,
+      ...(hasValidEdits ? localEdits : {}),
+      cancelled: Boolean(invoiceUi.cancelled?.[invoice.id] || invoice.cancelled),
+    };
+  }), [invoices, invoiceUi]);
   const stores = useMemo(() => ["All Stores", ...new Set(shownInvoices.map(invoiceStore).filter(Boolean))], [shownInvoices]);
   const users = useMemo(() => ["All Users", ...new Set(shownInvoices.map(invoiceUser).filter(Boolean))], [shownInvoices]);
   const visibleInvoices = useMemo(() => shownInvoices.filter((invoice) => {
