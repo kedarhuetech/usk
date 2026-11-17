@@ -3,6 +3,9 @@ import * as XLSX from "xlsx";
 import { FiCalendar, FiPrinter, FiChevronDown, FiChevronUp } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
+import { isDatabaseMode } from "../../services/dataStorageConfig";
+import { transactionsDb } from "../../services/databaseRepository";
+import { loadBusinessItems } from "../../services/businessRecords";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const readLocal = (...keys) => {
@@ -52,6 +55,8 @@ function parseYMD(val) {
 function recordDate(row) {
   if (!row) return "";
   return (
+    row.transactionDate ||
+    row.transaction_date ||
     row.form?.invoiceDate ||
     row.form?.billDate ||
     row.form?.date ||
@@ -79,6 +84,7 @@ function recordAmount(row) {
     row.totals?.grandTotal ??
     row.totals?.amount ??
     row.totalAmount ??
+    row.total_amount ??
     row.total ??
     row.amount ??
     row.form?.grandTotal ??
@@ -172,30 +178,75 @@ export default function ProfitAndLossReport() {
     });
   };
 
+  const [dbTransactions, setDbTransactions] = useState([]);
+  const [dbItems, setDbItems] = useState([]);
+
   // Auto-refresh when localStorage or business records change
   useEffect(() => {
-    const onDataChange = () => setRefreshTrigger((prev) => prev + 1);
+    let mounted = true;
+    const fetchDb = async () => {
+      try {
+        const [txs, items] = await Promise.allSettled([
+          transactionsDb.listAll(),
+          loadBusinessItems(),
+        ]);
+        if (mounted) {
+          if (txs.status === "fulfilled" && Array.isArray(txs.value)) setDbTransactions(txs.value);
+          if (items.status === "fulfilled" && Array.isArray(items.value)) setDbItems(items.value);
+        }
+      } catch (e) {
+        console.warn("[P&L] Failed to fetch database records:", e);
+      }
+    };
+    fetchDb();
+    const onDataChange = () => {
+      setRefreshTrigger((prev) => prev + 1);
+      fetchDb();
+    };
     window.addEventListener("ledgerly:business-data-changed", onDataChange);
     window.addEventListener("storage", onDataChange);
     return () => {
+      mounted = false;
       window.removeEventListener("ledgerly:business-data-changed", onDataChange);
       window.removeEventListener("storage", onDataChange);
     };
   }, []);
 
-  /* ── Compute Financials from Real Local Storage ── */
+  /* ── Compute Financials from Database / Real Local Storage ── */
   const data = useMemo(() => {
-    const rawSales = readLocal("ledgerly:saleInvoices.v1");
-    const rawPurchases = readLocal("ledgerly:purchaseBills.v1");
-    const rawSaleReturns = readLocal("ledgerly:saleReturns.v1");
-    const rawPurchaseReturns = readLocal(
-      "ledgerly:purchaseReturns.v1",
-      "ledgerly:purchaseReturnsDebitNotes.v1"
-    );
-    const rawExpenses = readLocal("ledgerly:expenses.v1");
-    const rawPaymentIns = readLocal("ledgerly:paymentIns.v1");
-    const rawPaymentOuts = readLocal("ledgerly:paymentOuts.v1");
-    const rawItems = readLocal("ledgerly:inventoryItems.v1", "ledgerly:items.v1");
+    const rawSales = dbTransactions.length
+      ? dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "sale")
+      : readLocal("ledgerly:saleInvoices.v1");
+    const rawPurchases = dbTransactions.length
+      ? dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "purchase")
+      : readLocal("ledgerly:purchaseBills.v1");
+    const rawSaleReturns = dbTransactions.length
+      ? dbTransactions.filter((t) => {
+          const tp = (t.transactionType || t.transaction_type || t.type || "").toLowerCase();
+          return tp === "credit_note" || tp === "credit note" || tp === "sale_return";
+        })
+      : readLocal("ledgerly:saleReturns.v1");
+    const rawPurchaseReturns = dbTransactions.length
+      ? dbTransactions.filter((t) => {
+          const tp = (t.transactionType || t.transaction_type || t.type || "").toLowerCase();
+          return tp === "debit_note" || tp === "debit note" || tp === "purchase_return";
+        })
+      : readLocal(
+          "ledgerly:purchaseReturns.v1",
+          "ledgerly:purchaseReturnsDebitNotes.v1"
+        );
+    const rawExpenses = dbTransactions.length
+      ? dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "expense")
+      : readLocal("ledgerly:expenses.v1");
+    const rawPaymentIns = dbTransactions.length
+      ? dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "payment_in")
+      : readLocal("ledgerly:paymentIns.v1");
+    const rawPaymentOuts = dbTransactions.length
+      ? dbTransactions.filter((t) => (t.transactionType || t.transaction_type || t.type) === "payment_out")
+      : readLocal("ledgerly:paymentOuts.v1");
+    const rawItems = dbItems.length
+      ? dbItems
+      : readLocal("ledgerly:inventoryItems.v1", "ledgerly:items.v1");
 
     const filter = (rows) => rows.filter((r) => inDateRange(r, from, to));
 
@@ -427,7 +478,7 @@ export default function ProfitAndLossReport() {
       loanCharges,
       netProfit,
     };
-  }, [from, to, refreshTrigger]);
+  }, [from, to, refreshTrigger, dbTransactions, dbItems]);
 
   /* ── export ── */
   const handleExcel = () => {
