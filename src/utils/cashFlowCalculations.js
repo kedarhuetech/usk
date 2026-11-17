@@ -76,7 +76,7 @@ export function extractSaleCashMovement(rawSale, saleUi = {}) {
   const isCashSale = sale.saleType === "cash";
   const statusLower = String(sale.status || "").trim().toLowerCase();
 
-  let received = 0;
+  let received;
   if (isCashSale) {
     if (statusLower === "unpaid") {
       received = Number(sale.totals?.received ?? sale.receivedAmount ?? sale.form?.receivedAmount ?? 0);
@@ -127,7 +127,7 @@ export function extractPurchaseCashMovement(purchase) {
   const statusLower = String(purchase.status || "").trim().toLowerCase();
   const isCashPurchase = purchase.purchaseType === "cash" || purchase.saleType === "cash";
 
-  let paid = 0;
+  let paid;
   if (statusLower === "unpaid") {
     // Explicitly marked unpaid in purchase bills
     paid = Number(purchase.totals?.received ?? purchase.paidAmount ?? purchase.form?.paidAmount ?? 0);
@@ -174,7 +174,7 @@ export function extractPurchaseCashMovement(purchase) {
 export function extractPaymentInMovement(paymentIn) {
   if (!paymentIn || isVoided(paymentIn)) return null;
 
-  let amt = 0;
+  let amt;
   if (Array.isArray(paymentIn.payments) && paymentIn.payments.length > 0) {
     amt = paymentIn.payments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
   } else {
@@ -209,7 +209,7 @@ export function extractPaymentInMovement(paymentIn) {
 export function extractPaymentOutMovement(paymentOut) {
   if (!paymentOut || isVoided(paymentOut)) return null;
 
-  let amt = 0;
+  let amt;
   if (Array.isArray(paymentOut.payments) && paymentOut.payments.length > 0) {
     amt = paymentOut.payments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);
   } else {
@@ -256,7 +256,7 @@ export function extractExpenseMovement(expense) {
   total = Math.max(0, total);
 
   const statusLower = String(expense.status || "").trim().toLowerCase();
-  let paid = 0;
+  let paid;
 
   if (Array.isArray(expense.payments) && expense.payments.length > 0) {
     paid = expense.payments.reduce((sum, p) => sum + Math.max(0, Number(p.amount) || 0), 0);

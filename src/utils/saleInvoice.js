@@ -106,7 +106,7 @@ export function calculateInvoiceTotals(
 
   const manualRoundOff = roundOffValue !== "";
   const step = Number(settings.roundOffTo) || 1;
-  let autoRounded = baseBeforeRound;
+  let autoRounded;
   if (settings.roundOffMode === "Upward") {
     autoRounded = Math.ceil(baseBeforeRound / step) * step;
   } else if (settings.roundOffMode === "Downward") {

@@ -21,7 +21,7 @@ async function persistBase64Asset(val, entityType, businessId) {
     return val || null;
   }
   try {
-    const matches = val.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    const matches = val.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
     if (!matches || matches.length !== 3) return null;
     const mimeType = matches[1];
     const buffer = Buffer.from(matches[2], "base64");

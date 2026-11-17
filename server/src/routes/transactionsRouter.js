@@ -219,8 +219,6 @@ router.get("/", async (req, res) => {
           dueDate: dueDate,
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
-          invoiceNumber: row.document_number,
-          invoiceDate: toSqlDate(row.transaction_date),
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -416,8 +414,6 @@ router.get("/:id", async (req, res) => {
           dueDate: dueDate,
           billingAddress,
           shippingAddress,
-          invoiceNumber: row.document_number,
-          invoiceDate: toSqlDate(row.transaction_date),
           paymentType: row.payment_mode || "Cash",
         },
         totals: {
@@ -578,10 +574,10 @@ router.post("/", async (req, res) => {
       const itemDiscountAmount = parseFloat(item.discountAmount ?? item.discount_amount ?? (item.discountMode === "amount" ? item.discount : 0) ?? 0) || 0;
       const itemTaxRate = parseFloat(item.taxRate ?? item.tax_rate ?? (item.tax && item.tax !== "NONE" ? String(item.tax).replace(/[^0-9.]/g, "") : 0) ?? 0) || 0;
       const itemTaxAmount = parseFloat(item.taxAmount ?? item.tax_amount ?? 0) || 0;
-      const cgstRate = parseFloat(item.cgstRate ?? (itemTaxRate / 2) ?? 0) || 0;
-      const cgstAmount = parseFloat(item.cgstAmount ?? (itemTaxAmount / 2) ?? 0) || 0;
-      const sgstRate = parseFloat(item.sgstRate ?? (itemTaxRate / 2) ?? 0) || 0;
-      const sgstAmount = parseFloat(item.sgstAmount ?? (itemTaxAmount / 2) ?? 0) || 0;
+      const cgstRate = parseFloat(item.cgstRate ?? (itemTaxRate / 2)) || 0;
+      const cgstAmount = parseFloat(item.cgstAmount ?? (itemTaxAmount / 2)) || 0;
+      const sgstRate = parseFloat(item.sgstRate ?? (itemTaxRate / 2)) || 0;
+      const sgstAmount = parseFloat(item.sgstAmount ?? (itemTaxAmount / 2)) || 0;
       const igstRate = parseFloat(item.igstRate ?? 0) || 0;
       const igstAmount = parseFloat(item.igstAmount ?? 0) || 0;
       const cessRate = parseFloat(item.cessRate ?? item.cessPercent ?? 0) || 0;

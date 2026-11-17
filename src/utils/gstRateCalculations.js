@@ -153,7 +153,7 @@ export function resolveRowGst(row = {}, isInterstate = false) {
   const price = Math.max(0, num(row.price));
   const taxRateNum = extractTaxRateNumber(row.taxRate ?? calculated.taxRate);
 
-  let taxable = 0;
+  let taxable;
   if (calculated.taxable != null) {
     taxable = num(calculated.taxable);
   } else if (row.priceMode === "With Tax" && taxRateNum > 0) {
