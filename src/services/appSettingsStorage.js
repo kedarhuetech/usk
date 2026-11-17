@@ -103,6 +103,16 @@ export const DEFAULT_SETTINGS = {
     { id: "vehicleNumber", label: "Vehicle Number", enabled: false },
     { id: "driverName", label: "Driver Name", enabled: false },
   ],
+  additionalFieldsSetup: {
+    firmField1: { enabled: false, name: "", value: "", showInPrint: true },
+    firmField2: { enabled: false, name: "", value: "", showInPrint: true },
+    txnField1: { enabled: false, name: "Vehicle No", showInPrint: true },
+    txnField2: { enabled: false, name: "Driver Name", showInPrint: true },
+    txnField3: { enabled: false, name: "LR Number", showInPrint: true },
+    dateField: { enabled: false, name: "Delivery Date", showInPrint: true },
+    showOn: { sales: true, purchase: true, saleOrder: true, purchaseOrder: true },
+    theme: "Theme 1",
+  },
   transportationDetails: {
     enabled: false,
     transporterName: "",
@@ -115,6 +125,11 @@ export const DEFAULT_SETTINGS = {
     { id: "packaging", label: "Packaging Charges", amount: 0, enabled: false },
     { id: "insurance", label: "Insurance", amount: 0, enabled: false },
   ],
+  additionalChargesSetup: {
+    shipping: { enabled: false, label: "Shipping / Freight", defaultAmount: 0, taxRate: "None" },
+    packaging: { enabled: false, label: "Packaging Charges", defaultAmount: 0, taxRate: "None" },
+    insurance: { enabled: false, label: "Insurance", defaultAmount: 0, taxRate: "None" },
+  },
 
   // Transaction -> Transaction Prefixes
   selectedPrefixFirm: "firm-1",
@@ -152,6 +167,7 @@ export const DEFAULT_SETTINGS = {
   printCompanyName: true,
   companyNamePrint: "sai kirana stores",
   printCompanyLogo: true,
+  companyLogo: "",
   printAddress: true,
   addressPrint: "",
   printEmail: true,
@@ -178,6 +194,20 @@ export const DEFAULT_SETTINGS = {
   // Print -> Item Table
   expandTableWholePage: true,
   minRowsItemTable: 0,
+  itemTableColumns: {
+    itemCode: true,
+    hsnSac: true,
+    mrp: false,
+    batchNo: false,
+    expiryDate: false,
+    mfgDate: false,
+    modelNo: false,
+    size: false,
+    serialNo: false,
+    discount: true,
+    tax: true,
+    cess: false,
+  },
 
   // Print -> Totals & Taxes
   printTotalItemQty: true,
@@ -196,6 +226,7 @@ export const DEFAULT_SETTINGS = {
   printReceivedByDetails: true,
   printDeliveredByDetails: true,
   printSignature: true,
+  signatureImage: "",
   printSignatureText: "Authorized Signature",
   printPaymentMode: false,
   printAcknowledgement: false,
