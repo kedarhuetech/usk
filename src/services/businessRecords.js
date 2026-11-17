@@ -43,6 +43,20 @@ export async function saveBusinessItem(value) {
   return saved;
 }
 
+// Deletes business item directly from MySQL database
+export async function deleteBusinessItem(itemId) {
+  deleteInventoryItem(itemId);
+  if (isDatabaseMode()) {
+    try {
+      await itemsDb.remove(itemId);
+    } catch (e) {
+      console.warn("[MySQL] Item delete failure:", e.message);
+      throw e;
+    }
+  }
+  notifyBusinessDataChanged();
+}
+
 // Loads business parties directly from MySQL database repository
 export async function loadBusinessParties() {
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
@@ -159,6 +173,20 @@ export async function saveBusinessSaleInvoice(value) {
   }
   notifyBusinessDataChanged();
   return saved;
+}
+
+// Deletes sales invoice directly from MySQL database transactions table
+export async function deleteBusinessSaleInvoice(invoiceId) {
+  deleteSaleInvoice(invoiceId);
+  if (isDatabaseMode()) {
+    try {
+      await transactionsDb.remove(invoiceId);
+    } catch (e) {
+      console.warn("[MySQL] Sale invoice delete failure:", e.message);
+      throw e;
+    }
+  }
+  notifyBusinessDataChanged();
 }
 
 // Loads purchase bills directly from MySQL database transactions table

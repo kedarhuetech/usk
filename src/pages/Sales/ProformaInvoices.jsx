@@ -232,7 +232,15 @@ export default function ProformaInvoices() {
   };
 
   const duplicateProforma = (entry) => {
-    persist([{ ...entry, id: `proforma-${Date.now()}`, number: `${entry.number}-COPY`, status: "Open", convertedAt: "", convertedSaleId: "", conversionType: "" }, ...proformas]);
+    const copy = { ...entry, id: `proforma-${Date.now()}`, number: `${entry.number}-COPY`, status: "Open", convertedAt: "", convertedSaleId: "", conversionType: "" };
+    persist([copy, ...proformas]);
+    transactionsDb.save({
+      ...copy,
+      transactionType: "proforma",
+      type: "proforma",
+      documentNumber: copy.number,
+      totalAmount: copy.total,
+    }).catch(() => {});
     toast.success("Proforma invoice duplicated.");
     setOpenMenu("");
   };

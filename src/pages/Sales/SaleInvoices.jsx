@@ -20,7 +20,7 @@ import {
 import Button from "../../components/Common/Button";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import Card from "../../components/Common/Card";
-import { loadSalesInvoices, saveBusinessSaleInvoice } from "../../services/businessRecords";
+import { loadSalesInvoices, saveBusinessSaleInvoice, deleteBusinessSaleInvoice } from "../../services/businessRecords";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentIns, readTransactionValue, writeTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { notifyBusinessDataChanged, businessDataChangedEvent } from "../../services/businessDataChanged.js";
@@ -437,14 +437,16 @@ function SaleInvoices() {
     if (action === "Delete") {
       setConfirmModal({
         isOpen: true,
-        title: "Hide Invoice",
-        message: "Hide this invoice from the Sale Invoices list in this browser? Its saved invoice will remain unchanged.",
-        confirmText: "Hide Invoice",
+        title: "Delete Sale Invoice",
+        message: `Permanently delete sale invoice #${invoice.form?.invoiceNumber || invoice.invoiceNumber || ""}? This will update inventory and party balances.`,
+        confirmText: "Delete",
         confirmColor: "red",
         onConfirm: () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-          saveInvoiceUi((current) => ({ ...current, deleted: [...new Set([...(current.deleted || []), invoice.id])], history: recordInvoiceHistory(current, invoice, action) }));
-          toast.success("Invoice hidden from the list.");
+          deleteBusinessSaleInvoice(invoice.id).then(() => {
+            setInvoices((prev) => prev.filter((i) => i.id !== invoice.id));
+            toast.success("Invoice deleted successfully.");
+          }).catch((error) => toast.error(error.message || "Could not delete this invoice."));
         },
       });
       return;
@@ -471,9 +473,21 @@ function SaleInvoices() {
       return;
     }
     if (action === "Duplicate") {
-      const duplicate = { ...invoice, id: `local-copy-${Date.now()}`, localOnly: true, createdAt: new Date().toISOString(), form: { ...invoice.form, invoiceNumber: `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY` } };
-      saveInvoiceUi((current) => ({ ...current, duplicates: [duplicate, ...(current.duplicates || [])], history: recordInvoiceHistory(current, invoice, action) }));
-      toast.success("Invoice duplicated successfully.");
+      const copyNum = `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY`;
+      const duplicate = {
+        ...invoice,
+        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `invoice-copy-${Date.now()}`,
+        invoiceNumber: copyNum,
+        documentNumber: copyNum,
+        form: { ...invoice.form, invoiceNumber: copyNum },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      saveBusinessSaleInvoice(duplicate).then((saved) => {
+        setInvoices((prev) => [saved || duplicate, ...prev]);
+        toast.success("Invoice duplicated successfully.");
+      }).catch((error) => toast.error(error.message || "Could not duplicate this invoice."));
+      return;
     } else if (["Generate e-Invoice", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
   };
 

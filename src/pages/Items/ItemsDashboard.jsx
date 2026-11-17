@@ -15,7 +15,7 @@ import {
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
-import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
+import { loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem, deleteBusinessItem } from "../../services/businessRecords";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { cancelInventoryAdjustment, getInventoryAdjustments, saveInventoryAdjustment } from "../../services/inventoryAdjustmentsStorage";
@@ -768,7 +768,7 @@ function ItemsDashboard() {
                           confirmText: "Delete",
                           danger: true,
                           onConfirm: () => {
-                            deleteInventoryItem(item);
+                            deleteBusinessItem(item.id || item);
                             const remaining = items.filter((entry) => !sameInventoryItemIdentity(entry, item));
                             const csvItems = readCsvImportedItems().filter((entry) => !sameInventoryItemIdentity(entry, item));
                             window.localStorage.setItem(ITEM_CSV_IMPORTS_KEY, JSON.stringify(csvItems));
@@ -776,7 +776,7 @@ function ItemsDashboard() {
                             if (remaining.some((entry) => entry.id === selectedId) === false) {
                               setSelectedId(remaining.find((entry) => entry.type === activeTab)?.id || "");
                             }
-                            setNotice(`${item.itemName} and matching copies deleted from local storage.`);
+                            setNotice(`${item.itemName} deleted.`);
                             toast.success(`${item.itemName} deleted.`);
                             setConfirmDialog(null);
                           },

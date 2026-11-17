@@ -308,88 +308,51 @@ export default function TransactionActionMenu({
     // 3. Duplicate
     if (action === "Duplicate") {
       const now = new Date().toISOString();
-      const copyId = `${source.toLowerCase().replace(/[^a-z0-9]/g, "-")}-copy-${Date.now()}`;
+      const copyId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${source.toLowerCase().replace(/[^a-z0-9]/g, "-")}-copy-${Date.now()}`;
       const copyNum = `${num}-COPY`;
 
-      const appendStorage = (key) => {
-        try {
-          const items = JSON.parse(window.localStorage.getItem(key) || "[]");
-          if (Array.isArray(items)) {
-            const clone = {
-              ...raw,
-              id: copyId,
-              invoiceId: copyId,
-              number: copyNum,
-              refNo: copyNum,
-              returnNo: copyNum,
-              form: raw.form ? { ...raw.form, invoiceNumber: copyNum } : undefined,
-              invoiceNumber: copyNum,
-              date: now.slice(0, 10),
-              createdAt: now,
-              updatedAt: now,
-            };
-            items.unshift(clone);
-            window.localStorage.setItem(key, JSON.stringify(items));
-          }
-        } catch {}
+      const clone = {
+        ...raw,
+        id: copyId,
+        invoiceId: copyId,
+        documentNumber: copyNum,
+        number: copyNum,
+        refNo: copyNum,
+        returnNo: copyNum,
+        form: raw.form ? { ...raw.form, invoiceNumber: copyNum } : undefined,
+        invoiceNumber: copyNum,
+        transactionDate: now.slice(0, 10),
+        date: now.slice(0, 10),
+        createdAt: now,
+        updatedAt: now,
       };
 
-      if (source === "Sale Order") {
-        filterStorage("ledgerly:saleOrders.v1");
-      } else if (source === "Purchase Order") {
-        filterStorage("ledgerly:purchaseOrders.v1");
-      } else if (source === "Sale") {
-        const copy = {
-          ...raw,
-          id: copyId,
-          invoiceNumber: copyNum,
-          form: raw.form ? { ...raw.form, invoiceNumber: copyNum } : undefined,
-          createdAt: now,
-        };
-        saveSaleInvoice(copy);
+      if (source === "Sale") {
+        saveSaleInvoice(clone);
       } else if (source === "Purchase") {
-        const copy = {
-          ...raw,
-          id: copyId,
-          invoiceId: copyId,
-          invoiceNumber: copyNum,
-          form: raw.form ? { ...raw.form, invoiceNumber: copyNum } : undefined,
-          createdAt: now,
-        };
-        savePurchaseBill(copy);
-      } else if (source === "Payment-In") {
-        appendStorage("ledgerly:paymentIns.v1");
-      } else if (source === "Payment-Out" || source === "Credit Note Refund") {
-        appendStorage("ledgerly:paymentOuts.v1");
-      } else if (source.includes("Estimate")) {
-        appendStorage("ledgerly:estimateQuotations.v1");
-      } else if (source.includes("Proforma")) {
-        appendStorage("ledgerly:proformaInvoices.v1");
-      } else if (source === "Credit Note") {
-        appendStorage("ledgerly:saleReturns.v1");
-      } else if (source === "Debit Note") {
-        appendStorage("ledgerly:purchaseReturns.v1");
+        savePurchaseBill(clone);
       }
 
-      recordAuditTrail({
-        action: "Transaction Duplicated",
-        entity: source,
-        details: `${source} #${num} duplicated as #${copyNum}`,
-        user: "Current User",
+      transactionsDb.save(clone).then(() => {
+        recordAuditTrail({
+          action: "Transaction Duplicated",
+          entity: source,
+          details: `${source} #${num} duplicated as #${copyNum}`,
+          user: "Current User",
+        });
+        notifyBusinessDataChanged();
+        if (onRefresh) onRefresh();
+      }).catch((err) => {
+        console.warn("[TransactionActionMenu Duplicate Notice]", err?.message);
+        notifyBusinessDataChanged();
+        if (onRefresh) onRefresh();
       });
-
-      notifyBusinessDataChanged();
-      if (onRefresh) onRefresh();
       return;
     }
 
     // 4. Open PDF & Preview
     if (action === "Open PDF" || action === "Preview") {
-      if (source === "Sale Order") {
-        filterStorage("ledgerly:saleOrders.v1");
-      } else if (source === "Purchase Order") {
-        filterStorage("ledgerly:purchaseOrders.v1");
-      } else if (source === "Sale") {
+      if (source === "Sale") {
         navigate("/sales/sale-invoices/preview", {
           state: { invoice: raw, printAfterOpen: false },
         });
@@ -402,11 +365,7 @@ export default function TransactionActionMenu({
 
     // 5. Print
     if (action === "Print") {
-      if (source === "Sale Order") {
-        filterStorage("ledgerly:saleOrders.v1");
-      } else if (source === "Purchase Order") {
-        filterStorage("ledgerly:purchaseOrders.v1");
-      } else if (source === "Sale") {
+      if (source === "Sale") {
         navigate("/sales/sale-invoices/preview", {
           state: { invoice: raw, printAfterOpen: true },
         });

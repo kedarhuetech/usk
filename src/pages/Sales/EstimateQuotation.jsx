@@ -255,6 +255,14 @@ export default function EstimateQuotation() {
   const duplicateEstimate = (estimate) => {
     const copy = { ...estimate, id: `estimate-${Date.now()}`, number: `${estimate.number}-COPY`, status: "Open", convertedAt: "", conversionType: "", convertedSaleId: "" };
     saveEstimates([copy, ...estimates]);
+    transactionsDb.save({
+      ...copy,
+      transactionType: "estimate",
+      type: "estimate",
+      documentNumber: copy.number,
+      totalAmount: copy.total,
+    }).catch(() => {});
+    toast.success(`Quotation ${copy.number} duplicated.`);
     setActionMenu("");
   };
 
