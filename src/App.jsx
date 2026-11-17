@@ -94,8 +94,8 @@ function App() {
           <Route path="cash-bank/loan-accounts" element={<LoanAccounts />} />
           <Route path="items" element={<ItemsDashboard />} />
           <Route path="parties/party-details" element={<PartyDetails />} />
-          <Route path="parties/whatsapp-connect" element={<Navigate to="/parties/party-details" replace />} />
-          <Route path="parties/business-network" element={<Navigate to="/parties/party-details" replace />} />
+          <Route path="parties/whatsapp-connect" element={<WhatsAppConnect />} />
+          <Route path="parties/business-network" element={<Navigate to="/parties/usk-network" replace />} />
           <Route path="parties/usk-network" element={<USKNetwork />} />
 
           {/* Protected Business Growth Section */}

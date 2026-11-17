@@ -76,6 +76,13 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
   // Fetch sales if not provided via summary or refresh on businessDataChanged
   useEffect(() => {
     let active = true;
+
+    if (Array.isArray(summary?.activeSales) && summary.activeSales.length > 0) {
+      setLocalSales(summary.activeSales);
+      setSalesLoading(false);
+      return;
+    }
+
     const updateSales = async () => {
       setSalesLoading(true);
       try {
@@ -110,7 +117,7 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
       window.removeEventListener(businessDataChangedEvent, updateSales);
       window.removeEventListener("storage", onStorage);
     };
-  }, []);
+  }, [summary?.activeSales]);
 
   // Active sales list: prefer summary.activeSales if available and populated, otherwise localSales
   const sales = useMemo(() => {

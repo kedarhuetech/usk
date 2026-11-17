@@ -1,8 +1,8 @@
 import { apiRequest } from "./apiClient.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem } from "./itemsStorage.js";
-import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice } from "./salesStorage.js";
+import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice, saleInvoicesStorageKey } from "./salesStorage.js";
 import { getParties, saveParty, deleteParty } from "./partiesStorage.js";
-import { getPurchaseBills, savePurchaseBill } from "./purchaseBillsStorage.js";
+import { getPurchaseBills, savePurchaseBill, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
@@ -115,10 +115,13 @@ export async function loadSalesInvoices() {
     try {
       const dbSales = await transactionsDb.listByType("sale");
       if (Array.isArray(dbSales)) {
-        for (const invoice of dbSales) {
-          try { saveSaleInvoice(invoice, { skipRemoteSync: true }); } catch {}
-        }
-        return dbSales.map(normalizeInvoice);
+        const normalized = dbSales.map(normalizeInvoice);
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem(saleInvoicesStorageKey, JSON.stringify(normalized));
+          }
+        } catch {}
+        return normalized;
       }
     } catch (e) {
       console.warn("[MySQL] Falling back to local sales invoices:", e.message);
@@ -163,10 +166,12 @@ export async function loadPurchaseBills() {
   if (isDatabaseMode()) {
     try {
       const dbPurchases = await transactionsDb.listByType("purchase");
-      if (Array.isArray(dbPurchases) && dbPurchases.length > 0) {
-        for (const bill of dbPurchases) {
-          try { savePurchaseBill(bill); } catch {}
-        }
+      if (Array.isArray(dbPurchases)) {
+        try {
+          if (typeof window !== "undefined" && window.localStorage) {
+            window.localStorage.setItem(purchaseBillsStorageKey, JSON.stringify(dbPurchases));
+          }
+        } catch {}
         return dbPurchases;
       }
     } catch (e) {

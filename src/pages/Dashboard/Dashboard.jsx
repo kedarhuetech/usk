@@ -24,8 +24,6 @@ function Dashboard() {
     let request = 0;
     const refresh = () => {
       const currentRequest = ++request;
-      setLoading(true);
-      setSummary(null);
       setError("");
       loadBusinessSummary()
         .then((data) => {
@@ -35,8 +33,7 @@ function Dashboard() {
         })
         .catch((loadError) => {
           if (!active || currentRequest !== request) return;
-          setSummary(null);
-          console.error("Could not load local dashboard summary:", loadError);
+          console.error("Could not load dashboard summary:", loadError);
           setError(loadError.message || "Could not load saved business totals.");
         })
         .finally(() => {

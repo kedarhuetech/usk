@@ -85,9 +85,7 @@ function Home() {
 
     const refresh = () => {
       const currentRequest = ++request;
-      setIsLoading(true);
       setLoadError("");
-      setSummary(null);
       loadBusinessSummary()
         .then((data) => {
           if (!active || currentRequest !== request) return;
@@ -95,7 +93,7 @@ function Home() {
         })
         .catch((error) => {
           if (!active || currentRequest !== request) return;
-          setSummary(null);
+          console.error("Could not load home summary:", error);
           setLoadError(error.message || "Could not load saved business data.");
         })
         .finally(() => {
