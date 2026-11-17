@@ -34,6 +34,8 @@ import auditTrailRoutes from "./routes/auditTrailRouter.js";
 import reportsRoutes from "./routes/reportsRouter.js";
 import backupRoutes from "./routes/backupRouter.js";
 import hsnRoutes from "./routes/hsn.js";
+import purchaseJobWorksRoutes from "./routes/purchaseJobWorksRouter.js";
+import balanceSheetRoutes from "./routes/balanceSheetRouter.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
 import { initializeDatabaseSchema } from "./db/initSchema.js";
@@ -84,6 +86,8 @@ app.use("/api/audit-trail", auditTrailRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/backup", backupRoutes);
 app.use("/api/hsn", hsnRoutes);
+app.use("/api/purchase-job-works", purchaseJobWorksRoutes);
+app.use("/api/balance-sheet", balanceSheetRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {
@@ -94,7 +98,7 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
-app.use((error, req, res, next) => {
+app.use((error, req, res, _next) => {
   if (error instanceof multer.MulterError) return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ success: false, message: error.code === "LIMIT_FILE_SIZE" ? "Image must be 10 MB or smaller." : "Invalid image upload." });
   if (error.message === "File type not allowed") return res.status(400).json({ success: false, message: "Only JPG, PNG, WEBP, and GIF images are accepted." });
   return res.status(400).json({ success: false, message: "Invalid request." });
@@ -105,7 +109,7 @@ const server = app.listen(PORT, async () => {
   try {
     await initializeDatabaseSchema();
     await seedDefaultHsnCodes();
-    await syncTransactionsFromGrowth();
+    // syncTransactionsFromGrowth() backfill disabled on startup to prevent redundant synchronization
   } catch (err) {
     console.warn("Startup initialization warning:", err.message);
   }

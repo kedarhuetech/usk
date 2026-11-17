@@ -148,28 +148,35 @@ export default function ProformaInvoices() {
     } else if (value === "This Year") { setDateFrom(`${date.getFullYear()}-01-01`); setDateTo(`${date.getFullYear()}-12-31`); }
     else if (value === "All Time") { setDateFrom(""); setDateTo(""); }
   };
-  const saveProforma = (value) => {
+  const saveProforma = async (value) => {
     const saved = { ...value, id: value.id || `proforma-${Date.now()}` };
-    persist(editor.mode === "edit" ? proformas.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...proformas]);
-    setEditor(null);
 
-    // Save directly to MySQL transactions table
-    transactionsDb.save({
-      ...saved,
-      transactionType: "proforma",
-      type: "proforma",
-      documentNumber: saved.number,
-      transactionDate: saved.date,
-      partyName: saved.customer,
-      totalAmount: Number(saved.amount || 0),
-      items: (saved.rows || []).map((r) => ({
-        itemName: r.item,
-        description: r.description,
-        quantity: Number(r.qty || 1),
-        unitPrice: Number(r.price || 0),
-        totalAmount: Number(r.qty || 1) * Number(r.price || 0),
-      })),
-    }).catch((err) => console.warn("[Proforma] MySQL save notice:", err.message));
+    try {
+      // Save directly to MySQL transactions table
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "proforma",
+        type: "proforma",
+        documentNumber: saved.number,
+        transactionDate: saved.date,
+        partyName: saved.customer,
+        totalAmount: Number(saved.amount || 0),
+        items: (saved.rows || []).map((r) => ({
+          itemName: r.item,
+          description: r.description,
+          quantity: Number(r.qty || 1),
+          unitPrice: Number(r.price || 0),
+          totalAmount: Number(r.qty || 1) * Number(r.price || 0),
+        })),
+      });
+
+      persist(editor.mode === "edit" ? proformas.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...proformas]);
+      setEditor(null);
+      toast.success(editor.mode === "edit" ? "Proforma updated." : "Proforma created.");
+    } catch (err) {
+      toast.error(err.message || "Failed to persist proforma invoice.");
+      return;
+    }
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {

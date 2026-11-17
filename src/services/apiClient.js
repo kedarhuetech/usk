@@ -1,3 +1,5 @@
+import { getActiveBusinessId } from "../config/businessConfig.js";
+
 // Sends app requests to the existing backend with the active business context.
 const RAW_URL = import.meta.env?.VITE_API_BASE_URL || "/api";
 // Clean base URL without trailing slash or trailing /api
@@ -10,7 +12,7 @@ export async function apiRequest(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  headers.set("X-Business-Id", import.meta.env?.VITE_BUSINESS_ID || "demo-business");
+  headers.set("X-Business-Id", getActiveBusinessId());
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   // Automatically prefixes /api if not present

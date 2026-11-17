@@ -1,8 +1,9 @@
 import { businessGrowthApi } from "./apiClient.js";
 import { smartAdsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getActiveBusinessId } from "../config/businessConfig.js";
 
-const BUSINESS_SCOPE = import.meta.env?.VITE_BUSINESS_ID || "demo-business";
+const BUSINESS_SCOPE = getActiveBusinessId();
 const STORAGE_KEY = `usk.smartAds.v1:${BUSINESS_SCOPE}`;
 const LEGACY_MIGRATION_KEY = `${STORAGE_KEY}:legacyImported`;
 

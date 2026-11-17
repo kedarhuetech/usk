@@ -1,11 +1,12 @@
 import { calculateLoanOutstanding, validateLoan, validateRepayment } from "./loanAccounts.js";
 import { cashBankDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getActiveBusinessId } from "../config/businessConfig.js";
 
 export const LOAN_ACCOUNTS_STORAGE_KEY = "usv.loanAccounts.v1";
 
 export function getLoanAccountsStorageKey() {
-  const companyId = String(import.meta.env?.VITE_BUSINESS_ID || "").trim();
+  const companyId = getActiveBusinessId();
   return companyId ? `${LOAN_ACCOUNTS_STORAGE_KEY}:${encodeURIComponent(companyId)}` : LOAN_ACCOUNTS_STORAGE_KEY;
 }
 
@@ -33,6 +34,30 @@ function writeLoans(loans) {
 const event = (status) => ({ status, at: new Date().toISOString() });
 
 export async function getAllLoans() {
+  if (isDatabaseMode()) {
+    try {
+      const res = await cashBankDb.getLoanAccounts();
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        const mapped = list.map((r) => ({
+          ...r,
+          loanName: r.accountName || r.loanName || "Loan Account",
+          lenderName: r.lenderName || "Lender",
+          originalAmount: r.principalAmount || r.originalAmount || 0,
+          annualInterestRate: r.interestRate || r.annualInterestRate || 0,
+          tenureMonths: r.termMonths || r.tenureMonths || 12,
+          emiOverride: r.emiAmount || r.emiOverride || 0,
+          status: r.status || "Active",
+          repayments: r.repayments || [],
+          statusHistory: r.statusHistory || [event(r.status || "Active")],
+        }));
+        writeLoans(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn("[LoanAccounts] Failed to fetch from MySQL:", err.message);
+    }
+  }
   return readLoans().sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
 }
 
@@ -49,9 +74,9 @@ export async function createLoan(loan) {
   if (loans.some((entry) => entry.id === id)) throw new Error("This loan was already saved.");
   const now = new Date().toISOString();
   const saved = { ...normalized, id, repayments: [], statusHistory: [event(normalized.status)], createdAt: now, updatedAt: now };
-  writeLoans([saved, ...loans]);
+
   if (isDatabaseMode()) {
-    cashBankDb.saveLoanAccount({
+    await cashBankDb.saveLoanAccount({
       id: saved.id,
       accountName: saved.loanName,
       lenderName: saved.lenderName,
@@ -62,8 +87,9 @@ export async function createLoan(loan) {
       interestRate: parseFloat(saved.annualInterestRate) || 0,
       termMonths: parseInt(saved.tenureMonths, 10) || 12,
       emiAmount: parseFloat(saved.emiOverride || 0),
-    }).catch((err) => console.warn("[MySQL] Loan account background sync:", err.message));
+    });
   }
+  writeLoans([saved, ...loans]);
   return saved;
 }
 
@@ -86,8 +112,16 @@ export async function updateLoan(id, changes) {
 }
 
 export async function getRepayments(loanId) {
+  if (isDatabaseMode()) {
+    try {
+      const remote = await cashBankDb.listRepayments(loanId);
+      if (Array.isArray(remote)) return remote;
+    } catch (err) {
+      console.warn("[LoanRepayments] Failed to fetch from MySQL:", err.message);
+    }
+  }
   const loan = await getLoanById(loanId);
-  return loan ? [...loan.repayments].sort((left, right) => String(right.paymentDate).localeCompare(String(left.paymentDate))) : [];
+  return loan ? [...(loan.repayments || [])].sort((left, right) => String(right.paymentDate).localeCompare(String(left.paymentDate))) : [];
 }
 
 export async function recordRepayment(loanId, repayment) {
@@ -97,13 +131,18 @@ export async function recordRepayment(loanId, repayment) {
   const loan = loans[index];
   if (loan.status !== "Active") throw new Error("Repayments cannot be added to a closed loan.");
   const id = repayment.id || crypto.randomUUID();
-  const existing = loan.repayments.find((entry) => entry.id === id);
+  const existing = (loan.repayments || []).find((entry) => entry.id === id);
   if (existing) return existing;
   const normalized = { ...repayment, id, amountPaid: Number(repayment.amountPaid), principalPaid: Number(repayment.principalPaid), interestPaid: Math.round((Number(repayment.amountPaid) - Number(repayment.principalPaid)) * 100) / 100, reference: String(repayment.reference || "").trim(), notes: String(repayment.notes || "").trim() };
   const validation = validateRepayment(normalized, loan);
   if (validation) throw new Error(validation);
   normalized.createdAt = new Date().toISOString();
-  loans[index] = { ...loan, repayments: [...loan.repayments, normalized], updatedAt: new Date().toISOString() };
+
+  if (isDatabaseMode()) {
+    await cashBankDb.saveRepayment(loanId, normalized);
+  }
+
+  loans[index] = { ...loan, repayments: [...(loan.repayments || []), normalized], updatedAt: new Date().toISOString() };
   writeLoans(loans);
   return normalized;
 }

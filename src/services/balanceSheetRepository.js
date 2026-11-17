@@ -2,6 +2,9 @@
 // changing the accounting functions or report components.
 import { listBankAccounts, listBankTransactions } from "./bankAccounts.js";
 import { getAllLoans } from "./loanAccountsRepository.js";
+import { balanceSheetDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
+
 export const BALANCE_SHEET_ACCOUNTS_KEY = "usv.balanceSheetAccounts.v1";
 
 const TRANSACTION_KEYS = {
@@ -22,19 +25,50 @@ export function createLocalBalanceSheetRepository(storage = typeof window !== "u
       try { [bankAccounts, bankTransactions] = await Promise.all([listBankAccounts(), listBankTransactions()]); }
       catch { bankUnavailable = true; }
       try { loans = await getAllLoans(); } catch { /* Missing loan storage is treated as unavailable data. */ }
-      return { transactions, accounts: read(BALANCE_SHEET_ACCOUNTS_KEY, []), bankAccounts: Array.isArray(bankAccounts) ? bankAccounts : [], bankTransactions: Array.isArray(bankTransactions) ? bankTransactions : [], bankUnavailable, loans: Array.isArray(loans) ? loans : [] };
+
+      let accounts = read(BALANCE_SHEET_ACCOUNTS_KEY, []);
+      if (isDatabaseMode()) {
+        try {
+          const remoteAccounts = await balanceSheetDb.listAccounts();
+          if (Array.isArray(remoteAccounts)) {
+            accounts = remoteAccounts;
+            storage?.setItem(BALANCE_SHEET_ACCOUNTS_KEY, JSON.stringify(accounts));
+          }
+        } catch (err) {
+          console.warn("[BalanceSheet] Failed to fetch accounts from MySQL:", err.message);
+        }
+      }
+
+      return { transactions, accounts, bankAccounts: Array.isArray(bankAccounts) ? bankAccounts : [], bankTransactions: Array.isArray(bankTransactions) ? bankTransactions : [], bankUnavailable, loans: Array.isArray(loans) ? loans : [] };
     },
     async saveAccount(account) {
       if (!storage) throw new Error("Browser storage is unavailable.");
       const accounts = read(BALANCE_SHEET_ACCOUNTS_KEY, []);
       const duplicate = accounts.some((row) => row.id !== account.id && row.name.trim().toLowerCase() === account.name.trim().toLowerCase());
       if (duplicate) throw new Error("An account with this name already exists.");
+
+      if (isDatabaseMode()) {
+        try {
+          await balanceSheetDb.saveAccount(account);
+        } catch (err) {
+          console.warn("[BalanceSheet] Failed to persist account to MySQL:", err.message);
+          throw err;
+        }
+      }
+
       const next = account.id ? accounts.map((row) => row.id === account.id ? account : row) : [...accounts, account];
       storage.setItem(BALANCE_SHEET_ACCOUNTS_KEY, JSON.stringify(next));
       return next;
     },
     async deleteAccount(id) {
       if (!storage) throw new Error("Browser storage is unavailable.");
+      if (isDatabaseMode()) {
+        try {
+          await balanceSheetDb.removeAccount(id);
+        } catch (err) {
+          console.warn("[BalanceSheet] Failed to delete account from MySQL:", err.message);
+        }
+      }
       const next = read(BALANCE_SHEET_ACCOUNTS_KEY, []).filter((row) => row.id !== id);
       storage.setItem(BALANCE_SHEET_ACCOUNTS_KEY, JSON.stringify(next));
       return next;

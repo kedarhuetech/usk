@@ -1,5 +1,7 @@
 import { inventoryItemsStorageKey } from "./itemsStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+import { purchaseJobWorksDb } from "./databaseRepository.js";
+import { isDatabaseMode } from "./dataStorageConfig.js";
 
 export const purchaseJobWorkStorageKey = "ledgerly:purchaseJobWorks.v1";
 const historyKey = "ledgerly:inventoryAdjustments.v1";
@@ -17,6 +19,21 @@ function readList(key) {
 export function getPurchaseJobWorks() {
   try { return readList(purchaseJobWorkStorageKey); }
   catch (error) { throw new Error(`Unable to read job-work records: ${error.message}`, { cause: error }); }
+}
+
+export async function fetchPurchaseJobWorksFromDb() {
+  if (isDatabaseMode()) {
+    try {
+      const remote = await purchaseJobWorksDb.listAll();
+      if (Array.isArray(remote)) {
+        window.localStorage.setItem(purchaseJobWorkStorageKey, JSON.stringify(remote));
+        return remote;
+      }
+    } catch (err) {
+      console.warn("[JobWork] Failed to fetch from MySQL:", err.message);
+    }
+  }
+  return getPurchaseJobWorks();
 }
 
 export function savePurchaseJobWork(input) {
@@ -76,6 +93,9 @@ export function savePurchaseJobWork(input) {
     window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(nextInventory));
     window.localStorage.setItem(historyKey, JSON.stringify([...history, ...nextHistory]));
     if (!readList(purchaseJobWorkStorageKey).some((row) => row.id === record.id)) throw new Error("Job-work record could not be verified after saving.");
+    if (isDatabaseMode()) {
+      purchaseJobWorksDb.save(record).catch((err) => console.warn("[JobWork] MySQL sync notice:", err.message));
+    }
     notifyBusinessDataChanged();
     return record;
   } catch (error) {

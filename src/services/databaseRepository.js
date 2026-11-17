@@ -17,6 +17,7 @@ import { apiRequest } from "./apiClient.js";
 import { getStorageMode, setStorageMode } from "./dataStorageConfig.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { transactionStorageKeys } from "./transactionRepository.js";
+import { getActiveBusinessId, getScopedStorageKey } from "../config/businessConfig.js";
 
 // Storage keys for local caching & migration
 const PARTIES_KEY = "ledgerly:parties.v1";
@@ -74,19 +75,20 @@ export const partiesDb = {
 
   /**
    * Fetches all parties (for lookups and local cache refresh)
+   * MySQL is the primary source of truth. Empty DB result is preserved.
    */
   async listAll() {
     try {
       const res = await apiRequest("/parties?limit=200");
       const list = Array.isArray(res) ? res : (res?.data || []);
-      if (Array.isArray(list) && list.length > 0) {
-        writeLocal(PARTIES_KEY, list);
+      if (Array.isArray(list)) {
+        writeLocal(getScopedStorageKey(PARTIES_KEY), list);
         return list;
       }
-      return readLocal(PARTIES_KEY, []);
+      return readLocal(getScopedStorageKey(PARTIES_KEY), []);
     } catch (err) {
-      console.warn("[MySQL] Falling back to local cache for parties:", err.message);
-      return readLocal(PARTIES_KEY, []);
+      console.warn("[MySQL] Falling back to scoped local cache for parties:", err.message);
+      return readLocal(getScopedStorageKey(PARTIES_KEY), []);
     }
   },
 
@@ -98,26 +100,29 @@ export const partiesDb = {
   },
 
   /**
-   * Persists a party to MySQL
+   * Persists a party to MySQL. Awaited, throws on failure.
    */
   async save(party) {
-    try {
-      const res = await apiRequest("/parties", {
-        method: "POST",
-        body: JSON.stringify(party),
-      });
-      return res?.data || party;
-    } catch (err) {
-      console.warn("[MySQL] Failed to save party to backend:", err.message);
-      return party;
-    }
+    const res = await apiRequest("/parties", {
+      method: "POST",
+      body: JSON.stringify(party),
+    });
+    const saved = res?.data || res;
+    // Update scoped local cache
+    const current = readLocal(getScopedStorageKey(PARTIES_KEY), []);
+    const updated = [saved, ...current.filter((p) => String(p.id) !== String(saved.id))];
+    writeLocal(getScopedStorageKey(PARTIES_KEY), updated);
+    return saved;
   },
 
   /**
    * Deletes a party from MySQL
    */
   async remove(id) {
-    return apiRequest(`/parties/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await apiRequest(`/parties/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const current = readLocal(getScopedStorageKey(PARTIES_KEY), []);
+    writeLocal(getScopedStorageKey(PARTIES_KEY), current.filter((p) => String(p.id) !== String(id)));
+    return res;
   },
 };
 
@@ -144,19 +149,20 @@ export const itemsDb = {
 
   /**
    * Fetches all items (for POS, autocomplete, and local cache)
+   * MySQL is the primary source of truth. Empty DB result is preserved.
    */
   async listAll() {
     try {
       const res = await apiRequest("/items?limit=200");
       const list = Array.isArray(res) ? res : (res?.data || []);
-      if (Array.isArray(list) && list.length > 0) {
-        writeLocal(INVENTORY_ITEMS_KEY, list);
+      if (Array.isArray(list)) {
+        writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), list);
         return list;
       }
-      return readLocal(INVENTORY_ITEMS_KEY, []);
+      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     } catch (err) {
-      console.warn("[MySQL] Falling back to local cache for items:", err.message);
-      return readLocal(INVENTORY_ITEMS_KEY, []);
+      console.warn("[MySQL] Falling back to scoped local cache for items:", err.message);
+      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     }
   },
 
@@ -168,26 +174,28 @@ export const itemsDb = {
   },
 
   /**
-   * Persists an item to MySQL
+   * Persists an item to MySQL. Awaited, throws on failure.
    */
   async save(item) {
-    try {
-      const res = await apiRequest("/items", {
-        method: "POST",
-        body: JSON.stringify(item),
-      });
-      return res?.data || item;
-    } catch (err) {
-      console.warn("[MySQL] Failed to save item to backend:", err.message);
-      return item;
-    }
+    const res = await apiRequest("/items", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+    const saved = res?.data || res;
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
+    const updated = [saved, ...current.filter((i) => String(i.id) !== String(saved.id))];
+    writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
+    return saved;
   },
 
   /**
    * Deletes an item from MySQL
    */
   async remove(id) {
-    return apiRequest(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const res = await apiRequest(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
+    writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), current.filter((i) => String(i.id) !== String(id)));
+    return res;
   },
 };
 
@@ -283,9 +291,12 @@ export const transactionsDb = {
     const partyName =
       transaction.partyName ||
       transaction.customer ||
+      transaction.supplier ||
       transaction.party ||
       transaction.form?.customer ||
+      transaction.form?.supplier ||
       transaction.customerName ||
+      transaction.supplierName ||
       (isGenuineCash ? "Cash Sale" : (transaction.saleType === "cash" ? "Cash Sale" : null));
 
     const partyId =
@@ -301,9 +312,12 @@ export const transactionsDb = {
       transaction.form?.phone ||
       null;
 
+    const transactionType = (transaction.transactionType || transaction.type || "sale").toLowerCase();
     const invoiceNumber = String(
       transaction.documentNumber ||
+      transaction.number ||
       transaction.invoiceNumber ||
+      transaction.billNumber ||
       transaction.form?.invoiceNumber ||
       "1"
     );
@@ -318,6 +332,7 @@ export const transactionsDb = {
 
     const totalAmount = Number(
       transaction.totalAmount ??
+      transaction.amount ??
       transaction.totals?.finalTotal ??
       transaction.total ??
       0
@@ -325,39 +340,61 @@ export const transactionsDb = {
 
     const paidAmount = Number(
       transaction.paidAmount ??
+      transaction.receivedAmount ??
+      transaction.received ??
       transaction.totals?.received ??
-      (transaction.saleType === "cash" ? totalAmount : 0)
+      (transactionType === "payment_in" || transactionType === "payment_out" ? totalAmount : (transaction.saleType === "cash" ? totalAmount : 0))
     );
 
     const balanceAmount = Number(
       transaction.balanceAmount ??
       transaction.totals?.balance ??
-      Math.max(0, totalAmount - paidAmount)
+      (transactionType === "payment_in" || transactionType === "payment_out" ? 0 : Math.max(0, totalAmount - paidAmount))
     );
 
+    const rawPayments = Array.isArray(transaction.payments) && transaction.payments.length > 0 ? transaction.payments : [];
     const rawRows = (Array.isArray(transaction.items) && transaction.items.length)
       ? transaction.items
-      : (Array.isArray(transaction.rows) ? transaction.rows : []);
+      : (Array.isArray(transaction.rows) && transaction.rows.length
+          ? transaction.rows
+          : (rawPayments.length > 0
+              ? rawPayments.map((p, idx) => ({
+                  id: p.id || `pay-${Date.now()}-${idx}`,
+                  name: p.type || "Payment",
+                  item: p.type || "Payment",
+                  itemName: p.type || "Payment",
+                  unit: "TXN",
+                  qty: 1,
+                  quantity: 1,
+                  price: Number(p.amount || 0),
+                  unitPrice: Number(p.amount || 0),
+                  amount: Number(p.amount || 0),
+                  totalAmount: Number(p.amount || 0),
+                  itemCode: p.reference || "",
+                  serialNo: p.chequeDate || "",
+                }))
+              : []));
     const items = rawRows.map((r, idx) => ({
       id: r.id || `line-${Date.now()}-${idx}`,
       itemId: r.itemId || r.sourceItemId || null,
       sourceItemId: r.sourceItemId || r.itemId || null,
       name: r.item || r.name || r.itemName || "Item",
       itemName: r.item || r.name || r.itemName || "Item",
-      itemCode: r.itemCode || r.code || null,
+      itemCode: r.itemCode || r.code || r.size || null,
       hsnCode: r.hsnCode || r.hsn || null,
       batchNo: r.batchNo || null,
-      serialNo: Array.isArray(r.serialNumbers) ? r.serialNumbers.join(",") : (r.serialNo || r.serial || null),
+      serialNo: Array.isArray(r.serialNumbers) ? r.serialNumbers.join(",") : (r.serialNo || r.serial || r.description || null),
       qty: Number(r.qty ?? r.quantity ?? 1),
       quantity: Number(r.qty ?? r.quantity ?? 1),
       unit: r.unit || "PCS",
       price: Number(r.price ?? r.unitPrice ?? 0),
       unitPrice: Number(r.price ?? r.unitPrice ?? 0),
       purchasePrice: Number(r.purchasePrice ?? 0),
-      discountPercent: Number(r.discountPercent || 0),
-      discountAmount: Number(r.discountAmount || 0),
-      taxRate: Number(r.taxRate || 0),
+      discountPercent: Number(r.discountPercent ?? (r.discountType !== "amount" ? r.discount : 0) ?? 0),
+      discountAmount: Number(r.discountAmount ?? (r.discountType === "amount" ? r.discount : 0) ?? 0),
+      taxRate: Number(r.taxRate || (r.tax && r.tax !== "NONE" ? String(r.tax).replace(/[^0-9.]/g, "") : 0) || 0),
       taxAmount: Number(r.taxAmount || 0),
+      cessAmount: Number(r.cessAmount || r.cess || 0),
       amount: Number(r.amount ?? r.totalAmount ?? (Number(r.qty ?? 1) * Number(r.price ?? 0))),
       totalAmount: Number(r.amount ?? r.totalAmount ?? (Number(r.qty ?? 1) * Number(r.price ?? 0))),
     }));
@@ -365,16 +402,22 @@ export const transactionsDb = {
     const payload = {
       ...transaction,
       id: transaction.id || transaction.invoiceId,
-      transactionType: transaction.transactionType || "sale",
+      transactionType,
+      type: transactionType,
       documentNumber: invoiceNumber,
+      number: invoiceNumber,
       invoiceNumber,
       billNumber: transaction.billNumber || invoiceNumber,
       transactionDate,
       invoiceDate: transactionDate,
+      date: transactionDate,
       partyId,
       partyName,
       customer: partyName,
       customerName: partyName,
+      supplier: partyName,
+      supplierName: partyName,
+      dueDate: transaction.dueDate || null,
       partyPhone: phone,
       phone,
       billingAddress: transaction.billingAddress || transaction.form?.billingAddress || null,
@@ -384,8 +427,19 @@ export const transactionsDb = {
       total: totalAmount,
       amount: totalAmount,
       paidAmount,
+      receivedAmount: paidAmount,
+      received: paidAmount,
       balanceAmount,
+      status: transaction.status || "Open",
+      paymentStatus: transaction.status || "Open",
+      roundOff: typeof transaction.roundOffValue !== "undefined" && transaction.roundOffValue !== "" ? Number(transaction.roundOffValue) : (typeof transaction.roundOff === "number" ? transaction.roundOff : 0),
+      roundOffValue: transaction.roundOffValue ?? "",
       paymentMode: transaction.paymentMode || transaction.paymentType || transaction.form?.paymentType || (transaction.saleType === "cash" ? "Cash" : "Credit"),
+      paymentType: transaction.paymentType || transaction.paymentMode || "Cash",
+      notes: transaction.notes || transaction.description || null,
+      description: transaction.description || transaction.notes || null,
+      linkedInvoiceId: transaction.linkedInvoiceId || transaction.poNumber || null,
+      payments: rawPayments,
       items,
       rows: items,
     };
@@ -450,6 +504,30 @@ export const transactionsDb = {
   async remove(id) {
     return apiRequest(`/transactions/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
+};
+
+export const paymentInsDb = {
+  listAll: () => transactionsDb.listByType("payment_in"),
+  save: (payment) => transactionsDb.save({ ...payment, transactionType: "payment_in", type: "payment_in" }),
+  remove: (id) => transactionsDb.remove(id),
+};
+
+export const paymentOutsDb = {
+  listAll: () => transactionsDb.listByType("payment_out"),
+  save: (payment) => transactionsDb.save({ ...payment, transactionType: "payment_out", type: "payment_out" }),
+  remove: (id) => transactionsDb.remove(id),
+};
+
+export const saleOrdersDb = {
+  listAll: () => transactionsDb.listByType("sale_order"),
+  save: (order) => transactionsDb.save({ ...order, transactionType: "sale_order", type: "sale_order" }),
+  remove: (id) => transactionsDb.remove(id),
+};
+
+export const purchaseOrdersDb = {
+  listAll: () => transactionsDb.listByType("purchase_order"),
+  save: (order) => transactionsDb.save({ ...order, transactionType: "purchase_order", type: "purchase_order" }),
+  remove: (id) => transactionsDb.remove(id),
 };
 
 // ============================================================================
@@ -612,6 +690,16 @@ export const cashBankDb = {
   async removeLoanAccount(id) {
     return apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
   },
+  async listRepayments(loanId) {
+    const res = await apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(loanId)}/repayments`);
+    return res?.data || [];
+  },
+  async saveRepayment(loanId, repayment) {
+    return apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(loanId)}/repayments`, {
+      method: "POST",
+      body: JSON.stringify(repayment),
+    });
+  },
 };
 
 // ============================================================================
@@ -628,6 +716,57 @@ export const unitsDb = {
   },
   async remove(id) {
     return apiRequest(`/units/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+  async listConversions(unit = "") {
+    const query = unit ? `?unit=${encodeURIComponent(unit)}` : "";
+    const res = await apiRequest(`/units/conversions${query}`);
+    return res?.data || [];
+  },
+  async saveConversion(conversion) {
+    return apiRequest("/units/conversions", { method: "POST", body: JSON.stringify(conversion) });
+  },
+  async removeConversion(id) {
+    return apiRequest(`/units/conversions/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+};
+
+export const purchaseJobWorksDb = {
+  async listAll() {
+    const res = await apiRequest("/purchase-job-works");
+    return res?.data || [];
+  },
+  async save(jobWork) {
+    return apiRequest("/purchase-job-works", { method: "POST", body: JSON.stringify(jobWork) });
+  },
+  async remove(id) {
+    return apiRequest(`/purchase-job-works/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+};
+
+export const balanceSheetDb = {
+  async listAccounts() {
+    const res = await apiRequest("/balance-sheet/accounts");
+    return res?.data || [];
+  },
+  async saveAccount(account) {
+    return apiRequest("/balance-sheet/accounts", { method: "POST", body: JSON.stringify(account) });
+  },
+  async removeAccount(id) {
+    return apiRequest(`/balance-sheet/accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+};
+
+export const migrationDb = {
+  async migrateLocalData(payload) {
+    return apiRequest("/migration/migrate-local-data", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  },
+  async rollbackBatch(batchId) {
+    return apiRequest(`/migration/rollback-batch/${encodeURIComponent(batchId)}`, {
+      method: "POST",
+    });
   },
 };
 
@@ -721,6 +860,8 @@ export async function autoMigrateLocalDataToMySQL() {
   const items = readLocal(INVENTORY_ITEMS_KEY, []);
   const sales = readLocal(SALE_INVOICES_KEY, []);
   const purchases = readLocal(PURCHASE_BILLS_KEY, []);
+  const paymentIns = readLocal(transactionStorageKeys.paymentIns, []);
+  const paymentOuts = readLocal(transactionStorageKeys.paymentOuts, []);
   const reminders = readLocal(SERVICE_REMINDERS_KEY, []);
   const bankAccounts = readLocal(BANK_ACCOUNTS_KEY, []);
   const settings = readLocal(SETTINGS_KEY, {});
@@ -739,14 +880,62 @@ export async function autoMigrateLocalDataToMySQL() {
   const transactions = [
     ...sales.map((s) => ({ ...s, transactionType: "sale" })),
     ...purchases.map((p) => ({ ...p, transactionType: "purchase" })),
+    ...paymentIns.map((pi) => ({ ...pi, transactionType: "payment_in" })),
+    ...paymentOuts.map((po) => ({ ...po, transactionType: "payment_out" })),
     ...estimates.map((e) => ({ ...e, transactionType: "estimate" })),
     ...proformas.map((p) => ({ ...p, transactionType: "proforma" })),
     ...challans.map((c) => ({ ...c, transactionType: "delivery_challan" })),
     ...expenses.map((x) => ({ ...x, transactionType: "expense" })),
     ...debitNotes.map((d) => ({ ...d, transactionType: "debit_note" })),
     ...creditNotes.map((c) => ({ ...c, transactionType: "sale_return" })),
-    ...saleOrders.map((o) => ({ ...o, transactionType: "sale_order" })),
-    ...purchaseOrders.map((o) => ({ ...o, transactionType: "purchase_order" })),
+    ...saleOrders.map((o) => ({
+      ...o,
+      transactionType: "sale_order",
+      type: "sale_order",
+      documentNumber: o.number || o.documentNumber,
+      partyName: o.customer || o.partyName,
+      customer: o.customer || o.partyName,
+      rows: (o.rows || o.items || []).map((r) => ({
+        ...r,
+        item: r.item || r.itemName || r.name || "Item",
+        name: r.item || r.itemName || r.name || "Item",
+        itemName: r.item || r.itemName || r.name || "Item",
+        itemCode: r.itemCode || r.code || r.size || null,
+        serialNo: r.serialNo || r.serial || r.description || null,
+      })),
+      items: (o.rows || o.items || []).map((r) => ({
+        ...r,
+        item: r.item || r.itemName || r.name || "Item",
+        name: r.item || r.itemName || r.name || "Item",
+        itemName: r.item || r.itemName || r.name || "Item",
+        itemCode: r.itemCode || r.code || r.size || null,
+        serialNo: r.serialNo || r.serial || r.description || null,
+      })),
+    })),
+    ...purchaseOrders.map((o) => ({
+      ...o,
+      transactionType: "purchase_order",
+      type: "purchase_order",
+      documentNumber: o.number || o.documentNumber,
+      partyName: o.supplier || o.partyName,
+      supplier: o.supplier || o.partyName,
+      rows: (o.rows || o.items || []).map((r) => ({
+        ...r,
+        item: r.item || r.itemName || r.name || "Item",
+        name: r.item || r.itemName || r.name || "Item",
+        itemName: r.item || r.itemName || r.name || "Item",
+        itemCode: r.itemCode || r.code || r.size || null,
+        serialNo: r.serialNo || r.serial || r.description || null,
+      })),
+      items: (o.rows || o.items || []).map((r) => ({
+        ...r,
+        item: r.item || r.itemName || r.name || "Item",
+        name: r.item || r.itemName || r.name || "Item",
+        itemName: r.item || r.itemName || r.name || "Item",
+        itemCode: r.itemCode || r.code || r.size || null,
+        serialNo: r.serialNo || r.serial || r.description || null,
+      })),
+    })),
   ];
 
   if (!parties.length && !items.length && !transactions.length && !reminders.length) {

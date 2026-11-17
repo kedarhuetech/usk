@@ -165,28 +165,35 @@ export default function EstimateQuotation() {
 
   const openNew = () => setEditor({ mode: "new" });
   const openEdit = (estimate) => setEditor({ mode: "edit", estimate });
-  const saveEstimate = (estimate) => {
+  const saveEstimate = async (estimate) => {
     const saved = { ...estimate, id: estimate.id || `estimate-${Date.now()}` };
-    saveEstimates(editor.mode === "edit" ? estimates.map((item) => item.id === saved.id ? saved : item) : [saved, ...estimates]);
-    setEditor(null);
 
-    // Save directly to MySQL transactions table
-    transactionsDb.save({
-      ...saved,
-      transactionType: "estimate",
-      type: "estimate",
-      documentNumber: saved.number,
-      transactionDate: saved.date,
-      partyName: saved.customer,
-      totalAmount: Number(saved.amount || 0),
-      items: (saved.rows || []).map((r) => ({
-        itemName: r.item,
-        description: r.description,
-        quantity: Number(r.qty || 1),
-        unitPrice: Number(r.price || 0),
-        totalAmount: Number(r.qty || 1) * Number(r.price || 0),
-      })),
-    }).catch((err) => console.warn("[Estimate] MySQL save notice:", err.message));
+    try {
+      // Save directly to MySQL transactions table
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "estimate",
+        type: "estimate",
+        documentNumber: saved.number,
+        transactionDate: saved.date,
+        partyName: saved.customer,
+        totalAmount: Number(saved.amount || 0),
+        items: (saved.rows || []).map((r) => ({
+          itemName: r.item,
+          description: r.description,
+          quantity: Number(r.qty || 1),
+          unitPrice: Number(r.price || 0),
+          totalAmount: Number(r.qty || 1) * Number(r.price || 0),
+        })),
+      });
+
+      saveEstimates(editor.mode === "edit" ? estimates.map((item) => item.id === saved.id ? saved : item) : [saved, ...estimates]);
+      setEditor(null);
+      toast.success(editor.mode === "edit" ? "Estimate updated." : "Estimate created.");
+    } catch (err) {
+      toast.error(err.message || "Failed to persist estimate.");
+      return;
+    }
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {

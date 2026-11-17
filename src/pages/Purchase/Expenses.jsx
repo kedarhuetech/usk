@@ -213,40 +213,44 @@ export default function Expenses() {
   const total = editor?.entry.rows.reduce((sum, row) => sum + rowAmount(row, editor.entry.gst), 0) || 0;
   const enteredPayments = editor?.entry.payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0) || 0;
   const paid = editor ? (enteredPayments || total) : 0;
-  const persistEditor = () => {
+  const persistEditor = async () => {
     const entry = editor.entry;
     if (!entry.category) { toast.error("Choose an expense category first."); return; }
     const clean = { ...entry, rows: entry.rows.filter(row => row.item.trim()), amount: total, paid, status: paid >= total ? "Paid" : "Unpaid", history: [...(entry.history || []), { action: editor.mode === "new" ? "Created expense" : "Updated expense", at: new Date().toISOString() }] };
     if (!clean.rows.length) { toast.error("Add at least one expense item."); return; }
-    saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
 
-    // Save directly to MySQL transactions table
-    transactionsDb.save({
-      ...clean,
-      transactionType: "expense",
-      type: "expense",
-      documentNumber: clean.number,
-      transactionDate: clean.date,
-      partyName: clean.party || clean.category,
-      totalAmount: Number(clean.amount || 0),
-      paidAmount: Number(clean.paid || 0),
-      balanceAmount: Math.max(0, Number(clean.amount || 0) - Number(clean.paid || 0)),
-      notes: clean.category,
-      items: (clean.rows || []).map((r) => ({
-        itemName: r.item,
-        description: r.description,
-        quantity: Number(r.qty || 1),
-        unitPrice: Number(r.price || 0),
-        discountPercent: Number(r.discount || 0),
-        taxPercent: Number(r.tax || 0),
-        totalAmount: rowAmount(r, clean.gst),
-      })),
-    }).catch((err) => console.warn("[Expense] MySQL save notice:", err.message));
+    try {
+      // Save directly to MySQL transactions table
+      await transactionsDb.save({
+        ...clean,
+        transactionType: "expense",
+        type: "expense",
+        documentNumber: clean.number,
+        transactionDate: clean.date,
+        partyName: clean.party || clean.category,
+        totalAmount: Number(clean.amount || 0),
+        paidAmount: Number(clean.paid || 0),
+        balanceAmount: Math.max(0, Number(clean.amount || 0) - Number(clean.paid || 0)),
+        notes: clean.category,
+        items: (clean.rows || []).map((r) => ({
+          itemName: r.item,
+          description: r.description,
+          quantity: Number(r.qty || 1),
+          unitPrice: Number(r.price || 0),
+          discountPercent: Number(r.discount || 0),
+          taxPercent: Number(r.tax || 0),
+          totalAmount: rowAmount(r, clean.gst),
+        })),
+      });
 
-    toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
-    setSelected(clean.category);
-    setTab("Category");
-    setEditor(null);
+      saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
+      toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
+      setSelected(clean.category);
+      setTab("Category");
+      setEditor(null);
+    } catch (err) {
+      toast.error(err.message || "Failed to persist expense.");
+    }
   };
   const remove = (entry) => {
     setConfirmModal({

@@ -2392,46 +2392,54 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
     const invoice = buildInvoice();
     if (isPurchase && editInvoice && localOnlyPurchase) {
-      const saved = savePurchaseBillLocally({ ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt });
-      sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
-      setToast("Purchase bill updated in this browser.");
-      navigate(returnPath);
+      try {
+        const saved = await saveBusinessPurchaseBill({ ...invoice, id: editInvoice.id, invoiceId: editInvoice.invoiceId || editInvoice.id, createdAt: editInvoice.createdAt });
+        sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
+        setToast("Purchase bill updated successfully.");
+        navigate(returnPath);
+      } catch (err) {
+        setToast(err.message || "Could not update purchase bill.");
+      }
       return;
     }
     if (isPurchase && localOnlyPurchase) {
-      const saved = savePurchaseBillLocally(invoice);
-      finalizeOrderConversions(saved);
-      sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
-      setToast(purchaseOrderConversion ? "Purchase bill created from the purchase order." : "Purchase bill saved in this browser.");
-      navigate(returnPath);
+      try {
+        const saved = await saveBusinessPurchaseBill(invoice);
+        finalizeOrderConversions(saved);
+        sessionStorage.setItem(config.storageKey, JSON.stringify(saved));
+        setToast(purchaseOrderConversion ? "Purchase bill created from the purchase order." : "Purchase bill saved successfully.");
+        navigate(returnPath);
+      } catch (err) {
+        setToast(err.message || "Could not save purchase bill.");
+      }
       return;
     }
     if (quotationConversion) {
       try {
-        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, quotationId: quotationConversion.id, proformaId: location.state?.proformaConversion?.id || "" });
+        const savedInvoice = await saveBusinessSaleInvoice({ ...invoice, quotationId: quotationConversion.id, proformaId: location.state?.proformaConversion?.id || "" });
         const sourceDocuments = JSON.parse(window.localStorage.getItem(conversionStorageKey) || "[]");
         window.localStorage.setItem(conversionStorageKey, JSON.stringify(sourceDocuments.map((document) => document.id === quotationConversion.id ? { ...document, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id } : document)));
-        setToast("Sale invoice saved locally from this quotation.");
+        setToast("Sale invoice created from this quotation.");
         navigate(returnPath);
       } catch (error) {
-        setToast(error.message || "Could not save the sale invoice locally.");
+        setToast(error.message || "Could not save the sale invoice.");
       }
       return;
     }
     if (saleOrderConversions.length) {
       try {
-        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, saleOrderIds: saleOrderConversions.map((order) => order.id) });
+        const savedInvoice = await saveBusinessSaleInvoice({ ...invoice, saleOrderIds: saleOrderConversions.map((order) => order.id) });
         finalizeOrderConversions(savedInvoice);
         setToast("Sale invoice created from the selected sale order(s).");
         navigate(returnPath);
       } catch (error) {
-        setToast(error.message || "Could not convert the sale order locally.");
+        setToast(error.message || "Could not convert the sale order.");
       }
       return;
     }
     if (deliveryChallanConversions.length) {
       try {
-        const savedInvoice = saveSaleInvoiceLocally({ ...invoice, deliveryChallanIds: deliveryChallanConversions.map((challan) => challan.id) });
+        const savedInvoice = await saveBusinessSaleInvoice({ ...invoice, deliveryChallanIds: deliveryChallanConversions.map((challan) => challan.id) });
         const key = "ledgerly:deliveryChallans.v1";
         const sourceChallans = JSON.parse(window.localStorage.getItem(key) || "[]");
         window.localStorage.setItem(key, JSON.stringify(sourceChallans.map((challan) => deliveryChallanConversions.some((source) => source.id === challan.id)
@@ -2440,7 +2448,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
         setToast("Sale invoice created from the selected delivery challan(s).");
         navigate(returnPath);
       } catch (error) {
-        setToast(error.message || "Could not convert the delivery challan locally.");
+        setToast(error.message || "Could not convert the delivery challan.");
       }
       return;
     }

@@ -265,7 +265,7 @@ export default function PurchaseReturns() {
       },
     }));
 
-  const save = () => {
+  const save = async () => {
     const value = editor.value;
     if (!value.party.trim()) {
       toast.error("Please enter or select a Party Name.");
@@ -285,11 +285,8 @@ export default function PurchaseReturns() {
     };
 
     try {
-      persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
-      setEditor(null);
-
       // Save directly to MySQL transactions table
-      transactionsDb.save({
+      await transactionsDb.save({
         ...saved,
         transactionType: "debit_note",
         type: "debit_note",
@@ -307,8 +304,10 @@ export default function PurchaseReturns() {
           taxPercent: Number(r.tax || 0),
           totalAmount: rowAmount(r),
         })),
-      }).catch((err) => console.warn("[DebitNote] MySQL save notice:", err.message));
+      });
 
+      persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
+      setEditor(null);
       toast.success(editor.mode === "edit" ? "Debit note updated." : "Debit note created.");
 
       // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
