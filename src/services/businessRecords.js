@@ -77,7 +77,16 @@ export async function loadBusinessParties() {
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
     try {
       const dbParties = await partiesDb.listAll();
-      if (Array.isArray(dbParties)) return dbParties;
+      if (Array.isArray(dbParties)) {
+        return dbParties.map((party) => {
+          const isInactive = party?.status === "inactive" || party?.isActive === false;
+          return {
+            ...party,
+            status: isInactive ? "inactive" : "active",
+            isActive: !isInactive,
+          };
+        });
+      }
     } catch (e) {
       console.warn("[MySQL] Falling back to local parties:", e.message);
     }
