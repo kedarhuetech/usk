@@ -752,8 +752,8 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           <TextArea value={form.billingAddress} onChange={(event) => setField("billingAddress", event.target.value)} placeholder="Billing Address" className="h-20 w-full sm:h-24 lg:h-20" />
           {form.billingAddress && (
             <div className="mt-2 flex justify-end gap-4 text-xs">
-              <button type="button" onClick={() => setField("billingAddress", "")} className="text-slate-500">Remove</button>
-              <button type="button" className="text-blue-600">Change</button>
+              <button type="button" onClick={() => setField("billingAddress", "")} className="text-slate-500 hover:text-slate-700">Remove</button>
+              <button type="button" onClick={() => document.querySelector('textarea[placeholder="Billing Address"]')?.focus()} className="text-blue-600 hover:underline">Change</button>
             </div>
           )}
         </div>
@@ -762,8 +762,8 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             <TextArea value={form.shippingAddress} onChange={(event) => setField("shippingAddress", event.target.value)} placeholder="Shipping Address" className="h-20 w-full sm:h-24 lg:h-20" />
             {form.shippingAddress && (
               <div className="mt-2 flex justify-end gap-4 text-xs">
-                <button type="button" onClick={() => setField("shippingAddress", "")} className="text-slate-500">Remove</button>
-                <button type="button" className="text-blue-600">Change</button>
+                <button type="button" onClick={() => setField("shippingAddress", "")} className="text-slate-500 hover:text-slate-700">Remove</button>
+                <button type="button" onClick={() => document.querySelector('textarea[placeholder="Shipping Address"]')?.focus()} className="text-blue-600 hover:underline">Change</button>
               </div>
             )}
           </div>
@@ -1462,6 +1462,7 @@ function TermsTitlePicker({ value, templates, onSelect, onAddNew }) {
 
 // Renders the payment selector interface.
 function PaymentSelector({ value, onChange }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   useDismiss(open, rootRef, () => setOpen(false));
@@ -1474,7 +1475,7 @@ function PaymentSelector({ value, onChange }) {
       </button>
       {open && (
         <div className="absolute z-40 mt-1.5 w-full rounded-lg border border-slate-200 bg-white py-1.5 shadow-xl">
-          <button type="button" className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
+          <button type="button" onClick={() => { setOpen(false); navigate("/cash-bank/bank-accounts"); }} className="flex w-full items-center gap-2 px-3 py-1.5 text-[13px] font-semibold text-blue-600 hover:bg-blue-50">
             <FiPlus /> Add Bank A/C
           </button>
           {paymentTypes.map((type) => (
@@ -1578,7 +1579,7 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
               <span className="mb-1 block text-[13px] text-slate-500">Payment Type</span>
               <PaymentSelector value={form.paymentType} onChange={(value) => setField("paymentType", value)} />
             </label>
-            <button type="button" className="text-[13px] font-semibold text-blue-600">+ Add Payment type</button>
+            <button type="button" onClick={() => navigate("/settings?tab=transaction")} className="text-[13px] font-semibold text-blue-600 hover:underline">+ Add Payment type</button>
           </div>
         )}
         {!form.showDescription ? (
@@ -1692,6 +1693,7 @@ function ShareMenu({ actions = shareActions, onAction }) {
 
 // Renders the settings drawer interface.
 function SettingsDrawer({ settings, setSettings, billingType, setBillingType, onClose }) {
+  const navigate = useNavigate();
   useEffect(() => {
     // Handles key down.
     const handleKeyDown = (event) => {
@@ -1726,7 +1728,7 @@ function SettingsDrawer({ settings, setSettings, billingType, setBillingType, on
           </div>
         </div>
         <footer className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
-          <button type="button" className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600"><FiSettings /> More Settings</button>
+          <button type="button" onClick={() => { onClose(); navigate("/settings?tab=transaction"); }} className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600 hover:underline"><FiSettings /> More Settings</button>
         </footer>
       </aside>
     </div>
@@ -1737,6 +1739,9 @@ function SettingsDrawer({ settings, setSettings, billingType, setBillingType, on
 function BusinessModal({ mode, business, setBusiness, onClose }) {
   const [errors, setErrors] = useState({});
   const [success, setSuccess] = useState("");
+  const [firmTab, setFirmTab] = useState("business");
+  const logoInputRef = useRef(null);
+  const sigInputRef = useRef(null);
 
   useEffect(() => {
     // Handles key down.
@@ -1763,6 +1768,24 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
     setSuccess(`${mode} details saved for demo.`);
   };
 
+  const handleLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setBusinessField("logo", reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSigUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => setBusinessField("signature", reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onClick={onClose}>
       <Card className="max-h-[86vh] w-full max-w-2xl overflow-y-auto p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -1775,7 +1798,10 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
         </div>
         {success && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] font-semibold text-emerald-700">{success}</div>}
         <div className="grid gap-5 md:grid-cols-[260px_1fr]">
-          <button type="button" className="flex h-28 w-28 items-center justify-center justify-self-center rounded-lg border border-dashed border-slate-300 text-base font-semibold text-slate-400">Add Logo</button>
+          <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+          <button type="button" onClick={() => logoInputRef.current?.click()} className="flex h-28 w-28 items-center justify-center justify-self-center overflow-hidden rounded-lg border border-dashed border-slate-300 text-base font-semibold text-slate-400 hover:border-blue-400 hover:text-blue-600">
+            {business.logo ? <img src={business.logo} alt="Logo" className="h-full w-full object-contain" /> : "Add Logo"}
+          </button>
           <div className="grid gap-3">
             <label><span className="mb-1 block text-xs text-slate-500">Business Name *</span><TextInput error={errors.name} value={business.name} onChange={(event) => setBusinessField("name", event.target.value)} /></label>
             <label><span className="mb-1 block text-xs text-blue-600">GSTIN</span><TextInput error={errors.gstin} value={business.gstin} onChange={(event) => setBusinessField("gstin", event.target.value)} />{errors.gstin && <span className="mt-1 block text-xs text-rose-600">{errors.gstin}</span>}</label>
@@ -1783,19 +1809,32 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
             <TextInput value={business.email} onChange={(event) => setBusinessField("email", event.target.value)} placeholder="Email ID" />
           </div>
         </div>
-        <div className="mt-5 border-b border-slate-200">
-          <button type="button" className="border-b-2 border-blue-600 px-4 py-2.5 text-[13px] font-bold text-blue-600">Business Details</button>
-          <button type="button" className="px-4 py-2.5 text-[13px] font-bold text-slate-400">Additional Fields</button>
+        <div className="mt-5 border-b border-slate-200 flex gap-2">
+          <button type="button" onClick={() => setFirmTab("business")} className={`px-4 py-2.5 text-[13px] font-bold ${firmTab === "business" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-400 hover:text-slate-600"}`}>Business Details</button>
+          <button type="button" onClick={() => setFirmTab("additional")} className={`px-4 py-2.5 text-[13px] font-bold ${firmTab === "additional" ? "border-b-2 border-blue-600 text-blue-600" : "text-slate-400 hover:text-slate-600"}`}>Additional Fields</button>
         </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <TextArea value={business.address} onChange={(event) => setBusinessField("address", event.target.value)} placeholder="Business Address" className="h-24" />
-          <label><span className="mb-1 block text-xs text-slate-500">Business Type</span><SelectInput value={business.type} onChange={(value) => setBusinessField("type", value)} options={["None", "Retail", "Wholesale", "Service"]} /></label>
-          <TextInput value={business.pincode} onChange={(event) => setBusinessField("pincode", event.target.value)} placeholder="Pincode" />
-          <TextInput value={business.category} onChange={(event) => setBusinessField("category", event.target.value)} placeholder="Business Category" />
-          <label><span className="mb-1 block text-xs text-slate-500">State</span><SelectInput value={business.state} onChange={(value) => setBusinessField("state", value)} options={stateOfSupplyOptions} /></label>
-          <button type="button" className="flex h-20 items-center justify-center rounded-lg border border-dashed border-slate-300 text-[13px] text-slate-400">Add Signature</button>
-          <TextInput value={business.description} onChange={(event) => setBusinessField("description", event.target.value.slice(0, 160))} placeholder="Business Description" />
-        </div>
+        {firmTab === "business" ? (
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <TextArea value={business.address} onChange={(event) => setBusinessField("address", event.target.value)} placeholder="Business Address" className="h-24" />
+            <label><span className="mb-1 block text-xs text-slate-500">Business Type</span><SelectInput value={business.type} onChange={(value) => setBusinessField("type", value)} options={["None", "Retail", "Wholesale", "Service"]} /></label>
+            <TextInput value={business.pincode} onChange={(event) => setBusinessField("pincode", event.target.value)} placeholder="Pincode" />
+            <TextInput value={business.category} onChange={(event) => setBusinessField("category", event.target.value)} placeholder="Business Category" />
+            <label><span className="mb-1 block text-xs text-slate-500">State</span><SelectInput value={business.state} onChange={(value) => setBusinessField("state", value)} options={stateOfSupplyOptions} /></label>
+            <div>
+              <input ref={sigInputRef} type="file" accept="image/*" className="hidden" onChange={handleSigUpload} />
+              <button type="button" onClick={() => sigInputRef.current?.click()} className="flex h-20 w-full items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 text-[13px] text-slate-400 hover:border-blue-400 hover:text-blue-600">
+                {business.signature ? <img src={business.signature} alt="Signature" className="h-full w-full object-contain" /> : "Add Signature"}
+              </button>
+            </div>
+            <TextInput value={business.description} onChange={(event) => setBusinessField("description", event.target.value.slice(0, 160))} placeholder="Business Description" />
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <TextInput value={business.upiId || ""} onChange={(e) => setBusinessField("upiId", e.target.value)} placeholder="UPI ID (e.g. business@upi)" />
+            <TextInput value={business.bankAccount || ""} onChange={(e) => setBusinessField("bankAccount", e.target.value)} placeholder="Default Bank Account" />
+            <TextArea value={business.terms || ""} onChange={(e) => setBusinessField("terms", e.target.value)} placeholder="Default Terms & Conditions" className="h-24" />
+          </div>
+        )}
         <footer className="mt-5 flex justify-end">
           <Button onClick={save} className="rounded-md bg-blue-600 px-9 py-2 text-[13px] text-white hover:bg-blue-700">Save</Button>
         </footer>

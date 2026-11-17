@@ -103,6 +103,9 @@ function PartyIllustration() {
 
 // Renders the gst address tab interface.
 function GstAddressTab({ form, setField, showShipping, setShowShipping, enableShippingAddress = true }) {
+  const [showDetailedBilling, setShowDetailedBilling] = useState(Boolean(form.billingStreet || form.billingCity || form.billingPincode));
+  const [showDetailedShipping, setShowDetailedShipping] = useState(Boolean(form.shippingStreet || form.shippingCity || form.shippingPincode));
+
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       <div className="space-y-4">
@@ -114,18 +117,40 @@ function GstAddressTab({ form, setField, showShipping, setShowShipping, enableSh
       <div className={`grid gap-6 ${enableShippingAddress ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
         <div>
           <TextareaField label="Billing Address" value={form.billingAddress} onChange={(value) => setField("billingAddress", value)} placeholder="Billing Address" />
-          <button type="button" className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
-            Show Detailed Address
-          </button>
+          {showDetailedBilling ? (
+            <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2.5">
+              <Input label="Street / Flat" value={form.billingStreet || ""} onChange={(e) => setField("billingStreet", e.target.value)} placeholder="Building, Street" />
+              <div className="grid grid-cols-2 gap-2">
+                <Input label="City" value={form.billingCity || ""} onChange={(e) => setField("billingCity", e.target.value)} placeholder="City" />
+                <Input label="Pincode" value={form.billingPincode || ""} onChange={(e) => setField("billingPincode", e.target.value)} placeholder="Pincode" />
+              </div>
+              <button type="button" onClick={() => setShowDetailedBilling(false)} className="text-xs text-blue-600 hover:underline">Hide Detailed Fields</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowDetailedBilling(true)} className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
+              Show Detailed Address
+            </button>
+          )}
         </div>
         {enableShippingAddress && (
           <div>
             {showShipping ? (
               <>
                 <TextareaField label="Shipping Address" value={form.shippingAddress} onChange={(value) => setField("shippingAddress", value)} placeholder="Shipping Address" />
-                <button type="button" className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
-                  Show Detailed Address
-                </button>
+                {showDetailedShipping ? (
+                  <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2.5">
+                    <Input label="Shipping Street" value={form.shippingStreet || ""} onChange={(e) => setField("shippingStreet", e.target.value)} placeholder="Building, Street" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input label="City" value={form.shippingCity || ""} onChange={(e) => setField("shippingCity", e.target.value)} placeholder="City" />
+                      <Input label="Pincode" value={form.shippingPincode || ""} onChange={(e) => setField("shippingPincode", e.target.value)} placeholder="Pincode" />
+                    </div>
+                    <button type="button" onClick={() => setShowDetailedShipping(false)} className="text-xs text-blue-600 hover:underline">Hide Detailed Fields</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowDetailedShipping(true)} className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700">
+                    Show Detailed Address
+                  </button>
+                )}
               </>
             ) : (
               <button
