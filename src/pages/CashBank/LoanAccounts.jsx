@@ -3,7 +3,7 @@ import { FiAlertCircle, FiCheckCircle, FiCreditCard, FiEdit2, FiEye, FiPlus, FiX
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { calculateLoanOutstanding, calculateLoanEmi, estimateUpcomingEmiDate, formatLoanAmount, loanEmi, summarizeLoans, validateLoan, validateRepayment } from "../../services/loanAccounts";
-import { closeLoan, createLoan, getAllLoans, recordRepayment, updateLoan } from "../../services/loanAccountsRepository";
+import { closeLoan, createLoan, getAllLoans, getRepayments, recordRepayment, updateLoan } from "../../services/loanAccountsRepository";
 import { toast } from "../../components/Common/Toast.jsx";
 import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
 
@@ -35,7 +35,7 @@ function LoanForm({ initialLoan, onClose, onSaved }) {
       repaymentFrequency: initialLoan.repaymentFrequency || initialLoan.loanType || initialLoan.loan_type || "Monthly",
       firstEmiDate: initialLoan.firstEmiDate ? String(initialLoan.firstEmiDate).slice(0, 10) : base.firstEmiDate,
       status: initialLoan.status || "Active",
-      emiOverride: initialLoan.emiOverride ?? initialLoan.emiAmount ?? initialLoan.emi_amount ?? "",
+      emiOverride: (initialLoan.emiOverride !== "" && initialLoan.emiOverride != null) ? initialLoan.emiOverride : "",
       notes: initialLoan.notes || "",
     };
   });
@@ -121,10 +121,29 @@ function RepaymentForm({ loan, onCancel, onSaved }) {
 
 function LoanDetails({ loan, onClose, onRepayment, onCloseLoan }) {
   const [showRepayment, setShowRepayment] = useState(false);
-  const repayments = [...(loan.repayments || [])].sort((left, right) => String(right.paymentDate).localeCompare(String(left.paymentDate)));
-  return <Dialog title={loan.loanName} onClose={onClose} wide><div className="space-y-5 p-5"><div className="grid gap-4 sm:grid-cols-3">{[["Lender", loan.lenderName], ["Status", loan.status], ["Original amount", formatLoanAmount(loan.originalAmount)], ["Estimated outstanding principal", formatLoanAmount(calculateLoanOutstanding(loan))], ["Annual interest", `${loan.annualInterestRate}%`], ["Tenure", `${loan.tenureMonths} months`], [loan.emiOverride ? "Agreed EMI" : "Estimated EMI", formatLoanAmount(loanEmi(loan))], ["Start date", loan.startDate], ["First EMI date", loan.firstEmiDate], ["Estimated next EMI date", estimateUpcomingEmiDate(loan)], ["Repayment frequency", loan.repaymentFrequency], ["Notes", loan.notes || "—"]].map(([label, value]) => <div key={label}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 text-sm font-medium text-slate-900">{value}</p></div>)}</div><p className="rounded-md bg-amber-50 p-3 text-xs text-amber-900">Outstanding principal is estimated as original principal minus recorded principal portions. The next EMI date advances once per recorded repayment; interest accrual and lender statements are not verified.</p>
+  const [repaymentsList, setRepaymentsList] = useState(() => Array.isArray(loan.repayments) ? loan.repayments : []);
+
+  useEffect(() => {
+    let active = true;
+    getRepayments(loan.id).then((items) => {
+      if (active && Array.isArray(items)) {
+        setRepaymentsList(items);
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [loan.id, loan.repayments]);
+
+  const repayments = [...repaymentsList].sort((left, right) => String(right.paymentDate).localeCompare(String(left.paymentDate)));
+  return <Dialog title={loan.loanName} onClose={onClose} wide><div className="space-y-5 p-5"><div className="grid gap-4 sm:grid-cols-3">{[["Lender", loan.lenderName], ["Status", loan.status], ["Original amount", formatLoanAmount(loan.originalAmount)], ["Estimated outstanding principal", formatLoanAmount(calculateLoanOutstanding({ ...loan, repayments: repaymentsList }))], ["Annual interest", `${loan.annualInterestRate}%`], ["Tenure", `${loan.tenureMonths} months`], [loan.emiOverride ? "Agreed EMI" : "Estimated EMI", formatLoanAmount(loanEmi(loan))], ["Start date", loan.startDate], ["First EMI date", loan.firstEmiDate], ["Estimated next EMI date", estimateUpcomingEmiDate({ ...loan, repayments: repaymentsList })], ["Repayment frequency", loan.repaymentFrequency], ["Notes", loan.notes || "—"]].map(([label, value]) => <div key={label}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-1 text-sm font-medium text-slate-900">{value}</p></div>)}</div><p className="rounded-md bg-amber-50 p-3 text-xs text-amber-900">Outstanding principal is estimated as original principal minus recorded principal portions. The next EMI date advances once per recorded repayment; interest accrual and lender statements are not verified.</p>
     {loan.status === "Active" && !showRepayment && <Button onClick={() => setShowRepayment(true)} className="bg-blue-600 text-white">Record Repayment</Button>}
-    {showRepayment && <RepaymentForm loan={loan} onCancel={() => setShowRepayment(false)} onSaved={async () => { setShowRepayment(false); await onRepayment(); }} />}
+    {showRepayment && <RepaymentForm loan={loan} onCancel={() => setShowRepayment(false)} onSaved={async () => {
+      setShowRepayment(false);
+      try {
+        const fresh = await getRepayments(loan.id);
+        if (Array.isArray(fresh)) setRepaymentsList(fresh);
+      } catch {}
+      await onRepayment();
+    }} />}
     <section><h3 className="mb-2 font-bold text-slate-900">Repayment history</h3>{repayments.length ? <div className="overflow-x-auto"><table className="w-full min-w-[600px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-2">Date</th><th className="p-2 text-right">Paid</th><th className="p-2 text-right">Principal</th><th className="p-2 text-right">Interest / charges</th><th className="p-2">Reference</th></tr></thead><tbody>{repayments.map((repayment) => <tr key={repayment.id} className="border-t"><td className="p-2">{repayment.paymentDate}</td><td className="p-2 text-right">{formatLoanAmount(repayment.amountPaid)}</td><td className="p-2 text-right">{formatLoanAmount(repayment.principalPaid)}</td><td className="p-2 text-right">{formatLoanAmount(repayment.interestPaid)}</td><td className="p-2">{repayment.reference || "—"}</td></tr>)}</tbody></table></div> : <p className="rounded-md border border-dashed p-6 text-center text-sm text-slate-500">No repayments recorded.</p>}</section>
     {loan.status === "Active" && <div className="flex justify-end"><Button onClick={onCloseLoan} className="border border-rose-200 text-rose-700 hover:bg-rose-50">Mark Loan Closed</Button></div>}</div></Dialog>;
 }

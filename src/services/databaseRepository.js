@@ -726,7 +726,7 @@ export const cashBankDb = {
   },
   async listRepayments(loanId) {
     const res = await apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(loanId)}/repayments`);
-    return res?.data || [];
+    return Array.isArray(res) ? res : (res?.data || []);
   },
   async saveRepayment(loanId, repayment) {
     return apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(loanId)}/repayments`, {
