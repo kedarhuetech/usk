@@ -615,13 +615,6 @@ export default function CashFlowReport() {
             </button>
             <button
               type="button"
-              onClick={() => handleAction("Duplicate", menuState.row)}
-              className="w-full px-3.5 py-2 text-left font-medium text-gray-800 hover:bg-sky-50 hover:text-sky-700 transition"
-            >
-              Duplicate
-            </button>
-            <button
-              type="button"
               onClick={() => handleAction("View History", menuState.row)}
               className="w-full px-3.5 py-2 text-left font-medium text-gray-800 hover:bg-sky-50 hover:text-sky-700 transition"
             >

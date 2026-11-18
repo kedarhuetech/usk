@@ -113,11 +113,10 @@ export default function TransactionActionMenu({
   const buttonRef = useRef(null);
   const menuRef = useRef(null);
 
-  // Default actions list strictly matching reference screenshot (Image 2)
+  // Default actions list strictly matching reference screenshot
   const defaultActions = [
     "View/Edit",
     "Delete",
-    "Duplicate",
     "Open PDF",
     "Preview",
     "Print",

@@ -953,7 +953,6 @@ function ItemsDashboard() {
                     const current = readTransactionActions();
                     if (action === "Cancel Invoice") current.cancelled = { ...current.cancelled, [actionKey]: true };
                     if (action === "Delete") current.deleted = [...new Set([...(current.deleted || []), actionKey])];
-                    if (action === "Duplicate") current.copies = [...(current.copies || []), { itemId: selectedItem.id, id: `${row.id}-copy-${Date.now()}`, row: { ...row, id: undefined, invoice: `${row.invoice}-COPY`, name: `${row.name} (Copy)`, status: "Draft copy" } }];
                     if (action === "Convert To Return") current.returns = [...(current.returns || []), { id: `return-${Date.now()}`, itemId: selectedItem.id, invoice: row.invoice, name: row.name, date: new Date().toISOString(), quantity: row.quantity, unit: row.unit, price: row.price, amount: row.amount }];
                     writeTransactionActions(current);
                     setRowMenu("");
