@@ -22,7 +22,7 @@ export async function loadBusinessItems() {
       const dbItems = await itemsDb.listAll();
       if (Array.isArray(dbItems)) {
         const normalized = dbItems.map((item) => normalizeInventoryItem(item));
-        writeItems(normalized);
+        writeItems(normalized, { skipEvent: true });
         return normalized;
       }
     } catch (e) {

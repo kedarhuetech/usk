@@ -443,35 +443,47 @@ function ItemsDashboard() {
   }, [refresh]);
   useEffect(() => {
     let isMounted = true;
-    const reloadData = async () => {
-      if (isDatabaseMode()) {
+    let debounceTimer = null;
+    let inFlight = false;
+
+    const reloadData = () => {
+      if (debounceTimer) window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(async () => {
+        if (inFlight || !isMounted) return;
+        inFlight = true;
         try {
-          const dbItems = await loadBusinessItems();
-          if (isMounted && Array.isArray(dbItems)) {
-            const allItems = [...dbItems, ...readCsvImportedItems()];
-            setItems(applyItemUiOverrides(allItems));
-          }
-        } catch {
-          if (isMounted) {
+          if (isDatabaseMode()) {
+            try {
+              const dbItems = await loadBusinessItems();
+              if (isMounted && Array.isArray(dbItems)) {
+                const allItems = [...dbItems, ...readCsvImportedItems()];
+                setItems(applyItemUiOverrides(allItems));
+              }
+            } catch {
+              if (isMounted) {
+                const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
+                setItems(applyItemUiOverrides(currentItems));
+              }
+            }
+          } else {
             const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
             setItems(applyItemUiOverrides(currentItems));
           }
+          setSales(getSaleInvoices());
+          setPurchases(getPurchaseBills());
+        } finally {
+          inFlight = false;
         }
-      } else {
-        const currentItems = [...getInventoryItems(), ...readCsvImportedItems()];
-        setItems(applyItemUiOverrides(currentItems));
-      }
-      setSales(getSaleInvoices());
-      setPurchases(getPurchaseBills());
+      }, 150);
     };
+
     window.addEventListener(businessDataChangedEvent, reloadData);
     window.addEventListener("storage", reloadData);
-    window.addEventListener("inventory-items-changed", reloadData);
     return () => {
       isMounted = false;
+      if (debounceTimer) window.clearTimeout(debounceTimer);
       window.removeEventListener(businessDataChangedEvent, reloadData);
       window.removeEventListener("storage", reloadData);
-      window.removeEventListener("inventory-items-changed", reloadData);
     };
   }, []);
   useEffect(() => {
