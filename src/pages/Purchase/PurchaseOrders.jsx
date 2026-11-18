@@ -484,7 +484,7 @@ export default function PurchaseOrders() {
                   <>
                     <button aria-label="Close menu" onClick={() => setMenuId("")} className="fixed inset-0 z-20 cursor-default"/>
                     <div className="absolute right-2 top-10 z-30 w-48 rounded-lg bg-white p-1 shadow-xl">
-                      {["View/Edit", "Delete", "Duplicate", "Open PDF", "Preview", "Print", "View History"].map((name) => (
+                      {["View/Edit", "Delete", "Open PDF", "Preview", "Print", "View History"].map((name) => (
                         <button key={name} onClick={() => action(name, order)} className="block w-full rounded px-3 py-2.5 text-left text-xs hover:bg-blue-50">
                           {name}
                         </button>

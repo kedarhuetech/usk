@@ -572,7 +572,7 @@ export default function SaleOrders() {
               </div>
               {menuId === order.id && (
                 <div className="absolute right-3 top-12 z-20 w-48 rounded-lg bg-white p-1 shadow-xl">
-                  {["View/Edit", "Delete", "Duplicate", "Open PDF", "Preview", "Print", "View History"].map((action) => (
+                  {["View/Edit", "Delete", "Open PDF", "Preview", "Print", "View History"].map((action) => (
                     <button key={action} onClick={() => act(action, order)} className="block w-full rounded px-3 py-2.5 text-left text-xs hover:bg-blue-50">
                       {action}
                     </button>

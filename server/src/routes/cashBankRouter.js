@@ -15,11 +15,91 @@ const router = Router();
 // ==================== CASH IN HAND ====================
 
 /**
+ * Synchronize cash transactions from transactions table into cash_in_hand ledger table
+ */
+async function syncCashTransactions(businessId) {
+  try {
+    const [cashTxns] = await pool.query(
+      `SELECT t.id, t.business_id, t.transaction_type, t.document_number, t.transaction_date,
+              t.party_id, t.party_name, t.total_amount, t.paid_amount, t.payment_mode, t.notes, t.created_at
+       FROM transactions t
+       WHERE t.business_id = ? AND LOWER(t.payment_mode) = 'cash'
+         AND t.transaction_type IN ('sale', 'pos', 'purchase', 'expense', 'payment_in', 'payment-in', 'payment_out', 'payment-out', 'sale_return', 'credit note', 'credit_note', 'purchase_return', 'debit note', 'debit_note')`,
+      [businessId]
+    );
+
+    for (const txn of cashTxns) {
+      const type = (txn.transaction_type || "").toLowerCase();
+      let entryType = "in";
+      let amount = parseFloat(txn.paid_amount) || 0;
+      if (amount <= 0) {
+        amount = parseFloat(txn.total_amount) || 0;
+      }
+      if (amount <= 0) continue;
+
+      if (["purchase", "expense", "payment_out", "payment-out", "sale_return", "credit note", "credit_note"].includes(type)) {
+        entryType = "out";
+      } else {
+        entryType = "in";
+      }
+
+      const entryDate = toSqlDate(txn.transaction_date) || toSqlDate(txn.created_at) || new Date().toISOString().slice(0, 10);
+      const desc = txn.notes || `${type.replace(/_/g, " ").toUpperCase()} #${txn.document_number || txn.id.slice(0, 8)}`;
+
+      await pool.query(
+        `INSERT INTO cash_in_hand (
+          id, business_id, entry_date, entry_type, amount,
+          party_id, party_name, reference_type, reference_no, description, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          entry_date = VALUES(entry_date),
+          entry_type = VALUES(entry_type),
+          amount = VALUES(amount),
+          party_id = VALUES(party_id),
+          party_name = VALUES(party_name),
+          reference_type = VALUES(reference_type),
+          reference_no = VALUES(reference_no),
+          description = VALUES(description)`,
+        [
+          txn.id,
+          businessId,
+          entryDate,
+          entryType,
+          amount,
+          txn.party_id || null,
+          txn.party_name || "Cash",
+          type,
+          txn.document_number || "",
+          desc,
+          txn.created_at || new Date()
+        ]
+      );
+    }
+
+    // Clean up synced transactions that are no longer cash or were deleted
+    await pool.query(
+      `DELETE FROM cash_in_hand 
+       WHERE business_id = ? 
+         AND (reference_type IS NULL OR reference_type != 'adjustment')
+         AND id NOT IN (
+           SELECT id FROM transactions 
+           WHERE business_id = ? AND LOWER(payment_mode) = 'cash'
+         )`,
+      [businessId, businessId]
+    );
+  } catch (err) {
+    console.error("[CashBank] Failed to sync cash transactions:", err);
+  }
+}
+
+/**
  * GET /api/cash-bank/cash-in-hand
  */
 router.get("/cash-in-hand", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
+    await syncCashTransactions(businessId);
+
     const [rows] = await pool.query(
       `SELECT * FROM cash_in_hand WHERE business_id = ? ORDER BY entry_date DESC, created_at DESC`,
       [businessId]
@@ -36,7 +116,7 @@ router.get("/cash-in-hand", async (req, res) => {
       totalCash,
       data: rows.map((r) => ({
         id: r.id,
-        entryDate: r.entry_date,
+        entryDate: toSqlDate(r.entry_date) || (r.entry_date ? String(r.entry_date).slice(0, 10) : ""),
         entryType: r.entry_type,
         amount: parseFloat(r.amount) || 0,
         partyId: r.party_id,
@@ -61,14 +141,14 @@ const saveCashHandler = async (req, res) => {
     const body = req.body || {};
 
     const id = req.params?.id || body.id || `cash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const entryDate = body.entryDate || body.date || new Date().toISOString().slice(0, 10);
+    const entryDate = toSqlDate(body.entryDate || body.date) || new Date().toISOString().slice(0, 10);
     const entryType = (body.entryType || body.type || "in").toLowerCase();
-    const amount = parseFloat(body.amount) || 0;
+    const amount = Math.abs(parseFloat(body.amount) || 0);
     const partyId = body.partyId || null;
     const partyName = body.partyName || null;
-    const referenceType = body.referenceType || null;
-    const referenceNo = body.referenceNo || null;
-    const description = body.description || null;
+    const referenceType = body.referenceType || "adjustment";
+    const referenceNo = body.referenceNo || "ADJUSTMENT";
+    const description = body.description || body.reason || null;
 
     await pool.query(
       `INSERT INTO cash_in_hand (
