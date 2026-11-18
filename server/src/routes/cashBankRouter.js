@@ -230,23 +230,57 @@ router.get("/loan-accounts", async (req, res) => {
       [businessId]
     );
 
+    const [repayRows] = await pool.query(
+      `SELECT * FROM loan_repayments WHERE business_id = ? ORDER BY payment_date DESC, created_at DESC`,
+      [businessId]
+    );
+
+    const repaymentsByLoan = {};
+    for (const r of repayRows) {
+      if (!repaymentsByLoan[r.loan_id]) repaymentsByLoan[r.loan_id] = [];
+      const paymentDate = r.payment_date instanceof Date
+        ? `${r.payment_date.getFullYear()}-${String(r.payment_date.getMonth() + 1).padStart(2, "0")}-${String(r.payment_date.getDate()).padStart(2, "0")}`
+        : String(r.payment_date || "").slice(0, 10);
+
+      repaymentsByLoan[r.loan_id].push({
+        id: r.id,
+        loanId: r.loan_id,
+        paymentDate,
+        amountPaid: parseFloat(r.amount_paid) || 0,
+        principalPaid: parseFloat(r.principal_paid) || 0,
+        interestPaid: parseFloat(r.interest_paid) || 0,
+        paymentMode: r.payment_mode,
+        reference: r.reference || "",
+        notes: r.notes || "",
+        createdAt: r.created_at,
+      });
+    }
+
     return res.json({
       success: true,
-      data: rows.map((r) => ({
-        id: r.id,
-        accountName: r.account_name,
-        lenderName: r.lender_name,
-        accountNumber: r.account_number,
-        loanType: r.loan_type,
-        principalAmount: parseFloat(r.principal_amount) || 0,
-        currentBalance: parseFloat(r.current_balance) || 0,
-        interestRate: parseFloat(r.interest_rate) || 0,
-        termMonths: parseInt(r.term_months, 10) || 12,
-        emiAmount: parseFloat(r.emi_amount) || 0,
-        startDate: r.start_date,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      })),
+      data: rows.map((r) => {
+        const loanRepayments = repaymentsByLoan[r.id] || [];
+        const totalPrincipalPaid = loanRepayments.reduce((sum, item) => sum + item.principalPaid, 0);
+        const principal = parseFloat(r.principal_amount) || 0;
+        const currentBalance = Math.max(0, Math.round((principal - totalPrincipalPaid) * 100) / 100);
+
+        return {
+          id: r.id,
+          accountName: r.account_name,
+          lenderName: r.lender_name,
+          accountNumber: r.account_number,
+          loanType: r.loan_type,
+          principalAmount: principal,
+          currentBalance: currentBalance,
+          interestRate: parseFloat(r.interest_rate) || 0,
+          termMonths: parseInt(r.term_months, 10) || 12,
+          emiAmount: parseFloat(r.emi_amount) || 0,
+          startDate: r.start_date,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          repayments: loanRepayments,
+        };
+      }),
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -265,12 +299,23 @@ const saveLoanHandler = async (req, res) => {
     const accountName = (body.accountName || body.name || "Loan Account").trim();
     const lenderName = (body.lenderName || body.lender || "Bank").trim();
     const accountNumber = (body.accountNumber || body.accountNo || "").trim();
-    const loanType = body.loanType || "Term Loan";
+    const loanType = body.loanType || "Monthly";
     const principalAmount = parseFloat(body.principalAmount ?? body.amount ?? 0) || 0;
-    const currentBalance = parseFloat(body.currentBalance ?? principalAmount) || 0;
     const interestRate = parseFloat(body.interestRate ?? 0) || 0;
     const termMonths = parseInt(body.termMonths, 10) || 12;
-    const emiAmount = parseFloat(body.emiAmount ?? 0) || 0;
+
+    // Calculate estimated EMI if no explicit override was entered
+    const calculatedEmi = (() => {
+      if (principalAmount <= 0 || termMonths <= 0) return 0;
+      if (interestRate === 0) return Math.round((principalAmount / termMonths) * 100) / 100;
+      const monthlyRate = interestRate / 1200;
+      return Math.round((principalAmount * monthlyRate / (1 - Math.pow(1 + monthlyRate, -termMonths))) * 100) / 100;
+    })();
+
+    const providedEmi = parseFloat(body.emiAmount ?? 0);
+    const emiAmount = providedEmi > 0 ? providedEmi : calculatedEmi;
+
+    const currentBalance = parseFloat(body.currentBalance ?? principalAmount) || 0;
     const startDate = body.startDate || null;
 
     await pool.query(
@@ -296,7 +341,7 @@ const saveLoanHandler = async (req, res) => {
       ]
     );
 
-    return res.json({ success: true, message: "Loan account saved.", data: { id, accountName, currentBalance } });
+    return res.json({ success: true, message: "Loan account saved.", data: { id, accountName, currentBalance, emiAmount } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -336,18 +381,24 @@ router.get("/loan-accounts/:id/repayments", async (req, res) => {
 
     return res.json({
       success: true,
-      data: rows.map((r) => ({
-        id: r.id,
-        loanId: r.loan_id,
-        paymentDate: r.payment_date,
-        amountPaid: parseFloat(r.amount_paid) || 0,
-        principalPaid: parseFloat(r.principal_paid) || 0,
-        interestPaid: parseFloat(r.interest_paid) || 0,
-        paymentMode: r.payment_mode,
-        reference: r.reference || "",
-        notes: r.notes || "",
-        createdAt: r.created_at,
-      })),
+      data: rows.map((r) => {
+        const paymentDate = r.payment_date instanceof Date
+          ? `${r.payment_date.getFullYear()}-${String(r.payment_date.getMonth() + 1).padStart(2, "0")}-${String(r.payment_date.getDate()).padStart(2, "0")}`
+          : String(r.payment_date || "").slice(0, 10);
+
+        return {
+          id: r.id,
+          loanId: r.loan_id,
+          paymentDate,
+          amountPaid: parseFloat(r.amount_paid) || 0,
+          principalPaid: parseFloat(r.principal_paid) || 0,
+          interestPaid: parseFloat(r.interest_paid) || 0,
+          paymentMode: r.payment_mode,
+          reference: r.reference || "",
+          notes: r.notes || "",
+          createdAt: r.created_at,
+        };
+      }),
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
