@@ -1,5 +1,6 @@
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { expenseCategoriesDb } from "./databaseRepository.js";
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   parseYMD,
@@ -157,6 +158,14 @@ export const getExpenseCategories = () => {
 export const saveExpenseCategories = (categories) => {
   const saved = writeTransactionCollection(transactionStorageKeys.expenseCategories, categories);
   notifyBusinessDataChanged();
+  if (isDatabaseMode() && Array.isArray(categories)) {
+    categories.forEach((cat) => {
+      const name = typeof cat === "string" ? cat : (cat?.categoryName || cat?.name);
+      if (name) {
+        expenseCategoriesDb.save({ categoryName: name, expenseType: "indirect" }).catch(() => {});
+      }
+    });
+  }
   return saved;
 };
 

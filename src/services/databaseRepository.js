@@ -739,6 +739,28 @@ export const cashBankDb = {
 };
 
 // ============================================================================
+// 8.1. EXPENSE CATEGORIES DATABASE API
+// ============================================================================
+
+export const expenseCategoriesDb = {
+  async getAll() {
+    const res = await apiRequest("/expense-categories");
+    return Array.isArray(res) ? res : (res?.data || []);
+  },
+  async save(category) {
+    return apiRequest("/expense-categories", {
+      method: "POST",
+      body: JSON.stringify(category),
+    });
+  },
+  async remove(idOrName) {
+    return apiRequest(`/expense-categories/${encodeURIComponent(idOrName)}`, {
+      method: "DELETE",
+    });
+  },
+};
+
+// ============================================================================
 // 9. UNITS & ADJUSTMENTS DATABASE API
 // ============================================================================
 
