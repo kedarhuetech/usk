@@ -16,7 +16,11 @@ router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const [rows] = await pool.query(
-      `SELECT * FROM inventory_adjustments WHERE business_id = ? ORDER BY adjustment_date DESC, created_at DESC`,
+      `SELECT a.*, COALESCE(NULLIF(a.item_name, 'Item'), i.name, a.item_name) AS resolved_item_name
+       FROM inventory_adjustments a
+       LEFT JOIN inventory_items i ON a.business_id = i.business_id AND a.item_id = i.id
+       WHERE a.business_id = ? 
+       ORDER BY a.adjustment_date DESC, a.created_at DESC`,
       [businessId]
     );
 
@@ -25,7 +29,7 @@ router.get("/", async (req, res) => {
       data: rows.map((r) => ({
         id: r.id,
         itemId: r.item_id,
-        itemName: r.item_name,
+        itemName: r.resolved_item_name || r.item_name || "Item",
         adjustmentType: r.adjustment_type,
         quantity: parseFloat(r.quantity) || 0,
         unitPrice: parseFloat(r.unit_price) || 0,
@@ -53,7 +57,25 @@ router.post("/", async (req, res) => {
 
     const id = body.id || `adj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const itemId = body.itemId || body.item_id;
-    const itemName = (body.itemName || "Item").trim();
+    let itemName = (body.itemName || body.item_name || body.name || "").trim();
+
+    if (!itemId) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "Valid item ID is required." });
+    }
+
+    // Lookup actual item name from inventory_items if missing or placeholder "Item"
+    if (!itemName || itemName.toLowerCase() === "item") {
+      const [itemRows] = await conn.query(
+        `SELECT name FROM inventory_items WHERE business_id = ? AND id = ?`,
+        [businessId, itemId]
+      );
+      if (itemRows.length > 0 && itemRows[0].name) {
+        itemName = itemRows[0].name.trim();
+      }
+    }
+    if (!itemName) itemName = "Item";
+
     const adjustmentType = (body.adjustmentType || body.type || "add").toLowerCase();
     const quantity = parseFloat(body.quantity) || 0;
     const unitPrice = parseFloat(body.unitPrice ?? 0) || 0;
@@ -61,9 +83,9 @@ router.post("/", async (req, res) => {
     const reason = body.reason || null;
     const adjustmentDate = toSqlDate(body.adjustmentDate) || new Date().toISOString().slice(0, 10);
 
-    if (!itemId || quantity <= 0) {
+    if (quantity <= 0) {
       await conn.rollback();
-      return res.status(400).json({ success: false, message: "Valid item ID and positive quantity are required." });
+      return res.status(400).json({ success: false, message: "Positive quantity is required." });
     }
 
     // 1. Insert adjustment row
@@ -71,7 +93,16 @@ router.post("/", async (req, res) => {
       `INSERT INTO inventory_adjustments (
         id, business_id, item_id, item_name, adjustment_type,
         quantity, unit_price, total_value, reason, adjustment_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        item_id = VALUES(item_id),
+        item_name = VALUES(item_name),
+        adjustment_type = VALUES(adjustment_type),
+        quantity = VALUES(quantity),
+        unit_price = VALUES(unit_price),
+        total_value = VALUES(total_value),
+        reason = VALUES(reason),
+        adjustment_date = VALUES(adjustment_date)`,
       [id, businessId, itemId, itemName, adjustmentType, quantity, unitPrice, totalValue, reason, adjustmentDate]
     );
 

@@ -574,15 +574,16 @@ function ItemsDashboard() {
 
   // Saves adjustment.
   const saveAdjustment = async (item, nextQuantity, adjustment) => {
+    const itemName = item.itemName || item.name || item.item_name || "";
     if (enableBatchTracking) {
-      saveInventoryAdjustment({ itemId: item.id, itemName: item.itemName, unit: item.unit || "", batchTracked: true, ...adjustment });
+      saveInventoryAdjustment({ itemId: item.id, itemName, unit: item.unit || "", batchTracked: true, ...adjustment });
       const updated = await saveBusinessItem(getInventoryItems().find((entry) => entry.id === item.id));
       setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
       setNotice("Batch stock adjustment saved.");
       return;
     }
     const updated = await saveBusinessItem({ ...item, openingQuantity: nextQuantity, stock: nextQuantity });
-    saveInventoryAdjustment({ itemId: item.id, unit: item.unit || "", ...adjustment });
+    saveInventoryAdjustment({ itemId: item.id, itemName, unit: item.unit || "", ...adjustment });
     setItems((current) => current.map((entry) => entry.id === updated.id ? updated : entry));
     setNotice("Stock adjustment saved.");
   };

@@ -35,10 +35,15 @@ export function saveInventoryAdjustment(adjustment) {
   const next = existing ? adjustments.map((item) => item.id === entry.id ? entry : item) : [ ...adjustments, entry ];
   window.localStorage.setItem(ADJUSTMENTS_KEY, JSON.stringify(next));
   if (isDatabaseMode()) {
+    const resolvedItem = getInventoryItems().find((it) => it.id === entry.itemId);
+    const resolvedName = entry.itemName && entry.itemName !== "Item"
+      ? entry.itemName
+      : (resolvedItem?.itemName || resolvedItem?.name || entry.itemName || "Item");
+
     inventoryAdjustmentsDb.save({
       id: entry.id,
       itemId: entry.itemId,
-      itemName: entry.itemName || "Item",
+      itemName: resolvedName,
       adjustmentType: entry.direction === "add" ? "add" : "reduce",
       quantity: parseFloat(entry.quantity) || 0,
       reason: entry.reason || "",
