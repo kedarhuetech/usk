@@ -666,7 +666,8 @@ export const settingsDb = {
       const res = await apiRequest("/settings/company-profile");
       const data = res?.data ?? res;
       if (data && typeof data === "object") {
-        writeLocal(COMPANY_PROFILE_KEY, data);
+        const scopedKey = getScopedStorageKey(COMPANY_PROFILE_KEY);
+        writeLocal(scopedKey, data);
         if (typeof window !== "undefined") {
           try {
             window.dispatchEvent(new CustomEvent("ledgerly:company-profile-updated", { detail: data }));
@@ -674,9 +675,10 @@ export const settingsDb = {
         }
         return data;
       }
-      return readLocal(COMPANY_PROFILE_KEY, {});
+      return data;
     } catch (err) {
-      return readLocal(COMPANY_PROFILE_KEY, {});
+      console.warn("[MySQL] Failed to load company profile from MySQL:", err.message);
+      throw err;
     }
   },
 

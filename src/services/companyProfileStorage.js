@@ -1,6 +1,7 @@
 // Provides the company profile storage application service.
 import { settingsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 const COMPANY_PROFILE_KEY = "ledgerly:companyProfile.v1";
 export const companyProfileUpdatedEvent = "ledgerly:company-profile-updated";
@@ -55,68 +56,88 @@ function cleanPhone(val) {
   return trimmed === "8369501991" ? "" : trimmed;
 }
 
-// Gets company profile.
-export function getCompanyProfile() {
-  if (!canUseStorage()) return { ...defaultCompanyProfile };
+// Normalizes raw company profile record with aliases and safe fallbacks
+export function normalizeCompanyProfile(saved) {
+  if (!saved || typeof saved !== "object") return { ...defaultCompanyProfile };
+  const rawName = cleanName(saved.businessName) || cleanName(saved.companyName) || "";
+  const rawPhone = cleanPhone(saved.phoneNumber) || cleanPhone(saved.phone) || "";
+  const bDetails = (saved && typeof saved.bankDetails === "object") ? saved.bankDetails : {};
 
-  try {
-    const raw = window.localStorage.getItem(COMPANY_PROFILE_KEY);
-    const saved = raw ? JSON.parse(raw) : null;
-    if (!saved || typeof saved !== "object") {
-      window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(defaultCompanyProfile));
-      return { ...defaultCompanyProfile };
-    }
-
-    const rawName = cleanName(saved.businessName) || cleanName(saved.companyName) || "";
-    const rawPhone = cleanPhone(saved.phoneNumber) || cleanPhone(saved.phone) || "";
-    const bDetails = (saved && typeof saved.bankDetails === "object") ? saved.bankDetails : {};
-
-    const profile = {
-      ...defaultCompanyProfile,
-      ...saved,
-      companyName: rawName,
-      businessName: rawName,
-      tradeName: saved.tradeName || "",
-      phoneNumber: rawPhone,
-      phone: rawPhone,
-      emailId: saved.emailId || saved.email || "",
-      email: saved.email || saved.emailId || "",
-      gstin: saved.gstin || "",
-      pan: saved.pan || "",
-      businessAddress: saved.businessAddress || saved.streetAddress || saved.address || "",
-      streetAddress: saved.streetAddress || saved.businessAddress || saved.address || "",
-      city: saved.city || "",
-      state: saved.state || "",
-      pincode: saved.pincode || "",
-      country: saved.country || "India",
-      businessType: saved.businessType || "",
-      businessCategory: saved.businessCategory || "",
+  return {
+    ...defaultCompanyProfile,
+    ...saved,
+    companyName: rawName,
+    businessName: rawName,
+    tradeName: saved.tradeName || "",
+    phoneNumber: rawPhone,
+    phone: rawPhone,
+    emailId: saved.emailId || saved.email || "",
+    email: saved.email || saved.emailId || "",
+    gstin: saved.gstin || "",
+    pan: saved.pan || "",
+    businessAddress: saved.businessAddress || saved.streetAddress || saved.address || "",
+    streetAddress: saved.streetAddress || saved.businessAddress || saved.address || "",
+    city: saved.city || "",
+    state: saved.state || "",
+    pincode: saved.pincode || "",
+    country: saved.country || "India",
+    businessType: saved.businessType || "",
+    businessCategory: saved.businessCategory || "",
+    bankName: saved.bankName || bDetails.bankName || "",
+    accountNumber: saved.accountNumber || bDetails.accountNumber || "",
+    ifscCode: saved.ifscCode || bDetails.ifscCode || "",
+    branchName: saved.branchName || bDetails.branchName || "",
+    upiId: saved.upiId || bDetails.upiId || "",
+    termsAndConditions: saved.termsAndConditions || "",
+    signature: saved.signature || saved.signatureUrl || "",
+    signatureUrl: saved.signatureUrl || saved.signature || "",
+    logo: saved.logo || saved.logoUrl || "",
+    logoUrl: saved.logoUrl || saved.logo || "",
+    bankDetails: {
       bankName: saved.bankName || bDetails.bankName || "",
       accountNumber: saved.accountNumber || bDetails.accountNumber || "",
       ifscCode: saved.ifscCode || bDetails.ifscCode || "",
       branchName: saved.branchName || bDetails.branchName || "",
       upiId: saved.upiId || bDetails.upiId || "",
-      termsAndConditions: saved.termsAndConditions || "",
-      signature: saved.signature || saved.signatureUrl || "",
-      signatureUrl: saved.signatureUrl || saved.signature || "",
-      logo: saved.logo || saved.logoUrl || "",
-      logoUrl: saved.logoUrl || saved.logo || "",
-      bankDetails: {
-        bankName: saved.bankName || bDetails.bankName || "",
-        accountNumber: saved.accountNumber || bDetails.accountNumber || "",
-        ifscCode: saved.ifscCode || bDetails.ifscCode || "",
-        branchName: saved.branchName || bDetails.branchName || "",
-        upiId: saved.upiId || bDetails.upiId || "",
-      },
-    };
-    return profile;
+    },
+  };
+}
+
+// Authoritatively loads company profile from MySQL database, updating scoped cache on success.
+export async function loadAuthoritativeCompanyProfile() {
+  const profile = await settingsDb.getCompanyProfile();
+  if (!profile || typeof profile !== "object") {
+    throw new Error("Invalid response received from database.");
+  }
+  const normalized = normalizeCompanyProfile(profile);
+  if (canUseStorage()) {
+    try {
+      const key = getScopedStorageKey(COMPANY_PROFILE_KEY);
+      window.localStorage.setItem(key, JSON.stringify(normalized));
+    } catch {}
+  }
+  return normalized;
+}
+
+// Synchronously gets cached company profile.
+export function getCompanyProfile() {
+  if (!canUseStorage()) return { ...defaultCompanyProfile };
+
+  try {
+    const scopedKey = getScopedStorageKey(COMPANY_PROFILE_KEY);
+    const raw = window.localStorage.getItem(scopedKey) || window.localStorage.getItem(COMPANY_PROFILE_KEY);
+    const saved = raw ? JSON.parse(raw) : null;
+    if (!saved || typeof saved !== "object") {
+      return { ...defaultCompanyProfile };
+    }
+    return normalizeCompanyProfile(saved);
   } catch {
     return { ...defaultCompanyProfile };
   }
 }
 
-// Saves company profile.
-export async function saveCompanyProfile(profile) {
+// Saves company profile directly to MySQL database and updates cache upon success.
+export async function saveCompanyProfile(profile, options = {}) {
   const current = getCompanyProfile();
   const nextProfile = {
     ...current,
@@ -159,22 +180,26 @@ export async function saveCompanyProfile(profile) {
   nextProfile.upiId = upiId;
   nextProfile.bankDetails = { bankName, accountNumber, ifscCode, branchName, upiId };
 
+  if (options.clearFields) {
+    nextProfile.clearFields = options.clearFields;
+  }
+  if (options._isExplicitClear) {
+    nextProfile._isExplicitClear = true;
+  }
+
+  // Authoritative Persistence: MySQL must confirm first before updating cache
+  await settingsDb.saveCompanyProfile(nextProfile);
+
   if (canUseStorage()) {
     try {
-      window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
+      const key = getScopedStorageKey(COMPANY_PROFILE_KEY);
+      window.localStorage.setItem(key, JSON.stringify(nextProfile));
     } catch (err) {
-      console.warn("Could not save company profile to localStorage:", err);
+      console.warn("Could not cache company profile to localStorage:", err);
     }
     window.dispatchEvent(new CustomEvent(companyProfileUpdatedEvent, { detail: nextProfile }));
   }
-  if (isDatabaseMode()) {
-    try {
-      await settingsDb.saveCompanyProfile(nextProfile);
-    } catch (err) {
-      console.warn("[MySQL] Background company profile sync notice:", err.message);
-      throw err;
-    }
-  }
+
   return nextProfile;
 }
 

@@ -10,6 +10,11 @@ export const DEFAULT_BUSINESS_ID = "demo-business";
 export function getActiveBusinessId() {
   const envId = typeof import.meta !== "undefined" && import.meta.env?.VITE_BUSINESS_ID;
   const rawId = String(envId || DEFAULT_BUSINESS_ID).trim();
+  if (rawId === "local-development") {
+    // Explicitly reject local-development to prevent cross-business data leakage
+    console.warn("[Tenant Security] 'local-development' is prohibited in this environment. Enforcing 'demo-business'.");
+    return DEFAULT_BUSINESS_ID;
+  }
   return rawId || DEFAULT_BUSINESS_ID;
 }
 
