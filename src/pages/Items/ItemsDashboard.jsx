@@ -867,21 +867,31 @@ function ItemsDashboard() {
                             } catch (error) {
                               console.error("Item delete error:", error);
                               if (error?.status === 409 || error?.code === "ITEM_REFERENCED" || error?.message?.includes("referenced")) {
+                                const isAlreadyInactive = item.isActive === false;
                                 setConfirmDialog({
-                                  title: "Item Has Historical Transactions",
-                                  message: `${error.message}\n\nWould you like to mark "${item.itemName}" as inactive instead? Inactive items are hidden from new sales but preserve all historical accounting records.`,
-                                  confirmText: "Mark Inactive",
-                                  danger: false,
+                                  title: isAlreadyInactive ? "Permanently Delete Item" : "Item Has Historical Transactions",
+                                  message: isAlreadyInactive
+                                    ? `"${item.itemName}" is already inactive and has historical records. Do you want to permanently delete this item? Historical invoice lines will be preserved.`
+                                    : `${error.message}\n\nWould you like to mark "${item.itemName}" as inactive instead? Inactive items are hidden from new sales but preserve all historical accounting records.`,
+                                  confirmText: isAlreadyInactive ? "Delete Permanently" : "Mark Inactive",
+                                  danger: isAlreadyInactive,
                                   onConfirm: async () => {
                                     setConfirmDialog(null);
                                     try {
-                                      await deleteBusinessItem(item, { deactivate: true });
-                                      await refresh();
-                                      setNotice(`${item.itemName} marked as inactive.`);
-                                      toast.success(`${item.itemName} marked inactive.`);
-                                    } catch (deactError) {
-                                      toast.error(`Could not deactivate item: ${deactError.message}`);
-                                      setLoadError(deactError.message);
+                                      if (isAlreadyInactive) {
+                                        await deleteBusinessItem(item, { force: true });
+                                        await refresh();
+                                        setNotice(`"${item.itemName}" permanently deleted.`);
+                                        toast.success(`"${item.itemName}" deleted.`);
+                                      } else {
+                                        await deleteBusinessItem(item, { deactivate: true });
+                                        await refresh();
+                                        setNotice(`${item.itemName} marked as inactive.`);
+                                        toast.success(`${item.itemName} marked inactive.`);
+                                      }
+                                    } catch (actionErr) {
+                                      toast.error(`Operation failed: ${actionErr.message}`);
+                                      setLoadError(actionErr.message);
                                     }
                                   },
                                   onCancel: () => setConfirmDialog(null),

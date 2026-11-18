@@ -231,20 +231,6 @@ export default function ProformaInvoices() {
     toast.success("Converted to Sale Order.");
   };
 
-  const duplicateProforma = (entry) => {
-    const copy = { ...entry, id: `proforma-${Date.now()}`, number: `${entry.number}-COPY`, status: "Open", convertedAt: "", convertedSaleId: "", conversionType: "" };
-    persist([copy, ...proformas]);
-    transactionsDb.save({
-      ...copy,
-      transactionType: "proforma",
-      type: "proforma",
-      documentNumber: copy.number,
-      totalAmount: copy.total,
-    }).catch(() => {});
-    toast.success("Proforma invoice duplicated.");
-    setOpenMenu("");
-  };
-
   const openDocument = (entry, printNow = false) => {
     const info = getEffectiveCompanyInfo();
     const rows = (entry.rows || []).map((row, index) => ({
@@ -290,7 +276,6 @@ export default function ProformaInvoices() {
     setOpenMenu("");
     if (action === "View/Edit") setEditor({ mode: "edit", entry });
     else if (action === "Delete") deleteProforma(entry);
-    else if (action === "Duplicate") duplicateProforma(entry);
     else if (action === "Open PDF") openDocument(entry);
     else if (action === "Preview") setPreview(entry);
     else if (action === "Print") openDocument(entry, true);

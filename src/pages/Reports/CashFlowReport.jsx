@@ -246,21 +246,6 @@ export default function CashFlowReport() {
       return;
     }
 
-    if (action === "Duplicate") {
-      if (row.storageKey) {
-        const currentList = readLocal(row.storageKey);
-        const copy = {
-          ...row.raw,
-          id: `${row.type.toLowerCase()}-copy-${Date.now()}`,
-          invoiceNumber: `${row.raw.invoiceNumber || row.raw.form?.invoiceNumber || "1"}-COPY`,
-          createdAt: new Date().toISOString(),
-          date: isoDate(),
-        };
-        writeLocal(row.storageKey, [copy, ...currentList]);
-      }
-      return;
-    }
-
     if (action === "View History") {
       setHistoryModal(row);
       return;

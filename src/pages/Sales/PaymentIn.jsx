@@ -253,35 +253,6 @@ export default function PaymentIn() {
     setMenuPosition({ top: rect.bottom + menuHeight > window.innerHeight ? Math.max(8, rect.top - menuHeight) : rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) });
     setOpenMenu(entry.id);
   };
-  const duplicate = async (entry) => {
-    const newId = `payment-in-${Date.now()}`;
-    const newNumber = String(records.length + 1);
-    const copy = { ...entry, id: newId, number: newNumber, status: "Unused", linkedInvoiceId: "", history: [{ action: "Duplicated receipt", at: new Date().toISOString() }] };
-    persist([copy, ...records]);
-    try {
-      await transactionsDb.save({
-        ...copy,
-        transactionType: "payment_in",
-        type: "payment_in",
-        documentNumber: newNumber,
-        number: newNumber,
-        transactionDate: copy.date || today(),
-        date: copy.date || today(),
-        partyId: copy.partyId || null,
-        partyName: copy.partyName,
-        totalAmount: copy.amount,
-        paidAmount: copy.received ?? copy.amount,
-        balanceAmount: 0,
-        paymentMode: copy.paymentType || "Cash",
-        payments: copy.payments || [],
-      });
-      toast.success("Receipt duplicated.");
-    } catch (err) {
-      console.warn("[PaymentIn MySQL Duplicate Notice]", err?.message);
-      toast.success("Receipt duplicated locally.");
-    }
-    setOpenMenu("");
-  };
   const remove = (entry) => {
     setConfirmModal({
       isOpen: true,

@@ -366,41 +366,6 @@ export default function PurchaseOrders() {
         },
       });
     }
-    if (name === "Duplicate") {
-      const newNumber = String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1);
-      const newId = `purchase-order-${Date.now()}`;
-      const duplicated = {
-        ...order,
-        id: newId,
-        number: newNumber,
-        status: "Open",
-        history: [{ action: "Duplicated purchase order", at: new Date().toISOString() }],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      saveList([duplicated, ...orders]);
-      try {
-        transactionsDb.save({
-          ...duplicated,
-          transactionType: "purchase_order",
-          type: "purchase_order",
-          documentNumber: newNumber,
-          number: newNumber,
-          partyName: duplicated.supplier,
-          supplier: duplicated.supplier,
-          supplierName: duplicated.supplier,
-          rows: duplicated.rows,
-          items: duplicated.rows,
-        }).then(() => {
-          toast.success("Purchase order duplicated and saved to database.");
-        }).catch((err) => {
-          console.warn("[PurchaseOrders] Duplicate remote sync notice:", err?.message);
-          toast.warning("Duplicated locally. MySQL sync pending.");
-        });
-      } catch (err) {
-        toast.warning("Duplicated locally. MySQL sync pending.");
-      }
-    }
     if (name === "Convert to Purchase") {
       const summary = getOrderFulfillmentSummary(order);
       if (summary.isFullyConverted) {

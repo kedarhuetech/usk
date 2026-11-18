@@ -352,10 +352,6 @@ export default function DeliveryChallans() {
         },
       });
     }
-    if (action === "Duplicate") {
-      setEditor({ mode: "new", value: { ...challan, id: "", number: String(Math.max(0, ...challans.map((entry) => Number(entry.number) || 0)) + 1), status: "Open" } });
-      toast.success("Challan duplicated.");
-    }
     if (["Preview", "Open PDF", "Print"].includes(action)) setPreviewChallan(challan);
   };
 

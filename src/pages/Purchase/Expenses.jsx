@@ -294,12 +294,6 @@ export default function Expenses() {
     });
     setMenuId("");
   };
-  const duplicate = (entry) => {
-    const copy = { ...entry, id: crypto.randomUUID(), number: String(records.length + 1), history: [{ action: "Duplicated expense", at: new Date().toISOString() }] };
-    saveRecords([copy, ...records]);
-    toast.success("Expense duplicated.");
-    setMenuId("");
-  };
   const saveExpenseItem = () => {
     const draft = itemModal?.draft;
     if (!draft?.item.trim()) { toast.error("Enter an item name first."); return; }

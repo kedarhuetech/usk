@@ -415,40 +415,6 @@ export default function SaleOrders() {
         },
       });
     }
-    if (action === "Duplicate") {
-      const newNumber = String(Math.max(0, ...orders.map((entry) => Number(entry.number) || 0)) + 1);
-      const newId = `sale-order-${Date.now()}`;
-      const duplicated = {
-        ...order,
-        id: newId,
-        number: newNumber,
-        status: "Open",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        history: [{ action: "Duplicated sale order", at: new Date().toISOString() }],
-      };
-      persist([duplicated, ...orders]);
-      try {
-        transactionsDb.save({
-          ...duplicated,
-          transactionType: "sale_order",
-          type: "sale_order",
-          documentNumber: newNumber,
-          number: newNumber,
-          partyName: duplicated.customer,
-          customer: duplicated.customer,
-          rows: duplicated.rows,
-          items: duplicated.rows,
-        }).then(() => {
-          toast.success("Sale order duplicated and saved to database.");
-        }).catch((err) => {
-          console.warn("[SaleOrders] Duplicate remote sync notice:", err?.message);
-          toast.warning("Duplicated locally. MySQL sync pending.");
-        });
-      } catch (err) {
-        toast.warning("Duplicated locally. MySQL sync pending.");
-      }
-    }
     if (["Preview", "Open PDF", "Print"].includes(action)) {
       const rows = (order.rows || []).map((row) => ({
         item: row.item || "Item",
