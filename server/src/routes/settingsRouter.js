@@ -114,21 +114,58 @@ router.get("/company-profile", async (req, res) => {
       return res.json({
         success: true,
         data: {
-          companyName: "Sai Kirana Stores",
-          businessName: "Sai Kirana Stores",
+          businessId,
+          companyName: "",
+          businessName: "",
+          tradeName: "",
           businessType: "",
           businessCategory: "",
+          phone: "",
+          phoneNumber: "",
+          email: "",
+          emailId: "",
+          gstin: "",
+          pan: "",
+          streetAddress: "",
+          businessAddress: "",
+          address: "",
+          city: "",
+          state: "",
+          pincode: "",
+          country: "India",
+          bankName: "",
+          accountNumber: "",
+          ifscCode: "",
+          branchName: "",
+          upiId: "",
+          signatureUrl: "",
+          signature: "",
+          logoUrl: "",
+          logo: "",
+          termsAndConditions: "",
+          bankDetails: {
+            bankName: "",
+            accountNumber: "",
+            ifscCode: "",
+            branchName: "",
+            upiId: "",
+          },
         },
       });
     }
 
     const row = rows[0];
+    const normalizeUrl = (url) => {
+      if (!url || typeof url !== "string") return "";
+      return url.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
+    };
+
     return res.json({
       success: true,
       data: {
         businessId: row.business_id,
-        companyName: row.company_name,
-        businessName: row.company_name,
+        companyName: row.company_name || "",
+        businessName: row.company_name || "",
         tradeName: row.trade_name || "",
         businessType: row.business_type || "",
         businessCategory: row.business_category || "",
@@ -151,11 +188,11 @@ router.get("/company-profile", async (req, res) => {
         ifscCode: row.ifsc_code || "",
         branchName: row.branch_name || "",
         upiId: row.upi_id || "",
-        signatureUrl: row.signature_url || "",
-        signature: row.signature_url || "",
+        signatureUrl: normalizeUrl(row.signature_url),
+        signature: normalizeUrl(row.signature_url),
 
-        logoUrl: row.logo_url || "",
-        logo: row.logo_url || "",
+        logoUrl: normalizeUrl(row.logo_url),
+        logo: normalizeUrl(row.logo_url),
         termsAndConditions: row.terms_and_conditions || "",
         bankDetails: {
           bankName: row.bank_name || "",
@@ -178,7 +215,16 @@ router.get("/company-profile", async (req, res) => {
 router.post("/company-profile", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
+    if (businessId === "local-development") {
+      return res.status(400).json({
+        success: false,
+        message: "The tenant 'local-development' is prohibited in this environment.",
+      });
+    }
+
     const body = req.body || {};
+    const clearFields = new Set(Array.isArray(body.clearFields) ? body.clearFields : []);
+    const isExplicitClear = Boolean(body._isExplicitClear);
 
     // 1. Fetch existing profile for this business to preserve omitted properties
     const [existingRows] = await pool.query(
@@ -191,19 +237,26 @@ router.post("/company-profile", async (req, res) => {
 
     // Helper to resolve string fields with aliases while distinguishing omitted from explicitly cleared
     const resolveField = (aliases, existingValue) => {
+      const isCleared = isExplicitClear || aliases.some((a) => clearFields.has(a));
       const presentAlias = aliases.find((key) => hasOwn(body, key));
       if (presentAlias !== undefined) {
         const definedAlias = aliases.find((key) => hasOwn(body, key) && body[key] !== undefined) ?? presentAlias;
         const raw = body[definedAlias];
-        if (raw == null) return null;
+        if (raw == null) {
+          return isCleared ? null : (existingValue ?? null);
+        }
         const str = String(raw).trim();
-        return str === "" ? null : str;
+        if (str === "") {
+          return isCleared ? null : (existingValue ?? null);
+        }
+        return str;
       }
       return existingValue ?? null;
     };
 
     // Helper for bank details supporting root and nested bankDetails object
     const resolveBankField = (fieldName, existingValue) => {
+      const isCleared = isExplicitClear || clearFields.has(fieldName) || clearFields.has("bankDetails");
       const bankDetails = body.bankDetails;
       const hasRoot = hasOwn(body, fieldName);
       const hasNested = Boolean(bankDetails && typeof bankDetails === "object" && hasOwn(bankDetails, fieldName));
@@ -219,9 +272,14 @@ router.post("/company-profile", async (req, res) => {
         } else {
           raw = bankDetails[fieldName];
         }
-        if (raw == null) return null;
+        if (raw == null) {
+          return isCleared ? null : (existingValue ?? null);
+        }
         const str = String(raw).trim();
-        return str === "" ? null : str;
+        if (str === "") {
+          return isCleared ? null : (existingValue ?? null);
+        }
+        return str;
       }
       return existingValue ?? null;
     };
@@ -234,9 +292,9 @@ router.post("/company-profile", async (req, res) => {
         ? body.companyName
         : body.businessName;
       const trimmed = raw != null ? String(raw).trim() : "";
-      companyName = trimmed || (existing?.company_name || "Sai Kirana Stores");
+      companyName = trimmed || (existing?.company_name || "");
     } else {
-      companyName = existing?.company_name || "Sai Kirana Stores";
+      companyName = existing?.company_name || "";
     }
 
     const tradeName = resolveField(["tradeName"], existing?.trade_name);
@@ -269,12 +327,13 @@ router.post("/company-profile", async (req, res) => {
     // Signature resolution (supports aliases, explicit clear, Base64 persistence, or omission preservation)
     let signatureUrl;
     const hasSignature = hasOwn(body, "signatureUrl") || hasOwn(body, "signature");
+    const isSignatureCleared = isExplicitClear || clearFields.has("signature") || clearFields.has("signatureUrl");
     if (hasSignature) {
       const rawSig = (hasOwn(body, "signatureUrl") && body.signatureUrl !== undefined)
         ? body.signatureUrl
         : body.signature;
       if (rawSig == null || String(rawSig).trim() === "") {
-        signatureUrl = null;
+        signatureUrl = isSignatureCleared ? null : (existing?.signature_url ?? null);
       } else if (typeof rawSig === "string" && rawSig.startsWith("data:image/")) {
         signatureUrl = await persistBase64Asset(rawSig, "company-signature", businessId);
       } else {
@@ -283,16 +342,20 @@ router.post("/company-profile", async (req, res) => {
     } else {
       signatureUrl = existing ? existing.signature_url : null;
     }
+    if (signatureUrl && typeof signatureUrl === "string") {
+      signatureUrl = signatureUrl.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
+    }
 
     // Logo resolution (supports aliases, explicit clear, Base64 persistence, or omission preservation)
     let logoUrl;
     const hasLogo = hasOwn(body, "logoUrl") || hasOwn(body, "logo");
+    const isLogoCleared = isExplicitClear || clearFields.has("logo") || clearFields.has("logoUrl");
     if (hasLogo) {
       const rawLogo = (hasOwn(body, "logoUrl") && body.logoUrl !== undefined)
         ? body.logoUrl
         : body.logo;
       if (rawLogo == null || String(rawLogo).trim() === "") {
-        logoUrl = null;
+        logoUrl = isLogoCleared ? null : (existing?.logo_url ?? null);
       } else if (typeof rawLogo === "string" && rawLogo.startsWith("data:image/")) {
         logoUrl = await persistBase64Asset(rawLogo, "company-logo", businessId);
       } else {
@@ -300,6 +363,9 @@ router.post("/company-profile", async (req, res) => {
       }
     } else {
       logoUrl = existing ? existing.logo_url : null;
+    }
+    if (logoUrl && typeof logoUrl === "string") {
+      logoUrl = logoUrl.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
     }
 
     const termsAndConditions = resolveField(["termsAndConditions"], existing?.terms_and_conditions);

@@ -12,7 +12,9 @@ export async function apiRequest(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  headers.set("X-Business-Id", getActiveBusinessId());
+  const activeBizId = getActiveBusinessId();
+  const safeBizId = (!activeBizId || activeBizId === "local-development") ? "demo-business" : activeBizId;
+  headers.set("X-Business-Id", safeBizId);
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   // Automatically prefixes /api if not present
