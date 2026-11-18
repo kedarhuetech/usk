@@ -2,6 +2,7 @@ import { getInventoryItems } from "./itemsStorage.js";
 import { getParties } from "./partiesStorage.js";
 import { getSaleInvoices } from "./salesStorage.js";
 import { getPurchaseBills } from "./purchaseBillsStorage.js";
+import { transactionsDb } from "./databaseRepository.js";
 import {
   loadBusinessItems,
   loadBusinessParties,
@@ -36,8 +37,11 @@ export const dataVerificationRepository = {
   },
   async getSales() {
     try {
-      const live = await loadSalesInvoices();
-      if (Array.isArray(live) && live.length > 0) return live;
+      const allTx = await transactionsDb.listAll();
+      if (Array.isArray(allTx)) {
+        const sales = allTx.filter((t) => t.transactionType === "sale" || t.transactionType === "pos" || t.type === "sale" || t.type === "pos");
+        if (sales.length > 0) return sales;
+      }
     } catch {}
     return readRecords("Sales", getSaleInvoices);
   },

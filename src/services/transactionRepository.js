@@ -34,6 +34,11 @@ const memoryStore = new Map();
 export function setMemoryCollection(key, records) {
   if (Array.isArray(records)) {
     memoryStore.set(key, records);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(records));
+      } catch {}
+    }
   }
 }
 
