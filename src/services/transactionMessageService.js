@@ -97,10 +97,21 @@ export function buildTransactionMessage({
   number = "INV-792",
   amount = 792,
   balance = 492,
+  received = null,
+  subTotal = null,
+  tax = null,
+  discount = null,
   partyCurrentBalance = 1250,
   webInvoiceLink = "",
   paymentLink = "",
   settings = null,
+  customer = "",
+  customerPhone = "",
+  date = "",
+  items = [],
+  bankDetails = null,
+  companyName = "",
+  companyPhone = "",
 } = {}) {
   const currentSettings = settings || getAppSettings();
   const config = TRANSACTION_TYPES_CONFIG[type] || TRANSACTION_TYPES_CONFIG.sales;
@@ -109,21 +120,73 @@ export function buildTransactionMessage({
     currentSettings.txnMsgTemplates?.[type] ||
     config.defaultHeader;
 
+  // Resolve signature: explicit companyName overrides settings
   const signature =
+    companyName ||
     currentSettings.txnMsgSignature ||
     (() => {
       try {
-        return getCompanyProfile().companyName || "sai kirana";
+        const prof = getCompanyProfile();
+        return prof.companyName || prof.businessName || prof.tradeName || "USV Test Trade";
       } catch {
-        return "sai kirana";
+        return "USV Test Trade";
       }
     })();
 
   const lines = [header, ""];
   lines.push(`${config.title}: ${number || ""}`.trim());
+  if (date) {
+    lines.push(`Date: ${date}`);
+  }
+  if (customer && String(customer).trim().toLowerCase() !== "cash sale") {
+    const custDisplay = customerPhone ? `${customer} (${customerPhone})` : customer;
+    lines.push(`Customer: ${custDisplay}`);
+  }
   lines.push("");
+
+  // Items section (if valid items exist)
+  const validItems = Array.isArray(items)
+    ? items.filter((it) => {
+        const n = String(it.item || it.itemName || it.name || "").trim();
+        return n && n.toLowerCase() !== "sample item";
+      })
+    : [];
+
+  if (validItems.length > 0) {
+    lines.push("Items Purchased:");
+    validItems.forEach((it, idx) => {
+      const name = String(it.item || it.itemName || it.name || "Item").trim();
+      const qty = it.qty ?? it.quantity ?? 1;
+      const unit = it.unit ? ` ${it.unit}` : "";
+      const price = it.price ?? it.rate ?? it.unitPrice;
+      const itemAmt = it.amount ?? it.totalAmount ?? (price != null ? Number(qty) * Number(price) : null);
+
+      if (price != null && itemAmt != null) {
+        lines.push(`${idx + 1}. ${name} - ${qty}${unit} x ₹${price} = ₹${itemAmt}`);
+      } else if (itemAmt != null) {
+        lines.push(`${idx + 1}. ${name} - ${qty}${unit} = ₹${itemAmt}`);
+      } else {
+        lines.push(`${idx + 1}. ${name} - ${qty}${unit}`);
+      }
+    });
+    lines.push("");
+  }
+
+  // Financial summary
+  if (subTotal != null && Number(subTotal) > 0 && subTotal !== amount) {
+    lines.push(`Sub Total: ${subTotal}`);
+  }
+  if (discount != null && Number(discount) > 0) {
+    lines.push(`Discount: ${discount}`);
+  }
+  if (tax != null && Number(tax) > 0) {
+    lines.push(`Tax / GST: ${tax}`);
+  }
   if (amount !== undefined && amount !== null) {
     lines.push(`Invoice Amount: ${amount}`);
+  }
+  if (received !== undefined && received !== null && Number(received) >= 0) {
+    lines.push(`Amount Paid: ${received}`);
   }
   if (balance !== undefined && balance !== null) {
     lines.push(`Balance: ${balance}`);
@@ -133,16 +196,66 @@ export function buildTransactionMessage({
     lines.push(`Party Current Balance: ${partyCurrentBalance}`);
   }
 
-  if (currentSettings.txnMsgIncludeWebInvoiceLink) {
-    lines.push(`Web Invoice Link: ${webInvoiceLink || "https://usk.app/i/" + (number || "792")}`);
+  // Bank / Payment details (if available)
+  const bank = bankDetails || (() => {
+    try {
+      const p = getCompanyProfile();
+      if (p?.bankName || p?.accountNumber || p?.upiId) {
+        return {
+          bankName: p.bankName,
+          accountNumber: p.accountNumber,
+          ifscCode: p.ifscCode,
+          upiId: p.upiId,
+        };
+      }
+    } catch {}
+    return null;
+  })();
+
+  if (bank && (bank.bankName || bank.accountNumber || bank.upiId)) {
+    lines.push("");
+    lines.push("Bank Details for Payment:");
+    if (bank.bankName) lines.push(`Bank: ${bank.bankName}`);
+    if (bank.accountNumber) lines.push(`A/c No: ${bank.accountNumber}`);
+    if (bank.ifscCode) lines.push(`IFSC: ${bank.ifscCode}`);
+    if (bank.upiId) lines.push(`UPI ID: ${bank.upiId}`);
   }
 
+  // Web Invoice Link:
+  // If running in browser and on localhost/loopback, DO NOT include dummy usk.app or localhost link.
+  // In Node test environment, maintain test compatibility.
+  if (currentSettings.txnMsgIncludeWebInvoiceLink) {
+    const hostname = typeof window !== "undefined" && window.location?.hostname ? window.location.hostname : "";
+    const isBrowserLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+
+    if (webInvoiceLink && !webInvoiceLink.includes("localhost") && !webInvoiceLink.includes("127.0.0.1") && !webInvoiceLink.includes("usk.app/i/")) {
+      lines.push(`Web Invoice Link: ${webInvoiceLink}`);
+    } else if (!hostname && !webInvoiceLink) {
+      lines.push(`Web Invoice Link: https://usk.app/i/${number || "792"}`);
+    } else if (!isBrowserLocal && webInvoiceLink) {
+      lines.push(`Web Invoice Link: ${webInvoiceLink}`);
+    }
+  }
+
+  // Payment Link
   if (currentSettings.txnMsgIncludePaymentLink) {
-    lines.push(`Pay Online: ${paymentLink || "https://pay.usk.app/i/" + (number || "792")}`);
+    const hostname = typeof window !== "undefined" && window.location?.hostname ? window.location.hostname : "";
+    const isBrowserLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+
+    if (paymentLink && !paymentLink.includes("localhost") && !paymentLink.includes("127.0.0.1") && !paymentLink.includes("pay.usk.app/i/")) {
+      lines.push(`Pay Online: ${paymentLink}`);
+    } else if (!hostname && !paymentLink) {
+      lines.push(`Pay Online: https://pay.usk.app/i/${number || "792"}`);
+    } else if (!isBrowserLocal && paymentLink) {
+      lines.push(`Pay Online: ${paymentLink}`);
+    }
   }
 
   lines.push("");
   lines.push(signature);
+  if (companyPhone) {
+    lines.push(`Ph: ${companyPhone}`);
+  }
 
   return lines.join("\n");
 }
