@@ -199,7 +199,7 @@ export function normalizeInvoice(invoice = {}) {
     invoiceId: invoice.invoiceId || id,
     invoiceNumber,
     documentNumber: invoiceNumber,
-    transactionType: invoice.transactionType || "sale",
+    transactionType: invoice.transactionType || invoice.type || invoice.reportType || "sale",
     partyId,
     partyName,
     customer: partyName,

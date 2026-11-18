@@ -30,11 +30,19 @@ export function verifyBusinessData(data) {
   const issues = [];
   const incompleteChecks = [...unavailableChecks];
   const itemIds = new Set(items.map((item) => String(item.id)));
+  const itemNames = new Set(items.map((item) => String(item.name || item.itemName || "").trim().toLowerCase()).filter(Boolean));
 
   // Only explicit saved item IDs count as relationships; free-text item labels are allowed.
   for (const [resource, records] of [["sales-invoices", sales], ["purchase-bills", purchases]]) {
     for (const transaction of records) {
-      const reference = transaction.form?.invoiceNumber || transaction.invoiceNumber || transaction.id || "Unknown transaction";
+      const reference = transaction.form?.invoiceNumber || transaction.invoiceNumber || transaction.documentNumber || transaction.id || "Unknown transaction";
+      const rawType = String(transaction.transactionType || transaction.type || "").toLowerCase();
+
+      // Skip non-invoice records like payment receipts or vouchers that don't have merchandise lines
+      if (rawType.includes("payment") || rawType.includes("expense") || rawType.includes("challan")) {
+        continue;
+      }
+
       for (const row of transaction.rows || []) {
         const quantity = Number(row.qty ?? row.quantity);
         const price = Number(row.price);
@@ -59,7 +67,9 @@ export function verifyBusinessData(data) {
           });
         }
         const itemId = row.sourceItemId || row.itemId || row.inventoryItemId;
-        if (itemId && !itemIds.has(String(itemId))) {
+        const itemName = String(row.item || row.name || "").trim().toLowerCase();
+        const hasItem = (itemId && itemIds.has(String(itemId))) || (itemName && itemNames.has(itemName));
+        if (itemId && !hasItem) {
           issues.push({
             id: `${resource}:${transaction.id}:${row.id || row.index || row.item}`,
             severity: "error",
@@ -72,7 +82,7 @@ export function verifyBusinessData(data) {
       }
 
       // Reuse USV's invoice calculator so verification follows the same tax and rounding rules.
-      if (!Array.isArray(transaction.rows) || !transaction.totals || transaction.totals.finalTotal === undefined) {
+      if (!Array.isArray(transaction.rows) || transaction.rows.length === 0 || !transaction.totals || transaction.totals.finalTotal === undefined) {
         incompleteChecks.push(`${resource} transaction ${reference} has no saved rows or final total, so its total could not be recalculated.`);
         continue;
       }
