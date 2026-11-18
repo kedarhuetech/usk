@@ -197,10 +197,13 @@ export const itemsDb = {
    * Deletes an item from MySQL
    */
   async remove(id, options = {}) {
-    const query = options.deactivate ? "?deactivate=true" : "";
+    const params = new URLSearchParams();
+    if (options.deactivate) params.append("deactivate", "true");
+    if (options.force) params.append("force", "true");
+    const query = params.toString() ? `?${params.toString()}` : "";
     const res = await apiRequest(`/items/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
     const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
-    const updated = options.deactivate || res?.action === "deactivated"
+    const updated = (options.deactivate || res?.action === "deactivated") && !options.force
       ? current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: false } : i))
       : current.filter((i) => String(i.id) !== String(id));
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
@@ -734,6 +737,28 @@ export const cashBankDb = {
     return apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(loanId)}/repayments`, {
       method: "POST",
       body: JSON.stringify(repayment),
+    });
+  },
+};
+
+// ============================================================================
+// 8.1. EXPENSE CATEGORIES DATABASE API
+// ============================================================================
+
+export const expenseCategoriesDb = {
+  async getAll() {
+    const res = await apiRequest("/expense-categories");
+    return Array.isArray(res) ? res : (res?.data || []);
+  },
+  async save(category) {
+    return apiRequest("/expense-categories", {
+      method: "POST",
+      body: JSON.stringify(category),
+    });
+  },
+  async remove(idOrName) {
+    return apiRequest(`/expense-categories/${encodeURIComponent(idOrName)}`, {
+      method: "DELETE",
     });
   },
 };

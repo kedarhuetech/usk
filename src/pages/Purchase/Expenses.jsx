@@ -9,7 +9,8 @@ import {
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
-import { transactionsDb } from "../../services/databaseRepository.js";
+import { expenseCategoriesDb, transactionsDb } from "../../services/databaseRepository.js";
+import { isDatabaseMode } from "../../services/dataStorageConfig.js";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
 const CATEGORIES_KEY = "ledgerly:expenseCategories.v1";
@@ -190,8 +191,29 @@ export default function Expenses() {
         }
       } catch {}
     }
+    async function fetchCategories() {
+      try {
+        if (isDatabaseMode()) {
+          const catRes = await expenseCategoriesDb.getAll();
+          const list = Array.isArray(catRes) ? catRes : (catRes?.data || []);
+          if (isMounted && list.length > 0) {
+            const catNames = list.map((c) => c.categoryName || c.name).filter(Boolean);
+            if (catNames.length > 0) {
+              setCategories(catNames);
+              localStorage.setItem(CATEGORIES_KEY, JSON.stringify(catNames));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[Expenses] Failed to fetch categories from DB:", err);
+      }
+    }
     fetchExpenses();
-    const onDataChanged = () => fetchExpenses();
+    fetchCategories();
+    const onDataChanged = () => {
+      fetchExpenses();
+      fetchCategories();
+    };
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
       window.addEventListener("ledgerly:business-data-changed", onDataChanged);
       return () => {
@@ -243,6 +265,10 @@ export default function Expenses() {
         })),
       });
 
+      if (isDatabaseMode() && clean.category) {
+        expenseCategoriesDb.save({ categoryName: clean.category, expenseType: "indirect" }).catch(() => {});
+      }
+
       saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
       toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
       setSelected(clean.category);
@@ -268,12 +294,6 @@ export default function Expenses() {
     });
     setMenuId("");
   };
-  const duplicate = (entry) => {
-    const copy = { ...entry, id: crypto.randomUUID(), number: String(records.length + 1), history: [{ action: "Duplicated expense", at: new Date().toISOString() }] };
-    saveRecords([copy, ...records]);
-    toast.success("Expense duplicated.");
-    setMenuId("");
-  };
   const saveExpenseItem = () => {
     const draft = itemModal?.draft;
     if (!draft?.item.trim()) { toast.error("Enter an item name first."); return; }
@@ -285,14 +305,22 @@ export default function Expenses() {
     toast.success("Expense item saved.");
     setItemModal(null);
   };
-  const addCategory = () => {
+  const addCategory = async () => {
     const name = categoryName.trim();
     if (!name) return;
     if (categories.some(value => value.toLowerCase() === name.toLowerCase())) {
       toast.error("This category already exists.");
       return;
     }
-    saveCategories([...categories, name]);
+    const updated = [...categories, name];
+    saveCategories(updated);
+    if (isDatabaseMode()) {
+      try {
+        await expenseCategoriesDb.save({ categoryName: name, expenseType: "indirect" });
+      } catch (dbErr) {
+        console.warn("[Expenses] Failed to sync new category to MySQL:", dbErr);
+      }
+    }
     updateEntry("category", name);
     setSelected(name);
     setCategoryName("");

@@ -17,6 +17,11 @@ import {
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage.js";
 import {
+  loadBusinessParties,
+  loadSalesInvoices,
+  loadPurchaseBills,
+} from "../../services/businessRecords.js";
+import {
   readTransactionCollection,
   readTransactionValue,
   transactionStorageKeys,
@@ -50,6 +55,12 @@ export default function PartyStatementReport() {
 
   // Refresh trigger for business data changes
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  useEffect(() => {
+    loadBusinessParties().catch(() => {});
+    loadSalesInvoices().catch(() => {});
+    loadPurchaseBills().catch(() => {});
+  }, []);
+
   useEffect(() => {
     const handleUpdate = () => setRefreshTrigger((k) => k + 1);
     window.addEventListener("ledgerly:business-data-changed", handleUpdate);

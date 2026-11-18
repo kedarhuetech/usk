@@ -583,9 +583,9 @@ function PartyDetails() {
   const [importPartiesOpen, setImportPartiesOpen] = useState(false);
   const [importNotice, setImportNotice] = useState("");
 
-  const handleImportParties = (selectedContacts) => {
+  const handleImportParties = async (selectedContacts) => {
     if (!selectedContacts?.length) return;
-    const existing = getParties();
+    const existing = parties.length > 0 ? parties : getParties();
     let firstSavedId = null;
 
     for (const c of selectedContacts) {
@@ -599,21 +599,24 @@ function PartyDetails() {
         continue;
       }
 
-      const saved = savePartyLocally({
-        ...partyFormDefaults,
-        partyName: c.name,
-        phone: c.phone || "",
-        email: c.email || "",
-        billingAddress: c.address || "",
-        openingBalance: "0",
-        openingBalanceType: "to-receive",
-        gstType: "Unregistered/Consumer",
-      });
-      if (!firstSavedId) firstSavedId = saved.id;
+      try {
+        const saved = await saveParty({
+          ...partyFormDefaults,
+          partyName: c.name,
+          phone: c.phone || "",
+          email: c.email || "",
+          billingAddress: c.address || "",
+          openingBalance: "0",
+          openingBalanceType: "to-receive",
+          gstType: "Unregistered/Consumer",
+        });
+        if (!firstSavedId) firstSavedId = saved?.id;
+      } catch (e) {
+        console.warn("[Party Import] Error saving contact:", c.name, e);
+      }
     }
 
-    const updated = getParties();
-    setParties(updated);
+    await fetchAllFromDatabase();
     if (firstSavedId) setSelectedPartyId(firstSavedId);
     setImportNotice(`Successfully imported ${selectedContacts.length} ${selectedContacts.length === 1 ? "party" : "parties"}!`);
     setTimeout(() => setImportNotice(""), 3500);

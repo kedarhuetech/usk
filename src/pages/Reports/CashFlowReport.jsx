@@ -246,21 +246,6 @@ export default function CashFlowReport() {
       return;
     }
 
-    if (action === "Duplicate") {
-      if (row.storageKey) {
-        const currentList = readLocal(row.storageKey);
-        const copy = {
-          ...row.raw,
-          id: `${row.type.toLowerCase()}-copy-${Date.now()}`,
-          invoiceNumber: `${row.raw.invoiceNumber || row.raw.form?.invoiceNumber || "1"}-COPY`,
-          createdAt: new Date().toISOString(),
-          date: isoDate(),
-        };
-        writeLocal(row.storageKey, [copy, ...currentList]);
-      }
-      return;
-    }
-
     if (action === "View History") {
       setHistoryModal(row);
       return;
@@ -535,11 +520,20 @@ export default function CashFlowReport() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const text = `${row.type} #${row.refNo}: ${row.name} - ${fmt(row.amount)}`;
                           if (navigator.share) {
                             navigator.share({
                               title: `${row.type} - ${row.name}`,
-                              text: `${row.type} #${row.refNo}: ${row.name}`,
+                              text,
+                            }).catch(() => {
+                              if (navigator.clipboard) {
+                                navigator.clipboard.writeText(text);
+                                toast.success("Copied to clipboard!");
+                              }
                             });
+                          } else if (navigator.clipboard) {
+                            navigator.clipboard.writeText(text);
+                            toast.success("Copied to clipboard!");
                           }
                         }}
                         title="Share"

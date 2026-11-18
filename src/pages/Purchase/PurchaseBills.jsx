@@ -11,6 +11,7 @@ import { businessDataChangedEvent } from "../../services/businessDataChanged";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentOuts } from "../../services/transactionRepository.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (value) => {
@@ -87,27 +88,59 @@ export default function PurchaseBills() {
       },
     });
   };
-  const duplicate = async (bill) => {
-    const newId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `purchase-${Date.now()}`;
-    const copy = {
-      ...bill,
-      id: newId,
-      invoiceId: newId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      form: { ...bill.form, invoiceNumber: String(records.length + 1) },
-      invoiceNumber: String(records.length + 1),
-      documentNumber: String(records.length + 1),
-    };
-    refresh([savePurchaseBill(copy), ...records]);
-    try {
-      await transactionsDb.save(copy);
-      toast.success("Purchase bill duplicated.");
-    } catch {
-      toast.success("Purchase bill duplicated locally.");
-    }
+  const printSingleBill = (bill, printNow = false) => {
     setMenuId("");
+    const amount = billTotal(bill);
+    const received = billPaid(bill);
+    const balance = Math.max(0, amount - received);
+    const partyName = bill.form?.customer || bill.partyName || "Cash Purchase";
+    const billNum = bill.form?.invoiceNumber || bill.invoiceNumber || "—";
+    const billDate = dateText(bill.form?.invoiceDate || bill.date);
+
+    let rows = [];
+    if (Array.isArray(bill.items) && bill.items.length > 0) {
+      rows = bill.items.map((r, i) => ({
+        index: i + 1,
+        item: r.item || r.name || r.itemName || "Item",
+        description: r.description || "",
+        qty: Number(r.qty || r.quantity || 1),
+        unit: r.unit || "PCS",
+        price: Number(r.price || r.rate || r.unitPrice || 0),
+        tax: Number(r.taxRate || r.tax || 0),
+        amount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
+      }));
+    } else if (Array.isArray(bill.rows) && bill.rows.length > 0) {
+      rows = bill.rows.map((r, i) => ({
+        index: i + 1,
+        item: r.item || r.name || r.itemName || "Item",
+        description: r.description || "",
+        qty: Number(r.qty || r.quantity || 1),
+        unit: r.unit || "PCS",
+        price: Number(r.price || r.rate || r.unitPrice || 0),
+        tax: Number(r.taxRate || r.tax || 0),
+        amount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
+      }));
+    } else {
+      rows = [{ index: 1, item: `Purchase Bill #${billNum}`, qty: 1, price: amount, amount }];
+    }
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Purchase Bill",
+      documentNumber: billNum,
+      date: billDate,
+      partyName,
+      partyPhone: bill.form?.phone || bill.phone || "",
+      partyBillingAddress: bill.form?.billingAddress || bill.billingAddress || "",
+      partyGstin: bill.form?.gstin || bill.gstin || "",
+      status: billSettlement(bill).paymentStatus,
+      rows,
+      totals: { subtotal: amount, total: amount, received, balance },
+      notes: bill.form?.notes || bill.notes || "",
+      autoPrint: printNow,
+    });
+    openPrintWindow(html, `Purchase_Bill_${billNum}`);
   };
+
   const print = () => setPrintModalOpen(true);
   const exportCsv = () => {
     const rows = [["Date", "Invoice No.", "Party Name", "Payment Type", "Amount", "Balance Due", "Status"], ...visible.map((bill) => {
@@ -121,7 +154,7 @@ export default function PurchaseBills() {
   return <main className="flex h-full min-h-0 flex-col gap-1.5 bg-slate-100 p-1.5 text-slate-700">
     <header className="flex min-h-[68px] items-center justify-between bg-white px-5"><h1 className="text-2xl font-bold">Purchase Bills</h1><div className="flex gap-3"><Button onClick={addPurchase} className="rounded-full bg-rose-600 px-6 text-white"><FiPlus /> Add Purchase</Button></div></header>
     <Card className="shrink-0 p-5"><div className="flex flex-wrap items-center gap-4"><label className="flex items-center gap-2 text-xl font-semibold">{statusFilter}<FiChevronDown/><select aria-label="Invoice filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="absolute h-8 w-64 cursor-pointer opacity-0"><option>All Purchase Invoices</option><option>Paid</option><option>Unpaid</option></select></label><span className="flex items-center gap-2 rounded border px-3 py-2"><FiCalendar/><input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></span><select className="rounded border px-4 py-3"><option>sai kirana stores</option></select><select className="rounded border px-4 py-3"><option>Admin</option></select><button onClick={exportCsv} className="ml-auto flex flex-col items-center text-sm"><span className="text-2xl font-bold text-emerald-700">▦</span>Excel Report</button><button onClick={print} className="flex flex-col items-center text-sm"><FiPrinter className="text-2xl"/>Print</button></div><div className="mt-5 flex flex-wrap items-center gap-5"><div className="min-w-56 rounded-xl bg-teal-100 px-5 py-4 dark:bg-[#1d3354]"><p>Paid</p><strong className="text-2xl">{money(paid)}</strong></div><span className="text-2xl font-bold">+</span><div className="min-w-56 rounded-xl bg-blue-100 px-5 py-4 dark:bg-[#1d3354]"><p>Unpaid</p><strong className="text-2xl">{money(unpaid)}</strong></div><span className="text-2xl font-bold">=</span><div className="min-w-56 rounded-xl bg-orange-200 px-5 py-4 dark:bg-[#1d3354]"><p>Total</p><strong className="text-2xl">{money(total)}</strong></div></div></Card>
-    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><div className="flex shrink-0 items-center justify-between px-4 py-4"><h2 className="text-lg font-semibold">TRANSACTIONS</h2><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search purchases" className="h-10 w-80 rounded border pl-9 pr-3"/></label></div><div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[1100px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["DATE", "INVOICE NO.", "PARTY NAME", "PAYMENT TYPE", "AMOUNT", "BALANCE DUE", "STATUS", "ACTIONS"].map((heading) => <th key={heading} className="border-y px-3 py-4">{heading}{heading !== "ACTIONS" && <FiFilter className="ml-2 inline"/>}</th>)}</tr></thead><tbody>{visible.map((bill) => { const amount = billTotal(bill), received = billPaid(bill), status = billSettlement(bill).paymentStatus; return <tr key={bill.id} className="border-b odd:bg-sky-100 even:bg-white"><td className="px-3 py-4">{dateText(bill.form?.invoiceDate || bill.date)}</td><td className="px-3 py-4 text-right">{bill.form?.invoiceNumber || bill.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{bill.form?.customer || bill.partyName || "Cash Purchase"}</td><td className="px-3 py-4">{bill.form?.paymentType || "Cash"}</td><td className="px-3 py-4 text-right">{money(amount)}</td><td className="px-3 py-4 text-right">{money(Math.max(0, amount - received))}</td><td className={`px-3 py-4 ${status === "Paid" ? "text-emerald-600" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{status}</td><td className="relative px-3 py-3"><button aria-label="Purchase bill actions" onClick={() => setMenuId(menuId === bill.id ? "" : bill.id)} className="p-2"><FiMoreVertical/></button>{menuId === bill.id && <div className="absolute right-3 top-10 z-30 w-44 rounded-lg bg-white p-1 shadow-xl">{["View/Edit", "Delete", "Print"].map((action) => <button key={action} onClick={() => { if (action === "Delete") remove(bill); else if (action === "Print") print(); else { setMenuId(""); navigate("/purchase-expense/purchase-bills/new", { state: { from: "/purchase-expense/purchase-bills", editPurchase: bill } }); } }} className="block w-full rounded px-3 py-2.5 text-left hover:bg-blue-50">{action}</button>)}</div>}</td></tr>; })}</tbody></table>{!visible.length && <div className="flex h-full min-h-64 flex-col items-center justify-center text-slate-400"><div className="grid h-28 w-28 place-items-center rounded-full bg-blue-50 text-5xl text-blue-400">▤</div><h3 className="mt-5 text-lg font-semibold text-slate-700">No Transactions to show</h3><p className="mt-2">You haven't added any purchase bills yet.</p><Button onClick={addPurchase} className="mt-5 rounded-full bg-rose-600 px-6 text-white"><FiPlus/> Add Purchase</Button></div>}</div></Card>
+    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><div className="flex shrink-0 items-center justify-between px-4 py-4"><h2 className="text-lg font-semibold">TRANSACTIONS</h2><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search purchases" className="h-10 w-80 rounded border pl-9 pr-3"/></label></div><div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[1100px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["DATE", "INVOICE NO.", "PARTY NAME", "PAYMENT TYPE", "AMOUNT", "BALANCE DUE", "STATUS", "ACTIONS"].map((heading) => <th key={heading} className="border-y px-3 py-4">{heading}{heading !== "ACTIONS" && <FiFilter className="ml-2 inline"/>}</th>)}</tr></thead><tbody>{visible.map((bill) => { const amount = billTotal(bill), received = billPaid(bill), status = billSettlement(bill).paymentStatus; return <tr key={bill.id} className="border-b odd:bg-sky-100 even:bg-white"><td className="px-3 py-4">{dateText(bill.form?.invoiceDate || bill.date)}</td><td className="px-3 py-4 text-right">{bill.form?.invoiceNumber || bill.invoiceNumber || "—"}</td><td className="px-3 py-4 font-medium">{bill.form?.customer || bill.partyName || "Cash Purchase"}</td><td className="px-3 py-4">{bill.form?.paymentType || "Cash"}</td><td className="px-3 py-4 text-right">{money(amount)}</td><td className="px-3 py-4 text-right">{money(Math.max(0, amount - received))}</td><td className={`px-3 py-4 ${status === "Paid" ? "text-emerald-600" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{status}</td><td className="relative px-3 py-3"><button aria-label="Purchase bill actions" onClick={() => setMenuId(menuId === bill.id ? "" : bill.id)} className="p-2 text-slate-500 hover:text-slate-800"><FiMoreVertical/></button>{menuId === bill.id && <div className="absolute right-3 top-10 z-30 w-44 rounded-lg bg-white p-1 shadow-xl border border-slate-200">{["View/Edit", "Open PDF", "Print", "Delete"].map((action) => <button key={action} onClick={() => { if (action === "Delete") remove(bill); else if (action === "Print") printSingleBill(bill, true); else if (action === "Open PDF") printSingleBill(bill, false); else { setMenuId(""); navigate("/purchase-expense/purchase-bills/new", { state: { from: "/purchase-expense/purchase-bills", editPurchase: bill } }); } }} className={`block w-full rounded px-3 py-2.5 text-left text-sm hover:bg-blue-50 ${action === "Delete" ? "text-rose-600 hover:bg-rose-50" : "text-slate-700"}`}>{action}</button>)}</div>}</td></tr>; })}</tbody></table>{!visible.length && <div className="flex h-full min-h-64 flex-col items-center justify-center text-slate-400"><div className="grid h-28 w-28 place-items-center rounded-full bg-blue-50 text-5xl text-blue-400">▤</div><h3 className="mt-5 text-lg font-semibold text-slate-700">No Transactions to show</h3><p className="mt-2">You haven't added any purchase bills yet.</p><Button onClick={addPurchase} className="mt-5 rounded-full bg-rose-600 px-6 text-white"><FiPlus/> Add Purchase</Button></div>}</div></Card>
     <ConfirmModal
       isOpen={confirmModal.isOpen}
       title={confirmModal.title}
@@ -130,6 +163,30 @@ export default function PurchaseBills() {
       confirmColor={confirmModal.confirmColor}
       onConfirm={confirmModal.onConfirm}
       onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
+    <ReportPrintPreviewModal
+      isOpen={printModalOpen}
+      title="Purchase Bills Report"
+      subtitle={`Total: ${money(total)} · Paid: ${money(paid)} · Balance Due: ${money(unpaid)}`}
+      columns={[
+        { key: "date", label: "Date" },
+        { key: "invoice", label: "Invoice No." },
+        { key: "party", label: "Party Name" },
+        { key: "type", label: "Payment Type" },
+        { key: "amount", label: "Amount", align: "right" },
+        { key: "balance", label: "Balance Due", align: "right" },
+        { key: "status", label: "Status" },
+      ]}
+      rows={visible.map((bill) => ({
+        date: dateText(bill.form?.invoiceDate || bill.date),
+        invoice: bill.form?.invoiceNumber || bill.invoiceNumber || "—",
+        party: bill.form?.customer || bill.partyName || "Cash Purchase",
+        type: bill.form?.paymentType || "Cash",
+        amount: money(billTotal(bill)),
+        balance: money(Math.max(0, billTotal(bill) - billPaid(bill))),
+        status: billSettlement(bill).paymentStatus,
+      }))}
+      onClose={() => setPrintModalOpen(false)}
     />
   </main>;
 }

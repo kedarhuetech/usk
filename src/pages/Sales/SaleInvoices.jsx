@@ -472,23 +472,7 @@ function SaleInvoices() {
       });
       return;
     }
-    if (action === "Duplicate") {
-      const copyNum = `${invoice.form?.invoiceNumber || invoice.invoiceNumber || "1"}-COPY`;
-      const duplicate = {
-        ...invoice,
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `invoice-copy-${Date.now()}`,
-        invoiceNumber: copyNum,
-        documentNumber: copyNum,
-        form: { ...invoice.form, invoiceNumber: copyNum },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      saveBusinessSaleInvoice(duplicate).then((saved) => {
-        setInvoices((prev) => [saved || duplicate, ...prev]);
-        toast.success("Invoice duplicated successfully.");
-      }).catch((error) => toast.error(error.message || "Could not duplicate this invoice."));
-      return;
-    } else if (["Generate e-Invoice", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
+    if (["Generate e-Invoice", "Payment History", "View History"].includes(action)) setActiveDialog({ type: action, invoice });
   };
 
   // Handles invoice.

@@ -57,7 +57,7 @@ export function readItems() {
 }
 
 // Writes items to in-memory cache, scoped business key, and unscoped key to maintain consistency across all modules.
-export function writeItems(items) {
+export function writeItems(items, { skipEvent = false } = {}) {
   if (Array.isArray(items)) {
     memoryItems = items.map((item) => normalizeInventoryItem(item));
   }
@@ -65,9 +65,11 @@ export function writeItems(items) {
   const scopedKey = getItemsStorageKey();
   window.localStorage.setItem(scopedKey, JSON.stringify(items));
   window.localStorage.setItem(INVENTORY_ITEMS_KEY, JSON.stringify(items));
-  try {
-    window.dispatchEvent(new CustomEvent("inventory-items-changed", { detail: items }));
-  } catch {}
+  if (!skipEvent) {
+    try {
+      window.dispatchEvent(new CustomEvent("inventory-items-changed", { detail: items }));
+    } catch {}
+  }
 }
 
 // This helper handles number logic.

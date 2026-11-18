@@ -304,52 +304,7 @@ export default function TransactionActionMenu({
       return;
     }
 
-    // 3. Duplicate
-    if (action === "Duplicate") {
-      const now = new Date().toISOString();
-      const copyId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${source.toLowerCase().replace(/[^a-z0-9]/g, "-")}-copy-${Date.now()}`;
-      const copyNum = `${num}-COPY`;
-
-      const clone = {
-        ...raw,
-        id: copyId,
-        invoiceId: copyId,
-        documentNumber: copyNum,
-        number: copyNum,
-        refNo: copyNum,
-        returnNo: copyNum,
-        form: raw.form ? { ...raw.form, invoiceNumber: copyNum } : undefined,
-        invoiceNumber: copyNum,
-        transactionDate: now.slice(0, 10),
-        date: now.slice(0, 10),
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      if (source === "Sale") {
-        saveSaleInvoice(clone);
-      } else if (source === "Purchase") {
-        savePurchaseBill(clone);
-      }
-
-      transactionsDb.save(clone).then(() => {
-        recordAuditTrail({
-          action: "Transaction Duplicated",
-          entity: source,
-          details: `${source} #${num} duplicated as #${copyNum}`,
-          user: "Current User",
-        });
-        notifyBusinessDataChanged();
-        if (onRefresh) onRefresh();
-      }).catch((err) => {
-        console.warn("[TransactionActionMenu Duplicate Notice]", err?.message);
-        notifyBusinessDataChanged();
-        if (onRefresh) onRefresh();
-      });
-      return;
-    }
-
-    // 4. Open PDF & Preview
+    // 3. Open PDF & Preview
     if (action === "Open PDF" || action === "Preview") {
       if (source === "Sale") {
         navigate("/sales/sale-invoices/preview", {

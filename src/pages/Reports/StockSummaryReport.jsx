@@ -9,6 +9,11 @@ import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import {
+  loadBusinessItems,
+  loadSalesInvoices,
+  loadPurchaseBills,
+} from "../../services/businessRecords.js";
 
 /* ── helpers ── */
 function readLocal(...keys) {
@@ -61,6 +66,12 @@ export default function StockSummaryReport() {
   const [dateFilter, setDateFilter] = useState(isoToday());
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    loadBusinessItems().catch(() => {});
+    loadSalesInvoices().catch(() => {});
+    loadPurchaseBills().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handler = () => setRefreshTrigger((k) => k + 1);

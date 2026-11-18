@@ -186,24 +186,6 @@ export default function AllTransactionsReport() {
       return;
     }
 
-    if (action === "Duplicate") {
-      if (row.storageKey) {
-        const currentList = readLocal(row.storageKey);
-        const copy = {
-          ...row.raw,
-          id: `${row.type.toLowerCase()}-copy-${Date.now()}`,
-          invoiceNumber: `${row.raw.invoiceNumber || row.raw.form?.invoiceNumber || "1"}-COPY`,
-          createdAt: new Date().toISOString(),
-        };
-        try {
-          writeTransactionCollection(row.storageKey, [copy, ...currentList]);
-          window.dispatchEvent(new Event("ledgerly:business-data-changed"));
-          window.dispatchEvent(new Event("storage"));
-        } catch {}
-      }
-      return;
-    }
-
     if (action === "View History") {
       setHistoryModal(row);
       return;

@@ -1478,14 +1478,24 @@ function Reports({ defaultReport }) {
                               `font-medium ${statusClass(status)}`
                             )}
                             {cell(
-                              <button
-                                type="button"
-                                onClick={() => setPrintModalOpen(true)}
-                                className="text-slate-500 hover:text-sky-600"
-                                title="Print purchase bill"
-                              >
-                                Print
-                              </button>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => navigateToEditTransaction(row, navigate)}
+                                  className="text-slate-500 hover:text-sky-600 font-medium"
+                                  title="View or Edit purchase bill"
+                                >
+                                  View/Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPrintModalOpen(true)}
+                                  className="text-slate-500 hover:text-sky-600 font-medium"
+                                  title="Print purchase bill"
+                                >
+                                  Print
+                                </button>
+                              </div>
                             )}
                           </>
                         ) : (

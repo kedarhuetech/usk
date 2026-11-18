@@ -252,20 +252,6 @@ export default function EstimateQuotation() {
     setActionMenu("");
   };
 
-  const duplicateEstimate = (estimate) => {
-    const copy = { ...estimate, id: `estimate-${Date.now()}`, number: `${estimate.number}-COPY`, status: "Open", convertedAt: "", conversionType: "", convertedSaleId: "" };
-    saveEstimates([copy, ...estimates]);
-    transactionsDb.save({
-      ...copy,
-      transactionType: "estimate",
-      type: "estimate",
-      documentNumber: copy.number,
-      totalAmount: copy.total,
-    }).catch(() => {});
-    toast.success(`Quotation ${copy.number} duplicated.`);
-    setActionMenu("");
-  };
-
   const openEstimateDocument = (estimate, printNow = false) => {
     const info = getEffectiveCompanyInfo();
     const rows = (estimate.rows || []).map((row, index) => ({
@@ -311,7 +297,6 @@ export default function EstimateQuotation() {
     setActionMenu("");
     if (action === "View/Edit") openEdit(estimate);
     else if (action === "Delete") removeEstimate(estimate);
-    else if (action === "Duplicate") duplicateEstimate(estimate);
     else if (action === "Open PDF") openEstimateDocument(estimate);
     else if (action === "Preview") setPreviewEstimate(estimate);
     else if (action === "Print") openEstimateDocument(estimate, true);
