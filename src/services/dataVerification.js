@@ -117,7 +117,10 @@ export function verifyBusinessData(data) {
           path: recordPath(resource),
         });
       }
-      if (saved.balance !== undefined && !moneyMatches(saved.balance, recomputed.balance)) {
+      const expectedBalance = isTotalValid ? Math.max(0, Number(saved.finalTotal) - effectiveReceived) : recomputed.balance;
+      const isBalanceValid = moneyMatches(saved.balance, recomputed.balance) || (isTotalValid && moneyMatches(saved.balance, expectedBalance));
+
+      if (saved.balance !== undefined && !isBalanceValid) {
         issues.push({
           id: `${resource}:${transaction.id}:balance`,
           severity: "warning",
