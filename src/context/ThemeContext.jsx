@@ -7,14 +7,15 @@ const ThemeContext = createContext();
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
     try {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === "dark" || saved === "light") return saved;
+
       const migrated = localStorage.getItem(THEME_MIGRATION_KEY);
       if (!migrated) {
         localStorage.setItem(THEME_MIGRATION_KEY, "true");
         localStorage.setItem(THEME_KEY, "dark");
         return "dark";
       }
-      const saved = localStorage.getItem(THEME_KEY);
-      if (saved === "dark" || saved === "light") return saved;
     } catch {}
     return "dark";
   });
