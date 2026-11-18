@@ -46,7 +46,7 @@ export function validateLoan(loan = {}) {
   if (!validDate(loan.firstEmiDate)) return "Enter a valid first EMI date.";
   if (loan.emiOverride !== "" && loan.emiOverride !== null && loan.emiOverride !== undefined) {
     const override = Number(loan.emiOverride);
-    if (!Number.isFinite(override) || override <= 0) return "EMI override must be greater than zero, or left blank.";
+    if (!Number.isFinite(override) || override < 0) return "EMI override must be greater than zero, or left blank.";
   }
   if (loan.notes && String(loan.notes).length > 1000) return "Notes must be 1,000 characters or fewer.";
   return "";

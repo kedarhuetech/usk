@@ -20,7 +20,25 @@ function Dialog({ title, onClose, children, wide = false }) {
 
 function LoanForm({ initialLoan, onClose, onSaved }) {
   const editing = Boolean(initialLoan);
-  const [form, setForm] = useState(() => initialLoan ? { ...initialLoan, status: initialLoan.status || "Active" } : blankLoan());
+  const [form, setForm] = useState(() => {
+    const base = blankLoan();
+    if (!initialLoan) return base;
+    return {
+      ...base,
+      ...initialLoan,
+      loanName: initialLoan.loanName || initialLoan.accountName || initialLoan.account_name || "",
+      lenderName: initialLoan.lenderName || initialLoan.lender_name || "",
+      originalAmount: initialLoan.originalAmount ?? initialLoan.principalAmount ?? initialLoan.principal_amount ?? "",
+      annualInterestRate: initialLoan.annualInterestRate ?? initialLoan.interestRate ?? initialLoan.interest_rate ?? "",
+      startDate: initialLoan.startDate ? String(initialLoan.startDate).slice(0, 10) : base.startDate,
+      tenureMonths: String(initialLoan.tenureMonths ?? initialLoan.termMonths ?? initialLoan.term_months ?? "12"),
+      repaymentFrequency: initialLoan.repaymentFrequency || initialLoan.loanType || initialLoan.loan_type || "Monthly",
+      firstEmiDate: initialLoan.firstEmiDate ? String(initialLoan.firstEmiDate).slice(0, 10) : base.firstEmiDate,
+      status: initialLoan.status || "Active",
+      emiOverride: initialLoan.emiOverride ?? initialLoan.emiAmount ?? initialLoan.emi_amount ?? "",
+      notes: initialLoan.notes || "",
+    };
+  });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
@@ -30,7 +48,20 @@ function LoanForm({ initialLoan, onClose, onSaved }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    const payload = { ...form, loanName: form.loanName.trim(), lenderName: form.lenderName.trim(), originalAmount: Number(form.originalAmount), annualInterestRate: Number(form.annualInterestRate), tenureMonths: Number(form.tenureMonths), emiOverride: form.emiOverride === "" ? "" : Number(form.emiOverride), status: form.status || "Active", notes: form.notes.trim() };
+    const loanName = String(form.loanName || "").trim();
+    const lenderName = String(form.lenderName || "").trim();
+    const notes = String(form.notes || "").trim();
+    const payload = {
+      ...form,
+      loanName,
+      lenderName,
+      originalAmount: Number(form.originalAmount),
+      annualInterestRate: Number(form.annualInterestRate),
+      tenureMonths: Number(form.tenureMonths),
+      emiOverride: form.emiOverride === "" || form.emiOverride == null ? "" : Number(form.emiOverride),
+      status: form.status || "Active",
+      notes,
+    };
     const validation = validateLoan(payload);
     if (validation) { setError(validation); return; }
     setSaving(true); setError("");
@@ -44,16 +75,16 @@ function LoanForm({ initialLoan, onClose, onSaved }) {
 
   return <Dialog title={editing ? "Edit Loan Account" : "Add Loan Account"} onClose={onClose} wide><form onSubmit={submit} className="space-y-4 p-5">
     <div className="grid gap-4 sm:grid-cols-2">
-      <label className="block text-sm font-semibold text-slate-700">Loan name *<input required maxLength={120} value={form.loanName} disabled={saving} onChange={(event) => setField("loanName", event.target.value)} className={inputClass} /></label>
-      <label className="block text-sm font-semibold text-slate-700">Lender / bank name *<input required maxLength={160} value={form.lenderName} disabled={saving} onChange={(event) => setField("lenderName", event.target.value)} className={inputClass} /></label>
-      <label className="block text-sm font-semibold text-slate-700">Original loan amount (₹) *<input type="number" min="0.01" step="0.01" required value={form.originalAmount} disabled={saving || editing && Boolean(initialLoan.repayments?.length)} onChange={(event) => setField("originalAmount", event.target.value)} className={inputClass} /></label>
-      <label className="block text-sm font-semibold text-slate-700">Annual interest rate (%) *<input type="number" min="0" max="100" step="0.01" required value={form.annualInterestRate} disabled={saving} onChange={(event) => setField("annualInterestRate", event.target.value)} className={inputClass} /></label>
-      <label className="block text-sm font-semibold text-slate-700">Loan start date *<input type="date" required value={form.startDate} disabled={saving} onChange={(event) => setField("startDate", event.target.value)} className={inputClass} /></label>
-      <label className="block text-sm font-semibold text-slate-700">Tenure (months) *<input type="number" min="1" max="1200" step="1" required value={form.tenureMonths} disabled={saving} onChange={(event) => setField("tenureMonths", event.target.value)} className={inputClass} /></label>
-      <label className="block text-sm font-semibold text-slate-700">Repayment frequency<select value={form.repaymentFrequency} disabled={saving} onChange={(event) => setField("repaymentFrequency", event.target.value)} className={inputClass}><option>Monthly</option></select></label>
-      <label className="block text-sm font-semibold text-slate-700">First EMI date *<input type="date" required value={form.firstEmiDate} disabled={saving} onChange={(event) => setField("firstEmiDate", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Loan name *<input required maxLength={120} value={form.loanName || ""} disabled={saving} onChange={(event) => setField("loanName", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Lender / bank name *<input required maxLength={160} value={form.lenderName || ""} disabled={saving} onChange={(event) => setField("lenderName", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Original loan amount (₹) *<input type="number" min="0.01" step="0.01" required value={form.originalAmount ?? ""} disabled={saving || editing && Boolean(initialLoan.repayments?.length)} onChange={(event) => setField("originalAmount", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Annual interest rate (%) *<input type="number" min="0" max="100" step="0.01" required value={form.annualInterestRate ?? ""} disabled={saving} onChange={(event) => setField("annualInterestRate", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Loan start date *<input type="date" required value={form.startDate || ""} disabled={saving} onChange={(event) => setField("startDate", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Tenure (months) *<input type="number" min="1" max="1200" step="1" required value={form.tenureMonths ?? ""} disabled={saving} onChange={(event) => setField("tenureMonths", event.target.value)} className={inputClass} /></label>
+      <label className="block text-sm font-semibold text-slate-700">Repayment frequency<select value={form.repaymentFrequency || "Monthly"} disabled={saving} onChange={(event) => setField("repaymentFrequency", event.target.value)} className={inputClass}><option>Monthly</option></select></label>
+      <label className="block text-sm font-semibold text-slate-700">First EMI date *<input type="date" required value={form.firstEmiDate || ""} disabled={saving} onChange={(event) => setField("firstEmiDate", event.target.value)} className={inputClass} /></label>
       <label className="block text-sm font-semibold text-slate-700">Loan status<select value={form.status || "Active"} disabled={saving} onChange={(event) => setField("status", event.target.value)} className={inputClass}><option value="Active">Active</option><option value="Closed">Closed</option></select></label>
-      <label className="block text-sm font-semibold text-slate-700">EMI override (₹, optional)<input type="number" min="0.01" step="0.01" value={form.emiOverride} disabled={saving} onChange={(event) => setField("emiOverride", event.target.value)} className={inputClass} placeholder="Use calculated estimate" /></label>
+      <label className="block text-sm font-semibold text-slate-700">EMI override (₹, optional)<input type="number" min="0.01" step="0.01" value={form.emiOverride ?? ""} disabled={saving} onChange={(event) => setField("emiOverride", event.target.value)} className={inputClass} placeholder="Use calculated estimate" /></label>
       <div className="flex items-end rounded-md bg-blue-50 p-3 text-sm text-blue-900"><div><span className="text-xs font-semibold uppercase">{form.emiOverride ? "Agreed EMI" : "Estimated monthly EMI"}</span><strong className="ml-2 text-lg">{formatLoanAmount(agreedEmi)}</strong><p className="text-xs">EMI is an estimate; lender terms may differ.</p></div></div>
     </div>
     {editing && initialLoan.repayments?.length > 0 && <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-900">Original amount is locked because repayments have been recorded. You can still edit other loan details.</p>}
