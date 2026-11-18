@@ -520,11 +520,20 @@ export default function CashFlowReport() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
+                          const text = `${row.type} #${row.refNo}: ${row.name} - ${fmt(row.amount)}`;
                           if (navigator.share) {
                             navigator.share({
                               title: `${row.type} - ${row.name}`,
-                              text: `${row.type} #${row.refNo}: ${row.name}`,
+                              text,
+                            }).catch(() => {
+                              if (navigator.clipboard) {
+                                navigator.clipboard.writeText(text);
+                                toast.success("Copied to clipboard!");
+                              }
                             });
+                          } else if (navigator.clipboard) {
+                            navigator.clipboard.writeText(text);
+                            toast.success("Copied to clipboard!");
                           }
                         }}
                         title="Share"

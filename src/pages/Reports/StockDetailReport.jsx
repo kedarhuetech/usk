@@ -4,6 +4,11 @@ import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import {
+  loadBusinessItems,
+  loadSalesInvoices,
+  loadPurchaseBills,
+} from "../../services/businessRecords.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -51,6 +56,12 @@ export default function StockDetailReport() {
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedRow, setSelectedRow] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    loadBusinessItems().catch(() => {});
+    loadSalesInvoices().catch(() => {});
+    loadPurchaseBills().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handler = () => setRefreshTrigger((k) => k + 1);

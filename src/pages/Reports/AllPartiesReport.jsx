@@ -8,6 +8,11 @@ import {
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
 import { calculatePartyBalances } from "../../services/partyBalances";
+import {
+  loadBusinessParties,
+  loadSalesInvoices,
+  loadPurchaseBills,
+} from "../../services/businessRecords.js";
 import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
@@ -43,6 +48,12 @@ export default function AllPartiesReport() {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  useEffect(() => {
+    loadBusinessParties().catch(() => {});
+    loadSalesInvoices().catch(() => {});
+    loadPurchaseBills().catch(() => {});
+  }, []);
 
   // Listen to business data updates
   useEffect(() => {
