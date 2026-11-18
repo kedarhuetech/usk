@@ -77,13 +77,37 @@ export function verifyBusinessData(data) {
         continue;
       }
       const saved = transaction.totals;
+      const normalizedRows = (transaction.rows || []).map((r) => ({
+        ...r,
+        discountMode: r.discountMode || (r.discountAmount && !r.discountPercent ? "amount" : r.discountMode),
+        taxRate: r.taxRate || (r.tax_rate ? `${r.tax_rate}%` : r.tax ? `${r.tax}%` : r.taxRate),
+      }));
+
+      const effectiveReceived = saved.received !== undefined && saved.received !== null && Number(saved.received) > 0
+        ? Number(saved.received)
+        : Number(transaction.paidAmount ?? transaction.receivedAmount ?? (
+            String(transaction.paymentStatus || "").toLowerCase() === "paid" ||
+            String(transaction.paymentStatus || "").toLowerCase() === "completed" ||
+            String(transaction.paymentMode || "").toLowerCase() === "cash"
+              ? saved.finalTotal
+              : 0
+          ));
+
       const recomputed = calculateInvoiceTotals(
-        transaction.rows,
+        normalizedRows,
         true,
         String(saved.roundOffAmount ?? ""),
-        saved.received ?? 0,
+        effectiveReceived,
       );
-      if (!moneyMatches(saved.finalTotal, recomputed.finalTotal)) {
+
+      const linesSum = (transaction.rows || []).reduce(
+        (sum, r) => sum + Number(r.total_amount || r.total || r.amount || 0),
+        0
+      );
+      const isTotalValid = moneyMatches(saved.finalTotal, recomputed.finalTotal) ||
+                           (linesSum > 0 && moneyMatches(saved.finalTotal, linesSum));
+
+      if (!isTotalValid) {
         issues.push({
           id: `${resource}:${transaction.id}:total`,
           severity: "error",
