@@ -851,6 +851,51 @@ const saveTransactionHandler = async (req, res) => {
       }
     }
 
+    // Sync cash movement into cash_in_hand table
+    const normPayMode = String(paymentMode || "").toLowerCase();
+    if (normPayMode === "cash") {
+      let entryType = "in";
+      let cashAmt = parseFloat(paidAmount) || 0;
+      if (cashAmt <= 0) cashAmt = parseFloat(totalAmount) || 0;
+      if (["purchase", "expense", "payment_out", "payment-out", "sale_return", "credit note", "credit_note"].includes(transactionType.toLowerCase())) {
+        entryType = "out";
+      }
+      if (cashAmt > 0) {
+        await conn.query(
+          `INSERT INTO cash_in_hand (
+            id, business_id, entry_date, entry_type, amount,
+            party_id, party_name, reference_type, reference_no, description, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE
+            entry_date = VALUES(entry_date),
+            entry_type = VALUES(entry_type),
+            amount = VALUES(amount),
+            party_id = VALUES(party_id),
+            party_name = VALUES(party_name),
+            reference_type = VALUES(reference_type),
+            reference_no = VALUES(reference_no),
+            description = VALUES(description)`,
+          [
+            id,
+            businessId,
+            toSqlDate(transactionDate) || new Date().toISOString().slice(0, 10),
+            entryType,
+            cashAmt,
+            partyId || null,
+            partyName || "Cash",
+            transactionType,
+            documentNumber || "",
+            notes || `${transactionType.toUpperCase()} #${documentNumber || id.slice(0, 8)}`
+          ]
+        );
+      }
+    } else {
+      await conn.query(
+        `DELETE FROM cash_in_hand WHERE business_id = ? AND id = ? AND (reference_type IS NULL OR reference_type != 'adjustment')`,
+        [businessId, id]
+      );
+    }
+
     await conn.commit();
 
     return res.json({
@@ -943,6 +988,7 @@ router.delete("/:id", async (req, res) => {
       }
 
       await conn.query(`DELETE FROM transaction_items WHERE business_id = ? AND transaction_id = ?`, [businessId, txnId]);
+      await conn.query(`DELETE FROM cash_in_hand WHERE business_id = ? AND id = ? AND (reference_type IS NULL OR reference_type != 'adjustment')`, [businessId, txnId]);
       await conn.query(`DELETE FROM transactions WHERE business_id = ? AND id = ?`, [businessId, txnId]);
     }
 

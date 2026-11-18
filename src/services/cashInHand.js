@@ -98,6 +98,77 @@ export function calculateCashBalance(entries = []) {
 }
 
 export async function loadCashInHandData() {
+  if (isDatabaseMode()) {
+    try {
+      const resp = await cashBankDb.getCashInHand();
+      const rows = Array.isArray(resp) ? resp : (resp?.data || []);
+
+      const entries = rows.map((r) => {
+        const direction = (r.entryType || r.entry_type || "in").toLowerCase() === "in" ? "in" : "out";
+        const amt = Math.abs(Number(r.amount) || 0);
+        const date = r.entryDate
+          ? String(r.entryDate).slice(0, 10)
+          : r.entry_date
+          ? String(r.entry_date).slice(0, 10)
+          : "";
+        const refType = String(r.referenceType || r.reference_type || "").toLowerCase();
+
+        let typeName = "Cash Entry";
+        if (refType === "adjustment") {
+          typeName = direction === "in" ? "Cash Increase" : "Cash Decrease";
+        } else if (refType === "sale" || refType === "pos") {
+          typeName = "Cash Sale";
+        } else if (refType === "purchase") {
+          typeName = "Cash Paid to Supplier";
+        } else if (refType === "expense") {
+          typeName = "Cash Expense";
+        } else if (refType === "credit note" || refType === "credit_note" || refType === "sale_return") {
+          typeName = "Credit Note (Cash Refund)";
+        } else if (refType === "debit note" || refType === "debit_note" || refType === "purchase_return") {
+          typeName = "Debit Note (Cash Received)";
+        } else if (refType.includes("payment_in") || refType.includes("payment-in")) {
+          typeName = "Payment In (Cash)";
+        } else if (refType.includes("payment_out") || refType.includes("payment-out")) {
+          typeName = "Payment Out (Cash)";
+        }
+
+        const name =
+          r.partyName ||
+          r.party_name ||
+          (refType === "adjustment" ? (r.description || "Cash Adjustment") : "Cash Party");
+        const refNo = r.referenceNo || r.reference_no || "";
+        const desc = r.description || `${typeName} ${refNo ? `#${refNo}` : ""}`.trim();
+
+        return {
+          id: String(r.id),
+          sourceId: r.id,
+          sourceType: refType || "cash_in_hand",
+          type: typeName,
+          direction,
+          amount: amt,
+          signedAmount: direction === "in" ? amt : -amt,
+          date,
+          name,
+          description: desc,
+          reference: refNo,
+          paymentMethod: "Cash",
+          sourceRecord: r,
+        };
+      });
+
+      return {
+        entries: entries.sort(
+          (left, right) =>
+            right.date.localeCompare(left.date) || right.id.localeCompare(left.id)
+        ),
+        complete: true,
+        unavailableSources: [],
+      };
+    } catch (err) {
+      console.warn("[CashInHand] Failed to load from MySQL backend, falling back to local storage:", err.message);
+    }
+  }
+
   const sales = mergeById(getSaleInvoices(), "sale");
   const purchases = mergeById(getPurchaseBills(), "purchase");
   const adjustments = readCashAdjustments();
@@ -118,23 +189,45 @@ function readCashAdjustments() {
   }
 }
 
-export function saveCashAdjustment(adjustment) {
-  if (typeof window === "undefined" || !window.localStorage) throw new Error("Browser local storage is unavailable.");
-  const existing = readCashAdjustments();
-  const duplicate = existing.find((record) => record.id === adjustment.id);
-  if (duplicate) return duplicate;
-  const saved = { ...adjustment, createdAt: new Date().toISOString() };
-  window.localStorage.setItem(CASH_ADJUSTMENTS_STORAGE_KEY, JSON.stringify([saved, ...existing]));
+export async function saveCashAdjustment(adjustment) {
+  const delta = Number(adjustment.amount ?? adjustment.difference ?? 0);
+  const entryType = delta >= 0 ? "in" : "out";
+  const amount = Math.abs(delta);
+  const now = new Date();
+  const dateStr = adjustment.date || (adjustment.createdAt ? String(adjustment.createdAt).slice(0, 10) : now.toISOString().slice(0, 10));
+
+  const saved = {
+    ...adjustment,
+    amount: delta,
+    createdAt: now.toISOString(),
+  };
+
   if (isDatabaseMode()) {
-    cashBankDb.saveCashInHand({
-      id: saved.id,
-      entryDate: (saved.createdAt || new Date().toISOString()).slice(0, 10),
-      entryType: Number(saved.difference || 0) >= 0 ? "in" : "out",
-      amount: Math.abs(Number(saved.difference || 0)),
-      description: saved.reason || "Cash Adjustment",
-      referenceType: "adjustment",
-    }).catch((err) => console.warn("[MySQL] Cash adjustment background sync:", err.message));
+    try {
+      await cashBankDb.saveCashInHand({
+        id: saved.id,
+        entryDate: dateStr,
+        entryType,
+        amount,
+        partyName: "Physical Cash Count",
+        referenceType: "adjustment",
+        referenceNo: "ADJUSTMENT",
+        description: saved.reason || "Physical cash count adjustment",
+      });
+    } catch (err) {
+      console.error("[CashBank] Failed to persist adjustment to MySQL:", err);
+      throw err;
+    }
   }
+
+  if (typeof window !== "undefined" && window.localStorage) {
+    const existing = readCashAdjustments();
+    window.localStorage.setItem(
+      CASH_ADJUSTMENTS_STORAGE_KEY,
+      JSON.stringify([saved, ...existing.filter((r) => r.id !== saved.id)])
+    );
+  }
+
   return saved;
 }
 
