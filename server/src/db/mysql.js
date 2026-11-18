@@ -30,14 +30,30 @@ export const pool = mysql.createPool({
 export function businessIdFromRequest(req) {
   const imageRead = req.method === "GET" && /^\/assets\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
-  const id = String(
+  let requestedId = String(
     req.get("x-business-id") ||
     (imageRead ? req.query.businessId : "") ||
     (process.env.NODE_ENV !== "production" ? demoBusinessId : "") ||
     ""
   ).trim();
-  if (!id || id.length > 64) throw Object.assign(new Error("A valid X-Business-Id header is required."), { status: 400 });
-  return id;
+
+  // For GET asset image retrieval, map legacy or incorrect query param away to demo-business
+  if (imageRead && requestedId === "local-development") {
+    requestedId = demoBusinessId;
+  }
+
+  // Explicitly reject local-development to prevent cross-business data contamination
+  if (requestedId === "local-development") {
+    throw Object.assign(
+      new Error("Access denied: 'local-development' is not permitted for this environment. Active business is demo-business."),
+      { status: 400 }
+    );
+  }
+
+  if (!requestedId || requestedId.length > 64) {
+    throw Object.assign(new Error("A valid X-Business-Id header is required."), { status: 400 });
+  }
+  return requestedId;
 }
 
 /**

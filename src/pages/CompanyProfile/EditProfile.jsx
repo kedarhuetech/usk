@@ -13,6 +13,7 @@ import {
 import {
   companyProfileUpdatedEvent,
   getCompanyProfile,
+  loadAuthoritativeCompanyProfile,
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
 import { businessGrowthApi } from "../../services/apiClient";
@@ -99,6 +100,9 @@ const BUSINESS_CATEGORIES = [
 export default function EditProfile() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState(getCompanyProfile);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [clearedFields, setClearedFields] = useState(new Set());
   const [savedNotification, setSavedNotification] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -119,6 +123,25 @@ export default function EditProfile() {
     isDirtyRef.current = false;
     setIsDirty(false);
   };
+
+  const fetchAuthoritativeProfile = async () => {
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      const profile = await loadAuthoritativeCompanyProfile();
+      setFormData(profile);
+      resetDirty();
+    } catch (err) {
+      console.error("[EditProfile] Failed to load authoritative company profile from MySQL:", err);
+      setLoadError(err.message || "Failed to load company profile from MySQL. Check that the backend is connected.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAuthoritativeProfile();
+  }, []);
 
   useEffect(() => {
     const handleProfileChange = () => {
@@ -166,6 +189,12 @@ export default function EditProfile() {
 
     markDirty();
     setErrorMessage("");
+    setClearedFields((prev) => {
+      const next = new Set(prev);
+      next.delete("logo");
+      next.delete("logoUrl");
+      return next;
+    });
     setLogoFile(file);
     const reader = new FileReader();
     reader.onload = () => {
@@ -181,6 +210,7 @@ export default function EditProfile() {
     markDirty();
     setLogoFile(null);
     setErrorMessage("");
+    setClearedFields((prev) => new Set([...prev, "logo", "logoUrl"]));
     setFormData((prev) => ({ ...prev, logo: "", logoUrl: "" }));
   };
 
@@ -197,6 +227,12 @@ export default function EditProfile() {
 
     markDirty();
     setErrorMessage("");
+    setClearedFields((prev) => {
+      const next = new Set(prev);
+      next.delete("signature");
+      next.delete("signatureUrl");
+      return next;
+    });
     setSignatureFile(file);
     const reader = new FileReader();
     reader.onload = () => {
@@ -212,6 +248,7 @@ export default function EditProfile() {
     markDirty();
     setSignatureFile(null);
     setErrorMessage("");
+    setClearedFields((prev) => new Set([...prev, "signature", "signatureUrl"]));
     setFormData((prev) => ({ ...prev, signature: "", signatureUrl: "" }));
   };
 
@@ -235,7 +272,7 @@ export default function EditProfile() {
         } catch (uploadErr) {
           throw new Error(uploadErr?.message || "Failed to upload business logo.");
         }
-      } else if (!formData.logo) {
+      } else if (!formData.logo && clearedFields.has("logo")) {
         finalLogoUrl = "";
       }
 
@@ -249,7 +286,7 @@ export default function EditProfile() {
         } catch (uploadErr) {
           throw new Error(uploadErr?.message || "Failed to upload signature image.");
         }
-      } else if (!formData.signature) {
+      } else if (!formData.signature && clearedFields.has("signature")) {
         finalSignatureUrl = "";
       }
 
@@ -261,10 +298,15 @@ export default function EditProfile() {
         signatureUrl: finalSignatureUrl,
       };
 
-      const updated = await saveCompanyProfile(profileToSave);
+      const options = {
+        clearFields: Array.from(clearedFields),
+      };
+
+      const updated = await saveCompanyProfile(profileToSave, options);
       setFormData(updated);
       setLogoFile(null);
       setSignatureFile(null);
+      setClearedFields(new Set());
       resetDirty();
       setSavedNotification(true);
       setTimeout(() => {
@@ -281,6 +323,7 @@ export default function EditProfile() {
     setLogoFile(null);
     setSignatureFile(null);
     setErrorMessage("");
+    setClearedFields(new Set());
     resetDirty();
     setFormData(getCompanyProfile());
     navigate(-1);
@@ -289,9 +332,32 @@ export default function EditProfile() {
   return (
     <div className="h-full overflow-y-auto bg-[#f8fafc] p-3 lg:p-5">
       <div className="mx-auto max-w-7xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:p-7">
-        <h1 className="text-xl font-bold tracking-tight text-[#1e293b]">
-          Edit Profile
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold tracking-tight text-[#1e293b]">
+            Edit Profile
+          </h1>
+          {isLoading && (
+            <span className="text-xs font-semibold text-blue-600 animate-pulse">
+              Syncing from MySQL...
+            </span>
+          )}
+        </div>
+
+        {loadError && (
+          <div className="mt-4 mb-2 flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-700">
+            <div className="flex items-center gap-2">
+              <FiAlertCircle className="h-5 w-5 shrink-0 text-rose-500" />
+              <span>{loadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchAuthoritativeProfile}
+              className="ml-4 rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-95 transition"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Circular Logo Area */}
         <div className="relative mt-3 mb-6 inline-block">
