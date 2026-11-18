@@ -16,6 +16,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import AddItem from "./AddItem";
 import { deleteBusinessItem, loadBusinessItems, loadPurchaseBills, loadSalesInvoices, saveBusinessItem } from "../../services/businessRecords";
+import { itemsDb } from "../../services/databaseRepository";
 import { isDatabaseMode } from "../../services/dataStorageConfig";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
@@ -786,7 +787,7 @@ function ItemsDashboard() {
                 <span className={`whitespace-nowrap text-sm font-medium ${activeTab === "product" && quantity(item) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{activeTab === "product" ? `${quantity(item)}${item.unit ? ` ${item.unit}` : ""}` : item.unit || "-"}</span>
                 <button type="button" aria-label={`Actions for ${item.itemName}`} onClick={() => setRowMenu((current) => current === item.id ? "" : item.id)} className="grid h-8 w-6 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"><FiMoreVertical /></button>
                 {rowMenu === item.id && (
-                  <div className="absolute right-2 top-9 z-30 w-40 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
+                  <div className="absolute right-2 top-9 z-30 w-44 rounded-lg border border-slate-200 bg-white p-1 shadow-xl">
                     <button
                       type="button"
                       onClick={() => {
@@ -798,6 +799,49 @@ function ItemsDashboard() {
                     >
                       View / Edit
                     </button>
+                    {item.isActive === false ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setRowMenu("");
+                          try {
+                            if (isDatabaseMode()) {
+                              await itemsDb.reactivate(item.id);
+                            }
+                            saveInventoryItem({ ...item, isActive: true });
+                            await refresh();
+                            setNotice(`"${item.itemName}" marked as Active.`);
+                            toast.success(`"${item.itemName}" marked as Active.`);
+                          } catch (err) {
+                            toast.error(err.message || "Could not activate item.");
+                          }
+                        }}
+                        className="w-full rounded px-3 py-2 text-left text-sm font-medium text-emerald-600 hover:bg-emerald-50"
+                      >
+                        Make Active
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setRowMenu("");
+                          try {
+                            if (isDatabaseMode()) {
+                              await itemsDb.deactivate(item.id);
+                            }
+                            saveInventoryItem({ ...item, isActive: false });
+                            await refresh();
+                            setNotice(`"${item.itemName}" marked as Inactive.`);
+                            toast.success(`"${item.itemName}" marked as Inactive.`);
+                          } catch (err) {
+                            toast.error(err.message || "Could not inactivate item.");
+                          }
+                        }}
+                        className="w-full rounded px-3 py-2 text-left text-sm font-medium text-amber-600 hover:bg-amber-50"
+                      >
+                        Make Inactive
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -877,7 +921,44 @@ function ItemsDashboard() {
           <div className="flex min-w-0 flex-col gap-1">
             <Card className="shrink-0 p-4 shadow-sm sm:p-5">
               {selectedItem ? <>
-                <div className="flex flex-wrap items-start justify-between gap-4"><div className="flex min-w-0 items-center gap-2"><h1 className="truncate text-lg font-semibold uppercase text-slate-900">{selectedItem.itemName}</h1><button type="button" aria-label="Edit item" title="Edit item" onClick={() => setItemModal({ mode: "edit", initialItem: selectedItem })} className="rounded p-1 text-slate-600 hover:bg-slate-100"><FiArrowUpRight /></button></div>{activeTab === "product" && <Button onClick={() => setAdjustItem(selectedItem)} className="rounded-md bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"><FiSliders /> Adjust Item</Button>}</div>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h1 className="truncate text-lg font-semibold uppercase text-slate-900">{selectedItem.itemName}</h1>
+                    {selectedItem.isActive === false ? (
+                      <span className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600">Inactive</span>
+                    ) : (
+                      <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-600">Active</span>
+                    )}
+                    <button type="button" aria-label="Edit item" title="Edit item" onClick={() => setItemModal({ mode: "edit", initialItem: selectedItem })} className="rounded p-1 text-slate-600 hover:bg-slate-100"><FiArrowUpRight /></button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const nextActive = selectedItem.isActive === false;
+                          if (isDatabaseMode()) {
+                            if (nextActive) await itemsDb.reactivate(selectedItem.id);
+                            else await itemsDb.deactivate(selectedItem.id);
+                          }
+                          saveInventoryItem({ ...selectedItem, isActive: nextActive });
+                          await refresh();
+                          toast.success(`"${selectedItem.itemName}" is now ${nextActive ? "Active" : "Inactive"}.`);
+                        } catch (err) {
+                          toast.error(err.message || "Could not update item status.");
+                        }
+                      }}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold shadow-sm transition ${
+                        selectedItem.isActive === false
+                          ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                          : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {selectedItem.isActive === false ? "Make Active" : "Make Inactive"}
+                    </button>
+                    {activeTab === "product" && <Button onClick={() => setAdjustItem(selectedItem)} className="rounded-md bg-blue-600 px-4 text-white shadow-sm hover:bg-blue-700"><FiSliders /> Adjust Item</Button>}
+                  </div>
+                </div>
                 <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                   <div className="space-y-2">
                     {enableItemDescription && selectedItem.description && <p className="text-slate-700">DESCRIPTION: <span className="font-normal text-slate-600">{selectedItem.description}</span></p>}

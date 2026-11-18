@@ -297,6 +297,7 @@ function createEditableItemForm(initialItem, defaultUnit = "PCS") {
     ...itemDefaults,
     id: initialItem.id,
     createdAt: initialItem.createdAt,
+    isActive: initialItem.isActive !== false,
     type: initialItem.type || itemDefaults.type,
     itemName: initialItem.itemName || initialItem.serviceName || initialItem.name || "",
     hsn: initialItem.hsn || initialItem.sac || "",
@@ -870,6 +871,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
       ...form,
       id: initialItem?.id || form.id,
       createdAt: initialItem?.createdAt || form.createdAt,
+      isActive: form.isActive !== undefined ? form.isActive : (initialItem?.isActive !== false),
       category,
       subCategory,
       barcode,
@@ -924,6 +926,21 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
               </button>
               <span className={!isProduct ? "text-blue-600" : "text-slate-400"}>Service</span>
             </div>
+            {isEditMode && (
+              <button
+                type="button"
+                onClick={() => setField("isActive", form.isActive === false)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
+                  form.isActive !== false
+                    ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                }`}
+                title="Click to toggle Active / Inactive status"
+              >
+                <span className={`h-2 w-2 rounded-full ${form.isActive !== false ? "bg-emerald-500" : "bg-rose-500"}`} />
+                {form.isActive !== false ? "Active" : "Inactive"}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-5 text-slate-500">
             <FiSettings className="h-5 w-5" />
