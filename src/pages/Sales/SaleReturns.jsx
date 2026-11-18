@@ -10,6 +10,7 @@ import { getInventoryItems } from "../../services/itemsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { calculateSaleReturnRow, cancelSaleReturn, getSaleReturns, saveSaleReturn } from "../../services/saleReturnsStorage";
 import { savePurchaseJobWork } from "../../services/purchaseJobWorkStorage";
+import { transactionsDb } from "../../services/databaseRepository.js";
 import { getAllLocalTransactions, transactionTypes } from "../../services/transactionRecordsStorage";
 import { ensureLocalTestData } from "../../services/localTransactionTestData";
 import { taxPercent } from "../../utils/saleInvoice";
@@ -544,6 +545,32 @@ export default function SaleReturns() {
     const result = saveSaleReturn(value);
     setRecords((current) => value.id ? current.map((record) => record.id === result.id ? result : record) : [result, ...current]);
 
+    // Persist to MySQL database transactions table
+    transactionsDb.save({
+      id: result.id,
+      transactionType: "credit_note",
+      type: "credit_note",
+      documentNumber: String(result.number || result.returnNumber || "1"),
+      transactionDate: result.date || new Date().toISOString().slice(0, 10),
+      partyId: result.partyId || null,
+      partyName: result.party || result.customerName || "Cash Sale",
+      partyPhone: result.phone || result.customerPhone || null,
+      subtotal: Number(result.total || 0),
+      totalAmount: Number(result.total || 0),
+      paidAmount: Number(result.received || 0),
+      balanceAmount: Number(result.customerCreditAmount ?? result.balance ?? (result.total - (result.received || 0))),
+      paymentMode: result.paymentType || "Cash",
+      status: result.status || "Credit Available",
+      items: (result.rows || []).map((r) => ({
+        itemId: r.itemId || r.sourceItemId || null,
+        itemName: r.item || r.name || "Item",
+        quantity: Number(r.qty || 1),
+        unitPrice: Number(r.price || r.rate || 0),
+        totalAmount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
+      })),
+      notes: result.notes || `Credit Note for Invoice ${result.invoiceNumber || ""}`,
+    }).catch((e) => console.warn("[CreditNote MySQL Save Notice]", e.message));
+
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
       const currentSettings = getAppSettings();
@@ -584,6 +611,7 @@ export default function SaleReturns() {
           try {
             const next = cancelSaleReturn(record.id);
             setRecords((current) => current.map((entry) => entry.id === next.id ? next : entry));
+            transactionsDb.remove(record.id).catch(() => {});
             toast.success(`${record.type} ${record.number} cancelled`);
           } catch (error) {
             toast.error(`Could not cancel ${record.type}: ${error.message}`);

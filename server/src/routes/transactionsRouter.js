@@ -37,10 +37,10 @@ function getPartyBalanceImpact(type, balAmt, pdAmt) {
   if (normType === "payment_out") {
     return Number(pdAmt) || 0;
   }
-  if (normType === "sale_return") {
+  if (normType === "sale_return" || normType === "credit note" || normType === "credit_note") {
     return -(Number(balAmt) || 0);
   }
-  if (normType === "purchase_return") {
+  if (normType === "purchase_return" || normType === "debit note" || normType === "debit_note") {
     return Number(balAmt) || 0;
   }
   return 0;
@@ -708,9 +708,10 @@ const saveTransactionHandler = async (req, res) => {
         if (line.item_id) {
           const qty = (parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0);
           let revertStock = 0;
-          if (existingTxn.transaction_type === "sale" || existingTxn.transaction_type === "pos" || existingTxn.transaction_type === "delivery_challan" || existingTxn.transaction_type === "purchase_return") {
+          const oldType = String(existingTxn.transaction_type || "").toLowerCase();
+          if (oldType === "sale" || oldType === "pos" || oldType === "delivery_challan" || oldType === "purchase_return" || oldType === "debit note" || oldType === "debit_note") {
             revertStock = +qty;
-          } else if (existingTxn.transaction_type === "purchase" || existingTxn.transaction_type === "sale_return") {
+          } else if (oldType === "purchase" || oldType === "sale_return" || oldType === "credit note" || oldType === "credit_note") {
             revertStock = -qty;
           }
           if (revertStock !== 0) {
@@ -780,9 +781,10 @@ const saveTransactionHandler = async (req, res) => {
       // 3. Atomically adjust stock if linked to inventory item
       if (itemId) {
         let stockDelta = 0;
-        if (transactionType === "sale" || transactionType === "pos" || transactionType === "delivery_challan" || transactionType === "purchase_return") {
+        const normTxnType = String(transactionType || "").toLowerCase();
+        if (normTxnType === "sale" || normTxnType === "pos" || normTxnType === "delivery_challan" || normTxnType === "purchase_return" || normTxnType === "debit note" || normTxnType === "debit_note") {
           stockDelta = -(quantity + freeQty);
-        } else if (transactionType === "purchase" || transactionType === "sale_return") {
+        } else if (normTxnType === "purchase" || normTxnType === "sale_return" || normTxnType === "credit note" || normTxnType === "credit_note") {
           stockDelta = (quantity + freeQty);
         }
 
@@ -967,9 +969,10 @@ router.delete("/:id", async (req, res) => {
         if (line.item_id) {
           const qty = (parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0);
           let revertStock = 0;
-          if (existing.transaction_type === "sale" || existing.transaction_type === "pos" || existing.transaction_type === "delivery_challan" || existing.transaction_type === "purchase_return") {
+          const delType = String(existing.transaction_type || "").toLowerCase();
+          if (delType === "sale" || delType === "pos" || delType === "delivery_challan" || delType === "purchase_return" || delType === "debit note" || delType === "debit_note") {
             revertStock = +qty;
-          } else if (existing.transaction_type === "purchase" || existing.transaction_type === "sale_return") {
+          } else if (delType === "purchase" || delType === "sale_return" || delType === "credit note" || delType === "credit_note") {
             revertStock = -qty;
           }
           if (revertStock !== 0) {
