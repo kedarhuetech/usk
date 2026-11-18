@@ -1,12 +1,13 @@
 // Implements the sale preview page with multiple themes and color selection.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import html2canvas from "html2canvas";
 import {
+  FiCheck,
   FiDownload,
   FiMail,
   FiMessageCircle,
   FiPrinter,
-  FiShare2,
   FiX,
 } from "react-icons/fi";
 import Button from "../../components/Common/Button";
@@ -139,7 +140,8 @@ function normalizeInvoiceData(raw) {
   const invoiceDateFormatted = rawDate ? (rawDate.includes("-") ? rawDate.split("-").reverse().join("-") : rawDate) : "";
   const billingAddress = form.billingAddress || raw.billingAddress || raw.address || "";
   const shippingAddress = form.shippingAddress || raw.shippingAddress || billingAddress;
-  const phone = form.phone || raw.phone || raw.contactNumber || "";
+  const phone = form.phone || form.partyPhone || raw.phone || raw.contactNumber || raw.partyPhone || "";
+  const email = form.email || form.partyEmail || raw.email || raw.contactEmail || raw.partyEmail || raw.customerEmail || "";
   const stateOfSupply = form.stateOfSupply || raw.stateOfSupply || "None";
   const terms = form.terms || raw.terms || "";
   const termsTitle = form.termsTitle || raw.termsTitle || "Terms & Conditions";
@@ -193,6 +195,9 @@ function normalizeInvoiceData(raw) {
     billingAddress,
     shippingAddress,
     phone,
+    email,
+    totalAmount: Math.max(0, finalTotal),
+    balanceAmount: balance,
     stateOfSupply,
     terms,
     termsTitle,
@@ -1049,33 +1054,202 @@ function SalePreview() {
   }, [state?.printAfterOpen]);
 
   const normalized = useMemo(() => normalizeInvoiceData(rawInvoice), [rawInvoice]);
+  const invoiceRef = useRef(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [shareNotice, setShareNotice] = useState(null);
 
-  const handleShareWhatsApp = () => {
+  const captureInvoiceBlob = async () => {
+    if (!invoiceRef.current) return null;
+    try {
+      const canvas = await html2canvas(invoiceRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            resolve(null);
+            return;
+          }
+          resolve({
+            blob,
+            dataUrl: canvas.toDataURL("image/png"),
+          });
+        }, "image/png");
+      });
+    } catch (err) {
+      console.warn("Could not capture invoice element to canvas:", err.message);
+      return null;
+    }
+  };
+
+  const copyBlobToClipboard = async (blob) => {
+    if (!blob || typeof ClipboardItem === "undefined" || !navigator.clipboard?.write) {
+      return false;
+    }
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      return true;
+    } catch (err) {
+      console.warn("Could not write image blob to clipboard:", err.message);
+      return false;
+    }
+  };
+
+  const triggerDownload = (blob, filename) => {
+    if (!blob) return;
+    try {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.warn("Could not trigger image download:", err.message);
+    }
+  };
+
+  const uploadInvoiceImage = async (blob, invoiceNumber) => {
+    if (!blob) return "";
+    try {
+      const file = new File([blob], `Invoice-${invoiceNumber}.png`, { type: "image/png" });
+      const asset = await businessGrowthApi.upload(file, "sale-invoice-image", String(invoiceNumber));
+      if (asset?.url) {
+        return `${window.location.origin}${asset.url}?businessId=demo-business`;
+      }
+    } catch (err) {
+      console.warn("Could not upload invoice image asset:", err.message);
+    }
+    return "";
+  };
+
+  const handleShareWhatsApp = async () => {
     if (!normalized) return;
+    setIsGeneratingImage(true);
+    setShareNotice({ type: "info", text: "Rendering invoice image & preparing message..." });
+
+    const profile = getCompanyProfile();
+    const effectiveCompany = companyName || profile?.companyName || "USV Test Trade";
+    const amountVal = normalized.totalAmount ?? normalized.totals?.finalTotal ?? 0;
+    const balanceVal = normalized.balanceAmount ?? normalized.totals?.balance ?? 0;
+
+    let copied = false;
+    const imgResult = await captureInvoiceBlob();
+    if (imgResult?.blob) {
+      copied = await copyBlobToClipboard(imgResult.blob);
+      triggerDownload(imgResult.blob, `Invoice-${normalized.invoiceNumber}.png`);
+    }
+
     const message = buildTransactionMessage({
       type: "sales",
       number: normalized.invoiceNumber,
-      amount: normalized.totalAmount,
-      balance: normalized.balanceAmount,
+      amount: amountVal,
+      balance: balanceVal,
+      received: normalized.totals?.received ?? Math.max(0, amountVal - balanceVal),
+      subTotal: normalized.totals?.subtotal || normalized.totals?.finalTotal || amountVal,
+      tax: normalized.totals?.tax ?? 0,
+      discount: normalized.totals?.discount ?? 0,
+      customer: normalized.customer,
+      customerPhone: normalized.phone,
+      date: normalized.invoiceDateFormatted,
+      items: normalized.rows,
+      bankDetails: {
+        bankName: appSettings.printBankDetails !== false ? (profile.bankName || "HDFC Bank") : "",
+        accountNumber: appSettings.printBankDetails !== false ? (profile.accountNumber || "50200012345678") : "",
+        ifscCode: appSettings.printBankDetails !== false ? (profile.ifscCode || "HDFC0001234") : "",
+        upiId: profile.upiId || "",
+      },
+      companyName: effectiveCompany,
+      companyPhone: companyPhone,
       settings: appSettings,
     });
-    sendMetaWhatsAppMessage({
-      phone: normalized.phone,
-      message,
+
+    const targetPhone = String(normalized.phone || "").replace(/[^0-9]/g, "");
+    if (targetPhone) {
+      sendMetaWhatsAppMessage({
+        phone: targetPhone,
+        message,
+        openFallback: true,
+      });
+    } else {
+      const waUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(waUrl, "_blank");
+    }
+
+    setIsGeneratingImage(false);
+    setShareNotice({
+      type: "success",
+      text: copied
+        ? "✓ Invoice image copied to clipboard & downloaded! In WhatsApp, press Ctrl+V to send the image."
+        : "✓ Invoice image generated & downloaded! In WhatsApp, attach the downloaded image.",
     });
+    setTimeout(() => setShareNotice(null), 8000);
   };
 
-  const handleShareEmail = () => {
+  const handleShareEmail = async () => {
     if (!normalized) return;
-    const subject = encodeURIComponent(`Invoice ${normalized.invoiceNumber} from ${companyProfile?.companyName || "Sai Kirana Stores"}`);
-    const body = encodeURIComponent(`Dear Customer,\n\nPlease find your invoice ${normalized.invoiceNumber} for amount ₹${normalized.totalAmount}.\n\nThank you for your business!`);
-    window.open(`mailto:${normalized.email || ""}?subject=${subject}&body=${body}`, "_blank");
-  };
+    setIsGeneratingImage(true);
+    setShareNotice({ type: "info", text: "Rendering invoice image & preparing email..." });
 
-  const handleShareSms = () => {
-    if (!normalized) return;
-    const body = encodeURIComponent(`Invoice ${normalized.invoiceNumber} for ₹${normalized.totalAmount} has been generated. Thank you for your business!`);
-    window.open(`sms:${normalized.phone || ""}?body=${body}`, "_blank");
+    const profile = getCompanyProfile();
+    const effectiveCompany = companyName || profile?.companyName || "USV Test Trade";
+    const amountVal = normalized.totalAmount ?? normalized.totals?.finalTotal ?? 0;
+    const balanceVal = normalized.balanceAmount ?? normalized.totals?.balance ?? 0;
+
+    let copied = false;
+    const imgResult = await captureInvoiceBlob();
+    if (imgResult?.blob) {
+      copied = await copyBlobToClipboard(imgResult.blob);
+      triggerDownload(imgResult.blob, `Invoice-${normalized.invoiceNumber}.png`);
+    }
+
+    const emailBody = buildTransactionMessage({
+      type: "sales",
+      number: normalized.invoiceNumber,
+      amount: amountVal,
+      balance: balanceVal,
+      received: normalized.totals?.received ?? Math.max(0, amountVal - balanceVal),
+      subTotal: normalized.totals?.subtotal || normalized.totals?.finalTotal || amountVal,
+      tax: normalized.totals?.tax ?? 0,
+      discount: normalized.totals?.discount ?? 0,
+      customer: normalized.customer,
+      customerPhone: normalized.phone,
+      date: normalized.invoiceDateFormatted,
+      items: normalized.rows,
+      bankDetails: {
+        bankName: appSettings.printBankDetails !== false ? (profile.bankName || "HDFC Bank") : "",
+        accountNumber: appSettings.printBankDetails !== false ? (profile.accountNumber || "50200012345678") : "",
+        ifscCode: appSettings.printBankDetails !== false ? (profile.ifscCode || "HDFC0001234") : "",
+        upiId: profile.upiId || "",
+      },
+      companyName: effectiveCompany,
+      companyPhone: companyPhone,
+      settings: appSettings,
+    }) + "\n\n(The full invoice image is on your clipboard — press Ctrl+V to paste it directly into this email).";
+
+    const subject = encodeURIComponent(`Invoice ${normalized.invoiceNumber} from ${effectiveCompany}`);
+    const body = encodeURIComponent(emailBody);
+    const targetEmail = normalized.email || "";
+    const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&su=${subject}&body=${body}`;
+    const win = window.open(gmailUrl, "_blank");
+    if (!win) {
+      window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
+    }
+
+    setIsGeneratingImage(false);
+    setShareNotice({
+      type: "success",
+      text: copied
+        ? "✓ Invoice image copied to clipboard & downloaded! In Gmail, press Ctrl+V to paste the image directly."
+        : "✓ Invoice image generated & downloaded! In Gmail, attach the downloaded image.",
+    });
+    setTimeout(() => setShareNotice(null), 8000);
   };
 
   if (!normalized) {
@@ -1156,40 +1330,58 @@ function SalePreview() {
 
         {/* Invoice Preview */}
         <section className="min-w-0 print:block">
-          <ThemeComponent
-            companyName={appSettings.printCompanyName !== false ? (appSettings.companyNamePrint || companyName) : ""}
-            companyPhone={appSettings.printPhoneNumber !== false ? (appSettings.phoneNumberPrint || companyPhone) : ""}
-            companyGstin={appSettings.printGstinOnSale !== false ? companyGstin : ""}
-            companyAddress={appSettings.printAddress !== false ? (appSettings.addressPrint || companyAddress) : ""}
-            companyLogo={appSettings.printCompanyLogo !== false ? companyLogo : ""}
-            companySignature={companySignature}
-            data={normalized}
-            color={currentColor}
-            appSettings={appSettings}
-          />
+          <div ref={invoiceRef} className="bg-white rounded-lg shadow-sm">
+            <ThemeComponent
+              companyName={appSettings.printCompanyName !== false ? (appSettings.companyNamePrint || companyName) : ""}
+              companyPhone={appSettings.printPhoneNumber !== false ? (appSettings.phoneNumberPrint || companyPhone) : ""}
+              companyGstin={appSettings.printGstinOnSale !== false ? companyGstin : ""}
+              companyAddress={appSettings.printAddress !== false ? (appSettings.addressPrint || companyAddress) : ""}
+              companyLogo={appSettings.printCompanyLogo !== false ? companyLogo : ""}
+              companySignature={companySignature}
+              data={normalized}
+              color={currentColor}
+              appSettings={appSettings}
+            />
+          </div>
         </section>
 
         {/* Right Sidebar - Share & Actions */}
         <aside className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 lg:col-span-2 xl:col-span-1 print:hidden">
-          <div className="rounded-lg bg-blue-50 p-4 text-center">
-            <p className="font-bold text-slate-800">Accept Online Payments</p>
-            <Button onClick={() => navigate("/business-growth/online-store")} className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-[13px] text-white hover:bg-blue-700">Start Now</Button>
-          </div>
           <div>
             <h2 className="mb-3 font-bold text-slate-900">Share Invoice</h2>
-            <div className="grid grid-cols-3 gap-2 text-center text-[13px]">
+            <div className="grid grid-cols-2 gap-3 text-center text-[13px]">
               <button
                 type="button"
                 onClick={handleShareWhatsApp}
-                className="rounded-md p-2 hover:bg-slate-50 cursor-pointer"
-                title="Share Invoice via Meta WhatsApp"
+                disabled={isGeneratingImage}
+                className="rounded-md border border-slate-100 p-2.5 transition hover:bg-slate-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Share Invoice via WhatsApp"
               >
                 <FiMessageCircle className="mx-auto mb-2 h-5 w-5 text-green-500" />
-                WhatsApp
+                {isGeneratingImage ? "Preparing..." : "WhatsApp"}
               </button>
-              <button type="button" onClick={handleShareEmail} className="rounded-md p-2 hover:bg-slate-50 cursor-pointer" title="Share via Email"><FiMail className="mx-auto mb-2 h-5 w-5 text-red-500" />Gmail</button>
-              <button type="button" onClick={handleShareSms} className="rounded-md p-2 hover:bg-slate-50 cursor-pointer" title="Share via SMS"><FiShare2 className="mx-auto mb-2 h-5 w-5 text-blue-500" />Message</button>
+              <button
+                type="button"
+                onClick={handleShareEmail}
+                disabled={isGeneratingImage}
+                className="rounded-md border border-slate-100 p-2.5 transition hover:bg-slate-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Share via Gmail"
+              >
+                <FiMail className="mx-auto mb-2 h-5 w-5 text-red-500" />
+                {isGeneratingImage ? "Preparing..." : "Gmail"}
+              </button>
             </div>
+            {shareNotice && (
+              <div
+                className={`mt-3 rounded-lg border p-2.5 text-xs transition-all ${
+                  shareNotice.type === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-blue-200 bg-blue-50 text-blue-700 animate-pulse"
+                }`}
+              >
+                {shareNotice.text}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center text-[13px]">
             <button type="button" onClick={() => window.print()} className="rounded-md p-2 hover:bg-slate-50"><FiDownload className="mx-auto mb-2 h-5 w-5 text-blue-600" />Download PDF</button>

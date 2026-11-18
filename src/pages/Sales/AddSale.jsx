@@ -2597,11 +2597,22 @@ function AddSale({ mode = "sale", localOnly = false }) {
       const targetPhone = (form.phone || savedInvoice.phone || savedInvoice.form?.phone || "").trim();
       if (sendToParty && isAutoEnabled && targetPhone) {
         const txnType = isPurchase ? "purchase" : "sales";
+        const validRows = (savedInvoice.rows?.length ? savedInvoice.rows : rows).filter((r) => (r.item || r.name || "").trim());
+        const effectiveCompany = business.name || getCompanyProfile()?.companyName || "USV Test Trade";
         const msg = buildTransactionMessage({
           type: txnType,
           number: form.invoiceNumber || savedInvoice.invoiceNumber || savedInvoice.id,
           amount: totals.finalTotal || totals.grandTotal || 0,
           balance: totals.balance ?? Math.max(0, (totals.finalTotal || totals.grandTotal || 0) - (totals.received || 0)),
+          received: totals.received || 0,
+          subTotal: totals.subtotal || totals.taxableAmount || totals.finalTotal,
+          tax: totals.tax || 0,
+          discount: totals.discount || 0,
+          customer: form.customer || form.partyName || savedInvoice.customer || savedInvoice.form?.customer,
+          customerPhone: targetPhone,
+          date: form.invoiceDate || form.date || savedInvoice.invoiceDate,
+          items: validRows,
+          companyName: effectiveCompany,
           settings: currentSettings,
         });
         sendMetaWhatsAppMessage({ phone: targetPhone, message: msg }).catch(() => {});
