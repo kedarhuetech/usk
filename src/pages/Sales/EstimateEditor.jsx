@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FiCamera, FiChevronDown, FiFileText, FiGrid, FiList, FiPlus, FiSave, FiSettings, FiX } from "react-icons/fi";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
