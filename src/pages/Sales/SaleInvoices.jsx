@@ -489,32 +489,86 @@ function SaleInvoices() {
   if (graphOpen) return <SalesGraphView invoices={graphInvoices} from={graphFrom} to={graphTo} setFrom={setGraphFrom} setTo={setGraphTo} period={graphPeriod} setPeriod={setGraphPeriod} user={graphUser} setUser={setGraphUser} users={users} onClose={() => setGraphOpen(false)} />;
 
   return (
-    <div className="min-h-full bg-slate-200 p-1">
-      <div className="mb-1 flex flex-col gap-4 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="inline-flex items-center gap-3 text-xl font-bold text-slate-800">Sale Invoices <FiChevronDown className="h-5 w-5 text-slate-500" /></h1>
-        <div className="flex items-center gap-3"><Button onClick={openAddSale} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus className="h-5 w-5" /> Add Sale</Button></div>
+    <div className="w-full max-w-full min-h-full bg-slate-200 p-1 flex flex-col">
+      <div className="mb-1 flex flex-wrap gap-3 bg-white px-4 sm:px-5 py-3 sm:py-4 items-center justify-between">
+        <h1 className="inline-flex items-center gap-2 sm:gap-3 text-lg sm:text-xl font-bold text-slate-800">Sale Invoices <FiChevronDown className="h-5 w-5 text-slate-500" /></h1>
+        <div className="flex items-center gap-3 shrink-0"><Button onClick={openAddSale} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700 whitespace-nowrap"><FiPlus className="h-5 w-5" /> Add Sale</Button></div>
       </div>
 
-      <Card className="mb-1 p-4 shadow-sm"><div className="flex flex-wrap items-center gap-3"><span className="text-sm font-bold text-slate-800">Filter by:</span>
-        <label className="flex min-h-10 items-center gap-2 rounded-full bg-blue-50 px-4 text-sm text-slate-700"><select aria-label="Date range preset" value={period} onChange={(event) => setPeriodRange(event.target.value)} className="cursor-pointer bg-transparent font-medium outline-none"><option>This Month</option><option>This Quarter</option><option>This Year</option><option>All Time</option><option>Custom</option></select></label>
-        <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-full bg-blue-50 px-4 text-sm text-slate-700"><FiCalendar className="h-4 w-4 text-slate-500" /><input aria-label="Start date" type="date" value={dateFrom} onChange={(event) => { setPeriod("Custom"); setDateFrom(event.target.value); }} className="w-[126px] bg-transparent outline-none" /><span>To</span><input aria-label="End date" type="date" value={dateTo} onChange={(event) => { setPeriod("Custom"); setDateTo(event.target.value); }} className="w-[126px] bg-transparent outline-none" /></div>
-        <label className="flex min-h-10 items-center gap-2 rounded-full bg-blue-50 px-4 text-sm text-slate-700"><select aria-label="Store filter" value={store} onChange={(event) => setStore(event.target.value)} className="max-w-48 cursor-pointer bg-transparent font-medium outline-none">{stores.map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label className="flex min-h-10 items-center gap-2 rounded-full bg-blue-50 px-4 text-sm text-slate-700"><select aria-label="User filter" value={user} onChange={(event) => setUser(event.target.value)} className="max-w-40 cursor-pointer bg-transparent font-medium outline-none">{users.map((value) => <option key={value}>{value}</option>)}</select></label>
-      </div></Card>
+      <Card className="mb-1 p-3 sm:p-4 shadow-sm w-full min-w-0 max-w-full">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          <span className="text-sm font-bold text-slate-800">Filter by:</span>
+          <label className="flex min-h-10 items-center gap-2 rounded-full bg-blue-50 px-3.5 text-sm text-slate-700"><select aria-label="Date range preset" value={period} onChange={(event) => setPeriodRange(event.target.value)} className="cursor-pointer bg-transparent font-medium outline-none"><option>This Month</option><option>This Quarter</option><option>This Year</option><option>All Time</option><option>Custom</option></select></label>
+          <div className="flex min-h-10 flex-wrap items-center gap-2 rounded-full bg-blue-50 px-3.5 text-sm text-slate-700"><FiCalendar className="h-4 w-4 text-slate-500" /><input aria-label="Start date" type="date" value={dateFrom} onChange={(event) => { setPeriod("Custom"); setDateFrom(event.target.value); }} className="w-[126px] bg-transparent outline-none" /><span>To</span><input aria-label="End date" type="date" value={dateTo} onChange={(event) => { setPeriod("Custom"); setDateTo(event.target.value); }} className="w-[126px] bg-transparent outline-none" /></div>
+          <label className="flex min-h-10 items-center gap-2 rounded-full bg-blue-50 px-3.5 text-sm text-slate-700"><select aria-label="Store filter" value={store} onChange={(event) => setStore(event.target.value)} className="max-w-48 cursor-pointer bg-transparent font-medium outline-none">{stores.map((value) => <option key={value}>{value}</option>)}</select></label>
+          <label className="flex min-h-10 items-center gap-2 rounded-full bg-blue-50 px-3.5 text-sm text-slate-700"><select aria-label="User filter" value={user} onChange={(event) => setUser(event.target.value)} className="max-w-40 cursor-pointer bg-transparent font-medium outline-none">{users.map((value) => <option key={value}>{value}</option>)}</select></label>
+        </div>
+      </Card>
 
-      <Card className="mb-1 min-h-44 p-5 shadow-sm"><div className="w-full max-w-md rounded-lg border border-violet-200 bg-violet-50/50 p-4"><div className="flex items-start justify-between gap-4"><div><p className="text-base text-slate-500">Total Sales Amount</p><p className="text-2xl font-bold text-slate-800">{formatMoney(totals.amount)}</p></div><span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-600">{visibleInvoices.length} invoices <FiTrendingUp /></span></div><div className="mt-5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500"><span>Received: <b className="text-slate-800">{formatMoney(totals.received)}</b></span><span className="text-slate-300">|</span><span>Balance: <b className="text-slate-800">{formatMoney(totals.balance)}</b></span></div></div></Card>
+      <Card className="mb-1 min-h-44 p-4 sm:p-5 shadow-sm w-full min-w-0 max-w-full">
+        <div className="w-full max-w-md rounded-lg border border-violet-200 bg-violet-50/50 p-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-base text-slate-500">Total Sales Amount</p>
+              <p className="text-2xl font-bold text-slate-800">{formatMoney(totals.amount)}</p>
+            </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-600">{visibleInvoices.length} invoices <FiTrendingUp /></span>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-x-3 gap-y-1 text-sm text-slate-500">
+            <span>Received: <b className="text-slate-800">{formatMoney(totals.received)}</b></span>
+            <span className="text-slate-300">|</span>
+            <span>Balance: <b className="text-slate-800">{formatMoney(totals.balance)}</b></span>
+          </div>
+        </div>
+      </Card>
 
-      <Card className="flex min-h-[calc(100vh-25rem)] flex-col shadow-sm"><div className="flex min-h-[68px] flex-wrap items-center justify-between gap-3 px-4 py-3"><h2 className="text-lg font-semibold text-slate-700">Transactions</h2><div className="flex items-center gap-3 text-slate-500">
-        {searchOpen && <label className="relative"><FiSearch className="absolute left-3 top-2.5 h-4 w-4" /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search invoices" className="h-9 w-48 rounded-md border border-slate-300 pl-9 pr-8 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="Close search" className="absolute right-2 top-2"><FiX /></button></label>}
-        <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search" title="Search" className="rounded p-1.5 hover:bg-slate-100"><FiSearch className="h-5 w-5" /></button><button type="button" onClick={() => setGraphOpen(true)} aria-label="Open sales graph" title="Sales Graph" className="rounded p-1.5 hover:bg-slate-100"><FiBarChart2 className="h-5 w-5" /></button><button type="button" onClick={() => downloadCsv(visibleInvoices)} aria-label="Download Excel CSV" title="Download Excel CSV" className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"><FiDownload className="h-5 w-5" /></button><button type="button" onClick={() => setPrintModalOpen(true)} aria-label="Print sale invoices" title="Print" className="rounded p-1.5 hover:bg-slate-100"><FiPrinter className="h-5 w-5" /></button>
-      </div></div>
-        {visibleInvoices.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[1050px] border-collapse text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["Date", "Invoice no", "Party Name", "Transaction", "Payment Type", "Amount", "Balance", "Status", "Actions"].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-3">{heading}{heading !== "Actions" && <FiFilter className="ml-2 inline h-3.5 w-3.5 text-slate-500" />}</th>)}</tr></thead><tbody>{visibleInvoices.map((invoice, index) => {
-          const amount = invoiceAmount(invoice); const balance = invoiceBalance(invoice); const cancelled = Boolean(invoice.cancelled || invoice.status === "Cancelled");
-          const paymentType = invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit");
-          const status = invoiceStatus(invoice);
-          const invoiceNum = invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.documentNumber || "—";
-          return <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50"><td className="whitespace-nowrap px-3 py-4">{formatDate(invoiceDate(invoice))}</td><td className="px-3 py-4">{invoiceNum}</td><td className="px-3 py-4 font-medium">{invoicePartyName(invoice)}</td><td className="px-3 py-4">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td><td className="px-3 py-4">{paymentType}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(amount)}</td><td className="whitespace-nowrap px-3 py-4 text-right">{cancelled ? "—" : formatMoney(balance)}</td><td className={`px-3 py-4 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td><td className="px-3 py-3"><div className="flex items-center gap-2"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-5 w-5" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-5 w-5" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td></tr>;
-        })}</tbody></table></div> : <EmptyState onAddSale={openAddSale} />}
+      <Card className="flex min-h-[calc(100vh-25rem)] flex-1 flex-col shadow-sm w-full min-w-0 max-w-full overflow-hidden">
+        <div className="flex min-h-[56px] flex-wrap items-center justify-between gap-3 px-4 py-3 shrink-0">
+          <h2 className="text-lg font-semibold text-slate-700">Transactions</h2>
+          <div className="flex items-center gap-2 sm:gap-3 text-slate-500 shrink-0">
+            {searchOpen && <label className="relative"><FiSearch className="absolute left-3 top-2.5 h-4 w-4" /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search invoices" className="h-9 w-40 sm:w-48 rounded-md border border-slate-300 pl-9 pr-8 text-sm outline-none focus:border-blue-500" /><button type="button" onClick={() => { setSearch(""); setSearchOpen(false); }} aria-label="Close search" className="absolute right-2 top-2"><FiX /></button></label>}
+            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search" title="Search" className="rounded p-1.5 hover:bg-slate-100"><FiSearch className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setGraphOpen(true)} aria-label="Open sales graph" title="Sales Graph" className="rounded p-1.5 hover:bg-slate-100"><FiBarChart2 className="h-5 w-5" /></button>
+            <button type="button" onClick={() => downloadCsv(visibleInvoices)} aria-label="Download Excel CSV" title="Download Excel CSV" className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"><FiDownload className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setPrintModalOpen(true)} aria-label="Print sale invoices" title="Print" className="rounded p-1.5 hover:bg-slate-100"><FiPrinter className="h-5 w-5" /></button>
+          </div>
+        </div>
+        {visibleInvoices.length ? (
+          <div className="min-h-0 flex-1 w-full max-w-full overflow-x-auto overflow-y-auto">
+            <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold text-slate-500">
+                <tr>
+                  {["Date", "Invoice no", "Party Name", "Transaction", "Payment Type", "Amount", "Balance", "Status", "Actions"].map((heading) => (
+                    <th key={heading} className="border-y border-slate-200 px-2.5 py-3 whitespace-nowrap">{heading}{heading !== "Actions" && <FiFilter className="ml-1.5 inline h-3.5 w-3.5 text-slate-500" />}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleInvoices.map((invoice, index) => {
+                  const amount = invoiceAmount(invoice); const balance = invoiceBalance(invoice); const cancelled = Boolean(invoice.cancelled || invoice.status === "Cancelled");
+                  const paymentType = invoice.form?.paymentType || (invoice.saleType === "cash" ? "Cash" : "Credit");
+                  const status = invoiceStatus(invoice);
+                  const invoiceNum = invoice.form?.invoiceNumber || invoice.invoiceNumber || invoice.documentNumber || "—";
+                  return (
+                    <tr key={invoice.id || index} className="border-b border-slate-100 odd:bg-white even:bg-slate-50/70 hover:bg-sky-50">
+                      <td className="whitespace-nowrap px-2.5 py-3.5">{formatDate(invoiceDate(invoice))}</td>
+                      <td className="px-2.5 py-3.5 font-medium">{invoiceNum}</td>
+                      <td className="px-2.5 py-3.5 font-medium">{invoicePartyName(invoice)}</td>
+                      <td className="px-2.5 py-3.5">{invoice.isReturn ? "Sale Return" : cancelled ? "Sale [Cancelled]" : "Sale"}</td>
+                      <td className="px-2.5 py-3.5">{paymentType}</td>
+                      <td className="whitespace-nowrap px-2.5 py-3.5 text-right">{cancelled ? "—" : formatMoney(amount)}</td>
+                      <td className="whitespace-nowrap px-2.5 py-3.5 text-right">{cancelled ? "—" : formatMoney(balance)}</td>
+                      <td className={`px-2.5 py-3.5 font-medium ${status === "Paid" ? "text-emerald-500" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{invoice.isReturn ? "Returned" : status}</td>
+                      <td className="px-2.5 py-3"><div className="flex items-center gap-1.5"><button type="button" onClick={() => openPreview(invoice, true)} aria-label="Print invoice" title="Print" className="rounded p-1 text-slate-500 hover:bg-slate-200"><FiPrinter className="h-4 w-4" /></button><button type="button" onClick={() => shareInvoice(invoice)} aria-label="Share invoice" title="Share" className="rounded p-1 text-slate-500 hover:bg-slate-200"><FiShare2 className="h-4 w-4" /></button><InvoiceActionsMenu invoice={invoice} open={rowMenu === invoice.id} onToggle={() => setRowMenu(rowMenu === invoice.id ? "" : invoice.id)} onAction={openInvoiceAction} /></div></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState onAddSale={openAddSale} />
+        )}
       </Card>
       {activeDialog && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setActiveDialog(null); }}><section className="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b border-slate-200 px-5 py-4"><div><h2 className="text-lg font-bold text-slate-800">{activeDialog.type === "edit" ? "View / Edit Invoice" : activeDialog.type}</h2><p className="mt-1 text-sm text-slate-500">Invoice {activeDialog.invoice.form?.invoiceNumber || activeDialog.invoice.invoiceNumber || "—"} · {invoicePartyName(activeDialog.invoice)}</p></div><button type="button" aria-label="Close" onClick={() => setActiveDialog(null)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><FiX /></button></header>
         {activeDialog.type === "Generate e-Invoice" && <div className="space-y-4 p-5"><p className="text-sm text-slate-600">Create a demo e-invoice record for {formatMoney(invoiceAmount(activeDialog.invoice))}. This does not submit to a government portal.</p>{activeDialog.generated && <p role="status" className="rounded bg-emerald-50 p-3 text-sm text-emerald-700">Demo e-invoice generated: {activeDialog.reference}</p>}<div className="flex justify-end gap-2"><Button onClick={() => setActiveDialog(null)} className="bg-slate-100 text-slate-700">Close</Button>{!activeDialog.generated && <Button onClick={() => { const reference = `DEMO-${Date.now()}`; saveInvoiceUi((current) => ({ ...current, eInvoices: { ...(current.eInvoices || {}), [activeDialog.invoice.id]: reference }, history: recordInvoiceHistory(current, activeDialog.invoice, "Demo e-Invoice generated") })); setActiveDialog((current) => ({ ...current, generated: true, reference })); }} className="bg-blue-600 text-white">Generate Demo e-Invoice</Button>}</div></div>}

@@ -830,9 +830,9 @@ function PartyDetails() {
   };
 
   return (
-    <div className="flex h-full min-h-[calc(100vh-7.5rem)] flex-col bg-slate-200">
-      <div className="flex h-16 sm:h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
-        <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold text-slate-700">Parties</h1>
+    <div className="flex h-full flex-col bg-slate-200 overflow-hidden">
+      <div className="flex h-14 sm:h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-700">Parties</h1>
         <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700 text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
       </div>
       {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
@@ -862,7 +862,7 @@ function PartyDetails() {
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(300px,29%)_1fr]">
+      <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(260px,28%)_1fr]">
         <section className={`flex flex-col overflow-hidden rounded-md bg-white ${
           mobileView === "details" ? "hidden md:flex" : "flex"
         } min-h-[360px] md:min-h-0`}>
@@ -1238,7 +1238,7 @@ function PartyDetails() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full min-w-[690px] text-left text-sm">
+            <table className="w-full min-w-[580px] text-left text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
                   {["Type", "Number", "Date", "Total", "Balance/ Unused", "Status", ""].map((label) => (
