@@ -762,6 +762,29 @@ export const expenseCategoriesDb = {
   },
 };
 
+export const expenseItemsDb = {
+  async getAll() {
+    try {
+      const res = await apiRequest("/expense-items");
+      return Array.isArray(res) ? res : (res?.data || []);
+    } catch (err) {
+      console.warn("[MySQL] Falling back for expense items:", err.message);
+      return [];
+    }
+  },
+  async save(item) {
+    return apiRequest("/expense-items", {
+      method: "POST",
+      body: JSON.stringify(item),
+    });
+  },
+  async remove(idOrName) {
+    return apiRequest(`/expense-items/${encodeURIComponent(idOrName)}`, {
+      method: "DELETE",
+    });
+  },
+};
+
 // ============================================================================
 // 9. UNITS & ADJUSTMENTS DATABASE API
 // ============================================================================

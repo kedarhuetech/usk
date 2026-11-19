@@ -9,7 +9,7 @@ import {
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
-import { expenseCategoriesDb, transactionsDb } from "../../services/databaseRepository.js";
+import { expenseCategoriesDb, expenseItemsDb, transactionsDb } from "../../services/databaseRepository.js";
 import { isDatabaseMode } from "../../services/dataStorageConfig.js";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
@@ -151,12 +151,67 @@ export default function Expenses() {
   const saveCategories = (next) => { setCategories(next); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
   const startNew = () => setEditor({ mode: "new", entry: blankEntry(records.length + 1) });
   const entriesFor = (name) => records.filter(record => tab === "Category" ? record.category === name : record.rows.some(row => row.item === name));
-  const items = [...new Set(records.flatMap(record => record.rows.map(row => row.item).filter(Boolean)))];
+  const items = useMemo(() => {
+    const set = new Set();
+    records.forEach(rec => (rec.rows || []).forEach(r => { if (r.item?.trim()) set.add(r.item.trim()); }));
+    expenseItems.forEach(exp => { if (exp.item?.trim()) set.add(exp.item.trim()); });
+    return [...set];
+  }, [records, expenseItems]);
   const names = tab === "Category" ? categories : items;
   const shownNames = names.filter(name => name.toLowerCase().includes(leftSearch.toLowerCase()));
   const activeName = selected || shownNames[0] || "";
   const selectedRecords = entriesFor(activeName);
   const visible = selectedRecords.filter(record => (!dateFrom || record.date >= dateFrom) && (!dateTo || record.date <= dateTo) && `${record.number} ${record.category} ${record.party} ${record.rows.map(row => row.item).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
+
+  const availableExpenseItems = useMemo(() => {
+    const map = new Map();
+
+    // 1. All items from historical expense transactions in this business
+    for (const rec of (records || [])) {
+      for (const row of (rec.rows || [])) {
+        const name = (row.item || row.name || row.itemName || "").trim();
+        if (!name) continue;
+        const lower = name.toLowerCase();
+        map.set(lower, {
+          item: name,
+          description: row.description || "",
+          price: row.price !== undefined && row.price !== "" ? row.price : "",
+          tax: row.tax !== undefined && row.tax !== "" ? row.tax : "",
+          hsn: row.hsn || "",
+          category: rec.category || "Expenses",
+        });
+      }
+    }
+
+    // 2. Dedicated Expense Items from MySQL expense_items and localStorage
+    for (const exp of (expenseItems || [])) {
+      const name = (exp.item || exp.name || exp.itemName || "").trim();
+      if (!name) continue;
+      const lower = name.toLowerCase();
+      const existing = map.get(lower);
+      map.set(lower, {
+        item: name,
+        description: exp.description || existing?.description || "",
+        price: exp.price !== undefined && exp.price !== "" ? exp.price : (existing?.price || ""),
+        tax: exp.tax !== undefined && exp.tax !== "" ? exp.tax : (existing?.tax || ""),
+        hsn: exp.hsn || existing?.hsn || "",
+        category: exp.category || existing?.category || "Expenses",
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.item.localeCompare(b.item));
+  }, [records, expenseItems]);
+
+  const filteredExpenseItems = useMemo(() => {
+    const query = itemSearch.trim().toLowerCase();
+    if (!query) return availableExpenseItems;
+    return availableExpenseItems.filter(item =>
+      item.item.toLowerCase().includes(query) ||
+      (item.category && item.category.toLowerCase().includes(query)) ||
+      (item.hsn && String(item.hsn).toLowerCase().includes(query)) ||
+      (item.description && item.description.toLowerCase().includes(query))
+    );
+  }, [availableExpenseItems, itemSearch]);
   const summary = useMemo(() => {
     const selectedRecords = records.filter(record => tab === "Category" ? record.category === activeName : record.rows.some(row => row.item === activeName));
     return selectedRecords.reduce((acc, record) => {
@@ -208,11 +263,31 @@ export default function Expenses() {
         console.warn("[Expenses] Failed to fetch categories from DB:", err);
       }
     }
+    async function fetchExpenseItems() {
+      try {
+        const list = await expenseItemsDb.getAll();
+        if (isMounted && Array.isArray(list) && list.length > 0) {
+          setExpenseItems(prev => {
+            const map = new Map((prev || []).map(i => [i.item.toLowerCase(), i]));
+            for (const item of list) {
+              map.set(item.item.toLowerCase(), item);
+            }
+            const combined = Array.from(map.values());
+            localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(combined));
+            return combined;
+          });
+        }
+      } catch (err) {
+        console.warn("[Expenses] Failed to fetch expense items from DB:", err);
+      }
+    }
     fetchExpenses();
     fetchCategories();
+    fetchExpenseItems();
     const onDataChanged = () => {
       fetchExpenses();
       fetchCategories();
+      fetchExpenseItems();
     };
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
       window.addEventListener("ledgerly:business-data-changed", onDataChanged);
@@ -269,6 +344,33 @@ export default function Expenses() {
         expenseCategoriesDb.save({ categoryName: clean.category, expenseType: "indirect" }).catch(() => {});
       }
 
+      // Also remember new row items in expenseItems cache
+      const newItemsToStore = clean.rows.map(r => ({
+        item: r.item.trim(),
+        description: r.description || "",
+        price: r.price || "",
+        tax: r.tax || "",
+        hsn: r.hsn || "",
+        category: clean.category || "Expenses",
+      }));
+      setExpenseItems(prev => {
+        const map = new Map((prev || []).map(i => [i.item.toLowerCase(), i]));
+        for (const ni of newItemsToStore) {
+          if (!map.has(ni.item.toLowerCase())) {
+            map.set(ni.item.toLowerCase(), ni);
+          }
+        }
+        const combined = Array.from(map.values());
+        localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(combined));
+        return combined;
+      });
+
+      if (isDatabaseMode()) {
+        for (const ni of newItemsToStore) {
+          expenseItemsDb.save(ni).catch(() => {});
+        }
+      }
+
       saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
       toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
       setSelected(clean.category);
@@ -294,7 +396,7 @@ export default function Expenses() {
     });
     setMenuId("");
   };
-  const saveExpenseItem = () => {
+  const saveExpenseItem = async () => {
     const draft = itemModal?.draft;
     if (!draft?.item.trim()) { toast.error("Enter an item name first."); return; }
     const updatedRow = { ...currentRows.find(row => row.id === itemModal.rowId), ...draft };
@@ -302,6 +404,23 @@ export default function Expenses() {
     const nextItems = [updatedRow, ...expenseItems.filter(item => item.item.toLowerCase() !== updatedRow.item.toLowerCase())];
     setExpenseItems(nextItems);
     localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(nextItems));
+
+    // Also persist to MySQL expense_items so it survives across sessions and devices
+    try {
+      if (isDatabaseMode()) {
+        await expenseItemsDb.save({
+          item: draft.item.trim(),
+          price: Number(draft.price) || 0,
+          tax: String(draft.tax || ""),
+          hsn: draft.hsn || "",
+          description: draft.description || "",
+          category: "Expenses",
+        });
+      }
+    } catch (err) {
+      console.warn("[Expenses] Failed to sync new expense item to DB:", err);
+    }
+
     toast.success("Expense item saved.");
     setItemModal(null);
   };
@@ -340,7 +459,7 @@ export default function Expenses() {
     {editor && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-3"><div className="flex h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"><div className="flex h-12 items-center gap-2 bg-slate-100 px-5"><span className="rounded-t bg-white px-5 py-3">Expense #{editor.entry.number}</span><button onClick={() => setEditor(null)} className="ml-auto p-2"><FiX/></button></div><div className="flex min-h-[70px] items-center justify-between border-b px-8"><div className="flex items-center gap-4"><h2 className="text-2xl font-bold">Expense</h2><label className="flex items-center gap-2 font-medium">GST<input type="checkbox" checked={editor.entry.gst} onChange={event => updateEntry("gst", event.target.checked)} className="h-5 w-5 accent-blue-500"/></label></div><span className="text-slate-400">Expense</span></div><div className="min-h-0 flex-1 overflow-auto bg-[#f4f4f4]"><div className="grid min-h-[345px] grid-cols-[1fr_420px] gap-8 px-8 py-7"><div className="space-y-4"><label className="relative block max-w-[345px]"><span className="absolute -top-2 left-4 bg-[#f4f4f4] px-1 text-sm text-blue-500">Expense Category*</span><select value={editor.entry.category} onChange={event => updateEntry("category", event.target.value)} className="h-14 w-full rounded-md border border-slate-300 bg-transparent px-4 outline-none focus:border-blue-500"><option value="">Select category</option>{categories.map(category => <option key={category}>{category}</option>)}</select></label><button onClick={() => setCategoryModal(true)} className="ml-4 text-blue-500"><FiPlus className="mr-1 inline"/>Add Expense Category</button>{editor.entry.gst && <div className="grid max-w-[720px] grid-cols-2 gap-4"><input value={editor.entry.party} onChange={event => updateEntry("party", event.target.value)} placeholder="Search by Name/Phone" className="h-14 rounded-md border bg-transparent px-4"/><select className="h-14 rounded-md border bg-transparent px-4"><option>State of supply</option>{["Maharashtra", "Karnataka", "Gujarat", "Delhi", "Other"].map(state => <option key={state}>{state}</option>)}</select></div>}</div><div className="space-y-5 pt-4"><label className="flex items-center justify-between gap-4"><span>Expense No</span><input value={editor.entry.number} onChange={event => updateEntry("number", event.target.value)} className="w-44 border-b bg-transparent px-2 py-2"/></label><label className="flex items-center justify-between gap-4"><span>Date</span><input type="date" value={editor.entry.date} onChange={event => updateEntry("date", event.target.value)} className="w-44 bg-transparent px-2 py-2"/></label></div></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[1100px] border-collapse bg-white text-sm"><thead className="text-slate-700"><tr>{["#", "Item", "Description", "Qty", "Price/Unit", ...(editor.entry.gst ? ["Discount %", "Tax %"] : ["Tax %"]), "Amount"].map(label => <th key={label} className="border border-slate-300 px-3 py-3 text-left uppercase">{label}</th>)}</tr></thead><tbody>{currentRows.map((row, index) => <tr key={row.id} className={index % 2 ? "bg-slate-50" : "bg-slate-100"}><td className="border px-3 py-4 text-center">{index + 1}</td><td className="border p-1"><button type="button" onClick={() => { setItemSearch(""); setItemModal({ mode: "picker", rowId: row.id, draft: { item: row.item, hsn: row.hsn || "", description: row.description, price: row.price, tax: row.tax || "" } }); }} className="min-h-11 w-full px-3 py-2 text-left outline-none hover:bg-blue-50">{row.item || <span className="text-slate-400">Select or add item</span>}</button></td><td className="border p-1"><input value={row.description} onChange={event => updateRow(row.id, "description", event.target.value)} className="w-full bg-transparent p-3 outline-none"/></td><td className="border p-1"><input type="number" min="0" value={row.qty} onChange={event => updateRow(row.id, "qty", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td><td className="border p-1"><input type="number" min="0" value={row.price} onChange={event => updateRow(row.id, "price", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td>{editor.entry.gst && <td className="border p-1"><input type="number" min="0" value={row.discount} onChange={event => updateRow(row.id, "discount", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td>}<td className="border p-1"><input type="number" min="0" value={row.tax} onChange={event => updateRow(row.id, "tax", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td><td className="border px-4 py-3 text-right">{money(rowAmount(row, editor.entry.gst))}</td></tr>)}</tbody><tfoot><tr><td colSpan={3} className="border p-2"><Button onClick={() => updateEntry("rows", [...currentRows, makeRow()])} className="border border-blue-400 px-4 text-blue-500">ADD ROW</Button></td><td className="border px-3 py-3 text-right font-semibold">TOTAL</td><td className="border px-3 py-3 text-center font-semibold">{currentRows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}</td><td colSpan={editor.entry.gst ? 2 : 1} className="border"/><td className="border px-4 py-3 text-right font-semibold">{money(total)}</td></tr></tfoot></table></div>
       <div className="grid grid-cols-[1fr_1fr] gap-8 px-8 py-8"><div><div className="max-w-[620px] rounded border border-slate-200 bg-white/50 p-5"><div className="grid grid-cols-1 gap-4">{editor.entry.payments.map(payment => <div key={payment.id}><label className="relative block"><span className="absolute -top-2 left-3 bg-[#f4f4f4] px-1 text-slate-500">Payment Type</span><select value={payment.type} onChange={event => updatePayment(payment.id, "type", event.target.value)} className="h-14 w-full rounded border border-slate-300 bg-transparent px-3"><option>Cash</option><option>Cheque</option><option>Bank Transfer</option><option>UPI</option><option>Card</option></select></label></div>)}</div><div className="mt-4 flex items-center justify-between"><button onClick={() => updateEntry("payments", [...editor.entry.payments, makePayment()])} className="text-blue-500"><FiPlus className="inline"/> Add Payment type</button><strong>Total payment: {money(paid)}</strong></div></div><textarea value={editor.entry.description} onChange={event => updateEntry("description", event.target.value)} placeholder="Description" className="mt-5 h-28 w-full max-w-[345px] resize-y rounded border border-slate-300 bg-transparent p-4"/></div><div className="flex items-start justify-end gap-5 pt-10"><label className="flex items-center gap-2"><input type="checkbox" checked={editor.entry.roundOff} onChange={event => updateEntry("roundOff", event.target.checked)} className="h-5 w-5 accent-blue-500"/>Round Off</label><label className="flex items-center gap-3 text-lg font-semibold">Total<input readOnly value={money(editor.entry.roundOff ? Math.round(total) : total)} className="w-56 rounded-md border border-slate-300 bg-white p-3 text-right"/></label></div></div></div><footer className="flex min-h-[76px] items-center justify-end gap-3 border-t bg-white px-8"><Button onClick={persistEditor} className="rounded-md bg-blue-600 px-10 py-3 font-semibold text-white hover:bg-blue-700">Save</Button></footer></div></div>}
-    {itemModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => setItemModal(null)}><div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-bold text-slate-700">{itemModal.mode === "picker" ? "Select Expense Item" : "Add Expense Item"}</h2><button onClick={() => setItemModal(null)} aria-label="Close item picker"><FiX className="h-6 w-6 text-slate-400"/></button></div>{itemModal.mode === "picker" ? <><div className="flex gap-3 border-b p-5"><label className="relative min-w-0 flex-1"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input autoFocus value={itemSearch} onChange={event => setItemSearch(event.target.value)} placeholder="Search items" className="h-11 w-full rounded-md border border-slate-300 pl-10 pr-3 outline-none focus:border-blue-500"/></label><Button onClick={() => setItemModal(current => ({ ...current, mode: "form", draft: { item: "", hsn: "", description: "", price: "", tax: "" } }))} className="shrink-0 bg-blue-600 px-5 text-white"><FiPlus/> Add Item</Button></div><div className="max-h-[55vh] min-h-36 overflow-y-auto p-3">{expenseItems.filter(item => item.item.toLowerCase().includes(itemSearch.toLowerCase())).length ? expenseItems.filter(item => item.item.toLowerCase().includes(itemSearch.toLowerCase())).map(item => <button key={item.item} onClick={() => { setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, item: item.item, description: item.description || "", price: item.price || "", tax: item.tax || "", hsn: item.hsn || "" } : row) } })); setItemModal(null); }} className="flex w-full items-center justify-between rounded-md px-4 py-3 text-left hover:bg-sky-50"><span><span className="block font-medium text-slate-700">{item.item}</span>{item.hsn && <span className="mt-1 block text-xs text-slate-400">HSN/SAC: {item.hsn}</span>}</span><span className="text-slate-500">{money(item.price)}</span></button>) : <div className="grid min-h-36 place-items-center text-slate-400">{itemSearch ? "No matching items" : "No saved expense items yet"}</div>}</div></> : <div className="p-6"><div className="grid grid-cols-2 gap-5"><label className="relative"><span className="absolute -top-2 left-4 bg-white px-1 text-sm text-blue-500">Item Name *</span><input autoFocus value={itemModal.draft.item} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, item: event.target.value } }))} className="h-14 w-full rounded-md border-2 border-blue-500 px-3 outline-none"/></label><input value={itemModal.draft.hsn} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, hsn: event.target.value } }))} placeholder="Item HSN / SAC" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><input value={itemModal.draft.description} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, description: event.target.value } }))} placeholder="Description" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><div className="flex items-center px-3 text-blue-500">Pricing</div><div className="flex h-14 overflow-hidden rounded-md border border-slate-300"><input type="number" min="0" value={itemModal.draft.price} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, price: event.target.value } }))} placeholder="Price" className="min-w-0 flex-1 px-3 outline-none"/><select className="border-l px-3"><option>Tax Excluded</option><option>Tax Included</option></select></div><select value={itemModal.draft.tax} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, tax: event.target.value } }))} className="h-14 rounded-md border border-slate-300 px-3 text-slate-500 outline-none focus:border-blue-500"><option value="">Tax Rate</option><option value="0">None (0%)</option><option value="5">GST 5%</option><option value="12">GST 12%</option><option value="18">GST 18%</option><option value="28">GST 28%</option></select></div><div className="mt-8 flex justify-end gap-3"><Button onClick={() => setItemModal(current => ({ ...current, mode: "picker" }))} className="border px-5">Back</Button><Button onClick={saveExpenseItem} className="bg-blue-600 px-7 py-3 font-semibold text-white">Save</Button></div></div>}</div></div>}    {categoryModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex justify-between"><h2 className="text-lg font-semibold">Add Expense Category</h2><button onClick={() => setCategoryModal(false)}><FiX/></button></div><input autoFocus value={categoryName} onChange={event => setCategoryName(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Category name" className="h-12 w-full rounded border px-3"/><div className="mt-5 flex justify-end gap-3"><Button onClick={() => setCategoryModal(false)} className="border px-4">Cancel</Button><Button onClick={addCategory} className="bg-blue-600 px-5 text-white">Save</Button></div></div></div>}
+    {itemModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => setItemModal(null)}><div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-bold text-slate-700">{itemModal.mode === "picker" ? "Select Expense Item" : "Add Expense Item"}</h2><button onClick={() => setItemModal(null)} aria-label="Close item picker"><FiX className="h-6 w-6 text-slate-400"/></button></div>{itemModal.mode === "picker" ? <><div className="flex gap-3 border-b p-5"><label className="relative min-w-0 flex-1"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input autoFocus value={itemSearch} onChange={event => setItemSearch(event.target.value)} placeholder="Search items" className="h-11 w-full rounded-md border border-slate-300 pl-10 pr-3 outline-none focus:border-blue-500"/></label><Button onClick={() => setItemModal(current => ({ ...current, mode: "form", draft: { item: "", hsn: "", description: "", price: "", tax: "" } }))} className="shrink-0 bg-blue-600 px-5 text-white"><FiPlus/> Add Item</Button></div><div className="max-h-[55vh] min-h-36 overflow-y-auto p-3">{filteredExpenseItems.length ? filteredExpenseItems.map(item => <button key={item.item} type="button" onClick={() => { setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, item: item.item, description: item.description || row.description || "", price: item.price !== "" && item.price !== undefined ? item.price : row.price, tax: item.tax !== "" && item.tax !== undefined ? item.tax : row.tax, hsn: item.hsn || row.hsn || "" } : row) } })); setItemModal(null); }} className="flex w-full items-center justify-between rounded-md px-4 py-3 text-left hover:bg-sky-50"><div><span className="block font-medium text-slate-700">{item.item}</span><div className="mt-1 flex items-center gap-2 text-xs text-slate-400">{item.category && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{item.category}</span>}{item.hsn && <span>HSN/SAC: {item.hsn}</span>}{item.description && <span className="truncate max-w-[220px] text-slate-400">{item.description}</span>}</div></div><span className="font-semibold text-slate-600">{item.price !== "" ? money(item.price) : "—"}</span></button>) : <div className="grid min-h-36 place-items-center text-slate-400">{itemSearch ? "No matching items" : "No saved expense items yet"}</div>}</div></> : <div className="p-6"><div className="grid grid-cols-2 gap-5"><label className="relative"><span className="absolute -top-2 left-4 bg-white px-1 text-sm text-blue-500">Item Name *</span><input autoFocus value={itemModal.draft.item} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, item: event.target.value } }))} className="h-14 w-full rounded-md border-2 border-blue-500 px-3 outline-none"/></label><input value={itemModal.draft.hsn} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, hsn: event.target.value } }))} placeholder="Item HSN / SAC" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><input value={itemModal.draft.description} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, description: event.target.value } }))} placeholder="Description" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><div className="flex items-center px-3 text-blue-500">Pricing</div><div className="flex h-14 overflow-hidden rounded-md border border-slate-300"><input type="number" min="0" value={itemModal.draft.price} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, price: event.target.value } }))} placeholder="Price" className="min-w-0 flex-1 px-3 outline-none"/><select className="border-l px-3"><option>Tax Excluded</option><option>Tax Included</option></select></div><select value={itemModal.draft.tax} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, tax: event.target.value } }))} className="h-14 rounded-md border border-slate-300 px-3 text-slate-500 outline-none focus:border-blue-500"><option value="">Tax Rate</option><option value="0">None (0%)</option><option value="5">GST 5%</option><option value="12">GST 12%</option><option value="18">GST 18%</option><option value="28">GST 28%</option></select></div><div className="mt-8 flex justify-end gap-3"><Button onClick={() => setItemModal(current => ({ ...current, mode: "picker" }))} className="border px-5">Back</Button><Button onClick={saveExpenseItem} className="bg-blue-600 px-7 py-3 font-semibold text-white">Save</Button></div></div>}</div></div>}    {categoryModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex justify-between"><h2 className="text-lg font-semibold">Add Expense Category</h2><button onClick={() => setCategoryModal(false)}><FiX/></button></div><input autoFocus value={categoryName} onChange={event => setCategoryName(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Category name" className="h-12 w-full rounded border px-3"/><div className="mt-5 flex justify-end gap-3"><Button onClick={() => setCategoryModal(false)} className="border px-4">Cancel</Button><Button onClick={addCategory} className="bg-blue-600 px-5 text-white">Save</Button></div></div></div>}
     {historyEntry && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"><div className="flex justify-between"><h2 className="text-lg font-semibold">Expense History · #{historyEntry.number}</h2><button onClick={() => setHistoryEntry(null)}><FiX/></button></div><div className="mt-5 space-y-3">{(historyEntry.history || []).length ? historyEntry.history.map((event, index) => <p key={index} className="border-b pb-3">{event.action}<span className="block text-sm text-slate-400">{new Date(event.at).toLocaleString()}</span></p>) : <p className="text-slate-500">No history recorded yet.</p>}</div></div></div>}
     {previewEntry && <ExpenseDocument entry={previewEntry} onClose={() => setPreviewEntry(null)}/>}
     <ConfirmModal

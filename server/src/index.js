@@ -37,6 +37,7 @@ import hsnRoutes from "./routes/hsn.js";
 import purchaseJobWorksRoutes from "./routes/purchaseJobWorksRouter.js";
 import balanceSheetRoutes from "./routes/balanceSheetRouter.js";
 import expenseCategoriesRoutes from "./routes/expenseCategoriesRouter.js";
+import expenseItemsRoutes from "./routes/expenseItemsRouter.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
 import { initializeDatabaseSchema } from "./db/initSchema.js";
@@ -90,6 +91,7 @@ app.use("/api/hsn", hsnRoutes);
 app.use("/api/purchase-job-works", purchaseJobWorksRoutes);
 app.use("/api/balance-sheet", balanceSheetRoutes);
 app.use("/api/expense-categories", expenseCategoriesRoutes);
+app.use("/api/expense-items", expenseItemsRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {

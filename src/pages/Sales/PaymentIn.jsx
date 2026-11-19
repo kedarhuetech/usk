@@ -16,6 +16,7 @@ import {
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -130,6 +131,7 @@ export default function PaymentIn() {
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 });
   const [history, setHistory] = useState(null);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: "",
@@ -178,6 +180,39 @@ export default function PaymentIn() {
   }).sort((a, b) => (b.date || "").localeCompare(a.date || "")), [records, dateFrom, dateTo, firm, user, search]);
   const amountTotal = visible.reduce((total, entry) => total + Number(entry.amount || 0), 0);
   const receivedTotal = visible.reduce((total, entry) => total + Number(entry.received ?? entry.amount ?? 0), 0);
+
+  const printRecords = useMemo(
+    () =>
+      visible.map((r) => ({
+        ...r,
+        id: r.id,
+        date: r.date,
+        invoiceDate: r.date,
+        invoiceNumber: r.number,
+        refNo: r.number,
+        number: r.number,
+        customer: r.partyName,
+        partyName: r.partyName,
+        supplier: r.partyName,
+        paymentType: r.paymentType || "Cash",
+        status: r.status || "Paid",
+        totalAmount: Number(r.amount || 0),
+        total: Number(r.amount || 0),
+        amount: Number(r.amount || 0),
+        paidAmount: Number(r.received ?? r.amount ?? 0),
+        receivedAmount: Number(r.received ?? r.amount ?? 0),
+        balanceAmount: 0,
+        totals: {
+          subtotal: Number(r.amount || 0),
+          finalTotal: Number(r.amount || 0),
+          grandTotal: Number(r.amount || 0),
+          paid: Number(r.received ?? r.amount ?? 0),
+          received: Number(r.received ?? r.amount ?? 0),
+          balance: 0,
+        },
+      })),
+    [visible]
+  );
 
   const persist = (next) => { setRecords(next); savePaymentIns(next); };
   const newReceipt = () => setEditor({ mode: "new", entry: { number: String(records.length + 1), date: today(), payments: [blankPayment()], description: "", partyId: "", partyName: "", received: "" } });
@@ -295,7 +330,7 @@ export default function PaymentIn() {
     <header className="flex min-h-[68px] items-center justify-between bg-white px-5"><h1 className="text-2xl font-bold">Payment-In <FiChevronDown className="ml-2 inline h-5 w-5" /></h1><Button onClick={newReceipt} className="rounded-full bg-rose-600 px-6 text-white hover:bg-rose-700"><FiPlus /> Add Payment-In</Button></header>
     <Card className="flex min-h-[88px] flex-wrap items-center gap-3 px-5 py-4"><span className="font-semibold">Filter by:</span><label className="flex h-11 items-center gap-2 rounded-full bg-blue-50 px-4"><select value={preset} onChange={(event) => datePreset(event.target.value)} className="bg-transparent font-medium outline-none">{["This Month", "This Quarter", "This Year", "All Time", "Custom"].map((value) => <option key={value}>{value}</option>)}</select></label><label className="flex h-11 items-center gap-2 rounded-full bg-blue-50 px-4"><FiCalendar /><input aria-label="Date from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPreset("Custom"); }} className="w-36 bg-transparent outline-none" /><span>To</span><input aria-label="Date to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setPreset("Custom"); }} className="w-36 bg-transparent outline-none" /></label><label className="rounded-full bg-blue-50 px-4 py-3"><select value={firm} onChange={(event) => setFirm(event.target.value)} className="bg-transparent outline-none"><option>All Firms</option>{[...new Set(records.map((record) => record.firm).filter(Boolean))].map((value) => <option key={value}>{value}</option>)}</select></label><label className="rounded-full bg-blue-50 px-4 py-3"><select value={user} onChange={(event) => setUser(event.target.value)} className="bg-transparent outline-none"><option>All Users</option>{[...new Set(records.map((record) => record.user).filter(Boolean))].map((value) => <option key={value}>{value}</option>)}</select></label></Card>
     <Card className="min-h-[150px] p-5"><div className="w-full max-w-md rounded-lg border border-violet-200 bg-violet-50/50 p-4"><div className="flex items-start justify-between"><div><p className="text-base text-slate-500">Total Amount</p><p className="text-2xl font-bold">{money(amountTotal)}</p></div><span className="rounded-full bg-emerald-100 px-3 py-1 text-sm text-emerald-600">{visible.length} receipts ↗</span></div><p className="mt-5 text-slate-500">Received: <b className="text-slate-800">{money(receivedTotal)}</b></p></div></Card>
-    <Card className="flex min-h-0 flex-1 flex-col"><div className="flex min-h-[68px] items-center justify-between px-5"><h2 className="text-lg font-semibold">Transactions</h2><div className="flex items-center gap-4 text-slate-500">{searchOpen && <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search payments" className="h-9 w-48 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500" />}<button aria-label="Search" onClick={() => { setSearchOpen((value) => !value); if (searchOpen) setSearch(""); }} className="text-xl hover:text-blue-600"><FiSearch /></button><button aria-label="Export Excel" onClick={exportRows} title="Download Excel" className="font-bold text-emerald-600">xls</button><button aria-label="Print" onClick={() => window.print()} title="Print" className="text-xl hover:text-blue-600"><FiPrinter /></button></div></div>
+    <Card className="flex min-h-0 flex-1 flex-col"><div className="flex min-h-[68px] items-center justify-between px-5"><h2 className="text-lg font-semibold">Transactions</h2><div className="flex items-center gap-4 text-slate-500">{searchOpen && <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search payments" className="h-9 w-48 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500" />}<button aria-label="Search" onClick={() => { setSearchOpen((value) => !value); if (searchOpen) setSearch(""); }} className="text-xl hover:text-blue-600"><FiSearch /></button><button aria-label="Export Excel" onClick={exportRows} title="Download Excel" className="font-bold text-emerald-600">xls</button><button aria-label="Print" onClick={() => setPrintModalOpen(true)} title="Print" className="text-xl hover:text-blue-600"><FiPrinter /></button></div></div>
       {visible.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[1000px] border-collapse text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["Date", "Ref. no.", "Party Name", "Total Amount", "Received", "Payment Type", "Status", "Actions"].map((label) => <th key={label} className="border-y border-slate-200 px-3 py-4">{label} {label !== "Actions" && <FiFilter className="ml-2 inline" />}</th>)}</tr></thead><tbody>{visible.map((entry) => <tr key={entry.id} className="border-b border-slate-100 odd:bg-sky-50 even:bg-white hover:bg-sky-100"><td className="px-3 py-4">{formatDate(entry.date)}</td><td className="px-3 py-4 text-right">{entry.number}</td><td className="px-3 py-4 font-medium">{entry.partyName}</td><td className="px-3 py-4 text-right">{money(entry.amount)}</td><td className="px-3 py-4 text-right">{money(entry.received ?? entry.amount)}</td><td className="px-3 py-4">{entry.paymentType}</td><td className={`px-3 py-4 font-medium ${entry.status === "Unused" ? "text-rose-500" : "text-emerald-600"}`}>{entry.status}</td><td className="relative px-3 py-3"><div className="flex items-center gap-3"><button title="Print" onClick={() => openReceipt(entry, true)}><FiPrinter className="h-5 w-5" /></button><button title="Link payment" onClick={() => { setEditor({ mode: "edit", entry }); setLinkOpen(true); }} className="text-lg">↗</button><button aria-label="Payment actions" aria-expanded={openMenu === entry.id} onClick={(event) => toggleMenu(entry, event)} className="p-1"><FiMoreVertical /></button></div>{openMenu === entry.id && <div style={{ top: menuPosition.top, right: menuPosition.right }} className="fixed z-[100] w-48 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">{["View/Edit", "Open PDF", "Print", "Delete", "View History"].map((action) => <button key={action} onClick={() => { setOpenMenu(""); if (action === "View/Edit") setEditor({ mode: "edit", entry: normalizePayment(entry) }); else if (action === "Open PDF") openReceipt(entry); else if (action === "Print") openReceipt(entry, true); else if (action === "Delete") remove(entry); else setHistory(entry); }} className={`block w-full rounded px-3 py-2.5 text-left hover:bg-blue-50 ${action === "Delete" ? "text-rose-600" : ""}`}>{action}</button>)}</div>}</td></tr>)}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-8 text-center"><div className="grid h-32 w-32 place-items-center rounded-full bg-blue-100 text-blue-400"><FiCalendar className="h-14 w-14" /></div><h2 className="mt-6 text-lg font-semibold">No Transactions to show</h2><p className="mt-2 text-sm text-slate-400">You haven't added any transactions yet.</p><Button onClick={newReceipt} className="mt-6 rounded-full bg-rose-600 px-5 text-white hover:bg-rose-700"><FiPlus /> Add Payment-In</Button></div>}</Card>
 
     {editor && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3" onMouseDown={(event) => { if (event.target === event.currentTarget) { setEditor(null); setLinkOpen(false); } }}><section className="flex max-h-[92vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-8 py-5"><h2 className="text-2xl font-bold text-slate-800">Payment-In</h2><div className="flex items-center gap-8"><button type="button" title="Settings" onClick={() => navigate("/settings?tab=transaction")} className="text-2xl text-slate-400 hover:text-slate-600">⚙</button><button type="button" onClick={() => { setEditor(null); setLinkOpen(false); }} aria-label="Close" className="text-3xl text-slate-400"><FiX /></button></div></header><div className="min-h-0 flex-1 overflow-auto px-8 py-7"><div className="grid min-h-[620px] grid-cols-1 gap-8 lg:grid-cols-[minmax(500px,1fr)_minmax(400px,1fr)]"><div><div className="grid gap-5 sm:grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)]"><div><label className="mb-1 block text-slate-500">Party <span className="text-rose-500">*</span></label><input list="payment-in-parties" value={editor.entry.partyName} onChange={(event) => { const party = parties.find((value) => (value.partyName || value.name) === event.target.value); updateEntry("partyName", event.target.value); updateEntry("partyId", party?.id || ""); }} placeholder="Select or enter party" className="h-14 w-full rounded-md border border-slate-300 px-4 text-lg outline-none focus:border-blue-500" /><datalist id="payment-in-parties">{parties.map((party) => <option key={party.id} value={party.partyName || party.name}>{party.phone}</option>)}</datalist>{editor.entry.partyId && <p className="px-4 pt-1 text-sm font-semibold text-teal-500">BAL: {money(parties.find((party) => String(party.id) === String(editor.entry.partyId))?.openingBalance || 0)}</p>}</div><div className="space-y-5"><label className="flex items-center justify-between gap-5 text-slate-500">Receipt No<input value={editor.entry.number} onChange={(event) => updateEntry("number", event.target.value)} className="w-36 border-b border-slate-300 px-2 py-2 text-lg text-slate-800 outline-none" /></label><label className="flex items-center justify-between gap-5 text-slate-500">Date<input type="date" value={editor.entry.date} onChange={(event) => updateEntry("date", event.target.value)} className="w-44 border-b border-slate-300 px-2 py-2 text-lg text-slate-800 outline-none" /></label></div></div>
@@ -311,6 +346,17 @@ export default function PaymentIn() {
       confirmColor={confirmModal.confirmColor}
       onConfirm={confirmModal.onConfirm}
       onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+    />
+    <ReportPrintPreviewModal
+      isOpen={printModalOpen}
+      title="Payment-In Report"
+      dateFrom={dateFrom}
+      dateTo={dateTo}
+      user={user}
+      records={printRecords}
+      totalLabel="Total Received:"
+      totalAmount={receivedTotal}
+      onClose={() => setPrintModalOpen(false)}
     />
   </main>;
 }

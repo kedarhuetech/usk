@@ -120,7 +120,7 @@ router.get("/", async (req, res) => {
       type: row.item_type || "product",
       itemType: row.item_type || "product",
       itemCode: row.item_code || "",
-      barcode: row.barcode || "",
+      barcode: row.barcode || row.item_code || "",
       category: row.category || "General",
       hsnCode: row.hsn_code || "",
       unit: row.unit || "PCS",
@@ -210,7 +210,7 @@ router.get("/:id", async (req, res) => {
         name: row.name,
         itemName: row.name,
         itemCode: row.item_code || "",
-        barcode: row.barcode || "",
+        barcode: row.barcode || row.item_code || "",
         category: row.category || "General",
         hsnCode: row.hsn_code || "",
         unit: row.unit || "PCS",
@@ -226,6 +226,7 @@ router.get("/:id", async (req, res) => {
         minStock: parseFloat(row.min_stock) || 0,
         isBatchTracked: Boolean(row.is_batch_tracked),
         isSerialTracked: Boolean(row.is_serial_tracked),
+        isActive: row.is_active !== 0,
         description: row.description || "",
         batches,
         createdAt: row.created_at,
@@ -256,8 +257,8 @@ const saveItemHandler = async (req, res) => {
       return res.status(400).json({ success: false, message: "Item name is required." });
     }
 
-    const itemCode = body.itemCode || body.item_code || null;
-    const barcode = body.barcode || null;
+    const itemCode = (body.itemCode || body.item_code || body.code || "").trim() || null;
+    const barcode = (body.barcode || body.barCode || body.itemBarcode || itemCode || "").trim() || null;
     const category = body.category || "General";
     const hsnCode = body.hsnCode || body.hsn_code || body.hsn || null;
     const unit = body.unit || "PCS";

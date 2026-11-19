@@ -106,6 +106,7 @@ export function buildReportHtml({
               record.invoiceNo ||
               record.invoice ||
               record.refNo ||
+              record.number ||
               record.id ||
               "—";
             const partyName =
@@ -653,6 +654,7 @@ export function generateReportPdfBlob({
           record.invoiceNo ||
           record.invoice ||
           record.refNo ||
+          record.number ||
           record.id ||
           "—"
       );
@@ -1383,6 +1385,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
                         record.invoiceNo ||
                         record.invoice ||
                         record.refNo ||
+                        record.number ||
                         record.id ||
                         "—";
                       const partyName =

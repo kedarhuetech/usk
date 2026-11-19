@@ -82,6 +82,8 @@ export async function initializeDatabaseSchema() {
       await addCol("inventory_items", "is_serial_tracked TINYINT(1) DEFAULT 0");
       await addCol("inventory_items", "description TEXT");
       await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
+      await addCol("transaction_items", "barcode VARCHAR(100)");
+      await addCol("transaction_items", "is_active TINYINT(1) DEFAULT 1");
 
       await addCol("transactions", "party_gstin VARCHAR(32)");
       await addCol("transactions", "billing_address TEXT");
@@ -328,6 +330,7 @@ export async function initializeDatabaseSchema() {
       item_id VARCHAR(64),
       item_name VARCHAR(255) NOT NULL,
       item_code VARCHAR(100),
+      barcode VARCHAR(100),
       hsn_code VARCHAR(20),
       batch_no VARCHAR(100),
       serial_no VARCHAR(100),
@@ -349,6 +352,7 @@ export async function initializeDatabaseSchema() {
       cess_rate DECIMAL(5,2) DEFAULT 0.00,
       cess_amount DECIMAL(12,2) DEFAULT 0.00,
       total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+      is_active TINYINT(1) DEFAULT 1,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_txn_items_txn (business_id, transaction_id),
       INDEX idx_txn_items_item (business_id, item_id)
@@ -473,6 +477,21 @@ export async function initializeDatabaseSchema() {
       expense_type VARCHAR(50) DEFAULT 'indirect',
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_expcat_biz (business_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 17b. Expense Items Table
+    `CREATE TABLE IF NOT EXISTS expense_items (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'default',
+      item_name VARCHAR(255) NOT NULL,
+      price DECIMAL(12,2) DEFAULT 0.00,
+      tax_rate DECIMAL(5,2) DEFAULT 0.00,
+      hsn_code VARCHAR(20) DEFAULT NULL,
+      description TEXT DEFAULT NULL,
+      category VARCHAR(100) DEFAULT 'Expenses',
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      INDEX idx_expense_items_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
     // 18. Online Store Settings Table

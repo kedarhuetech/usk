@@ -220,11 +220,9 @@ function InvoiceActionsMenu({ invoice, open, onToggle, onAction }) {
   const actions = [
     "View/Edit",
     ...(appSettings.enableRepeatInvoices ? ["Repeat Invoice"] : []),
-    "Generate e-Invoice",
     "Convert To Return",
     "Preview Delivery Challan",
     "Payment History",
-    "Cancel Invoice",
     "Delete",
     "Open PDF",
     "Preview",
