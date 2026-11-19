@@ -158,17 +158,15 @@ export default function MobileNavDrawer({
     onClose();
   };
 
+  if (!isOpen) return null;
+
   return (
     <>
       {/* Backdrop */}
       <div
         onClick={onClose}
         aria-hidden="true"
-        className={`fixed inset-0 z-[990] bg-black/60 backdrop-blur-xs transition-opacity duration-300 lg:hidden ${
-          isOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
+        className="fixed inset-0 z-[990] bg-black/60 backdrop-blur-xs transition-opacity duration-300 lg:hidden opacity-100 pointer-events-auto"
       />
 
       {/* Drawer Panel */}
@@ -176,9 +174,7 @@ export default function MobileNavDrawer({
         role="dialog"
         aria-label="Mobile Navigation Menu"
         aria-modal="true"
-        className={`fixed inset-y-0 left-0 z-[1000] flex w-[86%] max-w-[340px] flex-col border-r border-[#252B37] bg-[#12151B] text-slate-100 shadow-2xl transition-transform duration-300 ease-in-out lg:hidden select-none ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className="fixed inset-y-0 left-0 z-[1000] flex w-[86%] max-w-[340px] flex-col border-r border-[#252B37] bg-[#12151B] text-slate-100 shadow-2xl transition-transform duration-300 ease-in-out lg:hidden select-none translate-x-0"
       >
         {/* Header */}
         <div className="flex h-[60px] items-center justify-between border-b border-[#252B37] px-4 py-3">
