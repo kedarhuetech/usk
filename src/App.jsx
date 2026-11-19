@@ -52,7 +52,6 @@ import VerifyMyData from "./pages/Utilities/VerifyMyData";
 import BackupToComputer from "./pages/SyncShareBackup/BackupToComputer";
 import BackupToDrive from "./pages/SyncShareBackup/BackupToDrive";
 import RestoreBackup from "./pages/SyncShareBackup/RestoreBackup";
-import PlansPricing from "./pages/PlansPricing/PlansPricing";
 import EditProfile from "./pages/CompanyProfile/EditProfile";
 import {
   DataDeletion,
@@ -158,7 +157,7 @@ function App() {
           <Route path="utilities/import-from-tally" element={<ImportFromTally />} />
           <Route path="utilities/verify-my-data" element={<VerifyMyData />} />
           <Route path="utilities/update-items-in-bulk" element={<UpdateItemsInBulk />} />
-          <Route path="plans-pricing" element={<PlansPricing />} />
+
           <Route path="settings" element={<Settings />} />
           <Route path="sync-share-backup/backup-to-computer" element={<BackupToComputer />} />
           <Route path="sync-share-backup/backup-to-drive" element={<BackupToDrive />} />

@@ -176,43 +176,6 @@ function Sidebar() {
       </nav>
 
       <div className="shrink-0 space-y-2.5 p-2.5">
-        {/* Grab Sale Banner matching screenshot */}
-        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#202532] via-[#161922] to-[#0F1117] border border-[#FF5A1F]/30 p-3 text-white shadow-md">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-[11px] font-bold text-white">
-              <span className="text-xs text-amber-300">⚡</span> USK
-            </span>
-            <span className="rounded bg-[#FF5A1F] px-1.5 py-0.5 text-[9px] font-black text-white leading-none">
-              Upto 60% OFF
-            </span>
-          </div>
-
-          <p className="mt-1 text-sm font-black italic tracking-wide text-white drop-shadow-sm">
-            GRAB SALE
-          </p>
-
-          <div className="mt-2 flex items-end justify-between gap-1">
-            <div className="space-y-0.5 text-[10px] text-white/90">
-              <div className="flex items-center gap-1 font-medium">
-                <span>📅</span>
-                <span>29 Oct 2026</span>
-              </div>
-              <div className="flex items-center gap-1 font-medium">
-                <span>⏰</span>
-                <span>12:00 AM - 11:59 PM</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => navigate("/plans-pricing")}
-              className="rounded-full bg-[#FF5A1F] px-3 py-1 text-xs font-bold text-white shadow-sm transition hover:bg-[#E84E0F] active:scale-95"
-            >
-              Buy Now
-            </button>
-          </div>
-        </div>
-
         {/* Company Switcher / Profile Button */}
         <button
           type="button"
