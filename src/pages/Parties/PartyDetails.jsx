@@ -574,6 +574,7 @@ function PartyDetails() {
   }, [location.search, location.state]);
   const [partyActivity, setPartyActivity] = useState({ estimates: [], proformas: [], payments: [], paymentsOut: [], creditNotes: [], debitNotes: [] });
   const [selectedPartyId, setSelectedPartyId] = useState("cash-sale");
+  const [mobileView, setMobileView] = useState("list");
   const [search, setSearch] = useState("");
   const [statementOpen, setStatementOpen] = useState(false);
   const [printStatementOnOpen, setPrintStatementOnOpen] = useState(false);
@@ -835,8 +836,36 @@ function PartyDetails() {
         <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700 text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
       </div>
       {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
+      {/* Mobile Master-Detail View Switcher (< md) */}
+      <div className="flex md:hidden border-b border-slate-200 bg-white p-1.5 gap-1.5 shrink-0 z-10 shadow-xs">
+        <button
+          type="button"
+          onClick={() => setMobileView("list")}
+          className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer ${
+            mobileView === "list"
+              ? "bg-[#14171E] text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          Parties List ({filteredParties.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileView("details")}
+          className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer truncate px-2 ${
+            mobileView === "details"
+              ? "bg-[#FF5A1F] text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          {selectedParty ? selectedParty.partyName : "Cash Sale"} Details &amp; Txns
+        </button>
+      </div>
+
       <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(300px,29%)_1fr]">
-        <section className="flex min-h-[360px] sm:min-h-[430px] flex-col overflow-hidden rounded-md bg-white">
+        <section className={`flex flex-col overflow-hidden rounded-md bg-white ${
+          mobileView === "details" ? "hidden md:flex" : "flex"
+        } min-h-[360px] md:min-h-0`}>
           <div className="p-4 pb-2"><label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-slate-400"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Party Name" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" /></label></div>
           {/* Balance Filter Pills */}
           <div className="flex items-center gap-1.5 px-4 pb-2.5">
@@ -921,8 +950,11 @@ function PartyDetails() {
           <div className="min-h-0 flex-1 overflow-auto">
             {balanceFilter === "all" && statusFilter !== "inactive" && groupFilter === "all" && (
               <button
-                onClick={() => setSelectedPartyId("cash-sale")}
-                className={`grid w-full grid-cols-[1fr_130px] px-4 py-4 text-left text-sm transition ${
+                onClick={() => {
+                  setSelectedPartyId("cash-sale");
+                  setMobileView("details");
+                }}
+                className={`grid w-full grid-cols-[1fr_130px] px-4 py-4 text-left text-sm transition cursor-pointer ${
                   selectedPartyId === "cash-sale" ? "bg-sky-100 dark:bg-sky-950/40" : "hover:bg-slate-50"
                 }`}
               >
@@ -937,8 +969,11 @@ function PartyDetails() {
               return (
                 <button
                   key={party.id}
-                  onClick={() => setSelectedPartyId(party.id)}
-                  className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-3.5 text-left text-sm transition ${
+                  onClick={() => {
+                    setSelectedPartyId(party.id);
+                    setMobileView("details");
+                  }}
+                  className={`grid w-full grid-cols-[1fr_130px] items-center px-4 py-3.5 text-left text-sm transition cursor-pointer ${
                     String(selectedPartyId) === String(party.id)
                       ? "bg-sky-100 dark:bg-sky-950/40"
                       : "hover:bg-slate-50"
@@ -1013,7 +1048,23 @@ function PartyDetails() {
         </section>
 
         {/* Right Section: Party Header & Transactions */}
-        <section className="min-w-0 overflow-hidden rounded-md bg-white flex flex-col">
+        <section className={`min-w-0 overflow-hidden rounded-md bg-white flex flex-col ${
+          mobileView === "list" ? "hidden md:flex" : "flex"
+        }`}>
+          {/* Mobile Back Button to Party List */}
+          <div className="flex md:hidden items-center justify-between border-b border-slate-200 px-4 py-2.5 bg-slate-50 shrink-0">
+            <button
+              type="button"
+              onClick={() => setMobileView("list")}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+            >
+              ← Back to Parties List
+            </button>
+            <span className="text-xs font-semibold text-slate-500">
+              {filteredParties.length} parties
+            </span>
+          </div>
+
           {/* Header */}
           <div className="flex min-h-[68px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 bg-white">
             <div>
