@@ -92,7 +92,7 @@ function MainLayout() {
           </div>
         )}
 
-        <main className={`min-h-0 min-w-0 flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"} print:h-auto print:overflow-visible`}>
+        <main className={`min-h-0 min-w-0 w-full max-w-full flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"} overflow-x-hidden print:h-auto print:overflow-visible`}>
           {outlet && cloneElement(outlet, { key: refreshKey })}
         </main>
       </div>

@@ -330,8 +330,8 @@ export default function EditProfile() {
   };
 
   return (
-    <div className="min-h-full bg-[#f8fafc] p-3 lg:p-5">
-      <div className="mx-auto max-w-7xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:p-7">
+    <div className="w-full max-w-full min-h-full bg-[#f8fafc] p-3 sm:p-4 lg:p-5">
+      <div className="mx-auto max-w-7xl w-full min-w-0 rounded-xl border border-slate-200 bg-white p-4 sm:p-6 lg:p-7 shadow-sm">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight text-[#1e293b]">
             Edit Profile
@@ -434,10 +434,10 @@ export default function EditProfile() {
         </div>
 
         {/* Form Fields Grid */}
-        <form onSubmit={handleSave}>
-          <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-3">
+        <form onSubmit={handleSave} className="w-full min-w-0">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-6 md:grid-cols-2 xl:grid-cols-3 w-full min-w-0">
             {/* Column 1: Business Details */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <h2 className="text-base font-bold text-slate-800">
                 Business Details
               </h2>
@@ -534,7 +534,7 @@ export default function EditProfile() {
             </div>
 
             {/* Column 2: More Details */}
-            <div className="space-y-4">
+            <div className="space-y-4 min-w-0">
               <h2 className="text-base font-bold text-slate-800">
                 More Details
               </h2>
@@ -636,9 +636,9 @@ export default function EditProfile() {
             </div>
 
             {/* Column 3: Business Address & Signature */}
-            <div className="flex flex-col space-y-4">
+            <div className="flex flex-col space-y-4 min-w-0">
               {/* Spacer on large screens to align with column 1 and 2 inputs */}
-              <div className="hidden h-6 lg:block" />
+              <div className="hidden h-6 xl:block" />
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">
