@@ -1,20 +1,26 @@
 // Implements the party details page.
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
 import {
   FiAlertCircle,
   FiBell,
   FiCheck,
+  FiCheckCircle,
   FiChevronDown,
   FiChevronRight,
   FiCopy,
   FiDownload,
+  FiExternalLink,
   FiFileText,
   FiFilter,
+  FiLoader,
   FiMail,
   FiMessageSquare,
   FiPlus,
   FiPrinter,
   FiSearch,
+  FiSend,
+  FiShare2,
   FiStar,
   FiTrash2,
   FiUsers,
@@ -478,6 +484,231 @@ function formatDateDMY(dateStr) {
   return dateStr;
 }
 
+function downloadBlobFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+/**
+ * Generates an official, clean, vector A4 PDF for Party Statement using jsPDF.
+ */
+function generatePartyStatementPdfBlob({
+  companyName = "Company",
+  companyPhone = "",
+  companyEmail = "",
+  companyGstin = "",
+  party = {},
+  rows = [],
+  totals = {},
+  appSettings = {},
+  filename = "Party_Statement.pdf",
+}) {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const margin = 10;
+  const contentWidth = pageWidth - margin * 2; // 190mm
+
+  const drawHeader = (isFirstPage = false) => {
+    let currentY = 12;
+    if (isFirstPage) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15);
+      doc.setTextColor(15, 23, 42);
+      doc.text(companyName, pageWidth / 2, currentY, { align: "center" });
+      currentY += 4.5;
+
+      const metaParts = [];
+      if (companyPhone) metaParts.push(`Phone no.: ${companyPhone}`);
+      if (companyEmail) metaParts.push(`Email: ${companyEmail}`);
+      if (companyGstin) metaParts.push(`GSTIN: ${companyGstin}`);
+      if (metaParts.length > 0) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text(metaParts.join(" | "), pageWidth / 2, currentY, { align: "center" });
+        currentY += 5;
+      }
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text("Party statement", pageWidth / 2, currentY, { align: "center" });
+      const titleWidth = doc.getTextWidth("Party statement");
+      doc.setDrawColor(15, 23, 42);
+      doc.setLineWidth(0.4);
+      doc.line((pageWidth - titleWidth) / 2, currentY + 1, (pageWidth + titleWidth) / 2, currentY + 1);
+      currentY += 7;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`Party name: ${party.partyName || "Cash Sale"}`, margin, currentY);
+      currentY += 4.5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      if (party.phone) {
+        doc.text(`Contact No.: ${party.phone}`, margin, currentY);
+        currentY += 4;
+      }
+      if (party.billingAddress) {
+        doc.text(`Billing Address: ${party.billingAddress}`, margin, currentY);
+        currentY += 4;
+      }
+      if (appSettings.printShippingAddress !== false && party.shippingAddress) {
+        doc.text(`Shipping Address: ${party.shippingAddress}`, margin, currentY);
+        currentY += 4;
+      }
+      (party.additionalFields || [])
+        .filter((f) => f.showInPrint && f.value)
+        .forEach((f) => {
+          doc.text(`${f.fieldName || f.name}: ${f.value}`, margin, currentY);
+          currentY += 4;
+        });
+
+      currentY += 2;
+    } else {
+      currentY = 12;
+    }
+
+    // Table Header
+    doc.setFillColor(203, 213, 225);
+    doc.rect(margin, currentY, contentWidth, 7, "F");
+    doc.setTextColor(15, 23, 42);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+
+    doc.text("Date", margin + 2, currentY + 4.8);
+    doc.text("Txn Type", margin + 22, currentY + 4.8);
+    doc.text("Ref No.", margin + 55, currentY + 4.8);
+    doc.text("Payment Status", margin + 74, currentY + 4.8);
+    doc.text("Total", margin + 114, currentY + 4.8, { align: "right" });
+    doc.text("Received / Paid", margin + 134, currentY + 4.8, { align: "right" });
+    doc.text("Txn Balance", margin + 152, currentY + 4.8, { align: "right" });
+    doc.text("Receivable Bal", margin + 171, currentY + 4.8, { align: "right" });
+    doc.text("Payable Bal", margin + 190, currentY + 4.8, { align: "right" });
+
+    return currentY + 7;
+  };
+
+  let y = drawHeader(true);
+
+  if (rows.length === 0) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184);
+    doc.text("No transactions to show", pageWidth / 2, y + 10, { align: "center" });
+    y += 18;
+  } else {
+    rows.forEach((row, idx) => {
+      if (y > 275) {
+        doc.addPage();
+        y = drawHeader(false);
+      }
+
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentWidth, 6, "F");
+      }
+
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.2);
+      doc.line(margin, y + 6, margin + contentWidth, y + 6);
+
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+
+      doc.text(formatDateDMY(row.date), margin + 2, y + 4.2);
+      doc.text(String(row.source || "-").slice(0, 22), margin + 22, y + 4.2);
+      doc.text(String(row.number || "-").slice(0, 12), margin + 55, y + 4.2);
+
+      if (row.status === "Paid") {
+        doc.setTextColor(16, 185, 129);
+      } else {
+        doc.setTextColor(225, 29, 72);
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text(String(row.status || "-"), margin + 74, y + 4.2);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(30, 41, 59);
+      doc.text(money(row.total), margin + 114, y + 4.2, { align: "right" });
+      doc.text(money(row.received), margin + 134, y + 4.2, { align: "right" });
+      doc.text(money(row.balance), margin + 152, y + 4.2, { align: "right" });
+
+      if (row.receivableBalance > 0) {
+        doc.setTextColor(16, 185, 129);
+        doc.text(money(row.receivableBalance), margin + 171, y + 4.2, { align: "right" });
+      } else {
+        doc.setTextColor(148, 163, 184);
+        doc.text("-", margin + 171, y + 4.2, { align: "right" });
+      }
+
+      if (row.payableBalance > 0) {
+        doc.setTextColor(225, 29, 72);
+        doc.text(money(row.payableBalance), margin + 190, y + 4.2, { align: "right" });
+      } else {
+        doc.setTextColor(148, 163, 184);
+        doc.text("-", margin + 190, y + 4.2, { align: "right" });
+      }
+
+      y += 6;
+    });
+
+    if (y > 270) {
+      doc.addPage();
+      y = drawHeader(false);
+    }
+    doc.setFillColor(203, 213, 225);
+    doc.rect(margin, y, contentWidth, 7, "F");
+    doc.setDrawColor(148, 163, 184);
+    doc.setLineWidth(0.4);
+    doc.line(margin, y, margin + contentWidth, y);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+
+    doc.text("Total", margin + 2, y + 4.8);
+    doc.text(money(totals.totalAmount), margin + 114, y + 4.8, { align: "right" });
+    doc.text(money(totals.totalReceived), margin + 134, y + 4.8, { align: "right" });
+    doc.text(money(totals.totalBalance), margin + 152, y + 4.8, { align: "right" });
+
+    doc.setTextColor(4, 120, 87);
+    doc.text(money(totals.totalReceivable), margin + 171, y + 4.8, { align: "right" });
+
+    doc.setTextColor(190, 18, 60);
+    doc.text(money(totals.totalPayable), margin + 190, y + 4.8, { align: "right" });
+
+    y += 9;
+  }
+
+  const now = new Date();
+  const timestamp = `Generated on ${formatDateDMY(now)} at ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(148, 163, 184);
+    doc.text(timestamp, margin, pageHeight - 6);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 6, { align: "right" });
+  }
+
+  const pdfBlob = doc.output("blob");
+  const file = new File([pdfBlob], filename, { type: "application/pdf" });
+  return { doc, blob: pdfBlob, file, filename };
+}
+
 function buildStatementDocument(party, invoices, activity = [], settings = {}) {
   const opening = Math.abs(Number(party?.openingBalance || 0));
   const openingType = party?.openingBalanceType || "to-receive";
@@ -578,6 +809,12 @@ function PartyDetails() {
   const [search, setSearch] = useState("");
   const [statementOpen, setStatementOpen] = useState(false);
   const [printStatementOnOpen, setPrintStatementOnOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [gmailGuidanceOpen, setGmailGuidanceOpen] = useState(false);
+  const [lastGmailUrl, setLastGmailUrl] = useState("");
   const [transactionSearchOpen, setTransactionSearchOpen] = useState(false);
   const [transactionSearch, setTransactionSearch] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -799,6 +1036,234 @@ function PartyDetails() {
   const cashSaleName = selectedParty?.partyName || "Cash Sale";
   const selectedOpeningBalance = Math.abs(Number(selectedParty?.openingBalance || 0));
   const selectedBalanceType = selectedParty?.openingBalanceType || "to-receive";
+
+  const statementRows = useMemo(() => [
+    ...(selectedParty && selectedOpeningBalance > 0 ? [{
+      id: "opening",
+      date: selectedParty.asOfDate || "",
+      source: `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance`,
+      number: "-",
+      status: "Unpaid",
+      total: selectedOpeningBalance,
+      received: 0,
+      balance: selectedOpeningBalance,
+      receivableBalance: selectedBalanceType === "to-receive" ? selectedOpeningBalance : 0,
+      payableBalance: selectedBalanceType === "to-pay" ? selectedOpeningBalance : 0,
+    }] : []),
+    ...partyTransactions.map((entry) => ({
+      id: entry.id,
+      date: entry.date,
+      source: entry.source,
+      number: entry.number || "-",
+      status: entry.status || "Paid",
+      total: Number(entry.total || 0),
+      received: Number(entry.received || 0),
+      balance: Number(entry.balance || 0),
+      receivableBalance: Number(entry.receivableBalance || 0),
+      payableBalance: Number(entry.payableBalance || 0),
+    })),
+  ], [selectedParty, selectedOpeningBalance, selectedBalanceType, partyTransactions]);
+
+  const statementTotals = useMemo(() => ({
+    totalAmount: statementRows.reduce((sum, r) => sum + Number(r.total || 0), 0),
+    totalReceived: statementRows.reduce((sum, r) => sum + Number(r.received || 0), 0),
+    totalBalance: statementRows.reduce((sum, r) => sum + Number(r.balance || 0), 0),
+    totalReceivable: statementRows.reduce((sum, r) => sum + Number(r.receivableBalance || 0), 0),
+    totalPayable: statementRows.reduce((sum, r) => sum + Number(r.payableBalance || 0), 0),
+  }), [statementRows]);
+
+  const getStatementPdfDocument = () => {
+    const company = getCompanyProfile();
+    const companyName = company.businessName || company.companyName || "Company Name";
+    const senderEmail = company.email || company.emailId || "";
+    const partyName = selectedParty?.partyName || "Party";
+    const cleanFileName = `${(partyName || "Party").replace(/[^a-z0-9-_]+/gi, "_")}_Statement.pdf`;
+
+    return generatePartyStatementPdfBlob({
+      companyName,
+      companyPhone: company.phone || company.phoneNumber || "",
+      companyEmail: senderEmail,
+      companyGstin: company.gstin || "",
+      party: selectedParty || {},
+      rows: statementRows,
+      totals: statementTotals,
+      appSettings,
+      filename: cleanFileName,
+    });
+  };
+
+  const handleSaveStatementPdf = () => {
+    try {
+      const result = getStatementPdfDocument();
+      downloadBlobFile(result.blob, result.filename);
+      toast.success(`✓ ${result.filename} downloaded!`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to generate PDF.");
+    }
+  };
+
+  const handleOpenStatementPdf = () => {
+    try {
+      const result = getStatementPdfDocument();
+      const url = URL.createObjectURL(result.blob);
+      window.open(url, "_blank");
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to open PDF view.");
+    }
+  };
+
+  const buildPartyEmailBody = (channel = "gmail") => {
+    const company = getCompanyProfile();
+    const companyName = company.businessName || company.companyName || "Company";
+    const senderEmail = company.email || company.emailId || "";
+    const phone = company.phoneNumber || company.phone || "";
+    const partyName = selectedParty?.partyName || "Customer";
+    const pdfFileName = `${(partyName || "Party").replace(/[^a-z0-9-_]+/gi, "_")}_Statement.pdf`;
+
+    return `Dear ${partyName},
+
+Please find attached your Party Statement (PDF) from ${companyName}.
+
+==================================================
+PARTY STATEMENT
+Company: ${companyName}
+Party: ${partyName}
+${selectedParty?.phone ? `Contact No.: ${selectedParty.phone}\n` : ""}Generated: ${new Date().toLocaleDateString("en-IN")}
+==================================================
+
+STATEMENT SUMMARY:
+• Total Transactions: ${statementRows.length}
+• Total Amount: ${money(statementTotals.totalAmount)}
+• Total Received / Paid: ${money(statementTotals.totalReceived)}
+• Net Balance: ${money(statementTotals.totalBalance)}
+${statementTotals.totalReceivable > 0 ? `• Total Receivable: ${money(statementTotals.totalReceivable)}\n` : ""}${statementTotals.totalPayable > 0 ? `• Total Payable: ${money(statementTotals.totalPayable)}\n` : ""}
+ATTACHED DOCUMENT:
+📎 ${pdfFileName}
+
+Thank you,
+${companyName}
+${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : ""}`;
+  };
+
+  const handleSendViaEmailApp = async () => {
+    const cleanTo = emailInput.trim();
+    if (!cleanTo || !cleanTo.includes("@") || !cleanTo.includes(".")) {
+      toast.error("Please enter a valid recipient email address.");
+      return;
+    }
+
+    const company = getCompanyProfile();
+    const senderEmail = company.email || company.emailId || "";
+    if (!senderEmail) {
+      toast.error("Please add your business email in the Company Profile first.");
+      return;
+    }
+
+    setIsSendingEmail(true);
+    try {
+      const pdfFileName = `${(selectedParty?.partyName || "Party").replace(/[^a-z0-9-_]+/gi, "_")}_Statement.pdf`;
+      const result = generatePartyStatementPdfBlob({
+        companyName: company.businessName || company.companyName || "Company",
+        companyPhone: company.phone || company.phoneNumber || "",
+        companyEmail: senderEmail,
+        companyGstin: company.gstin || "",
+        party: selectedParty || {},
+        rows: statementRows,
+        totals: statementTotals,
+        appSettings,
+        filename: pdfFileName,
+      });
+
+      downloadBlobFile(result.blob, pdfFileName);
+
+      const subject = emailSubject.trim() || `[${company.businessName || company.companyName || "Company"}] Party Statement - ${selectedParty?.partyName || "Party"}`;
+      const body = buildPartyEmailBody("app");
+
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [result.file] })
+      ) {
+        try {
+          await navigator.share({
+            title: subject,
+            text: body,
+            files: [result.file],
+          });
+          toast.success(`✓ ${pdfFileName} attached and opened in Mail App!`, { duration: 6000 });
+          setEmailModalOpen(false);
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === "AbortError") return;
+          console.warn("navigator.share failed, using mailto fallback:", shareErr);
+        }
+      }
+
+      const mailtoUrl = `mailto:${encodeURIComponent(cleanTo)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.location.href = mailtoUrl;
+
+      toast.success(`✓ ${pdfFileName} downloaded to your PC & Mail App opened for ${cleanTo}!`, { duration: 8000 });
+      setEmailModalOpen(false);
+    } catch (err) {
+      console.error("Email send error:", err);
+      toast.error("Failed to generate PDF for email.");
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleSendViaGmail = () => {
+    const cleanTo = emailInput.trim();
+    if (!cleanTo || !cleanTo.includes("@") || !cleanTo.includes(".")) {
+      toast.error("Please enter a valid recipient email address.");
+      return;
+    }
+
+    const company = getCompanyProfile();
+    const senderEmail = company.email || company.emailId || "";
+    if (!senderEmail) {
+      toast.error("Please add your business email in the Company Profile first.");
+      return;
+    }
+
+    try {
+      const pdfFileName = `${(selectedParty?.partyName || "Party").replace(/[^a-z0-9-_]+/gi, "_")}_Statement.pdf`;
+      const result = generatePartyStatementPdfBlob({
+        companyName: company.businessName || company.companyName || "Company",
+        companyPhone: company.phone || company.phoneNumber || "",
+        companyEmail: senderEmail,
+        companyGstin: company.gstin || "",
+        party: selectedParty || {},
+        rows: statementRows,
+        totals: statementTotals,
+        appSettings,
+        filename: pdfFileName,
+      });
+
+      downloadBlobFile(result.blob, pdfFileName);
+
+      const subject = emailSubject.trim() || `[${company.businessName || company.companyName || "Company"}] Party Statement - ${selectedParty?.partyName || "Party"}`;
+      const body = buildPartyEmailBody("gmail");
+
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(cleanTo)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+      const win = window.open(gmailUrl, "_blank");
+      if (!win) {
+        window.location.href = `mailto:${encodeURIComponent(cleanTo)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      }
+
+      setLastGmailUrl(gmailUrl);
+
+      toast.success(`✓ ${pdfFileName} downloaded! Please attach this downloaded file before sending in Gmail.`, { duration: 15000 });
+      setGmailGuidanceOpen(true);
+    } catch (err) {
+      console.error("Gmail error:", err);
+      toast.error("Failed to generate PDF for Gmail.");
+    }
+  };
   // Opens statement document.
   const openStatementDocument = (printWhenReady = false) => {
     const popup = window.open("", "_blank");
@@ -1292,39 +1757,7 @@ function PartyDetails() {
         const company = getCompanyProfile();
         const companyName = company.businessName || company.companyName || "Company Name";
         const companyPhone = company.phoneNumber || company.phone || "";
-
-        const statementRows = [
-          ...(selectedParty && selectedOpeningBalance > 0 ? [{
-            id: "opening",
-            date: selectedParty.asOfDate || "",
-            source: `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance`,
-            number: "-",
-            status: "Unpaid",
-            total: selectedOpeningBalance,
-            received: 0,
-            balance: selectedOpeningBalance,
-            receivableBalance: selectedBalanceType === "to-receive" ? selectedOpeningBalance : 0,
-            payableBalance: selectedBalanceType === "to-pay" ? selectedOpeningBalance : 0,
-          }] : []),
-          ...partyTransactions.map((entry) => ({
-            id: entry.id,
-            date: entry.date,
-            source: entry.source,
-            number: entry.number || "-",
-            status: entry.status || "Paid",
-            total: Number(entry.total || 0),
-            received: Number(entry.received || 0),
-            balance: Number(entry.balance || 0),
-            receivableBalance: Number(entry.receivableBalance || 0),
-            payableBalance: Number(entry.payableBalance || 0),
-          })),
-        ];
-
-        const totalAmount = statementRows.reduce((sum, r) => sum + Number(r.total || 0), 0);
-        const totalReceived = statementRows.reduce((sum, r) => sum + Number(r.received || 0), 0);
-        const totalBalance = statementRows.reduce((sum, r) => sum + Number(r.balance || 0), 0);
-        const totalReceivable = statementRows.reduce((sum, r) => sum + Number(r.receivableBalance || 0), 0);
-        const totalPayable = statementRows.reduce((sum, r) => sum + Number(r.payableBalance || 0), 0);
+        const { totalAmount, totalReceived, totalBalance, totalReceivable, totalPayable } = statementTotals;
 
         return (
           <div className="party-statement-overlay fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6 backdrop-blur-xs">
@@ -1484,20 +1917,24 @@ function PartyDetails() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition"
+                  onClick={handleSaveStatementPdf}
+                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                 >
                   Save PDF
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    const email = selectedParty?.email || "";
-                    const subject = encodeURIComponent(`Party statement - ${selectedParty?.partyName || "Cash Sale"}`);
-                    const body = encodeURIComponent("Please find the party statement attached.");
-                    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+                    const partyEmail = selectedParty?.email || "";
+                    const partyName = selectedParty?.partyName || "Party";
+                    const company = getCompanyProfile();
+                    const cName = company.businessName || company.companyName || "Company";
+                    setEmailInput(partyEmail);
+                    setEmailSubject(`[${cName}] Party Statement - ${partyName}`);
+                    setGmailGuidanceOpen(false);
+                    setEmailModalOpen(true);
                   }}
-                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition"
+                  className="rounded-full border border-rose-500 px-5 py-2 text-xs sm:text-sm font-semibold text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                 >
                   Email PDF
                 </button>
@@ -1510,6 +1947,306 @@ function PartyDetails() {
                 </button>
               </footer>
             </section>
+          </div>
+        );
+      })()}
+
+      {/* Send Party Statement via Email Modal */}
+      {emailModalOpen && (() => {
+        const company = getCompanyProfile();
+        const senderEmail = company.email || company.emailId || "";
+        const partyName = selectedParty?.partyName || "Party";
+        const pdfFileName = `${(partyName || "Party").replace(/[^a-z0-9-_]+/gi, "_")}_Statement.pdf`;
+
+        return (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/10">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                  <FiMail className="text-rose-600 h-5 w-5" /> Send Party Statement via Email
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailModalOpen(false);
+                    setGmailGuidanceOpen(false);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 rounded-lg p-1 cursor-pointer"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+
+              {gmailGuidanceOpen ? (
+                <div className="py-3 space-y-4">
+                  <div className="text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 shadow-xs">
+                      <FiCheckCircle className="h-7 w-7" />
+                    </div>
+                    <h4 className="mt-2.5 text-base font-bold text-slate-900 tracking-tight">
+                      Gmail Compose Opened!
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Your party statement file has been downloaded to your computer:
+                    </p>
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-1.5 text-xs font-bold text-slate-900 shadow-2xs">
+                      <span className="rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-black text-white">
+                        PDF
+                      </span>
+                      <span>{pdfFileName}</span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border-2 border-amber-400 bg-amber-50/95 p-4 text-xs text-amber-950 space-y-3 shadow-xs">
+                    <div className="flex items-center gap-2 font-bold text-amber-950 text-sm">
+                      <span className="text-lg">📎</span>
+                      <span>Action Required: Attach Downloaded File in Gmail</span>
+                    </div>
+                    <p className="text-xs text-amber-900 font-medium leading-relaxed">
+                      When you send the email, <strong>please attach the downloaded file ({pdfFileName})</strong> which has just been downloaded to your computer:
+                    </p>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-white p-2.5 shadow-2xs">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 font-bold text-[11px]">
+                          1
+                        </span>
+                        <span className="text-slate-800">
+                          In your open Gmail tab, click the <strong>📎 Paperclip (Attach files) icon</strong> at the bottom of the compose window.
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-white p-2.5 shadow-2xs">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 font-bold text-[11px]">
+                          2
+                        </span>
+                        <span className="text-slate-800">
+                          Select <strong>{pdfFileName}</strong> from your <strong>Downloads</strong> folder (or simply drag the file from your browser&apos;s download tray directly into Gmail).
+                        </span>
+                      </div>
+                      <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-white p-2.5 shadow-2xs">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800 font-bold text-[11px]">
+                          3
+                        </span>
+                        <span className="text-slate-800">
+                          Once attached, click <strong>Send</strong> in Gmail.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (lastGmailUrl) window.open(lastGmailUrl, "_blank");
+                      }}
+                      className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <FiExternalLink className="h-3.5 w-3.5 text-rose-600" /> Re-open Gmail Tab
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveStatementPdf}
+                      className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <FiDownload className="h-3.5 w-3.5" /> Re-download PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGmailGuidanceOpen(false);
+                        setEmailModalOpen(false);
+                        setEmailInput("");
+                      }}
+                      className="rounded-lg bg-rose-600 px-5 py-2 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer shadow-sm"
+                    >
+                      Got it, Close
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-4 space-y-4">
+                  {!senderEmail ? (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900">
+                      <div className="flex items-start gap-3">
+                        <FiAlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <h4 className="text-sm font-bold text-amber-900">
+                            Sender Email Missing in Profile
+                          </h4>
+                          <p className="mt-1 text-xs text-amber-700 leading-relaxed">
+                            Please add your business email address in the{" "}
+                            <strong>Company Profile</strong> first before sending
+                            emails. Once your email is saved in your profile, you
+                            can easily send party statements to any recipient.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEmailModalOpen(false);
+                              setStatementOpen(false);
+                              navigate("/company-profile");
+                            }}
+                            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-amber-700 cursor-pointer"
+                          >
+                            Go to Company Profile to Add Email →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Sender (From Company Profile)
+                        </label>
+                        <div className="mt-1 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-800">
+                          <span className="font-semibold text-slate-900 truncate">
+                            {senderEmail}
+                          </span>
+                          <span className="shrink-0 flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            <FiCheck className="h-3 w-3" /> Profile Email
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Recipient Email Address <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          autoFocus
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="recipient@example.com"
+                          className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-rose-600 focus:ring-1 focus:ring-rose-600"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSendViaGmail();
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600">
+                          Subject
+                        </label>
+                        <input
+                          type="text"
+                          value={emailSubject}
+                          onChange={(e) => setEmailSubject(e.target.value)}
+                          className="mt-1.5 h-9 w-full rounded-md border border-slate-300 px-3 text-xs outline-none focus:border-rose-600"
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3.5 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-600 text-white font-black text-xs tracking-wider shadow-xs">
+                              PDF
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-bold text-slate-900 truncate max-w-[200px] sm:max-w-xs">
+                                  {pdfFileName}
+                                </p>
+                                <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-semibold text-rose-800">
+                                  PDF Document
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-600 mt-0.5">
+                                {statementRows.length} transactions • Total {money(statementTotals.totalAmount)}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isSendingEmail}
+                              onClick={handleOpenStatementPdf}
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 shadow-xs cursor-pointer"
+                              title="Preview PDF file in browser"
+                            >
+                              <FiExternalLink className="h-3 w-3" /> Preview
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isSendingEmail}
+                              onClick={handleSaveStatementPdf}
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 shadow-xs cursor-pointer"
+                              title="Download PDF to computer"
+                            >
+                              <FiDownload className="h-3 w-3" /> Download
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="rounded-md bg-amber-50/90 border border-amber-200 p-2.5 text-[11px] text-amber-950 leading-relaxed space-y-1">
+                          <p className="font-bold flex items-center gap-1.5 text-amber-900">
+                            <span>ℹ️ How PDF attachment works:</span>
+                          </p>
+                          <p>
+                            • <strong>Auto-Attach via Email App:</strong> Automatically attaches <strong>{pdfFileName}</strong> directly into your draft in Windows Mail / Outlook.
+                          </p>
+                          <p>
+                            • <strong>Gmail Web:</strong> <strong>{pdfFileName}</strong> is downloaded to your PC — simply drag the downloaded file into Gmail compose window or click 📎.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {!gmailGuidanceOpen && (
+                <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-4">
+                  <button
+                    type="button"
+                    disabled={isSendingEmail}
+                    onClick={() => {
+                      setEmailModalOpen(false);
+                      setEmailInput("");
+                    }}
+                    className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+
+                  {senderEmail && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={isSendingEmail}
+                        onClick={handleSendViaEmailApp}
+                        className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-800 cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                        title="Automatically attach PDF and compose in Mail App (Outlook / Windows Mail)"
+                      >
+                        {isSendingEmail ? (
+                          <FiLoader className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <FiShare2 className="h-3.5 w-3.5" />
+                        )}
+                        <span>⚡ Auto-Attach in Email App</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isSendingEmail}
+                        onClick={handleSendViaGmail}
+                        className="rounded-lg bg-rose-600 px-5 py-2 text-xs font-semibold text-white hover:bg-rose-700 cursor-pointer flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                        title="Download PDF and compose email in Gmail Web"
+                      >
+                        {isSendingEmail ? (
+                          <FiLoader className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <FiSend className="h-3.5 w-3.5" />
+                        )}
+                        <span>Send via Gmail</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}
