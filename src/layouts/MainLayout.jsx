@@ -58,7 +58,7 @@ function MainLayout() {
   const isReportsRoute = pathname.startsWith("/reports");
   const hasExistingBackAction = routesWithExistingBackAction.includes(pathname)
     || pathname.startsWith("/business-growth/marketing-tools/editor/");
-  const showBackButton = pathname !== "/" && !hasExistingBackAction
+  const showBackButton = pathname !== "/" && pathname !== "/dashboard" && !hasExistingBackAction
     && Number(window.history.state?.idx) > 0;
 
   if (isFullscreenRoute) {

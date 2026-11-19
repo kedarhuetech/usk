@@ -186,7 +186,7 @@ export default function HorizontalNavbar() {
               const isChildActive = hasChildren
                 ? item.children.some((child) => location.pathname === child.path || `${location.pathname}${location.search}` === child.path)
                 : false;
-              const isDirectActive = item.path === location.pathname;
+              const isDirectActive = item.path === location.pathname || (item.id === "dashboard" && location.pathname === "/");
               const isActive = isDirectActive || isChildActive;
               const isOpen = activeDropdown === item.id;
 

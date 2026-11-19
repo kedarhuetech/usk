@@ -49,7 +49,10 @@ export default function ReportPrintPreviewModal({
   dateTo,
   user = "All Users",
   records = [],
-  totalLabel = "Total Sale:",
+  rows = [],
+  columns,
+  subtitle,
+  totalLabel,
   totalAmount,
   printOnOpen = false,
 }) {
@@ -77,11 +80,34 @@ export default function ReportPrintPreviewModal({
 
   if (!isOpen) return null;
 
-  const durationStr = `From ${formatDateDMY(dateFrom)} to ${formatDateDMY(dateTo)}`;
+  const durationStr = !dateFrom && !dateTo
+    ? "All Dates"
+    : dateFrom && dateTo
+    ? `From ${formatDateDMY(dateFrom)} to ${formatDateDMY(dateTo)}`
+    : dateFrom
+    ? `From ${formatDateDMY(dateFrom)}`
+    : `Up to ${formatDateDMY(dateTo)}`;
+
+  const effectiveRecords = (Array.isArray(records) && records.length > 0)
+    ? records
+    : (Array.isArray(rows) && rows.length > 0)
+    ? rows
+    : [];
+
+  const isPurchase = title.toLowerCase().includes("purchase");
+  const isExpense = title.toLowerCase().includes("expense");
+  const resolvedTotalLabel = totalLabel || (isPurchase ? "Total Purchase:" : isExpense ? "Total Expenses:" : "Total Sale:");
+
+  const parseNum = (v) => {
+    if (v === undefined || v === null || v === "") return 0;
+    if (typeof v === "number") return v;
+    const n = parseFloat(String(v).replace(/[^0-9.-]+/g, ""));
+    return Number.isNaN(n) ? 0 : n;
+  };
 
   const calculatedTotal = totalAmount !== undefined
     ? Number(totalAmount)
-    : records.reduce((sum, r) => sum + Number(r.totals?.finalTotal ?? r.totals?.grandTotal ?? r.totalAmount ?? r.total ?? r.amount ?? 0), 0);
+    : effectiveRecords.reduce((sum, r) => sum + parseNum(r.totals?.finalTotal ?? r.totals?.grandTotal ?? r.totalAmount ?? r.total ?? r.amount), 0);
 
   const timestampStr = formatGeneratedTimestamp();
 
@@ -168,35 +194,48 @@ export default function ReportPrintPreviewModal({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {records.length === 0 ? (
+                  {effectiveRecords.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-8 text-center text-slate-400 font-medium">
                         No transactions found for the selected period
                       </td>
                     </tr>
                   ) : (
-                    records.map((record, index) => {
+                    effectiveRecords.map((record, index) => {
                       const rawDate = record.form?.invoiceDate || record.form?.billDate || record.invoiceDate || record.date || record.createdAt;
                       const displayDate = formatDateDMY(rawDate);
-                      const invNumber = record.form?.invoiceNumber || record.invoiceNumber || record.refNo || record.id || "—";
-                      const partyName = record.form?.customer || record.form?.party || record.customer || record.customerName || record.partyName || record.supplier || "Cash Sale";
+                      const invNumber = record.form?.invoiceNumber || record.invoiceNumber || record.invoiceNo || record.invoice || record.refNo || record.id || "—";
+                      const partyName = record.form?.customer || record.form?.party || record.customer || record.customerName || record.partyName || record.supplier || record.party || (isPurchase ? "Cash Purchase" : "Cash Sale");
                       const gstin = record.form?.gstin || record.partyGstin || record.gstin || "";
-                      const paymentType = record.form?.paymentType || (record.saleType === "cash" || record.purchaseType === "cash" ? "Cash" : "Credit");
+                      const paymentType = record.form?.paymentType || record.paymentType || (record.saleType === "cash" || record.purchaseType === "cash" ? "Cash" : "Credit");
 
-                      const totalAmt = Number(
-                        record.totals?.finalTotal ?? record.totals?.grandTotal ?? record.totalAmount ?? record.total ?? record.amount ?? 0
+                      const totalAmt = parseNum(
+                        record.totals?.finalTotal ?? record.totals?.grandTotal ?? record.totalAmount ?? record.total ?? record.amount
                       );
-                      const receivedAmt = Number(
-                        record.totals?.received ?? record.paidAmount ?? record.receivedAmount ?? record.form?.receivedAmount ?? record.form?.paidAmount ?? (paymentType === "Cash" ? totalAmt : 0)
-                      );
+                      const receivedAmt = record.totals?.received !== undefined
+                        ? parseNum(record.totals.received)
+                        : record.totals?.paid !== undefined
+                        ? parseNum(record.totals.paid)
+                        : record.paidAmount !== undefined
+                        ? parseNum(record.paidAmount)
+                        : record.receivedAmount !== undefined
+                        ? parseNum(record.receivedAmount)
+                        : record.form?.receivedAmount !== undefined
+                        ? parseNum(record.form.receivedAmount)
+                        : record.form?.paidAmount !== undefined
+                        ? parseNum(record.form.paidAmount)
+                        : (paymentType === "Cash" && record.status !== "Unpaid" ? totalAmt : 0);
+
                       const balanceDue = record.totals?.balance !== undefined
-                        ? Number(record.totals.balance)
+                        ? parseNum(record.totals.balance)
+                        : record.balanceAmount !== undefined
+                        ? parseNum(record.balanceAmount)
                         : Math.max(0, totalAmt - receivedAmt);
 
                       // Extract line items
-                      const rawRows = Array.isArray(record.rows)
+                      const rawRows = Array.isArray(record.rows) && record.rows.length > 0
                         ? record.rows
-                        : Array.isArray(record.items)
+                        : Array.isArray(record.items) && record.items.length > 0
                         ? record.items
                         : [];
                       const validRows = rawRows.filter((row) => row && (row.item || row.itemName || row.name || row.qty || row.quantity));
@@ -344,7 +383,7 @@ export default function ReportPrintPreviewModal({
               </div>
               <div className="text-right order-1 sm:order-2">
                 <span className="text-xl sm:text-2xl font-black text-slate-950 tracking-tight">
-                  {totalLabel} {fmtMoney(calculatedTotal)}
+                  {resolvedTotalLabel} {fmtMoney(calculatedTotal)}
                 </span>
               </div>
             </div>

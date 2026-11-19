@@ -57,7 +57,7 @@ export default function PurchaseBills() {
   }, []);
   const visible = useMemo(() => records.filter((bill) => {
     const status = billSettlement(bill).paymentStatus;
-    const text = `${bill.form?.customer || bill.partyName || ""} ${bill.form?.invoiceNumber || bill.invoiceNumber || ""}`.toLowerCase();
+    const text = `${bill.form?.customer || bill.partyName || bill.supplier || ""} ${bill.form?.invoiceNumber || bill.invoiceNumber || ""}`.toLowerCase();
     return (!fromDate || (bill.form?.invoiceDate || bill.date || "") >= fromDate)
       && (!toDate || (bill.form?.invoiceDate || bill.date || "") <= toDate)
       && (statusFilter === "All Purchase Invoices" || statusFilter === status)
@@ -88,37 +88,95 @@ export default function PurchaseBills() {
       },
     });
   };
+  const printRecords = useMemo(() => visible.map((bill) => {
+    const amount = billTotal(bill);
+    const received = billPaid(bill);
+    const balance = Math.max(0, amount - received);
+    const partyName = bill.form?.customer || bill.partyName || bill.supplier || "Cash Purchase";
+    const billNum = bill.form?.invoiceNumber || bill.invoiceNumber || "—";
+    const billDate = bill.form?.invoiceDate || bill.date || bill.createdAt;
+    const paymentType = bill.form?.paymentType || (bill.purchaseType === "cash" ? "Cash" : "Credit");
+    const gstin = bill.form?.gstin || bill.partyGstin || bill.gstin || "";
+    const settlement = billSettlement(bill);
+
+    const sourceRows = Array.isArray(bill.items) && bill.items.length > 0
+      ? bill.items
+      : Array.isArray(bill.rows) && bill.rows.length > 0
+      ? bill.rows
+      : [];
+
+    return {
+      ...bill,
+      id: bill.id,
+      invoiceDate: billDate,
+      date: billDate,
+      invoiceNumber: billNum,
+      partyName,
+      customer: partyName,
+      supplier: partyName,
+      gstin,
+      paymentType,
+      status: settlement.paymentStatus,
+      totalAmount: amount,
+      paidAmount: received,
+      receivedAmount: received,
+      balanceAmount: balance,
+      totals: {
+        ...(bill.totals || {}),
+        subtotal: bill.totals?.subtotal ?? amount,
+        finalTotal: amount,
+        grandTotal: amount,
+        received,
+        paid: received,
+        balance,
+      },
+      rows: sourceRows.map((r, i) => ({
+        id: r.id || `row-${i}`,
+        item: r.item || r.name || r.itemName || "Item",
+        itemName: r.item || r.name || r.itemName || "Item",
+        hsn: r.hsn || r.hsnSac || r.hsnCode || "",
+        qty: Number(r.qty ?? r.quantity ?? 1),
+        quantity: Number(r.qty ?? r.quantity ?? 1),
+        unit: r.unit || "PCS",
+        price: Number(r.price ?? r.rate ?? r.unitPrice ?? 0),
+        rate: Number(r.price ?? r.rate ?? r.unitPrice ?? 0),
+        unitPrice: Number(r.price ?? r.rate ?? r.unitPrice ?? 0),
+        discount: Number(r.discount ?? r.discountAmount ?? 0),
+        discountPercent: Number(r.discountPercent ?? 0),
+        taxRate: Number(r.taxRate ?? r.tax ?? 0),
+        amount: Number(r.amount ?? r.total ?? (r.calculated?.amount ?? (Number(r.qty ?? r.quantity ?? 1) * Number(r.price ?? r.rate ?? r.unitPrice ?? 0)))),
+      })),
+    };
+  }), [visible]);
+
   const printSingleBill = (bill, printNow = false) => {
     setMenuId("");
     const amount = billTotal(bill);
     const received = billPaid(bill);
     const balance = Math.max(0, amount - received);
-    const partyName = bill.form?.customer || bill.partyName || "Cash Purchase";
+    const partyName = bill.form?.customer || bill.partyName || bill.supplier || "Cash Purchase";
     const billNum = bill.form?.invoiceNumber || bill.invoiceNumber || "—";
     const billDate = dateText(bill.form?.invoiceDate || bill.date);
 
     let rows = [];
-    if (Array.isArray(bill.items) && bill.items.length > 0) {
-      rows = bill.items.map((r, i) => ({
+    const sourceRows = Array.isArray(bill.items) && bill.items.length > 0
+      ? bill.items
+      : Array.isArray(bill.rows) && bill.rows.length > 0
+      ? bill.rows
+      : [];
+
+    if (sourceRows.length > 0) {
+      rows = sourceRows.map((r, i) => ({
         index: i + 1,
         item: r.item || r.name || r.itemName || "Item",
         description: r.description || "",
-        qty: Number(r.qty || r.quantity || 1),
+        hsn: r.hsn || r.hsnSac || r.hsnCode || "",
+        qty: Number(r.qty ?? r.quantity ?? 1),
         unit: r.unit || "PCS",
-        price: Number(r.price || r.rate || r.unitPrice || 0),
-        tax: Number(r.taxRate || r.tax || 0),
-        amount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
-      }));
-    } else if (Array.isArray(bill.rows) && bill.rows.length > 0) {
-      rows = bill.rows.map((r, i) => ({
-        index: i + 1,
-        item: r.item || r.name || r.itemName || "Item",
-        description: r.description || "",
-        qty: Number(r.qty || r.quantity || 1),
-        unit: r.unit || "PCS",
-        price: Number(r.price || r.rate || r.unitPrice || 0),
-        tax: Number(r.taxRate || r.tax || 0),
-        amount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
+        price: Number(r.price ?? r.rate ?? r.unitPrice ?? 0),
+        tax: Number(r.taxRate ?? r.tax ?? 0),
+        discount: Number(r.discount ?? r.discountAmount ?? 0),
+        amount: Number(r.amount ?? r.total ?? (r.calculated?.amount ?? (Number(r.qty ?? r.quantity ?? 1) * Number(r.price ?? r.rate ?? r.unitPrice ?? 0)))),
       }));
     } else {
       rows = [{ index: 1, item: `Purchase Bill #${billNum}`, qty: 1, price: amount, amount }];
@@ -131,7 +189,7 @@ export default function PurchaseBills() {
       partyName,
       partyPhone: bill.form?.phone || bill.phone || "",
       partyBillingAddress: bill.form?.billingAddress || bill.billingAddress || "",
-      partyGstin: bill.form?.gstin || bill.gstin || "",
+      partyGstin: bill.form?.gstin || bill.partyGstin || bill.gstin || "",
       status: billSettlement(bill).paymentStatus,
       rows,
       totals: { subtotal: amount, total: amount, received, balance },
@@ -167,25 +225,12 @@ export default function PurchaseBills() {
     <ReportPrintPreviewModal
       isOpen={printModalOpen}
       title="Purchase Bills Report"
-      subtitle={`Total: ${money(total)} · Paid: ${money(paid)} · Balance Due: ${money(unpaid)}`}
-      columns={[
-        { key: "date", label: "Date" },
-        { key: "invoice", label: "Invoice No." },
-        { key: "party", label: "Party Name" },
-        { key: "type", label: "Payment Type" },
-        { key: "amount", label: "Amount", align: "right" },
-        { key: "balance", label: "Balance Due", align: "right" },
-        { key: "status", label: "Status" },
-      ]}
-      rows={visible.map((bill) => ({
-        date: dateText(bill.form?.invoiceDate || bill.date),
-        invoice: bill.form?.invoiceNumber || bill.invoiceNumber || "—",
-        party: bill.form?.customer || bill.partyName || "Cash Purchase",
-        type: bill.form?.paymentType || "Cash",
-        amount: money(billTotal(bill)),
-        balance: money(Math.max(0, billTotal(bill) - billPaid(bill))),
-        status: billSettlement(bill).paymentStatus,
-      }))}
+      dateFrom={fromDate}
+      dateTo={toDate}
+      user="Admin"
+      records={printRecords}
+      totalLabel="Total Purchase:"
+      totalAmount={total}
       onClose={() => setPrintModalOpen(false)}
     />
   </main>;
