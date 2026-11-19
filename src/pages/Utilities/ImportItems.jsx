@@ -102,6 +102,7 @@ function barcodeReviewFromProduct(product, barcode, source) {
   return {
     itemName,
     itemCode: barcode,
+    barcode: barcode,
     category,
     unit,
     salePrice: "",
@@ -168,6 +169,7 @@ function emptyBarcodeReview(barcode) {
   return {
     itemName: "",
     itemCode: barcode,
+    barcode: barcode,
     category: "",
     unit: "",
     purchasePrice: "",
@@ -466,6 +468,7 @@ function ImportItems() {
         ...reviewItem,
         type: "product",
         code: reviewItem.itemCode,
+        barcode: reviewItem.barcode || reviewItem.itemCode,
         stock: reviewItem.openingQuantity,
         id: undefined,
       });
@@ -536,6 +539,7 @@ function ImportItems() {
           ...row,
           id: undefined,
           code: row.itemCode,
+          barcode: row.barcode || row.itemCode,
           stock: row.openingQuantity,
         });
         imported += 1;

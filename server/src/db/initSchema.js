@@ -82,6 +82,7 @@ export async function initializeDatabaseSchema() {
       await addCol("inventory_items", "is_serial_tracked TINYINT(1) DEFAULT 0");
       await addCol("inventory_items", "description TEXT");
       await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
+      await addCol("transaction_items", "barcode VARCHAR(100)");
       await addCol("transaction_items", "is_active TINYINT(1) DEFAULT 1");
 
       await addCol("transactions", "party_gstin VARCHAR(32)");
@@ -329,6 +330,7 @@ export async function initializeDatabaseSchema() {
       item_id VARCHAR(64),
       item_name VARCHAR(255) NOT NULL,
       item_code VARCHAR(100),
+      barcode VARCHAR(100),
       hsn_code VARCHAR(20),
       batch_no VARCHAR(100),
       serial_no VARCHAR(100),
