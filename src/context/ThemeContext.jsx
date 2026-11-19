@@ -5,42 +5,23 @@ const THEME_MIGRATION_KEY = "ledgerly:charcoal_theme_applied_v2";
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => {
-    try {
-      const saved = localStorage.getItem(THEME_KEY);
-      if (saved === "dark" || saved === "light") return saved;
-
-      const migrated = localStorage.getItem(THEME_MIGRATION_KEY);
-      if (!migrated) {
-        localStorage.setItem(THEME_MIGRATION_KEY, "true");
-        localStorage.setItem(THEME_KEY, "dark");
-        return "dark";
-      }
-    } catch {}
-    return "dark";
-  });
+  const theme = "light";
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-      root.setAttribute("data-theme", "dark");
-    } else {
-      root.classList.remove("dark");
-      root.setAttribute("data-theme", "light");
-    }
+    root.classList.remove("dark");
+    root.setAttribute("data-theme", "light");
     try {
-      localStorage.setItem(THEME_KEY, theme);
+      localStorage.setItem(THEME_KEY, "light");
+      localStorage.removeItem(THEME_MIGRATION_KEY);
       window.dispatchEvent(new Event("ledgerly:theme-changed"));
     } catch {}
-  }, [theme]);
+  }, []);
 
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
+  const toggleTheme = () => {};
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, isDark: theme === "dark" }}>
+    <ThemeContext.Provider value={{ theme: "light", toggleTheme, isDark: false }}>
       {children}
     </ThemeContext.Provider>
   );
