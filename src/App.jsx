@@ -17,7 +17,6 @@ import CustomerStorefront from "./pages/BusinessGrowth/OnlineStore/CustomerStore
 import OnlineStore from "./pages/BusinessGrowth/OnlineStore/OnlineStore";
 import SmartAds from "./pages/BusinessGrowth/SmartAds/SmartAds";
 import WhatsAppMarketing from "./pages/BusinessGrowth/WhatsAppMarketing";
-import Home from "./pages/Home/Home";
 import ItemsDashboard from "./pages/Items/ItemsDashboard";
 import USKNetwork from "./pages/Parties/USKNetwork";
 import PartyDetails from "./pages/Parties/PartyDetails";
@@ -75,7 +74,8 @@ function App() {
         <Route path="/data-deletion" element={<DataDeletion />} />
 
         <Route path="/" element={<AppPasscodeGuard><MainLayout /></AppPasscodeGuard>}>
-          <Route index element={<Home />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="home" element={<Navigate to="/dashboard" replace />} />
           <Route path="company-profile" element={<EditProfile />} />
           <Route path="edit-profile" element={<EditProfile />} />
           <Route path="dashboard" element={<Dashboard />} />
