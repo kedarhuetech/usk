@@ -479,6 +479,21 @@ export async function initializeDatabaseSchema() {
       INDEX idx_expcat_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
+    // 17b. Expense Items Table
+    `CREATE TABLE IF NOT EXISTS expense_items (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'default',
+      item_name VARCHAR(255) NOT NULL,
+      price DECIMAL(12,2) DEFAULT 0.00,
+      tax_rate DECIMAL(5,2) DEFAULT 0.00,
+      hsn_code VARCHAR(20) DEFAULT NULL,
+      description TEXT DEFAULT NULL,
+      category VARCHAR(100) DEFAULT 'Expenses',
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      INDEX idx_expense_items_biz (business_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
     // 18. Online Store Settings Table
     `CREATE TABLE IF NOT EXISTS online_store_settings (
       business_id VARCHAR(64) PRIMARY KEY,

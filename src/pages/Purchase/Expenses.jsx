@@ -9,8 +9,7 @@ import {
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
-import { expenseCategoriesDb, itemsDb, transactionsDb } from "../../services/databaseRepository.js";
-import { getInventoryItems } from "../../services/itemsStorage.js";
+import { expenseCategoriesDb, expenseItemsDb, transactionsDb } from "../../services/databaseRepository.js";
 import { isDatabaseMode } from "../../services/dataStorageConfig.js";
 
 const RECORDS_KEY = "ledgerly:expenses.v1";
@@ -133,7 +132,6 @@ export default function Expenses() {
   const [itemSearch, setItemSearch] = useState("");
 
   const [expenseItems, setExpenseItems] = useState(() => read(EXPENSE_ITEMS_KEY, []));
-  const [dbInventoryItems, setDbInventoryItems] = useState(() => getInventoryItems());
   const [categoryName, setCategoryName] = useState("");
   const [menuId, setMenuId] = useState("");
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 8 });
@@ -168,57 +166,41 @@ export default function Expenses() {
   const availableExpenseItems = useMemo(() => {
     const map = new Map();
 
-    // 1. Inventory items from MySQL / local items
-    for (const inv of (dbInventoryItems || [])) {
-      const name = (inv.name || inv.itemName || "").trim();
-      if (!name) continue;
-      const lower = name.toLowerCase();
-      map.set(lower, {
-        item: name,
-        description: inv.description || "",
-        price: inv.purchasePrice ?? inv.purchase_price ?? inv.salePrice ?? inv.sale_price ?? "",
-        tax: inv.taxRate ?? inv.tax_rate ?? inv.tax ?? "",
-        hsn: inv.hsnCode ?? inv.hsn_code ?? inv.hsn ?? "",
-        category: inv.category || "General",
-      });
-    }
-
-    // 2. All rows from past expense transactions
+    // 1. All items from historical expense transactions in this business
     for (const rec of (records || [])) {
       for (const row of (rec.rows || [])) {
         const name = (row.item || row.name || row.itemName || "").trim();
         if (!name) continue;
         const lower = name.toLowerCase();
-        const existing = map.get(lower);
         map.set(lower, {
           item: name,
-          description: row.description || existing?.description || "",
-          price: row.price || existing?.price || "",
-          tax: row.tax || existing?.tax || "",
-          hsn: row.hsn || existing?.hsn || "",
-          category: rec.category || existing?.category || "Expenses",
+          description: row.description || "",
+          price: row.price !== undefined && row.price !== "" ? row.price : "",
+          tax: row.tax !== undefined && row.tax !== "" ? row.tax : "",
+          hsn: row.hsn || "",
+          category: rec.category || "Expenses",
         });
       }
     }
 
-    // 3. Custom saved expense items
+    // 2. Dedicated Expense Items from MySQL expense_items and localStorage
     for (const exp of (expenseItems || [])) {
-      const name = (exp.item || exp.name || "").trim();
+      const name = (exp.item || exp.name || exp.itemName || "").trim();
       if (!name) continue;
       const lower = name.toLowerCase();
       const existing = map.get(lower);
       map.set(lower, {
         item: name,
         description: exp.description || existing?.description || "",
-        price: exp.price || existing?.price || "",
-        tax: exp.tax || existing?.tax || "",
+        price: exp.price !== undefined && exp.price !== "" ? exp.price : (existing?.price || ""),
+        tax: exp.tax !== undefined && exp.tax !== "" ? exp.tax : (existing?.tax || ""),
         hsn: exp.hsn || existing?.hsn || "",
         category: exp.category || existing?.category || "Expenses",
       });
     }
 
     return Array.from(map.values()).sort((a, b) => a.item.localeCompare(b.item));
-  }, [dbInventoryItems, records, expenseItems]);
+  }, [records, expenseItems]);
 
   const filteredExpenseItems = useMemo(() => {
     const query = itemSearch.trim().toLowerCase();
@@ -281,23 +263,31 @@ export default function Expenses() {
         console.warn("[Expenses] Failed to fetch categories from DB:", err);
       }
     }
-    async function fetchItems() {
+    async function fetchExpenseItems() {
       try {
-        const list = await itemsDb.listAll();
+        const list = await expenseItemsDb.getAll();
         if (isMounted && Array.isArray(list) && list.length > 0) {
-          setDbInventoryItems(list);
+          setExpenseItems(prev => {
+            const map = new Map((prev || []).map(i => [i.item.toLowerCase(), i]));
+            for (const item of list) {
+              map.set(item.item.toLowerCase(), item);
+            }
+            const combined = Array.from(map.values());
+            localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(combined));
+            return combined;
+          });
         }
       } catch (err) {
-        console.warn("[Expenses] Failed to fetch items from DB:", err);
+        console.warn("[Expenses] Failed to fetch expense items from DB:", err);
       }
     }
     fetchExpenses();
     fetchCategories();
-    fetchItems();
+    fetchExpenseItems();
     const onDataChanged = () => {
       fetchExpenses();
       fetchCategories();
-      fetchItems();
+      fetchExpenseItems();
     };
     if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
       window.addEventListener("ledgerly:business-data-changed", onDataChanged);
@@ -375,6 +365,12 @@ export default function Expenses() {
         return combined;
       });
 
+      if (isDatabaseMode()) {
+        for (const ni of newItemsToStore) {
+          expenseItemsDb.save(ni).catch(() => {});
+        }
+      }
+
       saveRecords(editor.mode === "new" ? [clean, ...records] : records.map(record => record.id === clean.id ? clean : record));
       toast.success(editor.mode === "new" ? "Expense created." : "Expense updated.");
       setSelected(clean.category);
@@ -409,18 +405,16 @@ export default function Expenses() {
     setExpenseItems(nextItems);
     localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(nextItems));
 
-    // Also persist to MySQL inventory_items so it survives across sessions and devices
+    // Also persist to MySQL expense_items so it survives across sessions and devices
     try {
       if (isDatabaseMode()) {
-        await itemsDb.save({
-          name: draft.item.trim(),
-          purchasePrice: Number(draft.price) || 0,
-          salePrice: Number(draft.price) || 0,
-          taxRate: Number(draft.tax) || 0,
-          hsnCode: draft.hsn || "",
+        await expenseItemsDb.save({
+          item: draft.item.trim(),
+          price: Number(draft.price) || 0,
+          tax: String(draft.tax || ""),
+          hsn: draft.hsn || "",
           description: draft.description || "",
           category: "Expenses",
-          itemType: "expense",
         });
       }
     } catch (err) {
