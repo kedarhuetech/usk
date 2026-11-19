@@ -8,9 +8,7 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiDownload,
-  FiEdit,
   FiFileText,
-  FiGlobe,
   FiInfo,
   FiLock,
   FiMessageSquare,
@@ -741,10 +739,8 @@ function GeneralTab({
   onOpenAuditTrail,
   backupCount = 0,
 }) {
-  const firm = settings.firms?.[0] || { name: "Sai Kirana Stores", isDefault: true, devices: "ALL DEVICES" };
-
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       {/* COLUMN 1: Application & More Transactions */}
       <div className="space-y-6">
         {/* Application Card */}
@@ -991,119 +987,7 @@ function GeneralTab({
         </section>
       </div>
 
-      {/* COLUMN 2: Multi Firm & Stock Transfer Between Godowns */}
-      <div className="space-y-6">
-        {/* Multi Firm Card */}
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <label className="flex cursor-pointer items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-900">
-              <input
-                type="checkbox"
-                checked={settings.multiFirmEnabled || false}
-                onChange={(e) => update("multiFirmEnabled", e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
-              />
-              Multi Firm
-              <InfoTooltip text="Manage multiple businesses/firms inside a single account." />
-            </label>
-          </div>
-
-          {/* Active Firm Card (Matches screenshot) */}
-          <div className="mt-4 rounded-lg border-2 border-blue-500 bg-blue-50/40 p-3.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-blue-600 bg-white">
-                  <span className="h-2 w-2 rounded-full bg-blue-600" />
-                </span>
-                <div>
-                  <span className="text-xs font-bold uppercase text-slate-800">{firm.name}</span>
-                  <span className="ml-2 text-[10px] font-semibold uppercase text-slate-400">DEFAULT</span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onOpenFirmModal}
-                className="rounded p-1 text-slate-500 hover:bg-white hover:text-blue-600"
-                title="Edit firm name"
-              >
-                <FiEdit className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 pl-6 text-[11px] font-medium text-blue-700">
-              <FiGlobe className="h-3 w-3" />
-              <span>{firm.devices || "ALL DEVICES"}</span>
-            </div>
-          </div>
-
-          {settings.multiFirmEnabled && (
-            <button
-              type="button"
-              onClick={onOpenFirmModal}
-              className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:underline"
-            >
-              <FiPlus className="h-3.5 w-3.5" /> Add Another Firm
-            </button>
-          )}
-        </section>
-
-        {/* Stock Transfer Between Godowns Card */}
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-            Stock Transfer Between Godowns
-          </h3>
-          <p className="mt-2 text-xs leading-relaxed text-slate-500">
-            Manage all your stores/godowns and transfer stock seamlessly between them. Using this feature, you can
-            transfer stock between stores/godowns and manage your inventory more efficiently.
-          </p>
-
-          <div className="mt-4 pt-2">
-            <label className="flex cursor-pointer items-center justify-between text-xs font-semibold text-slate-700">
-              <span className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={settings.godownManagementEnabled || false}
-                  onChange={(e) => update("godownManagementEnabled", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Godown management & Stock transfer
-                <InfoTooltip text="Track stock locations and transfers across godowns/branches." />
-              </span>
-            </label>
-
-            {settings.godownManagementEnabled && (
-              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between pb-2">
-                  <span className="text-[11px] font-bold uppercase text-slate-500">Registered Godowns</span>
-                  <button
-                    type="button"
-                    onClick={onOpenGodownModal}
-                    className="text-xs font-semibold text-blue-600 hover:underline"
-                  >
-                    + Add Godown
-                  </button>
-                </div>
-                <div className="space-y-1.5">
-                  {(settings.godowns || [{ id: "godown-1", name: "Main Store", isDefault: true }]).map((g) => (
-                    <div
-                      key={g.id}
-                      className="flex items-center justify-between rounded bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm"
-                    >
-                      <span>{g.name}</span>
-                      {g.isDefault && (
-                        <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700">
-                          Primary
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* COLUMN 3: Backup & History & Customize Your View */}
+      {/* COLUMN 2: Backup & History & Customize Your View */}
       <div className="space-y-6">
         {/* Backup & History Card */}
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
