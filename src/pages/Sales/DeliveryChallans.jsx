@@ -137,7 +137,8 @@ export default function DeliveryChallans() {
     }
   };
 
-  const inventory = useMemo(() => getInventoryItems().filter((item) => item.type !== "service"), []);
+  const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
+  const inventory = useMemo(() => getInventoryItems().filter((item) => item.type !== "service" && isItemActive(item)), []);
   const filtered = challans.filter((challan) => `${challan.party} ${challan.number} ${challan.status}`.toLowerCase().includes(search.toLowerCase()) && (!fromDate || challan.date >= fromDate) && (!toDate || challan.date <= toDate));
   const conversionCandidates = challans.filter((challan) => challan.status !== "Converted to Sale"
     && (!selectorParty || challan.party.toLowerCase() === selectorParty.toLowerCase())
@@ -285,6 +286,24 @@ export default function DeliveryChallans() {
       toast.error("Please enter or select a Party Name.");
       return;
     }
+
+    const allInventory = getInventoryItems();
+    const originalChallan = editor.mode === "edit" ? challans.find((c) => c.id === editor.value.id) : null;
+    const originalRowItemNames = new Set(
+      (originalChallan?.rows || []).map((r) => String(r.item || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const inactiveRow = editor.value.rows.find((row) => {
+      const name = String(row.item || "").trim().toLowerCase();
+      if (!name) return false;
+      if (originalRowItemNames.has(name)) return false;
+      const match = allInventory.find((it) => (it.id && it.id === row.itemId) || String(it.itemName || it.name || "").trim().toLowerCase() === name);
+      return match && (match.isActive === false || match.is_active === 0);
+    });
+    if (inactiveRow) {
+      toast.error(`Item "${inactiveRow.item}" is inactive and cannot be added.`);
+      return;
+    }
+
     const saved = { ...editor.value, id: editor.value.id || crypto.randomUUID(), rows: editor.value.rows.filter((row) => row.item || row.qty), total: subtotal };
 
     try {

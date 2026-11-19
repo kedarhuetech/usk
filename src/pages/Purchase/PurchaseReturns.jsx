@@ -128,8 +128,9 @@ export default function PurchaseReturns() {
 
   const parties = useMemo(() => getParties(), []);
   const bills = useMemo(() => getPurchaseBills(), []);
+  const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
   const items = useMemo(
-    () => getInventoryItems().filter((item) => item.type !== "service"),
+    () => getInventoryItems().filter((item) => item.type !== "service" && isItemActive(item)),
     []
   );
 
@@ -271,6 +272,24 @@ export default function PurchaseReturns() {
       toast.error("Please enter or select a Party Name.");
       return;
     }
+
+    const allInventory = getInventoryItems();
+    const originalRecord = editor.mode === "edit" ? records.find((r) => r.id === value.id) : null;
+    const originalRowItemNames = new Set(
+      ((originalRecord?.rows || originalRecord?.items) || []).map((r) => String(r.item || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const inactiveRow = (value.rows || []).find((row) => {
+      const name = String(row.item || "").trim().toLowerCase();
+      if (!name) return false;
+      if (originalRowItemNames.has(name)) return false;
+      const match = allInventory.find((it) => (it.id && (it.id === row.itemId || it.id === row.sourceItemId)) || String(it.itemName || it.name || "").trim().toLowerCase() === name);
+      return match && (match.isActive === false || match.is_active === 0);
+    });
+    if (inactiveRow) {
+      toast.error(`Item "${inactiveRow.item}" is inactive and cannot be added to a purchase return.`);
+      return;
+    }
+
     const total = value.rows.reduce((sum, row) => sum + rowAmount(row), 0);
     const receivedVal = Number(value.received || 0);
     const balanceVal = Math.max(0, total - receivedVal);

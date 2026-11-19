@@ -145,8 +145,9 @@ export default function PurchaseOrders() {
   });
   const [historyModal, setHistoryModal] = useState(null);
   const [convertModalOrder, setConvertModalOrder] = useState(null);
+  const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
   const parties = useMemo(() => getParties(), []);
-  const inventory = useMemo(() => getInventoryItems(), []);
+  const inventory = useMemo(() => getInventoryItems().filter(isItemActive), []);
 
   const handleProceedConversion = (selectedItems) => {
     const order = convertModalOrder;
@@ -275,6 +276,24 @@ export default function PurchaseOrders() {
     const value = editor.value;
     if (!value.supplier.trim()) { toast.error("Select or enter a supplier."); return; }
     if (!value.rows.some((row) => row.item.trim() && Number(row.qty) > 0)) { toast.error("Add at least one item and quantity."); return; }
+
+    const allInventory = getInventoryItems();
+    const originalOrder = editor.mode === "edit" ? orders.find((o) => o.id === value.id) : null;
+    const originalRowItemNames = new Set(
+      (originalOrder?.rows || []).map((r) => String(r.item || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const inactiveRow = (value.rows || []).find((row) => {
+      const name = String(row.item || "").trim().toLowerCase();
+      if (!name) return false;
+      if (originalRowItemNames.has(name)) return false;
+      const match = allInventory.find((it) => (it.id && (it.id === row.itemId || it.id === row.sourceItemId)) || String(it.itemName || it.name || "").trim().toLowerCase() === name);
+      return match && (match.isActive === false || match.is_active === 0);
+    });
+    if (inactiveRow) {
+      toast.error(`Item "${inactiveRow.item}" is inactive and cannot be added to a purchase order.`);
+      return;
+    }
+
     const existingParty = parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.supplier.trim().toLowerCase());
     if (!existingParty) saveParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
     const orderId = value.id || `purchase-order-${Date.now()}`;

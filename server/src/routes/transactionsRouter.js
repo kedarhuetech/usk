@@ -653,6 +653,56 @@ const saveTransactionHandler = async (req, res) => {
     );
     const existingTxn = existingRows[0] || null;
 
+    // Inactive items validation: prevent inactive items from being added to new transactions (or as new lines)
+    if (transactionType !== "payment_in" && transactionType !== "payment_out") {
+      let existingItemIds = new Set();
+      let existingItemNames = new Set();
+      if (existingTxn) {
+        const [existingLines] = await conn.query(
+          `SELECT item_id, item_name FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
+          [businessId, id]
+        );
+        for (const line of existingLines) {
+          if (line.item_id) existingItemIds.add(String(line.item_id));
+          if (line.item_name) existingItemNames.add(String(line.item_name).trim().toLowerCase());
+        }
+      }
+
+      for (const item of rawItems) {
+        const itemId = item.itemId || item.sourceItemId || item.inventoryItemId || item.item_id || null;
+        const itemName = (item.item || item.itemName || item.name || "").trim();
+
+        // Allow existing line items on already-persisted transactions
+        if (existingTxn) {
+          if (itemId && existingItemIds.has(String(itemId))) continue;
+          if (itemName && existingItemNames.has(itemName.toLowerCase())) continue;
+        }
+
+        let inactiveCheck = [];
+        if (itemId) {
+          [inactiveCheck] = await conn.query(
+            `SELECT id, name, is_active FROM inventory_items WHERE business_id = ? AND id = ? AND is_active = 0 LIMIT 1`,
+            [businessId, itemId]
+          );
+        }
+        if (!inactiveCheck.length && itemName) {
+          [inactiveCheck] = await conn.query(
+            `SELECT id, name, is_active FROM inventory_items WHERE business_id = ? AND LOWER(TRIM(name)) = LOWER(?) AND is_active = 0 LIMIT 1`,
+            [businessId, itemName]
+          );
+        }
+
+        if (inactiveCheck.length > 0) {
+          await conn.rollback();
+          return res.status(400).json({
+            success: false,
+            code: "INACTIVE_ITEM_REJECTED",
+            message: `Item '${inactiveCheck[0].name || itemName}' is inactive and cannot be added to a transaction.`,
+          });
+        }
+      }
+    }
+
     // 1. Upsert Transaction Header (Pure SQL columns)
     await conn.query(
       `INSERT INTO transactions (

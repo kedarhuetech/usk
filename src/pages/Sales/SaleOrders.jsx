@@ -128,11 +128,13 @@ function printSaleOrderDoc(order) {
   openPrintWindow(html);
 }
 
+const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
+
 export default function SaleOrders() {
   const navigate = useNavigate();
   const location = useLocation();
   const [orders, setOrders] = useState(readOrders);
-  const [inventory, setInventory] = useState(getInventoryItems);
+  const [inventory, setInventory] = useState(() => getInventoryItems().filter(isItemActive));
   const [openItemRow, setOpenItemRow] = useState("");
   const [tab, setTab] = useState("orders");
   const [editor, setEditor] = useState(null);
@@ -259,7 +261,9 @@ export default function SaleOrders() {
     businessDataApi.list("items").then((remoteItems) => {
       if (!active || !Array.isArray(remoteItems)) return;
       const merged = new Map();
-      [...getInventoryItems(), ...remoteItems].forEach((item) => merged.set(String(item.id || item.itemCode || item.itemName), item));
+      [...getInventoryItems(), ...remoteItems]
+        .filter(isItemActive)
+        .forEach((item) => merged.set(String(item.id || item.itemCode || item.itemName), item));
       setInventory([...merged.values()]);
     }).catch(() => { /* Keep the browser's saved inventory available when the server is offline. */ });
     return () => { active = false; };
@@ -275,6 +279,24 @@ export default function SaleOrders() {
     const value = editor.value;
     if (!value.customer.trim()) { toast.error("Select or enter a customer."); return; }
     if (!(value.rows || []).some((row) => row.item.trim() && Number(row.qty) > 0)) { toast.error("Add at least one item and quantity."); return; }
+
+    const allInventory = getInventoryItems();
+    const originalOrder = editor.mode === "edit" ? orders.find((o) => o.id === value.id) : null;
+    const originalRowItemNames = new Set(
+      (originalOrder?.rows || []).map((r) => String(r.item || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const inactiveRow = (value.rows || []).find((row) => {
+      const name = String(row.item || "").trim().toLowerCase();
+      if (!name) return false;
+      if (originalRowItemNames.has(name)) return false;
+      const match = allInventory.find((it) => (it.id && (it.id === row.itemId || it.id === row.sourceItemId)) || String(it.itemName || it.name || "").trim().toLowerCase() === name);
+      return match && (match.isActive === false || match.is_active === 0);
+    });
+    if (inactiveRow) {
+      toast.error(`Item "${inactiveRow.item}" is inactive and cannot be added to a sale order.`);
+      return;
+    }
+
     const subtotal = value.rows.reduce((sum, row) => sum + rowAmount(row), 0);
     const amount = value.roundOff ? Math.round(subtotal) + (Number(value.roundOffValue) || 0) : subtotal;
     if (!parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.customer.trim().toLowerCase())) {
