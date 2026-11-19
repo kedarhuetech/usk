@@ -376,7 +376,7 @@ export default function Topbar({ onRefresh }) {
             type="button"
             onClick={() => setMobileDrawerOpen(true)}
             aria-label="Open navigation menu"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-[#1A1E27] hover:text-[#FF5A1F] transition lg:hidden cursor-pointer shrink-0"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-[#1A1E27] hover:text-[#FF5A1F] transition md:hidden cursor-pointer shrink-0"
           >
             <FiMenu className="h-5 w-5" />
           </button>
@@ -395,7 +395,7 @@ export default function Topbar({ onRefresh }) {
           {/* Functional Search Bar */}
           <div
             ref={searchContainerRef}
-            className="relative ml-3 hidden max-w-md flex-1 lg:block"
+            className="relative ml-3 hidden max-w-md flex-1 md:block"
           >
             <div
               className={`flex h-9 items-center gap-2 rounded-lg bg-[#1A1E27] px-3 border border-[#2B313F] transition ${
@@ -524,7 +524,7 @@ export default function Topbar({ onRefresh }) {
             onClick={() => setMobileDrawerOpen(true)}
             aria-label="Search navigation"
             title="Search"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A1E27] border border-[#2B313F] text-slate-300 hover:text-[#FF5A1F] transition lg:hidden cursor-pointer shadow-xs"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A1E27] border border-[#2B313F] text-slate-300 hover:text-[#FF5A1F] transition md:hidden cursor-pointer shadow-xs"
           >
             <FiSearch className="h-4 w-4" />
           </button>
