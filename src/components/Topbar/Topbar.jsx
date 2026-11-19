@@ -509,7 +509,7 @@ export default function Topbar({ onRefresh }) {
             onClick={() =>
               openTransaction("/purchase-expense/purchase-bills/new")
             }
-            className="hidden rounded-full bg-[#161921] hover:bg-[#202530] border border-[#2F3646] hover:border-[#FF5A1F]/60 px-2.5 xl:px-4 py-1.5 xl:py-2 text-xs xl:text-[13px] font-semibold text-white md:inline-flex items-center gap-1 transition-all shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+            className="hidden rounded-full bg-[#161921] hover:bg-[#202530] border border-[#2F3646] hover:border-[#FF5A1F]/60 px-2.5 xl:px-4 py-1.5 xl:py-2 text-xs xl:text-[13px] font-semibold text-white lg:inline-flex items-center gap-1 transition-all shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
           >
             + Add Purchase
           </button>
