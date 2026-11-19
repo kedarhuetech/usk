@@ -42,8 +42,9 @@ function lineTotals(row) {
 }
 
 export default function EstimateEditor({ estimate, onClose, onSave, documentType = "Estimate/Quotation" }) {
+  const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
   const parties = useMemo(() => getParties(), []);
-  const items = useMemo(() => getInventoryItems(), []);
+  const items = useMemo(() => getInventoryItems().filter(isItemActive), []);
   const [customer, setCustomer] = useState(() => estimate?.customer || estimate?.partyName || estimate?.customerName || estimate?.party || estimate?.form?.customer || "");
   const [phone, setPhone] = useState(() => estimate?.phone || estimate?.partyPhone || estimate?.form?.phone || "");
   const [billingAddress, setBillingAddress] = useState(() => estimate?.billingAddress || estimate?.partyAddress || estimate?.address || estimate?.form?.billingAddress || "");
@@ -88,7 +89,7 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
   const adjusted = roundOff && roundOffValue !== "" ? subtotal + (Number(roundOffValue) || 0) : rounded;
   const updateRow = (id, field, value) => setRows((current) => current.map((row) => row.id === id ? { ...row, [field]: value } : row));
   const chooseItem = (row, name) => {
-    const item = items.find((entry) => String(entry.itemName || entry.name).toLowerCase() === name.trim().toLowerCase());
+    const item = items.find((entry) => isItemActive(entry) && String(entry.itemName || entry.name).toLowerCase() === name.trim().toLowerCase());
     updateRow(row.id, "item", name);
     if (item) setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, item: name, unit: item.unit || entry.unit, price: item.salePrice || item.price || entry.price, taxRate: String(item.taxRate || item.gstRate || "NONE") } : entry));
   };
@@ -96,6 +97,23 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
     const amount = Number(adjusted.toFixed(2));
     if (!customer.trim()) { setToast("Choose or enter a customer name."); return; }
     if (!rows.some((row) => row.item.trim() && Number(row.qty) > 0)) { setToast("Add at least one item and quantity."); return; }
+
+    const allInventory = getInventoryItems();
+    const existingRowNames = new Set(
+      (estimate?.rows || []).map((r) => String(r.item || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const inactiveRow = rows.find((row) => {
+      if (!row.item?.trim()) return false;
+      const name = String(row.item).trim().toLowerCase();
+      if (existingRowNames.has(name)) return false;
+      const inv = allInventory.find((it) => (it.id && it.id === row.itemId) || String(it.itemName || it.name || "").trim().toLowerCase() === name);
+      return inv && (inv.isActive === false || inv.is_active === 0);
+    });
+    if (inactiveRow) {
+      setToast(`Item "${inactiveRow.item}" is inactive and cannot be added.`);
+      return;
+    }
+
     const existingParty = parties.find((party) => (party.partyName || party.name || "").trim().toLowerCase() === customer.trim().toLowerCase());
     if (!existingParty) saveParty({ partyName: customer.trim(), phone: phone.trim(), billingAddress, openingBalance: "0", openingBalanceType: "to-receive" });
     onSave({ ...(estimate || {}), customer: customer.trim(), phone, billingAddress, number: refNo.trim(), date, state, rows, amount, roundOffEnabled: roundOff, roundOffValue, terms, description, status: estimate?.status || "Open", firm: estimate?.firm || "My Company", user: estimate?.user || "You" });

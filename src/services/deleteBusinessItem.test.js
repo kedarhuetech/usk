@@ -4,6 +4,7 @@ import { deleteBusinessItem } from "./businessRecords.js";
 import { getInventoryItems, inventoryItemsStorageKey, saveInventoryItem } from "./itemsStorage.js";
 import { deleteAllInventoryItems } from "./inventoryItemBulkDelete.js";
 import { STORAGE_MODE_KEY } from "./dataStorageConfig.js";
+import { saleInvoicesStorageKey } from "./salesStorage.js";
 
 class MemoryStorage {
   values = new Map();
@@ -137,6 +138,59 @@ test("Bulk Deletion: deleteAllInventoryItems throws error in database mode and p
     // Confirm local storage items were NOT cleared
     const items = getInventoryItems();
     assert.equal(items.length, 2, "Items must remain untouched in database mode");
+  } finally {
+    env.restore();
+  }
+});
+
+test("deleteBusinessItem: Rejects permanent deletion of an item included in sales transactions", async () => {
+  const env = setupBrowserEnvironment({ storageMode: "local" });
+
+  // Add an invoice referencing item-1
+  const invoices = [
+    {
+      id: "inv-101",
+      form: { invoiceNumber: "INV-101", customer: "Demo Customer" },
+      rows: [{ id: "row-1", sourceItemId: "item-1", item: "Item 1", qty: 2, price: 100 }],
+    },
+  ];
+  env.storage.setItem(saleInvoicesStorageKey, JSON.stringify(invoices));
+
+  try {
+    // 1. Attempting permanent deletion must be rejected with 409
+    await assert.rejects(
+      async () => {
+        await deleteBusinessItem("item-1");
+      },
+      (err) => err.status === 409 && err.code === "ITEM_REFERENCED" && err.message.includes("included in transactions")
+    );
+
+    // 2. Verify item-1 is NOT deleted
+    let items = getInventoryItems();
+    assert.ok(items.some((i) => i.id === "item-1"), "Referenced item must not be deleted");
+
+    // 3. Deactivation option succeeds
+    const result = await deleteBusinessItem("item-1", { deactivate: true });
+    assert.equal(result.success, true);
+    items = getInventoryItems();
+    const deactivated = items.find((i) => i.id === "item-1");
+    assert.equal(deactivated.isActive, false, "Item should be deactivated without being deleted");
+  } finally {
+    env.restore();
+  }
+});
+
+test("deleteBusinessItem: Allows permanent deletion of an item NOT included in any transaction", async () => {
+  const env = setupBrowserEnvironment({ storageMode: "local" });
+
+  try {
+    // item-2 has NO transactions
+    const result = await deleteBusinessItem("item-2");
+    assert.equal(result.success, true);
+
+    const items = getInventoryItems();
+    assert.equal(items.some((i) => i.id === "item-2"), false, "Unreferenced item must be permanently deleted");
+    assert.equal(items.some((i) => i.id === "item-1"), true, "Other items remain");
   } finally {
     env.restore();
   }

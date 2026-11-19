@@ -199,11 +199,10 @@ export const itemsDb = {
   async remove(id, options = {}) {
     const params = new URLSearchParams();
     if (options.deactivate) params.append("deactivate", "true");
-    if (options.force) params.append("force", "true");
     const query = params.toString() ? `?${params.toString()}` : "";
     const res = await apiRequest(`/items/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
     const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
-    const updated = (options.deactivate || res?.action === "deactivated") && !options.force
+    const updated = options.deactivate || res?.action === "deactivated"
       ? current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: false } : i))
       : current.filter((i) => String(i.id) !== String(id));
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);

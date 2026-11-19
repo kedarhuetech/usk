@@ -227,7 +227,7 @@ function orderAdditionalChargeNote(order) {
 function saleItemFromInventory(item = {}) {
   return {
     id: item.id,
-    isActive: item.isActive !== false,
+    isActive: item.isActive !== false && item.is_active !== 0 && item.is_active !== "0",
     name: item.itemName || item.name || "Item",
     stock: item.openingQuantity || item.stock || "0",
     unit: item.unit || item.baseUnit || "",
@@ -959,7 +959,7 @@ function ItemPicker({ value, items, onSelect, onChange, onAddItem, appSettings =
   const enableItemCategory = appSettings.enableItemCategory ?? true;
   const q = (query || value).toLowerCase().trim();
   const filtered = items.filter((item) => {
-    if (item.isActive === false) return false;
+    if (item.isActive === false || item.is_active === 0 || item.is_active === "0") return false;
     if (!q) return true;
     const matchName = item.name.toLowerCase().includes(q);
     const matchCode = (item.code || "").toLowerCase().includes(q);
@@ -2183,9 +2183,33 @@ function AddSale({ mode = "sale", localOnly = false }) {
     const validRows = rows.filter((row) => row.item.trim() && toNumber(row.qty) > 0);
     if (!validRows.length) nextErrors.rows[rows[0].id] = { item: "Add at least one item" };
 
+    const originalInvoiceItemIds = new Set(
+      ((editInvoice?.items || editInvoice?.rows) || []).map((r) => String(r.sourceItemId || r.itemId || "").trim()).filter(Boolean)
+    );
+    const originalInvoiceItemNames = new Set(
+      ((editInvoice?.items || editInvoice?.rows) || []).map((r) => String(r.item || r.name || r.itemName || "").trim().toLowerCase()).filter(Boolean)
+    );
+
     rows.forEach((row) => {
       const rowErrors = {};
-      if (row.item.trim() && toNumber(row.qty) <= 0) rowErrors.qty = "Qty is required";
+      const trimmedItem = (row.item || "").trim();
+      if (trimmedItem) {
+        const rowItemName = trimmedItem.toLowerCase();
+        const matchedItem = items.find(
+          (item) =>
+            (row.sourceItemId && String(item.id) === String(row.sourceItemId)) ||
+            (String(item.name || item.itemName || "").trim().toLowerCase() === rowItemName)
+        );
+        const isOriginalRow = editInvoice && (
+          (row.sourceItemId && originalInvoiceItemIds.has(String(row.sourceItemId))) ||
+          (row.itemId && originalInvoiceItemIds.has(String(row.itemId))) ||
+          originalInvoiceItemNames.has(rowItemName)
+        );
+        if (matchedItem && (matchedItem.isActive === false || matchedItem.is_active === 0 || matchedItem.is_active === "0") && !isOriginalRow) {
+          rowErrors.item = `"${matchedItem.name || trimmedItem}" is inactive and cannot be selected`;
+        }
+      }
+      if (trimmedItem && toNumber(row.qty) <= 0) rowErrors.qty = "Qty is required";
       if (row.qty !== "" && toNumber(row.qty) < 0) rowErrors.qty = "Invalid qty";
       if (row.maxConvertibleQty != null && toNumber(row.qty) > Number(row.maxConvertibleQty)) {
         rowErrors.qty = `Cannot exceed remaining (${row.maxConvertibleQty})`;
@@ -2254,13 +2278,32 @@ function AddSale({ mode = "sale", localOnly = false }) {
     const activeRows = rows.filter((row) => String(row.item || "").trim() || Number(row.qty || 0) > 0 || Number(row.price || 0) > 0);
     const rowsToMap = activeRows.length > 0 ? activeRows : rows.slice(0, 1);
 
+    const originalInvoiceItemIds = new Set(
+      ((editInvoice?.items || editInvoice?.rows) || []).map((r) => String(r.sourceItemId || r.itemId || "").trim()).filter(Boolean)
+    );
+    const originalInvoiceItemNames = new Set(
+      ((editInvoice?.items || editInvoice?.rows) || []).map((r) => String(r.item || r.name || r.itemName || "").trim().toLowerCase()).filter(Boolean)
+    );
+
     const mappedRows = rowsToMap.map((row, index) => {
+      const rowItemName = String(row.item || "").trim().toLowerCase();
+      const isOriginalRow = editInvoice && (
+        (row.sourceItemId && originalInvoiceItemIds.has(String(row.sourceItemId))) ||
+        (row.itemId && originalInvoiceItemIds.has(String(row.itemId))) ||
+        originalInvoiceItemNames.has(rowItemName)
+      );
       const matchedItem = items.find(
-        (i) =>
-          (row.sourceItemId && String(i.id) === String(row.sourceItemId)) ||
-          (row.item &&
-            String(i.name || i.itemName || "").trim().toLowerCase() ===
-              String(row.item).trim().toLowerCase())
+        (i) => {
+          const isMatch =
+            (row.sourceItemId && String(i.id) === String(row.sourceItemId)) ||
+            (row.item &&
+              String(i.name || i.itemName || "").trim().toLowerCase() === rowItemName);
+          if (!isMatch) return false;
+          if (!isOriginalRow && (i.isActive === false || i.is_active === 0 || i.is_active === "0")) {
+            return false;
+          }
+          return true;
+        }
       );
       const resolvedItemId = row.sourceItemId || row.itemId || matchedItem?.id || "";
       const resolvedItemName = row.item || matchedItem?.name || matchedItem?.itemName || `Item ${index + 1}`;

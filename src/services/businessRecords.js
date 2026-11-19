@@ -59,6 +59,25 @@ export async function deleteBusinessItem(itemOrId, options = {}) {
     // 1. MySQL is the primary source of truth: Await remote deletion first.
     // If referenced in transactions, backend throws 409 Conflict.
     result = await itemsDb.remove(itemId, options);
+  } else if (!options.deactivate) {
+    // In local storage mode: check if item is in transactions before permanent deletion
+    const itemObj = target || getInventoryItems().find((i) => i.id === itemId);
+    const itemName = itemObj?.itemName;
+    const matches = (r) =>
+      r.sourceItemId === itemId ||
+      r.itemId === itemId ||
+      r.productId === itemId ||
+      (itemName && String(r.item || "").trim().toLowerCase() === String(itemName).trim().toLowerCase()) ||
+      (itemName && String(r.itemName || "").trim().toLowerCase() === String(itemName).trim().toLowerCase());
+
+    const hasSales = (getSaleInvoices() || []).some((inv) => (inv.rows || []).some(matches));
+    const hasPurchases = (getPurchaseBills() || []).some((bill) => (bill.rows || []).some(matches));
+    if (hasSales || hasPurchases) {
+      const err = new Error(`Cannot delete "${itemName || itemId}" because it is included in transactions. You can mark it inactive instead.`);
+      err.status = 409;
+      err.code = "ITEM_REFERENCED";
+      throw err;
+    }
   }
 
   // 2. Synchronize local cache after backend confirms success
