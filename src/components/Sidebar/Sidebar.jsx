@@ -177,7 +177,7 @@ function Sidebar() {
     <>
       <aside
         aria-label="Sidebar Navigation"
-        className="hidden h-screen w-56 shrink-0 flex-col bg-[#12151B] border-r border-[#222733] text-white xl:w-60 md:flex select-none z-20"
+        className="hidden md:flex h-full w-52 shrink-0 flex-col bg-[#12151B] border-r border-[#222733] text-white select-none z-30 overflow-hidden"
       >
         {/* Top Header: Brand & Search */}
         <div className="shrink-0 p-3 border-b border-[#222733]/70">

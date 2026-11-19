@@ -70,11 +70,11 @@ function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
+    <div className="flex h-full w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
       {!isTransactionRoute && <Sidebar />}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden w-full">
-        <div className="print:hidden sticky top-0 z-40 shrink-0 w-full">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="print:hidden shrink-0 z-30">
           <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
         </div>
 

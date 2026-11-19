@@ -330,7 +330,7 @@ export default function EditProfile() {
   };
 
   return (
-    <div className="h-full overflow-y-auto bg-[#f8fafc] p-3 lg:p-5">
+    <div className="min-h-full bg-[#f8fafc] p-3 lg:p-5">
       <div className="mx-auto max-w-7xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 lg:p-7">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold tracking-tight text-[#1e293b]">
