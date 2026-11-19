@@ -3,6 +3,7 @@ import {
   FiArrowRight,
   FiBarChart2,
   FiFileText,
+  FiMenu,
   FiPackage,
   FiRefreshCw,
   FiSearch,
@@ -16,6 +17,7 @@ import {
 import { useTheme } from "../../context/ThemeContext";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import MobileNavDrawer from "../Navigation/MobileNavDrawer";
 import {
   companyProfileUpdatedEvent,
   getCompanyProfile,
@@ -61,6 +63,7 @@ export default function Topbar({ onRefresh }) {
   const [logoError, setLogoError] = useState(false);
   const [comingSoon, setComingSoon] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const refreshTimer = useRef(null);
 
   // Search Bar State
@@ -366,13 +369,23 @@ export default function Topbar({ onRefresh }) {
     >
       
 
-      <div className="flex h-[52px] items-center justify-between px-4 py-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-[#FF5A1F] shadow-[0_0_8px_rgba(255,90,31,0.6)]" />
+      <div className="flex h-[52px] items-center justify-between px-3 sm:px-4 py-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
+          {/* Mobile Hamburger Menu Toggle */}
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(true)}
+            aria-label="Open navigation menu"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-[#1A1E27] hover:text-[#FF5A1F] transition lg:hidden cursor-pointer shrink-0"
+          >
+            <FiMenu className="h-5 w-5" />
+          </button>
+
+          <span className="h-2.5 w-2.5 rounded-full bg-[#FF5A1F] shadow-[0_0_8px_rgba(255,90,31,0.6)] shrink-0" />
           <span
             onClick={() => navigate("/company-profile")}
             title="Click to view Company Profile"
-            className="hidden text-sm font-semibold text-slate-100 sm:block cursor-pointer hover:text-[#FF5A1F] transition"
+            className="truncate text-xs sm:text-sm font-semibold text-slate-100 cursor-pointer hover:text-[#FF5A1F] transition max-w-[130px] sm:max-w-none"
           >
             {companyProfile.businessName ||
               companyProfile.companyName ||
@@ -505,6 +518,17 @@ export default function Topbar({ onRefresh }) {
           
           
       
+          {/* Mobile Search Button */}
+          <button
+            type="button"
+            onClick={() => setMobileDrawerOpen(true)}
+            aria-label="Search navigation"
+            title="Search"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A1E27] border border-[#2B313F] text-slate-300 hover:text-[#FF5A1F] transition lg:hidden cursor-pointer shadow-xs"
+          >
+            <FiSearch className="h-4 w-4" />
+          </button>
+
           {/* Light / Dark Mode Switch */}
           <button
             type="button"
@@ -539,6 +563,15 @@ export default function Topbar({ onRefresh }) {
           </button>
         </div>
       </div>
+
+      {/* Mobile Navigation Drawer */}
+      <MobileNavDrawer
+        isOpen={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+        companyProfile={companyProfile}
+        toggleTheme={toggleTheme}
+        isDark={isDark}
+      />
     </header>
   );
 }

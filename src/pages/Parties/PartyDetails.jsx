@@ -830,13 +830,13 @@ function PartyDetails() {
 
   return (
     <div className="flex h-full min-h-[calc(100vh-7.5rem)] flex-col bg-slate-200">
-      <div className="flex h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-700">Parties</h1>
-        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700"><FiPlus /> Add Party</Button></div>
+      <div className="flex h-16 sm:h-20 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
+        <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold text-slate-700">Parties</h1>
+        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700 text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
       </div>
       {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
       <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(300px,29%)_1fr]">
-        <section className="flex min-h-[430px] flex-col overflow-hidden rounded-md bg-white">
+        <section className="flex min-h-[360px] sm:min-h-[430px] flex-col overflow-hidden rounded-md bg-white">
           <div className="p-4 pb-2"><label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-slate-400"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Party Name" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" /></label></div>
           {/* Balance Filter Pills */}
           <div className="flex items-center gap-1.5 px-4 pb-2.5">
