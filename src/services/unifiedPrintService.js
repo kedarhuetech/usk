@@ -633,6 +633,7 @@ export function buildUnifiedStatementHtml({
       <div>
         <div style="font-size:14px;font-weight:700;color:#0f172a;">${escapeHtml(party?.partyName || "Cash Sale")}</div>
         ${party?.phone ? `<div style="color:#475569;margin-top:2px;">Contact: ${escapeHtml(party.phone)}</div>` : ""}
+        ${party?.gstin ? `<div style="color:#334155;margin-top:2px;font-weight:600;">GSTIN: ${escapeHtml(party.gstin)}</div>` : ""}
         ${party?.billingAddress ? `<div style="color:#64748b;margin-top:2px;">Billing: ${escapeHtml(party.billingAddress)}</div>` : ""}
         ${printableFields.map((f) => `<div style="color:#334155;margin-top:2px;"><b>${escapeHtml(f.fieldName || f.name)}:</b> ${escapeHtml(f.value)}</div>`).join("")}
       </div>
