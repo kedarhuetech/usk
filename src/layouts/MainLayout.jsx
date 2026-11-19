@@ -2,7 +2,7 @@
 import { cloneElement, useEffect, useState } from "react";
 import { FiArrowLeft } from "react-icons/fi";
 import { useLocation, useNavigate, useOutlet } from "react-router-dom";
-import HorizontalNavbar from "../components/Navigation/HorizontalNavbar";
+import Sidebar from "../components/Sidebar/Sidebar";
 import Topbar from "../components/Topbar/Topbar";
 import { autoDispatchDueRemindersViaMeta } from "../services/serviceRemindersService.js";
 import { toast } from "../components/Common/Toast.jsx";
@@ -70,13 +70,13 @@ function MainLayout() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
-      <div className="print:hidden sticky top-0 z-40 shrink-0">
-        <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
-        {!isTransactionRoute && <HorizontalNavbar />}
-      </div>
+    <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
+      {!isTransactionRoute && <Sidebar />}
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="print:hidden sticky top-0 z-40 shrink-0">
+          <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
+        </div>
 
         {showBackButton && (
           <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white text-slate-800 dark:border-[#252B37] dark:bg-[#12151B] dark:text-slate-100 px-4 sm:px-6 print:hidden">
