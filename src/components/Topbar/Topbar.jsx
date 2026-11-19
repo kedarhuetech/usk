@@ -11,10 +11,7 @@ import {
   FiUser,
   FiUsers,
   FiX,
-  FiMoon,
-  FiSun,
 } from "react-icons/fi";
-import { useTheme } from "../../context/ThemeContext";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import MobileNavDrawer from "../Navigation/MobileNavDrawer";
@@ -57,7 +54,6 @@ const reportList = [
 // Renders the topbar interface.
 export default function Topbar({ onRefresh }) {
   const navigate = useNavigate();
-  const { theme, toggleTheme, isDark } = useTheme();
   const { pathname } = useLocation();
   const [companyProfile, setCompanyProfile] = useState(getCompanyProfile);
   const [logoError, setLogoError] = useState(false);
@@ -527,20 +523,6 @@ export default function Topbar({ onRefresh }) {
             <FiSearch className="h-4 w-4" />
           </button>
 
-          {/* Light / Dark Mode Switch */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            aria-label="Toggle dark/light mode"
-            className="rounded-full bg-[#1A1E27] border border-[#2B313F] p-2 text-slate-300 hover:text-[#FF5A1F] hover:border-[#FF5A1F]/50 transition-all cursor-pointer hover:scale-105 active:scale-95 shadow-xs shrink-0"
-          >
-            {isDark ? (
-              <FiSun className="h-4 w-4 text-amber-500 transition-transform rotate-0 hover:rotate-45" />
-            ) : (
-              <FiMoon className="h-4 w-4 text-slate-600 transition-transform hover:-rotate-12" />
-            )}
-          </button>
           <button
             type="button"
             onClick={() => navigate("/company-profile")}
@@ -567,8 +549,6 @@ export default function Topbar({ onRefresh }) {
         isOpen={mobileDrawerOpen}
         onClose={() => setMobileDrawerOpen(false)}
         companyProfile={companyProfile}
-        toggleTheme={toggleTheme}
-        isDark={isDark}
       />
     </header>
   );

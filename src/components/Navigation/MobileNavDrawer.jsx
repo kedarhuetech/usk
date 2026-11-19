@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FiChevronDown,
-  FiMoon,
   FiPlus,
   FiSearch,
-  FiSun,
   FiUser,
   FiX,
   FiArrowRight,
@@ -23,8 +21,6 @@ export default function MobileNavDrawer({
   isOpen,
   onClose,
   companyProfile,
-  toggleTheme,
-  isDark,
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -376,36 +372,16 @@ export default function MobileNavDrawer({
           )}
         </div>
 
-        {/* Footer with Theme Switch & Profile */}
-        <div className="border-t border-[#252B37] p-3 bg-[#0E1116] space-y-2">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="flex items-center gap-2 rounded-lg bg-[#1A1E27] border border-[#2B313F] px-3 py-2 text-xs font-medium text-slate-300 hover:text-[#FF5A1F] transition cursor-pointer"
-            >
-              {isDark ? (
-                <>
-                  <FiSun className="h-4 w-4 text-amber-500" />
-                  <span>Light Mode</span>
-                </>
-              ) : (
-                <>
-                  <FiMoon className="h-4 w-4 text-slate-400" />
-                  <span>Dark Mode</span>
-                </>
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleNavigate("/company-profile")}
-              className="flex items-center gap-1.5 rounded-lg bg-[#1A1E27] border border-[#2B313F] px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
-            >
-              <FiUser className="h-4 w-4 text-[#FF5A1F]" />
-              <span>Profile</span>
-            </button>
-          </div>
+        {/* Footer with Profile */}
+        <div className="border-t border-[#252B37] p-3 bg-[#0E1116]">
+          <button
+            type="button"
+            onClick={() => handleNavigate("/company-profile")}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#1A1E27] border border-[#2B313F] px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+          >
+            <FiUser className="h-4 w-4 text-[#FF5A1F]" />
+            <span>Profile</span>
+          </button>
         </div>
       </aside>
     </>
