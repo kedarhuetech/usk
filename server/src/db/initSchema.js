@@ -82,6 +82,7 @@ export async function initializeDatabaseSchema() {
       await addCol("inventory_items", "is_serial_tracked TINYINT(1) DEFAULT 0");
       await addCol("inventory_items", "description TEXT");
       await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
+      await addCol("transaction_items", "is_active TINYINT(1) DEFAULT 1");
 
       await addCol("transactions", "party_gstin VARCHAR(32)");
       await addCol("transactions", "billing_address TEXT");
@@ -349,6 +350,7 @@ export async function initializeDatabaseSchema() {
       cess_rate DECIMAL(5,2) DEFAULT 0.00,
       cess_amount DECIMAL(12,2) DEFAULT 0.00,
       total_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+      is_active TINYINT(1) DEFAULT 1,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_txn_items_txn (business_id, transaction_id),
       INDEX idx_txn_items_item (business_id, item_id)

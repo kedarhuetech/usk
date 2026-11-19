@@ -131,7 +131,7 @@ router.get("/", async (req, res) => {
                 batch_no, serial_no, quantity, free_qty, unit, unit_price,
                 purchase_price, discount_percent, discount_amount, tax_rate,
                 tax_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
-                igst_rate, igst_amount, cess_rate, cess_amount, total_amount
+                igst_rate, igst_amount, cess_rate, cess_amount, total_amount, is_active
          FROM transaction_items
          WHERE business_id = ? AND transaction_id IN (${placeholders})
          ORDER BY id ASC`,
@@ -173,6 +173,8 @@ router.get("/", async (req, res) => {
           cessAmount: parseFloat(item.cess_amount) || 0,
           amount: parseFloat(item.total_amount) || 0,
           totalAmount: parseFloat(item.total_amount) || 0,
+          isActive: item.is_active !== 0,
+          is_active: item.is_active,
         });
       }
     }
@@ -400,6 +402,8 @@ router.get("/:id", async (req, res) => {
       cessAmount: parseFloat(item.cess_amount) || 0,
       amount: parseFloat(item.total_amount) || 0,
       totalAmount: parseFloat(item.total_amount) || 0,
+      isActive: item.is_active !== 0,
+      is_active: item.is_active,
     }));
 
     const txnDate = formatSqlDate(row.transaction_date);
@@ -762,19 +766,20 @@ const saveTransactionHandler = async (req, res) => {
       const cessRate = parseFloat(item.cessRate ?? item.cessPercent ?? 0) || 0;
       const cessAmount = parseFloat(item.cessAmount ?? item.cess ?? 0) || 0;
       const itemTotalAmount = parseFloat(item.calculated?.amount ?? item.amount ?? item.totalAmount ?? (quantity * unitPrice - itemDiscountAmount)) || 0;
+      const itemIsActive = item.isActive !== undefined ? (item.isActive ? 1 : 0) : (item.is_active !== undefined ? (item.is_active ? 1 : 0) : 1);
 
       await conn.query(
         `INSERT INTO transaction_items (
           id, transaction_id, business_id, item_id, item_name, item_code, hsn_code,
           batch_no, serial_no, quantity, free_qty, unit, unit_price, purchase_price,
           discount_percent, discount_amount, tax_rate, tax_amount, cgst_rate, cgst_amount,
-          sgst_rate, sgst_amount, igst_rate, igst_amount, cess_rate, cess_amount, total_amount
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          sgst_rate, sgst_amount, igst_rate, igst_amount, cess_rate, cess_amount, total_amount, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           lineId, id, businessId, itemId, itemName, itemCode, hsnCode,
           batchNo, serialNo, quantity, freeQty, unit, unitPrice, purchasePrice,
           itemDiscountPercent, itemDiscountAmount, itemTaxRate, itemTaxAmount, cgstRate, cgstAmount,
-          sgstRate, sgstAmount, igstRate, igstAmount, cessRate, cessAmount, itemTotalAmount
+          sgstRate, sgstAmount, igstRate, igstAmount, cessRate, cessAmount, itemTotalAmount, itemIsActive
         ]
       );
 

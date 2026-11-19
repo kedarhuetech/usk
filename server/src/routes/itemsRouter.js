@@ -226,6 +226,7 @@ router.get("/:id", async (req, res) => {
         minStock: parseFloat(row.min_stock) || 0,
         isBatchTracked: Boolean(row.is_batch_tracked),
         isSerialTracked: Boolean(row.is_serial_tracked),
+        isActive: row.is_active !== 0,
         description: row.description || "",
         batches,
         createdAt: row.created_at,
