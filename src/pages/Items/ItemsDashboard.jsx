@@ -9,6 +9,7 @@ import {
   FiMoreVertical,
   FiPlus,
   FiSearch,
+  FiShield,
   FiSliders,
   FiX,
 } from "react-icons/fi";
@@ -166,6 +167,35 @@ function quantity(item) {
 // This helper handles value logic.
 function stockValue(item) {
   return quantity(item) * (Number(item?.purchasePrice || 0) || 0);
+}
+
+// Checks whether an item is already included in any database transaction (such as sales or purchases).
+function hasItemTransactions(item, salesList = [], purchasesList = []) {
+  if (!item) return false;
+  const matches = (row) =>
+    row.sourceItemId === item.id ||
+    row.itemId === item.id ||
+    row.productId === item.id ||
+    (row.item && String(row.item).trim().toLowerCase() === String(item.itemName || "").trim().toLowerCase()) ||
+    (row.itemName && String(row.itemName).trim().toLowerCase() === String(item.itemName || "").trim().toLowerCase());
+
+  const inSales = (salesList || []).some((inv) => (inv.rows || []).some(matches));
+  if (inSales) return true;
+
+  const inPurchases = (purchasesList || []).some((bill) => (bill.rows || []).some(matches));
+  if (inPurchases) return true;
+
+  try {
+    const returns = getSaleReturns() || [];
+    if (returns.some((ret) => (ret.rows || []).some(matches))) return true;
+  } catch {}
+
+  try {
+    const adjustments = getInventoryAdjustments(item.id) || [];
+    if (adjustments.length > 0) return true;
+  } catch {}
+
+  return false;
 }
 
 // This helper handles rows logic.
@@ -370,6 +400,7 @@ function ItemsDashboard() {
   const [bulkFields, setBulkFields] = useState({ salePrice: "", purchasePrice: "", category: "" });
   const [rowMenu, setRowMenu] = useState("");
   const [itemModal, setItemModal] = useState(null);
+  const [itemStatusModal, setItemStatusModal] = useState(null);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleteAllCount, setDeleteAllCount] = useState(null);
   const [deleteAllPhrase, setDeleteAllPhrase] = useState("");
@@ -491,7 +522,7 @@ function ItemsDashboard() {
     // Handles pointer down.
     const onPointerDown = (event) => { if (!menuRef.current?.contains(event.target) && !event.target.closest?.("[data-item-bulk-menu]") && !event.target.closest?.("[data-item-transaction-actions]") && !event.target.closest?.("[data-item-row-actions]")) { setMenuOpen(false); setRowMenu(""); } };
     // Handles key down.
-    const onKeyDown = (event) => { if (event.key === "Escape") { setMenuOpen(false); setRowMenu(""); setItemModal(null); setAdjustItem(null); setTransactionDetails(null); setTransactionHistory(null); setUnitModal(false); setConversionModal(false); } };
+    const onKeyDown = (event) => { if (event.key === "Escape") { setMenuOpen(false); setRowMenu(""); setItemModal(null); setItemStatusModal(null); setAdjustItem(null); setTransactionDetails(null); setTransactionHistory(null); setUnitModal(false); setConversionModal(false); } };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onKeyDown); };
@@ -898,9 +929,14 @@ function ItemsDashboard() {
                       type="button"
                       onClick={() => {
                         setRowMenu("");
+                        const isReferenced = hasItemTransactions(item, sales, purchases);
+                        if (isReferenced) {
+                          setItemStatusModal(item);
+                          return;
+                        }
                         setConfirmDialog({
                           title: "Delete Item",
-                          message: `Permanently delete "${item.itemName}"? This operation cannot be undone.`,
+                          message: `Permanently delete "${item.itemName}"? This item is not used in any transactions and this operation cannot be undone.`,
                           confirmText: "Delete",
                           danger: true,
                           onConfirm: async () => {
@@ -914,40 +950,12 @@ function ItemsDashboard() {
                               } else {
                                 const modeSuffix = isDatabaseMode() ? "" : " from local storage";
                                 setNotice(`${item.itemName} deleted successfully${modeSuffix}.`);
-                                toast.success(`${item.itemName} deleted.`);
+                                toast.success(`${item.itemName} permanently deleted.`);
                               }
                             } catch (error) {
                               console.error("Item delete error:", error);
-                              if (error?.status === 409 || error?.code === "ITEM_REFERENCED" || error?.message?.includes("referenced")) {
-                                const isAlreadyInactive = item.isActive === false;
-                                setConfirmDialog({
-                                  title: isAlreadyInactive ? "Permanently Delete Item" : "Item Has Historical Transactions",
-                                  message: isAlreadyInactive
-                                    ? `"${item.itemName}" is already inactive and has historical records. Do you want to permanently delete this item? Historical invoice lines will be preserved.`
-                                    : `${error.message}\n\nWould you like to mark "${item.itemName}" as inactive instead? Inactive items are hidden from new sales but preserve all historical accounting records.`,
-                                  confirmText: isAlreadyInactive ? "Delete Permanently" : "Mark Inactive",
-                                  danger: isAlreadyInactive,
-                                  onConfirm: async () => {
-                                    setConfirmDialog(null);
-                                    try {
-                                      if (isAlreadyInactive) {
-                                        await deleteBusinessItem(item, { force: true });
-                                        await refresh();
-                                        setNotice(`"${item.itemName}" permanently deleted.`);
-                                        toast.success(`"${item.itemName}" deleted.`);
-                                      } else {
-                                        await deleteBusinessItem(item, { deactivate: true });
-                                        await refresh();
-                                        setNotice(`${item.itemName} marked as inactive.`);
-                                        toast.success(`${item.itemName} marked inactive.`);
-                                      }
-                                    } catch (actionErr) {
-                                      toast.error(`Operation failed: ${actionErr.message}`);
-                                      setLoadError(actionErr.message);
-                                    }
-                                  },
-                                  onCancel: () => setConfirmDialog(null),
-                                });
+                              if (error?.status === 409 || error?.code === "ITEM_REFERENCED" || error?.message?.includes("referenced") || error?.message?.includes("transactions")) {
+                                setItemStatusModal(item);
                               } else {
                                 toast.error(`Could not delete item: ${error.message}`);
                                 setLoadError(`Failed to delete ${item.itemName}: ${error.message}`);
@@ -1119,98 +1127,205 @@ function ItemsDashboard() {
                     refresh();
                     setNotice(action === "Delete" ? "Transaction hidden from the Items screen." : `${action} saved in this browser only.`);
                   };
-                  const actions = row.type === "Sale" ? ["View/Edit", "Cancel Invoice", "Delete", "Open PDF", "Preview", "Print", "Convert To Return", "Payment History", "View History"] : ["View Details", "Delete", "Preview", "Print", "Payment History", "View History"];
+                  const isOpeningStock = row.type === "Opening Stock" || row.name === "Opening Stock" || String(row.id).includes("opening-stock");
+                  const actions = row.type === "Sale"
+                    ? ["View/Edit", "Delete", "Open PDF", "Preview", "Print", "Convert To Return", "Payment History", "View History"]
+                    : row.type === "Purchase"
+                    ? ["View/Edit", "Delete", "Open PDF", "Preview", "Print", "Payment History", "View History"]
+                    : ["View Details", "Delete", "Preview", "Print", "Payment History", "View History"];
                   const rowActions = row.source?.batchTracked ? (row.source.cancelled ? ["View Details"] : ["View Details", "Reverse Adjustment"]) : actions;
-                  return <tr key={row.id} className="border-b border-slate-200/80 text-slate-900 hover:bg-slate-50 dark:border-[#252B37] dark:text-slate-100 dark:hover:bg-[#1A1E27]/50"><td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100"><span className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${row.type === "Sale" ? "bg-emerald-500" : row.type === "Purchase" ? "bg-blue-600" : "bg-rose-600"}`} />{row.type}</td><td className="px-3 py-3.5 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">{row.invoice}</td><td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">{row.name}</td><td className="whitespace-nowrap px-3 py-3.5 text-slate-700 dark:text-slate-300">{dateLabel(row.date)}</td><td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100">{row.quantity} {row.unit}</td><td className="whitespace-nowrap px-3 py-3.5 text-slate-800 dark:text-slate-200">{row.price === "-" ? "-" : money(row.price)}</td><td className="whitespace-nowrap px-3 py-3.5 font-bold text-slate-950 dark:text-slate-50">{row.amount === "-" ? "-" : money(row.amount)}</td><td className="px-3 py-3.5"><span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${row.status === "Unpaid" || row.status === "Overdue" ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"}`}>{row.status}</span></td><td className="px-3 py-3 text-slate-400"><div className="relative" data-item-transaction-actions><button type="button" aria-label={`Actions for ${row.type}`} onClick={() => setRowMenu((current) => current === `transaction-${row.id}` ? "" : `transaction-${row.id}`)} className="grid h-8 w-7 place-items-center rounded hover:bg-slate-100"><FiMoreVertical /></button>{rowMenu === `transaction-${row.id}` && <div className="absolute right-0 top-8 z-40 max-h-[min(440px,70vh)] w-52 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 text-slate-700 shadow-xl">{rowActions.map((action) => <button key={action} type="button" onClick={() => {
-                    setRowMenu("");
-                    if (action === "Reverse Adjustment") {
-                      try {
-                        cancelInventoryAdjustment(row.source.id);
-                        saveBusinessItem(getInventoryItems().find((entry) => entry.id === row.source.itemId)).then(() => { refresh(); setNotice("Batch adjustment reversed."); }).catch((error) => setNotice(error.message || "Could not sync the reversed adjustment."));
-                      } catch (error) { setNotice(error.message || "Could not reverse this batch adjustment."); }
-                      return;
-                    }
-                    if (action === "Convert To Return") {
-                      const invoiceToConvert = row.source || {
-                        id: row.sourceId || `sale-${Date.now()}`,
-                        invoiceNumber: row.invoice,
-                        form: {
-                          invoiceNumber: row.invoice,
-                          customer: row.name,
-                          invoiceDate: row.date,
-                        },
-                        rows: [{
-                          id: `row-${Date.now()}`,
-                          sourceItemId: selectedItem?.id,
-                          item: selectedItem?.itemName || "Item",
-                          qty: row.quantity,
-                          price: row.price,
-                          unit: row.unit,
-                        }],
-                        totals: { finalTotal: row.amount },
-                      };
-                      navigate("/sales/sale-return-credit-note", {
-                        state: {
-                          convertInvoice: invoiceToConvert,
-                          invoiceId: row.sourceId || row.source?.id,
-                          invoiceNumber: row.invoice,
-                          customerName: row.name,
-                          targetItemId: selectedItem?.id,
-                          targetItemName: selectedItem?.itemName,
-                          targetQty: row.quantity,
-                        },
-                      });
-                      return;
-                    }
-                    if (action === "View Details" || action === "Payment History") { setTransactionDetails(row); return; }
-                    if (action === "Preview") { if (row.type === "Sale" && row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source } }); else setTransactionDetails(row); return; }
-                    if (action === "View/Edit") {
-                      const target = items.find((item) =>
-                        (row.itemId && item.id === row.itemId)
-                        || (!row.itemId && String(item.itemName || "").trim().toLowerCase() === String(row.itemName || "").trim().toLowerCase())
-                      );
-                      if (target) {
-                        setSelectedId(target.id);
-                        setItemModal({ mode: "edit", initialItem: target });
-                      } else {
-                        setTransactionDetails(row);
-                      }
-                      return;
-                    }
-                    if (action === "Open PDF" || action === "Print") { if (row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source, printAfterOpen: true } }); else setTransactionDetails(row); return; }
-                    if (action === "View History") { setTransactionHistory(row); return; }
-                    if (action === "Delete") {
-                      setConfirmDialog({
-                        title: "Hide Transaction",
-                        message: "Hide this transaction from the Items screen? Its saved invoice will not be deleted.",
-                        confirmText: "Hide",
-                        danger: true,
-                        onConfirm: () => {
-                          localAction(action);
-                          toast.info("Transaction hidden from Items view.");
-                          setConfirmDialog(null);
-                        },
-                        onCancel: () => setConfirmDialog(null),
-                      });
-                      return;
-                    }
-                    if (action === "Cancel Invoice") {
-                      setConfirmDialog({
-                        title: "Cancel Invoice",
-                        message: "Mark this invoice as cancelled in the Items screen?",
-                        confirmText: "Cancel Invoice",
-                        danger: true,
-                        onConfirm: () => {
-                          localAction(action);
-                          toast.info("Invoice marked as cancelled.");
-                          setConfirmDialog(null);
-                        },
-                        onCancel: () => setConfirmDialog(null),
-                      });
-                      return;
-                    }
-                    localAction(action);
-                  }} className="w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-50">{action}</button>)}</div>}</div></td></tr>;
+                  return (
+                    <tr key={row.id} className="border-b border-slate-200/80 text-slate-900 hover:bg-slate-50 dark:border-[#252B37] dark:text-slate-100 dark:hover:bg-[#1A1E27]/50">
+                      <td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100">
+                        <span className={`mr-2 inline-block h-2.5 w-2.5 rounded-full ${row.type === "Sale" ? "bg-emerald-500" : row.type === "Purchase" ? "bg-blue-600" : "bg-rose-600"}`} />
+                        {row.type}
+                      </td>
+                      <td className="px-3 py-3.5 font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">{row.invoice}</td>
+                      <td className="px-3 py-3.5 font-medium text-slate-800 dark:text-slate-200">{row.name}</td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-slate-700 dark:text-slate-300">{dateLabel(row.date)}</td>
+                      <td className="whitespace-nowrap px-3 py-3.5 font-semibold text-slate-900 dark:text-slate-100">{row.quantity} {row.unit}</td>
+                      <td className="whitespace-nowrap px-3 py-3.5 text-slate-800 dark:text-slate-200">{row.price === "-" ? "-" : money(row.price)}</td>
+                      <td className="whitespace-nowrap px-3 py-3.5 font-bold text-slate-950 dark:text-slate-50">{row.amount === "-" ? "-" : money(row.amount)}</td>
+                      <td className="px-3 py-3.5">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${row.status === "Unpaid" || row.status === "Overdue" ? "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"}`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-slate-400">
+                        {isOpeningStock ? (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setTransactionDetails(row)}
+                              className="whitespace-nowrap rounded px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 hover:text-blue-800 transition cursor-pointer"
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="relative flex justify-end" data-item-transaction-actions>
+                            <button
+                              type="button"
+                              aria-label={`Actions for ${row.type}`}
+                              onClick={() => setRowMenu((current) => current === `transaction-${row.id}` ? "" : `transaction-${row.id}`)}
+                              className="grid h-8 w-7 place-items-center rounded hover:bg-slate-100 text-slate-400"
+                            >
+                              <FiMoreVertical />
+                            </button>
+                            {rowMenu === `transaction-${row.id}` && (
+                              <div className="absolute right-0 top-8 z-40 max-h-[min(440px,70vh)] w-52 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 text-slate-700 shadow-xl">
+                                {rowActions.map((action) => (
+                                  <button
+                                    key={action}
+                                    type="button"
+                                    onClick={() => {
+                                      setRowMenu("");
+                                      if (action === "Reverse Adjustment") {
+                                        try {
+                                          cancelInventoryAdjustment(row.source.id);
+                                          saveBusinessItem(getInventoryItems().find((entry) => entry.id === row.source.itemId)).then(() => { refresh(); setNotice("Batch adjustment reversed."); }).catch((error) => setNotice(error.message || "Could not sync the reversed adjustment."));
+                                        } catch (error) { setNotice(error.message || "Could not reverse this batch adjustment."); }
+                                        return;
+                                      }
+                                      if (action === "Convert To Return") {
+                                        const invoiceToConvert = row.source || {
+                                          id: row.sourceId || `sale-${Date.now()}`,
+                                          invoiceNumber: row.invoice,
+                                          form: {
+                                            invoiceNumber: row.invoice,
+                                            customer: row.name,
+                                            invoiceDate: row.date,
+                                          },
+                                          rows: [{
+                                            id: `row-${Date.now()}`,
+                                            sourceItemId: selectedItem?.id,
+                                            item: selectedItem?.itemName || "Item",
+                                            qty: row.quantity,
+                                            price: row.price,
+                                            unit: row.unit,
+                                          }],
+                                          totals: { finalTotal: row.amount },
+                                        };
+                                        navigate("/sales/sale-return-credit-note", {
+                                          state: {
+                                            convertInvoice: invoiceToConvert,
+                                            invoiceId: row.sourceId || row.source?.id,
+                                            invoiceNumber: row.invoice,
+                                            customerName: row.name,
+                                            targetItemId: selectedItem?.id,
+                                            targetItemName: selectedItem?.itemName,
+                                            targetQty: row.quantity,
+                                          },
+                                        });
+                                        return;
+                                      }
+                                      if (action === "View Details" || action === "Payment History") { setTransactionDetails(row); return; }
+                                      if (action === "Preview") { if (row.type === "Sale" && row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source } }); else setTransactionDetails(row); return; }
+                                      if (action === "View/Edit") {
+                                        let rawDoc = row.source ? { ...row.source, id: row.source.id || row.sourceId } : null;
+                                        if (!rawDoc && row.sourceId) {
+                                          if (row.type === "Sale") {
+                                            rawDoc = sales.find((s) => s.id === row.sourceId) || getSaleInvoices().find((s) => s.id === row.sourceId);
+                                          } else if (row.type === "Purchase") {
+                                            rawDoc = purchases.find((p) => p.id === row.sourceId) || getPurchaseBills().find((p) => p.id === row.sourceId);
+                                          }
+                                        }
+
+                                        if (row.type === "Sale") {
+                                          navigate("/sales/sale-invoices/new", {
+                                            state: { from: location.pathname, editInvoice: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Purchase") {
+                                          navigate("/purchase-expense/purchase-bills/new", {
+                                            state: { from: location.pathname, editPurchase: rawDoc, editBill: rawDoc, editInvoice: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Sale Order") {
+                                          navigate("/sales/sale-order", {
+                                            state: { from: location.pathname, editOrder: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Purchase Order") {
+                                          navigate("/purchase-expense/purchase-order", {
+                                            state: { from: location.pathname, editOrder: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (String(row.type).includes("Estimate")) {
+                                          navigate("/sales/estimate-quotation", {
+                                            state: { from: location.pathname, editEstimate: rawDoc, editInvoice: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (String(row.type).includes("Proforma")) {
+                                          navigate("/sales/proforma-invoice", {
+                                            state: { from: location.pathname, editProforma: rawDoc, editInvoice: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Sale Return" || row.type === "Credit Note" || String(row.type).includes("Return")) {
+                                          navigate("/sales/sale-return-credit-note", {
+                                            state: { from: location.pathname, editReturn: rawDoc, editCreditNote: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Purchase Return" || row.type === "Debit Note") {
+                                          navigate("/purchase-expense/purchase-return-debit-note", {
+                                            state: { from: location.pathname, editReturn: rawDoc, editDebitNote: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Payment-In") {
+                                          navigate("/sales/payment-in", {
+                                            state: { from: location.pathname, editPayment: rawDoc },
+                                          });
+                                          return;
+                                        }
+                                        if (row.type === "Payment-Out") {
+                                          navigate("/purchase-expense/payment-out", {
+                                            state: { from: location.pathname, editPayment: rawDoc },
+                                          });
+                                          return;
+                                        }
+
+                                        setTransactionDetails(row);
+                                        return;
+                                      }
+                                      if (action === "Open PDF" || action === "Print") { if (row.source) navigate("/sales/sale-invoices/preview", { state: { invoice: row.source, printAfterOpen: true } }); else setTransactionDetails(row); return; }
+                                      if (action === "View History") { setTransactionHistory(row); return; }
+                                      if (action === "Delete") {
+                                        setConfirmDialog({
+                                          title: "Hide Transaction",
+                                          message: "Hide this transaction from the Items screen? Its saved invoice will not be deleted.",
+                                          confirmText: "Hide",
+                                          danger: true,
+                                          onConfirm: () => {
+                                            localAction(action);
+                                            toast.info("Transaction hidden from Items view.");
+                                            setConfirmDialog(null);
+                                          },
+                                          onCancel: () => setConfirmDialog(null),
+                                        });
+                                        return;
+                                      }
+                                      localAction(action);
+                                    }}
+                                    className="w-full rounded px-3 py-2.5 text-left text-sm hover:bg-slate-50"
+                                  >
+                                    {action}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
                 })}
                 {!filteredTransactions.length && <tr><td colSpan="9" className="px-4 py-16 text-center text-sm text-slate-500">{selectedItem ? "No Rows To Show" : "Select an item to see its transactions."}</td></tr>}
               </tbody></table></div>
@@ -1237,6 +1352,144 @@ function ItemsDashboard() {
       {bulkAction && !bulkSelectionOpen && <Modal title={bulkAction === "code" ? "Bulk Assign Code" : bulkAction === "units" ? "Assign Units" : "Bulk Update Items"} onClose={() => { setBulkAction(""); setSelectedBulkIds([]); }}><div className="space-y-4 p-5"><p className="text-sm text-slate-500">This action applies to {selectedBulkItems.length} selected {activeTab}{selectedBulkItems.length === 1 ? "" : "s"} and is saved only in this browser.</p>{bulkAction === "code" && <div className="max-h-72 space-y-3 overflow-y-auto">{selectedBulkItems.map((item) => <label key={item.id} className="block text-sm font-medium text-slate-600">{item.itemName}<input value={bulkCodes[item.id] || ""} onChange={(event) => setBulkCodes((current) => ({ ...current, [item.id]: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder={`Unique code for ${item.itemName}`} /></label>)}</div>}{bulkAction === "units" && <label className="block text-sm font-medium text-slate-600">Set the same unit for all selected items<select value={bulkUnit} onChange={(event) => setBulkUnit(event.target.value)} className="mt-1.5 h-10 w-full rounded border border-slate-300 bg-white px-3"><option value="">Choose a unit</option>{units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</select></label>}{bulkAction === "update" && <div className="space-y-3"><label className="block text-sm font-medium text-slate-600">Sale price<input value={bulkFields.salePrice} onChange={(event) => setBulkFields((current) => ({ ...current, salePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Purchase price<input value={bulkFields.purchasePrice} onChange={(event) => setBulkFields((current) => ({ ...current, purchasePrice: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label><label className="block text-sm font-medium text-slate-600">Category<input value={bulkFields.category} onChange={(event) => setBulkFields((current) => ({ ...current, category: event.target.value }))} className="mt-1.5 h-10 w-full rounded border border-slate-300 px-3" placeholder="Leave blank to keep current" /></label></div>}<div className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button onClick={() => { setBulkAction(""); setSelectedBulkIds([]); }} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={saveBulkAction} disabled={(bulkAction === "units" && !bulkUnit) || (bulkAction === "code" && selectedBulkItems.some((item) => !String(bulkCodes[item.id] || "").trim()))} className="bg-blue-600 text-white">Apply</Button></div></div></Modal>}
       {unitModal && <Modal title="Add Unit" onClose={() => setUnitModal(false)}><div className="space-y-4 p-5"><label className="block text-sm font-semibold text-slate-600">Unit name<input autoFocus value={unitName} onChange={(event) => setUnitName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") createUnit(); }} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" placeholder="e.g. Carton" /></label><div className="flex justify-end gap-2"><Button onClick={() => setUnitModal(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={createUnit} className="bg-blue-600 text-white">Save Unit</Button></div></div></Modal>}
       {conversionModal && <Modal title={`Add Conversion · ${selectedUnit}`} onClose={() => setConversionModal(false)}><div className="space-y-4 p-5"><label className="block text-sm font-semibold text-slate-600">1 {selectedUnit} equals<input inputMode="decimal" value={conversionFactor} onChange={(event) => setConversionFactor(event.target.value.replace(/[^\d.]/g, ""))} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-normal" /></label><label className="block text-sm font-semibold text-slate-600">Unit<select value={conversionUnit} onChange={(event) => setConversionUnit(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal"><option value="">Select unit</option>{units.filter((unit) => unit !== selectedUnit).map((unit) => <option key={unit}>{unit}</option>)}</select></label><div className="flex justify-end gap-2"><Button onClick={() => setConversionModal(false)} className="bg-slate-100 text-slate-700">Cancel</Button><Button onClick={createConversion} className="bg-blue-600 text-white">Save Conversion</Button></div></div></Modal>}
+      {itemStatusModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-xs animate-in fade-in duration-150"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setItemStatusModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
+                  <FiShield className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-800">Cannot Delete Item</h2>
+                  <p className="text-xs text-slate-500">Transaction integrity protection</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setItemStatusModal(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-950 leading-relaxed">
+                <p className="font-semibold text-amber-950">
+                  "{itemStatusModal.itemName}" is already included in database transactions (such as purchase or sales transactions).
+                </p>
+                <p className="mt-1.5 text-amber-900">
+                  To protect historical invoice and audit records, this item <strong>must not be permanently deleted</strong>. You can deactivate it without deleting it by choosing an option below:
+                </p>
+              </div>
+
+              <div className="space-y-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Status Options:</p>
+
+                {/* Active Option */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const item = itemStatusModal;
+                    try {
+                      if (isDatabaseMode()) await itemsDb.reactivate(item.id);
+                      saveInventoryItem({ ...item, isActive: true });
+                      await refresh();
+                      toast.success(`"${item.itemName}" set to Active.`);
+                      setItemStatusModal(null);
+                    } catch (err) {
+                      toast.error(err.message || "Could not activate item.");
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-left transition ${
+                    itemStatusModal.isActive !== false
+                      ? "border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20"
+                      : "border-slate-200 hover:border-emerald-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-3 w-3 shrink-0 rounded-full bg-emerald-500 ring-4 ring-emerald-100" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Active
+                        {itemStatusModal.isActive !== false && (
+                          <span className="ml-2 text-xs font-normal text-emerald-700">(Current)</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500">Item is active and available for new sales &amp; purchases.</p>
+                    </div>
+                  </div>
+                  {itemStatusModal.isActive !== false ? (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full">Active</span>
+                  ) : (
+                    <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 hover:bg-emerald-100">Set Active</span>
+                  )}
+                </button>
+
+                {/* Inactive Option */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const item = itemStatusModal;
+                    try {
+                      if (isDatabaseMode()) await itemsDb.deactivate(item.id);
+                      saveInventoryItem({ ...item, isActive: false });
+                      await refresh();
+                      toast.success(`"${item.itemName}" marked as Inactive.`);
+                      setItemStatusModal(null);
+                    } catch (err) {
+                      toast.error(err.message || "Could not inactivate item.");
+                    }
+                  }}
+                  className={`w-full flex items-center justify-between rounded-xl border p-3.5 text-left transition ${
+                    itemStatusModal.isActive === false
+                      ? "border-rose-400 bg-rose-50/60 ring-2 ring-rose-400/20"
+                      : "border-slate-200 hover:border-amber-400 hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-3 w-3 shrink-0 rounded-full bg-rose-500 ring-4 ring-rose-100" />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">
+                        Inactive
+                        {itemStatusModal.isActive === false && (
+                          <span className="ml-2 text-xs font-normal text-rose-700">(Current)</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500">Deactivated: hidden from new sales, but preserves all historical data.</p>
+                    </div>
+                  </div>
+                  {itemStatusModal.isActive === false ? (
+                    <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2.5 py-1 rounded-full">Inactive</span>
+                  ) : (
+                    <span className="text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1 rounded-md shadow-xs">
+                      Make Inactive
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end border-t border-slate-100 pt-3">
+              <Button
+                onClick={() => setItemStatusModal(null)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {confirmDialog && (
         <ConfirmModal
           isOpen={Boolean(confirmDialog)}

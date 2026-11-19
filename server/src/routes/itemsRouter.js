@@ -449,53 +449,6 @@ router.delete("/:id", async (req, res) => {
         });
       }
 
-      // If client requests force deletion, preserve invoice records by re-linking or disassociating foreign keys
-      if (req.query.force === "true") {
-        await conn.beginTransaction();
-
-        // Check if there is another item with identical name or code to merge transaction references into
-        const [duplicateTarget] = await conn.query(
-          `SELECT id FROM inventory_items WHERE business_id = ? AND (name = ? OR item_code = ?) AND id != ? LIMIT 1`,
-          [businessId, itemName, existing[0].item_code || "", itemId]
-        );
-        const mergeTargetId = duplicateTarget.length > 0 ? duplicateTarget[0].id : null;
-
-        if (mergeTargetId) {
-          await conn.query(
-            `UPDATE transaction_items SET item_id = ? WHERE business_id = ? AND item_id = ?`,
-            [mergeTargetId, businessId, itemId]
-          );
-          try {
-            await conn.query(
-              `UPDATE inventory_adjustments SET item_id = ? WHERE business_id = ? AND item_id = ?`,
-              [mergeTargetId, businessId, itemId]
-            );
-          } catch {}
-        } else {
-          await conn.query(
-            `UPDATE transaction_items SET item_id = NULL WHERE business_id = ? AND item_id = ?`,
-            [businessId, itemId]
-          );
-          try {
-            await conn.query(
-              `UPDATE inventory_adjustments SET item_id = NULL WHERE business_id = ? AND item_id = ?`,
-              [businessId, itemId]
-            );
-          } catch {}
-        }
-
-        await conn.query(`DELETE FROM item_batches WHERE business_id = ? AND item_id = ?`, [businessId, itemId]);
-        await conn.query(`DELETE FROM inventory_items WHERE business_id = ? AND id = ?`, [businessId, itemId]);
-        await conn.commit();
-
-        return res.json({
-          success: true,
-          action: "deleted",
-          mergedTo: mergeTargetId,
-          message: `Item "${itemName}" permanently removed. Historical invoices preserved.`
-        });
-      }
-
       return res.status(409).json({
         success: false,
         code: "ITEM_REFERENCED",
