@@ -394,6 +394,7 @@ function ItemsDashboard() {
   const [adjustItem, setAdjustItem] = useState(null);
   const [transactionDetails, setTransactionDetails] = useState(null);
   const [transactionHistory, setTransactionHistory] = useState(null);
+  const [mobileItemView, setMobileItemView] = useState("list");
   const [units, setUnits] = useState(() => getUnits());
   const [selectedUnit, setSelectedUnit] = useState(() => getUnits()[0] || "PCS");
   const [unitSearch, setUnitSearch] = useState("");
@@ -747,10 +748,40 @@ function ItemsDashboard() {
       {loadError && <div role="alert" className="mb-1 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div>}
       {notice && <div role="status" className="mb-1 flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><FiX /></button></div>}
 
+      {/* Mobile Master-Detail View Switcher (< xl) */}
+      {activeTab !== "units" && (
+        <div className="flex xl:hidden border-b border-slate-200 bg-white p-1.5 gap-1.5 shrink-0 z-10 shadow-xs mb-1">
+          <button
+            type="button"
+            onClick={() => setMobileItemView("list")}
+            className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer ${
+              mobileItemView === "list"
+                ? "bg-[#14171E] text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {activeTab === "product" ? "Products" : "Services"} List ({filteredItems.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileItemView("details")}
+            className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer truncate px-2 ${
+              mobileItemView === "details"
+                ? "bg-[#FF5A1F] text-white shadow-xs"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+            }`}
+          >
+            {selectedItem ? selectedItem.itemName : "Item"} Details &amp; History
+          </button>
+        </div>
+      )}
+
       {activeTab !== "units" ? (
         <div className="grid min-h-[calc(100vh-12.5rem)] flex-1 gap-1 xl:grid-cols-[minmax(280px,24%)_minmax(0,1fr)]">
           <input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" aria-label="Choose item CSV file" onChange={(event) => importItemsCsv(event.target.files?.[0])} />
-          <Card className="flex min-h-[420px] flex-col overflow-visible shadow-sm">
+          <Card className={`flex min-h-[350px] sm:min-h-[420px] xl:min-h-0 flex-col overflow-visible shadow-sm ${
+            mobileItemView === "details" ? "hidden xl:flex" : "flex"
+          }`}>
             <div className="relative flex flex-wrap items-center gap-2 border-b border-slate-200 p-3">
               <div className="flex h-11 min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 shadow-xs focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
                 <FiSearch className="h-4 w-4 shrink-0 text-slate-400" />
@@ -795,7 +826,16 @@ function ItemsDashboard() {
             {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3">{enableItemCategory && <label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>}{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" />Low stock only</label>}</div>}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {filteredItems.map((item) => <div key={item.id} data-item-row-actions className={`group relative grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto_28px] items-center gap-2 px-3 ${selectedItem?.id === item.id ? "bg-sky-100" : "bg-white hover:bg-slate-50"}`}>
-                <button type="button" onClick={() => setSelectedId(item.id)} className="min-w-0 py-2 text-left"><span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span><span className="block truncate text-xs text-slate-400">{item.itemCode || ""}{enableItemCategory && item.category && <span className="ml-2 font-medium text-slate-500">[{item.category}]</span>}</span></button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    setMobileItemView("details");
+                  }}
+                  className="min-w-0 py-2 text-left cursor-pointer"
+                >
+                  <span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span><span className="block truncate text-xs text-slate-400">{item.itemCode || ""}{enableItemCategory && item.category && <span className="ml-2 font-medium text-slate-500">[{item.category}]</span>}</span>
+                </button>
                 <span className={`whitespace-nowrap text-sm font-medium ${activeTab === "product" && quantity(item) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{activeTab === "product" ? `${quantity(item)}${item.unit ? ` ${item.unit}` : ""}` : item.unit || "-"}</span>
                 <button type="button" aria-label={`Actions for ${item.itemName}`} onClick={() => setRowMenu((current) => current === item.id ? "" : item.id)} className="grid h-8 w-6 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"><FiMoreVertical /></button>
                 {rowMenu === item.id && (
@@ -940,7 +980,23 @@ function ItemsDashboard() {
             </div>
           </Card>
 
-          <div className="flex min-w-0 flex-col gap-1">
+          <div className={`min-w-0 flex-col gap-1 ${
+            mobileItemView === "list" ? "hidden xl:flex" : "flex"
+          }`}>
+            {/* Mobile Back Button to Items List (< xl) */}
+            <div className="flex xl:hidden items-center justify-between border-b border-slate-200 px-4 py-2 bg-white rounded-md shrink-0 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setMobileItemView("list")}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+              >
+                ← Back to {activeTab === "product" ? "Products" : "Services"} List
+              </button>
+              <span className="text-xs font-semibold text-slate-500">
+                {filteredItems.length} items
+              </span>
+            </div>
+
             <Card className="shrink-0 p-4 shadow-sm sm:p-5">
               {selectedItem ? <>
                 <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1163,7 +1219,7 @@ function ItemsDashboard() {
         </div>
       ) : (
         <div className="grid min-h-[calc(100vh-12.5rem)] flex-1 gap-1 xl:grid-cols-[minmax(280px,24%)_minmax(0,1fr)]">
-          <Card className="flex min-h-[420px] flex-col overflow-visible shadow-sm">
+          <Card className="flex min-h-[350px] sm:min-h-[420px] flex-col overflow-visible shadow-sm">
             <div className="flex items-center gap-2 border-b border-slate-200 p-3"><button type="button" aria-label="Search units" onClick={() => { setUnitSearchOpen((open) => !open); if (unitSearchOpen) setUnitSearch(""); }} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-700"><FiSearch /></button>{unitSearchOpen && <input autoFocus value={unitSearch} onChange={(event) => setUnitSearch(event.target.value)} placeholder="Search units" className="h-10 min-w-0 flex-1 rounded-md border border-slate-200 px-2 text-sm" />}<Button onClick={() => setUnitModal(true)} className="ml-auto h-11 rounded-md bg-amber-500 px-3 text-white shadow-sm hover:bg-amber-600"><FiPlus /> Add Units</Button><button type="button" aria-label="More unit actions" onClick={() => setUnitModal(true)} className="grid h-9 w-7 place-items-center text-slate-500"><FiMoreVertical /></button></div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_28px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold uppercase text-slate-500"><span>Full Name</span><span>Short Name</span><span /></div>
             <div className="min-h-0 flex-1 overflow-y-auto">{visibleUnits.map((unit) => <button key={unit} type="button" onClick={() => setSelectedUnit(unit)} className={`grid min-h-[58px] w-full grid-cols-[minmax(0,1fr)_auto_28px] items-center gap-2 px-3 text-left text-sm ${selectedUnit === unit ? "bg-sky-100" : "bg-white hover:bg-slate-50"}`}><span className="truncate font-medium text-slate-800">{unit}</span><span className="text-slate-700">{unit.length <= 4 ? unit[0] + unit.slice(1).toLowerCase() : unit.split(/\s+/).map((word) => word[0]).join("")}</span><FiMoreVertical className="text-slate-400" /></button>)}{!visibleUnits.length && <p className="p-6 text-center text-sm text-slate-500">No units match.</p>}</div>

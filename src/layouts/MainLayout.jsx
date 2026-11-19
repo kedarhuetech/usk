@@ -71,7 +71,7 @@ function MainLayout() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
-      <div className="print:hidden">
+      <div className="print:hidden sticky top-0 z-40 shrink-0">
         <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
         {!isTransactionRoute && <HorizontalNavbar />}
       </div>

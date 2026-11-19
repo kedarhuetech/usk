@@ -784,6 +784,58 @@ function Reports({ defaultReport }) {
     </td>
   );
 
+  const handleReportSelect = (report) => {
+    setActiveReport(report);
+    setSearch("");
+    setStore("All Stores");
+    setUser("All Users");
+    if (report === "All Transactions") {
+      navigate("/reports/all-transactions", { replace: true });
+    } else if (report === "Profit And Loss") {
+      navigate("/reports/profit-and-loss", { replace: true });
+    } else if (report === "Bill Wise Profit") {
+      navigate("/reports/bill-wise-profit", { replace: true });
+    } else if (report === "Cash flow") {
+      navigate("/reports/cash-flow", { replace: true });
+    } else if (report === "Balance Sheet") {
+      navigate("/reports/balance-sheet", { replace: true });
+    } else if (report === "All parties") {
+      navigate("/reports/all-parties", { replace: true });
+    } else if (report === "Party Report By Item") {
+      navigate("/reports/party-report-by-item", { replace: true });
+    } else if (report === "Sale Purchase By Party") {
+      navigate("/reports/sale-purchase-by-party", { replace: true });
+    } else if (report === "Sale Purchase By Party Group") {
+      navigate("/reports/sale-purchase-by-party-group", { replace: true });
+    } else if (report === "Stock summary") {
+      navigate("/reports/stock-summary", { replace: true });
+    } else if (report === "Item Report By Party") {
+      navigate("/reports/item-report-by-party", { replace: true });
+    } else if (report === "Item Category Wise Profit And Loss") {
+      navigate("/reports/item-category-wise-profit-and-loss", { replace: true });
+    } else if (report === "Item Wise Profit And Loss") {
+      navigate("/reports/item-wise-profit-and-loss", { replace: true });
+    } else if (report === "Low Stock Summary") {
+      navigate("/reports/low-stock-summary", { replace: true });
+    } else if (report === "Stock Detail") {
+      navigate("/reports/stock-detail", { replace: true });
+    } else if (report === "Item Detail") {
+      navigate("/reports/item-detail", { replace: true });
+    } else if (report === "Loan Statement") {
+      navigate("/reports/loan-statement", { replace: true });
+    } else if (report === "Expense") {
+      navigate("/reports/expense", { replace: true });
+    } else if (report === "Expense Category Report") {
+      navigate("/reports/expense-category-report", { replace: true });
+    } else if (report === "GST Rate Report") {
+      navigate("/reports/gst-rate-report", { replace: true });
+    } else if (report === "GST Report") {
+      navigate("/reports/gst-report", { replace: true });
+    } else {
+      navigate("/reports", { replace: true });
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-[#eaf0f6] text-[#263b57]">
       {/* Report sidebar */}
@@ -798,57 +850,7 @@ function Reports({ defaultReport }) {
               <button
                 key={report}
                 type="button"
-                onClick={() => {
-                  setActiveReport(report);
-                  setSearch("");
-                  setStore("All Stores");
-                  setUser("All Users");
-                  if (report === "All Transactions") {
-                    navigate("/reports/all-transactions", { replace: true });
-                  } else if (report === "Profit And Loss") {
-                    navigate("/reports/profit-and-loss", { replace: true });
-                  } else if (report === "Bill Wise Profit") {
-                    navigate("/reports/bill-wise-profit", { replace: true });
-                  } else if (report === "Cash flow") {
-                    navigate("/reports/cash-flow", { replace: true });
-                  } else if (report === "Balance Sheet") {
-                    navigate("/reports/balance-sheet", { replace: true });
-                  } else if (report === "All parties") {
-                    navigate("/reports/all-parties", { replace: true });
-                  } else if (report === "Party Report By Item") {
-                    navigate("/reports/party-report-by-item", { replace: true });
-                  } else if (report === "Sale Purchase By Party") {
-                    navigate("/reports/sale-purchase-by-party", { replace: true });
-                  } else if (report === "Sale Purchase By Party Group") {
-                    navigate("/reports/sale-purchase-by-party-group", { replace: true });
-                  } else if (report === "Stock summary") {
-                    navigate("/reports/stock-summary", { replace: true });
-                  } else if (report === "Item Report By Party") {
-                    navigate("/reports/item-report-by-party", { replace: true });
-                  } else if (report === "Item Category Wise Profit And Loss") {
-                    navigate("/reports/item-category-wise-profit-and-loss", { replace: true });
-                  } else if (report === "Item Wise Profit And Loss") {
-                    navigate("/reports/item-wise-profit-and-loss", { replace: true });
-                  } else if (report === "Low Stock Summary") {
-                    navigate("/reports/low-stock-summary", { replace: true });
-                  } else if (report === "Stock Detail") {
-                    navigate("/reports/stock-detail", { replace: true });
-                  } else if (report === "Item Detail") {
-                    navigate("/reports/item-detail", { replace: true });
-                  } else if (report === "Loan Statement") {
-                    navigate("/reports/loan-statement", { replace: true });
-                  } else if (report === "Expense") {
-                    navigate("/reports/expense", { replace: true });
-                  } else if (report === "Expense Category Report") {
-                    navigate("/reports/expense-category-report", { replace: true });
-                  } else if (report === "GST Rate Report") {
-                    navigate("/reports/gst-rate-report", { replace: true });
-                  } else if (report === "GST Report") {
-                    navigate("/reports/gst-report", { replace: true });
-                  } else {
-                    navigate("/reports", { replace: true });
-                  }
-                }}
+                onClick={() => handleReportSelect(report)}
                 className={`w-full border-l-4 px-4 py-3 text-left text-sm transition-colors ${activeReport === report
                     ? "border-sky-600 bg-slate-100 font-semibold text-[#263b57]"
                     : "border-transparent text-[#313b50] hover:bg-slate-50"
@@ -861,7 +863,35 @@ function Reports({ defaultReport }) {
         ))}
       </aside>
 
-      {/* Main content */}
+      {/* Main content wrapper */}
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Mobile Report Selector Bar (< md) */}
+        <div className="flex md:hidden items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2.5 shrink-0 shadow-xs print:hidden z-10">
+          <label htmlFor="mobile-report-select" className="text-xs font-bold text-slate-700 shrink-0">
+            Select Report:
+          </label>
+          <select
+            id="mobile-report-select"
+            value={activeReport}
+            onChange={(e) => handleReportSelect(e.target.value)}
+            className="flex-1 min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 cursor-pointer"
+          >
+            {reportGroups
+              .filter((group) => isReportGroupVisible(group.heading))
+              .map((group) => (
+                <optgroup key={group.heading} label={group.heading}>
+                  {group.reports.filter(isReportVisible).map((report) => (
+                    <option key={report} value={report}>
+                      {report}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+          </select>
+        </div>
+
+        {/* Report Content */}
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
       {activeReport === "All Transactions" ? (
         <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <AllTransactionsReport />
@@ -1556,6 +1586,8 @@ function Reports({ defaultReport }) {
           />
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }
