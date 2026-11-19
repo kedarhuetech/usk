@@ -4,7 +4,6 @@ import {
   FiBriefcase,
   FiCreditCard,
   FiFileText,
-  FiGrid,
   FiHome,
   FiPackage,
   FiRefreshCw,
@@ -279,12 +278,7 @@ export const sidebarNavigation = [
       { id: "settings-accounting", label: "Accounting", path: "/settings?tab=accounting" },
     ],
   },
-  {
-    id: "plans-pricing",
-    label: "Plans & Pricing",
-    path: "/plans-pricing",
-    icon: FiGrid,
-  },
+ 
 ];
 
 export const sidebarTrial = {

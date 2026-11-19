@@ -219,33 +219,8 @@ function Sidebar() {
           ))}
         </nav>
 
-        {/* Bottom Section: Grab Sale Promo & Company Profile */}
+        {/* Bottom Section: Company Profile */}
         <div className="shrink-0 space-y-2 p-2.5 border-t border-[#222733]/70">
-          {/* USK Promo Card */}
-          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-[#1E232E] via-[#151820] to-[#0E1015] border border-[#FF5A1F]/30 p-2.5 text-white shadow-md">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1 text-[11px] font-bold text-white">
-                <span className="text-xs text-amber-400">⚡</span> USK Premium
-              </span>
-              <span className="rounded bg-[#FF5A1F] px-1.5 py-0.5 text-[9px] font-black text-white leading-none">
-                PRO
-              </span>
-            </div>
-
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-slate-300 font-medium truncate">
-                Upgrade for GST & cloud
-              </span>
-              <button
-                type="button"
-                onClick={() => navigate("/plans-pricing")}
-                className="rounded-full bg-[#FF5A1F] px-2.5 py-1 text-[11px] font-bold text-white shadow-sm transition hover:bg-[#E84E0F] active:scale-95 cursor-pointer shrink-0"
-              >
-                Upgrade
-              </button>
-            </div>
-          </div>
-
           {/* Company Profile Shortcut */}
           <button
             type="button"
