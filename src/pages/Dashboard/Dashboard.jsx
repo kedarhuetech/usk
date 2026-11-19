@@ -75,11 +75,11 @@ function Dashboard() {
   });
 
   return (
-    <div className="bg-slate-200 p-5">
-      <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-5">
+    <div className="bg-slate-200 p-3 sm:p-5">
+      <div className="grid gap-4 sm:gap-5 xl:grid-cols-[1fr_360px]">
+        <div className="space-y-4 sm:space-y-5">
           {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">Dashboard totals could not be loaded: {error}</p>}
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-3 sm:gap-5 md:grid-cols-2">
             {stats.map((stat) => (
               <StatCard key={stat.id} stat={stat} />
             ))}
@@ -88,7 +88,7 @@ function Dashboard() {
           <ReportsSection reports={dashboardData.reports} />
         </div>
 
-        <aside className="space-y-5">
+        <aside className="space-y-4 sm:space-y-5">
           <QuickActions actions={dashboardData.actions} />
           {dashboardData.widgets.map((widget) => (
             <WidgetCard key={widget.id} widget={widget} />

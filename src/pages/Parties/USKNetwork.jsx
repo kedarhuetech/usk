@@ -1,4 +1,4 @@
-// Implements the USK network page.
+import { useState } from "react";
 import { FiChevronDown, FiFileText, FiSearch } from "react-icons/fi";
 import Card from "../../components/Common/Card";
 
@@ -89,15 +89,47 @@ function InvoicePanel() {
 
 // Renders the USK network interface.
 function USKNetwork() {
+  const [mobileTab, setMobileTab] = useState("users");
+
   return (
     <div className="bg-slate-200 p-1">
-      <div className="mb-1 bg-white px-6 py-5">
-        <h1 className="text-xl font-bold text-slate-800">Your Business Network</h1>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-3 bg-white px-4 sm:px-6 py-4 sm:py-5">
+        <h1 className="text-lg sm:text-xl font-bold text-slate-800">Your Business Network</h1>
+      </div>
+
+      {/* Mobile Tab Switcher (< lg) */}
+      <div className="flex lg:hidden border-b border-slate-200 bg-white p-1.5 gap-1.5 shrink-0 z-10 shadow-xs mb-1">
+        <button
+          type="button"
+          onClick={() => setMobileTab("users")}
+          className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer ${
+            mobileTab === "users"
+              ? "bg-[#14171E] text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          Connected Users ({connectedUsers.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("invoices")}
+          className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer ${
+            mobileTab === "invoices"
+              ? "bg-[#FF5A1F] text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+          }`}
+        >
+          Shared Invoices
+        </button>
       </div>
 
       <div className="grid gap-1 lg:grid-cols-[450px_1fr]">
-        <NetworkUsersPanel users={connectedUsers} />
-        <InvoicePanel />
+        <div className={mobileTab === "invoices" ? "hidden lg:block" : "block"}>
+          <NetworkUsersPanel users={connectedUsers} />
+        </div>
+        <div className={mobileTab === "users" ? "hidden lg:block" : "block"}>
+          <InvoicePanel />
+        </div>
       </div>
     </div>
   );
