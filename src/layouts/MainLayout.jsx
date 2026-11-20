@@ -63,7 +63,7 @@ function MainLayout() {
 
   if (isFullscreenRoute) {
     return (
-      <div className="h-screen w-screen overflow-hidden bg-[#0B0D11] text-slate-100">
+      <div className="h-[100dvh] w-full max-w-full overflow-hidden bg-[#0B0D11] text-slate-100">
         {outlet && cloneElement(outlet, { key: refreshKey })}
       </div>
     );
