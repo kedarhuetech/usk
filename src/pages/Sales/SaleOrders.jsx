@@ -141,7 +141,18 @@ export default function SaleOrders() {
   const [activeTabId, setActiveTabId] = useState(null);
   const editor = editorTabs.find((t) => t.tabId === activeTabId) || null;
 
-  const closeTab = (tabIdToClose) => {
+  const closeTab = (tabIdToClose, force = false) => {
+    const targetTab = editorTabs.find((t) => t.tabId === tabIdToClose);
+    if (targetTab && !force) {
+      const val = targetTab.value;
+      const isDirty = Boolean(val?.customer?.trim() || val?.rows?.some((r) => r.item?.trim() || Number(r.price) > 0));
+      if (isDirty) {
+        const discard = typeof window !== "undefined" && window.confirm
+          ? window.confirm(`Discard unsaved order #${val.number || ""} for ${val.customer || "customer"}?`)
+          : true;
+        if (!discard) return;
+      }
+    }
     setEditorTabs((current) => {
       const remaining = current.filter((t) => t.tabId !== tabIdToClose);
       if (!remaining.length) {
@@ -317,32 +328,40 @@ export default function SaleOrders() {
         ? source.rows
         : (source.items && source.items.length > 0)
         ? source.items
-        : [];
+        : (source.rawPayload?.rows || source.rawPayload?.items || []);
       const rows = rawRows.map((r) => ({
         id: crypto.randomUUID(),
-        item: r.item || r.itemName || r.name || "",
+        item: r.item || r.itemName || r.name || r.description || "",
         description: r.description || "",
         size: r.size || "",
         qty: String(r.qty ?? r.quantity ?? 1),
-        unit: r.unit || "NONE",
-        price: String(r.price ?? r.unitPrice ?? 0),
-        discount: String(r.discount ?? r.discountPercent ?? ""),
-        tax: String(r.tax ?? r.taxRate ?? "NONE"),
+        unit: r.unit || r.baseUnit || "NONE",
+        price: String(r.price ?? r.unitPrice ?? r.rate ?? 0),
+        discount: String(r.discount ?? r.discountPercent ?? r.discountPercentage ?? ""),
+        tax: String(r.tax ?? r.taxRate ?? r.taxPercent ?? "NONE"),
         cess: String(r.cess ?? ""),
       }));
       const existingOrders = readOrders();
-      const nextNumber = String(Math.max(0, ...existingOrders.map((o) => Number(o.number) || 0)) + 1);
+      const existingNumbers = [
+        ...existingOrders.map((o) => Number(o.number) || 0),
+        ...editorTabs.map((t) => Number(t.value?.number) || 0),
+      ];
+      const nextNumber = String(Math.max(0, ...existingNumbers) + 1);
+      const customerName = source.customer || source.partyName || source.customerName || source.party || source.rawPayload?.partyName || source.rawPayload?.customer || "";
+      const customerPhone = source.phone || source.partyPhone || source.customerPhone || source.rawPayload?.phone || "";
+      const tabId = `so-tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       setEditor({
+        tabId,
         mode: "new",
         value: {
           id: "",
           number: nextNumber,
-          customer: source.customer || source.partyName || "",
-          phone: source.phone || source.partyPhone || "",
+          customer: customerName,
+          phone: customerPhone,
           date: localDate(),
           dueDate: source.dueDate || localDate(),
           state: source.state || source.stateOfSupply || "Select",
-          billingAddress: source.billingAddress || "",
+          billingAddress: source.billingAddress || source.partyAddress || "",
           shippingAddress: source.shippingAddress || "",
           rows: rows.length > 0 ? rows : [newRow(), newRow()],
           payments: [newPayment()],
@@ -444,43 +463,41 @@ export default function SaleOrders() {
 
     // Update the source quotation or proforma status if converted
     if (value.convertedFromQuotationId) {
-      const estimatesKey = "ledgerly:estimates.v1";
-      try {
-        const localEstimates = JSON.parse(window.localStorage.getItem(estimatesKey) || "[]");
-        const updated = localEstimates.map((item) =>
-          item.id === value.convertedFromQuotationId
-            ? { ...item, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order", convertedSaleOrderId: orderId }
-            : item
-        );
-        window.localStorage.setItem(estimatesKey, JSON.stringify(updated));
-        transactionsDb.save({
-          id: value.convertedFromQuotationId,
-          status: "Converted to Sale Order",
-          convertedAt: new Date().toISOString(),
-          conversionType: "Sale Order",
-          convertedSaleOrderId: orderId,
-        }).catch(() => {});
-        window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
-      } catch {}
+      ["ledgerly:estimateQuotations.v1", "ledgerly:estimates.v1"].forEach((k) => {
+        try {
+          const list = JSON.parse(window.localStorage.getItem(k) || "[]");
+          window.localStorage.setItem(
+            k,
+            JSON.stringify(list.map((item) => item.id === value.convertedFromQuotationId ? { ...item, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order", convertedSaleOrderId: orderId } : item))
+          );
+        } catch {}
+      });
+      transactionsDb.save({
+        id: value.convertedFromQuotationId,
+        status: "Converted to Sale Order",
+        convertedAt: new Date().toISOString(),
+        conversionType: "Sale Order",
+        convertedSaleOrderId: orderId,
+      }).catch(() => {});
+      window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
     } else if (value.convertedFromProformaId) {
-      const proformasKey = "ledgerly:proformas.v1";
-      try {
-        const localProformas = JSON.parse(window.localStorage.getItem(proformasKey) || "[]");
-        const updated = localProformas.map((item) =>
-          item.id === value.convertedFromProformaId
-            ? { ...item, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order", convertedSaleOrderId: orderId }
-            : item
-        );
-        window.localStorage.setItem(proformasKey, JSON.stringify(updated));
-        transactionsDb.save({
-          id: value.convertedFromProformaId,
-          status: "Converted to Sale Order",
-          convertedAt: new Date().toISOString(),
-          conversionType: "Sale Order",
-          convertedSaleOrderId: orderId,
-        }).catch(() => {});
-        window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
-      } catch {}
+      ["ledgerly:proformaInvoices.v1", "ledgerly:proformas.v1"].forEach((k) => {
+        try {
+          const list = JSON.parse(window.localStorage.getItem(k) || "[]");
+          window.localStorage.setItem(
+            k,
+            JSON.stringify(list.map((item) => item.id === value.convertedFromProformaId ? { ...item, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order", convertedSaleOrderId: orderId } : item))
+          );
+        } catch (e) {}
+      });
+      transactionsDb.save({
+        id: value.convertedFromProformaId,
+        status: "Converted to Sale Order",
+        convertedAt: new Date().toISOString(),
+        conversionType: "Sale Order",
+        convertedSaleOrderId: orderId,
+      }).catch(() => {});
+      window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
     }
 
     // Persist to MySQL backend with clear failure distinction
@@ -750,7 +767,7 @@ export default function SaleOrders() {
 
     {editor && (
       <div className="fixed inset-0 z-50 flex flex-col bg-white">
-        <div className="flex h-12 shrink-0 items-end gap-1.5 bg-slate-200 px-4 pt-1">
+        <div className="flex h-12 shrink-0 items-end gap-1.5 bg-slate-200 px-4 pt-1 overflow-x-auto">
           {editorTabs.map((tabItem) => {
             const isActive = tabItem.tabId === activeTabId;
             return (

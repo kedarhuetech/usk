@@ -245,6 +245,18 @@ export default function ItemWiseProfitAndLoss() {
         soldQty.set(key, (soldQty.get(key) || 0) + Math.max(Number(r.qty || 0), 0));
       });
     });
+    // Deduct sale return (credit note) qty from soldQty
+    saleReturns.forEach((sr) => {
+      if (sr.cancelled || sr.status === "Cancelled") return;
+      const dateYmd = parseYMD(sr.form?.invoiceDate || sr.date || sr.createdAt);
+      if (from && dateYmd && dateYmd < from) return;
+      if (to && dateYmd && dateYmd > to) return;
+      (sr.rows || []).forEach((r) => {
+        const key = (r.item || "").trim().toLowerCase();
+        if (!key) return;
+        soldQty.set(key, Math.max(0, (soldQty.get(key) || 0) - Math.max(Number(r.qty || 0), 0)));
+      });
+    });
     const purchasedQty = new Map();
     purchases.forEach((p) => {
       if (p.cancelled || p.status === "Cancelled") return;
@@ -255,6 +267,18 @@ export default function ItemWiseProfitAndLoss() {
         const key = (r.item || "").trim().toLowerCase();
         if (!key) return;
         purchasedQty.set(key, (purchasedQty.get(key) || 0) + Math.max(Number(r.qty || 0), 0));
+      });
+    });
+    // Deduct purchase return (debit note) qty from purchasedQty
+    purchaseReturns.forEach((pr) => {
+      if (pr.cancelled || pr.status === "Cancelled") return;
+      const dateYmd = parseYMD(pr.date || pr.createdAt);
+      if (from && dateYmd && dateYmd < from) return;
+      if (to && dateYmd && dateYmd > to) return;
+      (pr.rows || []).forEach((r) => {
+        const key = (r.item || "").trim().toLowerCase();
+        if (!key) return;
+        purchasedQty.set(key, Math.max(0, (purchasedQty.get(key) || 0) - Math.max(Number(r.qty || 0), 0)));
       });
     });
 

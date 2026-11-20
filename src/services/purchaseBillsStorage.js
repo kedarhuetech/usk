@@ -132,4 +132,107 @@ export function replacePurchaseBills(bills) {
   }
 }
 
+export function applyDebitNoteToPurchaseBill(billNumberOrId, debitAmount = 0) {
+  if (!billNumberOrId) return null;
+  const target = String(billNumberOrId).trim().toLowerCase();
+  const currentBills = readBills();
+  const index = currentBills.findIndex((b) =>
+    String(b.id || "").toLowerCase() === target ||
+    String(b.invoiceId || "").toLowerCase() === target ||
+    String(b.billNumber || b.invoiceNumber || b.number || b.form?.billNumber || b.form?.invoiceNumber || "").toLowerCase() === target
+  );
+  if (index < 0) return null;
+
+  const bill = currentBills[index];
+  const total = Number(bill.totals?.finalTotal ?? bill.totalAmount ?? bill.total ?? 0);
+  const paid = Number(bill.totals?.received ?? bill.paidAmount ?? bill.paid ?? 0);
+  const currentDebit = Number(bill.debitNoteAppliedAmount || 0);
+  const newDebit = Math.max(0, currentDebit + Number(debitAmount || 0));
+  const newBalance = Math.max(0, total - paid - newDebit);
+
+  const updatedBill = {
+    ...bill,
+    debitNoteAppliedAmount: newDebit,
+    balanceAmount: newBalance,
+    balance: newBalance,
+    totals: {
+      ...(bill.totals || {}),
+      balance: newBalance,
+    },
+    status: newBalance <= 0.01 ? "Paid" : "Partially Paid",
+    updatedAt: new Date().toISOString(),
+  };
+
+  currentBills[index] = updatedBill;
+  writeTransactionCollection(PURCHASE_BILLS_KEY, currentBills);
+  notifyBusinessDataChanged();
+
+  // Sync with MySQL transactionsDb if in database mode
+  try {
+    transactionsDb.save({
+      ...updatedBill,
+      transactionType: "purchase",
+      type: "purchase",
+      balanceAmount: newBalance,
+      status: updatedBill.status,
+    }).catch(() => {});
+  } catch {}
+
+  return updatedBill;
+}
+
+export function applyPaymentToPurchaseBill(billNumberOrId, paymentAmount = 0) {
+  if (!billNumberOrId) return null;
+  const target = String(billNumberOrId).trim().toLowerCase();
+  const currentBills = readBills();
+  const index = currentBills.findIndex((b) =>
+    String(b.id || "").toLowerCase() === target ||
+    String(b.invoiceId || "").toLowerCase() === target ||
+    String(b.billNumber || b.invoiceNumber || b.number || b.form?.billNumber || b.form?.invoiceNumber || "").toLowerCase() === target
+  );
+  if (index < 0) return null;
+
+  const bill = currentBills[index];
+  const total = Number(bill.totals?.finalTotal ?? bill.totalAmount ?? bill.total ?? 0);
+  const currentPaid = Number(bill.totals?.received ?? bill.paidAmount ?? bill.paid ?? 0);
+  const currentDebit = Number(bill.debitNoteAppliedAmount || 0);
+  const newPaid = currentPaid + Number(paymentAmount || 0);
+  const newBalance = Math.max(0, total - newPaid - currentDebit);
+
+  const updatedBill = {
+    ...bill,
+    paidAmount: newPaid,
+    paid: newPaid,
+    receivedAmount: newPaid,
+    balanceAmount: newBalance,
+    balance: newBalance,
+    totals: {
+      ...(bill.totals || {}),
+      paid: newPaid,
+      received: newPaid,
+      balance: newBalance,
+    },
+    status: newBalance <= 0.01 ? "Paid" : "Partially Paid",
+    updatedAt: new Date().toISOString(),
+  };
+
+  currentBills[index] = updatedBill;
+  writeTransactionCollection(PURCHASE_BILLS_KEY, currentBills);
+  notifyBusinessDataChanged();
+
+  // Sync with MySQL
+  try {
+    transactionsDb.save({
+      ...updatedBill,
+      transactionType: "purchase",
+      type: "purchase",
+      paidAmount: newPaid,
+      balanceAmount: newBalance,
+      status: updatedBill.status,
+    }).catch(() => {});
+  } catch {}
+
+  return updatedBill;
+}
+
 export const purchaseBillsStorageKey = PURCHASE_BILLS_KEY;

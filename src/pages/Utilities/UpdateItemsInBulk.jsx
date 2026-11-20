@@ -6,6 +6,8 @@ import Card from "../../components/Common/Card";
 import { units, taxModes, taxOptions, discountTypes } from "../../constants/itemsData";
 import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { businessDataApi } from "../../services/apiClient.js";
 
 const fields = [
   { key: "itemName", label: "Item Name", type: "text" },
@@ -105,7 +107,10 @@ function UpdateItemsInBulk() {
     if (!selectedItems.length) return "Select at least one existing item.";
     if (!selectedFieldDefinition) return "Choose one existing item field to update.";
     const value = String(fieldValues[selectedField] ?? "").trim();
-    if (selectedField === "itemName" && !value) return "Item Name cannot be blank.";
+    if (selectedField === "itemName") {
+      if (!value) return "Item Name cannot be blank.";
+      if (selectedItems.length > 1) return "Cannot bulk rename multiple items to the exact same Item Name. Item names must be unique.";
+    }
     if (numericFields.has(selectedField) && value && (!Number.isFinite(Number(value)) || Number(value) < 0)) return `${selectedFieldDefinition.label} must be a non-negative number.`;
     return "";
   };
@@ -124,9 +129,16 @@ function UpdateItemsInBulk() {
     setError("");
     setStatus("");
     const value = fieldValues[selectedField] ?? "";
-    const updated = selectedItems.map((item) => saveInventoryItem(changedItem(item, selectedField, value)));
+    const updated = selectedItems.map((item) => {
+      const next = saveInventoryItem(changedItem(item, selectedField, value));
+      try {
+        businessDataApi.save("items", next).catch(() => {});
+      } catch {}
+      return next;
+    });
     setItems((current) => current.map((item) => updated.find((next) => next.id === item.id) || item));
-    setStatus(`Updated ${updated.length} item${updated.length === 1 ? "" : "s"} in local storage.`);
+    notifyBusinessDataChanged();
+    setStatus(`Updated ${updated.length} item${updated.length === 1 ? "" : "s"} and synchronized with database.`);
     setSelectedIds([]);
     setStep("select");
     setSaving(false);

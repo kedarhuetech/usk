@@ -155,9 +155,9 @@ function ProductCard({ item, storeState, onView, onAdd }) {
           type="button"
           disabled={!canAdd}
           onClick={() => onAdd(item, 1)}
-          className={`h-10 w-full rounded-full text-sm font-black ${canAdd ? "bg-slate-950 text-white hover:bg-slate-800" : "bg-slate-200 text-white"}`}
+          className={`h-10 w-full rounded-full text-sm font-black ${canAdd ? "bg-slate-950 text-white hover:bg-slate-800 cursor-pointer" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
         >
-          {storeState.acceptOnlineOrders ? "Add to Cart" : "Orders Closed"}
+          {!storeState.acceptOnlineOrders ? "Orders Closed" : itemMaxQuantity(item) <= 0 ? "Out of Stock" : "Add to Cart"}
         </button>
       </div>
     </article>
@@ -198,9 +198,9 @@ function ProductDetailModal({ item, storeState, quantity, setQuantity, onAdd, on
                 type="button"
                 disabled={!canAdd}
                 onClick={() => onAdd(item, quantity)}
-                className={`h-11 rounded-full px-6 text-sm font-black ${canAdd ? "bg-slate-950 text-white hover:bg-slate-800" : "bg-slate-200 text-white"}`}
+                className={`h-11 rounded-full px-6 text-sm font-black ${canAdd ? "bg-slate-950 text-white hover:bg-slate-800 cursor-pointer" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}
               >
-                {storeState.acceptOnlineOrders ? "Add to Cart" : "Orders Closed"}
+                {!storeState.acceptOnlineOrders ? "Orders Closed" : itemMaxQuantity(item) <= 0 ? "Out of Stock" : "Add to Cart"}
               </button>
             </div>
             {!storeState.acceptOnlineOrders && <p className="mt-3 text-sm font-semibold text-rose-600">This store is currently not accepting online orders.</p>}

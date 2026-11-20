@@ -1,9 +1,10 @@
 // Official Add Party Modal component from Parties section
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FiPlus, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
+import { getParties } from "../../services/partiesStorage";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -247,6 +248,28 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
 
   const isEditMode = Boolean(initialParty?.id);
 
+  const duplicateGstinParty = useMemo(() => {
+    const trimmed = (form.gstin || "").trim().toUpperCase();
+    if (!trimmed || trimmed.length < 5) return null;
+    const all = getParties();
+    return all.find(
+      (p) =>
+        String(p.id || "") !== String(initialParty?.id || "") &&
+        (p.gstin || "").trim().toUpperCase() === trimmed
+    );
+  }, [form.gstin, initialParty?.id]);
+
+  const duplicatePhoneParty = useMemo(() => {
+    const rawDigits = (form.phone || "").replace(/\D/g, "");
+    if (!rawDigits || rawDigits.length < 10) return null;
+    const all = getParties();
+    return all.find(
+      (p) =>
+        String(p.id || "") !== String(initialParty?.id || "") &&
+        (p.phone || p.phoneNumber || "").replace(/\D/g, "") === rawDigits
+    );
+  }, [form.phone, initialParty?.id]);
+
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   const setAdditionalField = (fieldId, prop, value, settingMeta = null) => {
@@ -281,6 +304,23 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
     if (!form.partyName.trim()) {
       setError("Party name is required.");
       return;
+    }
+    const rawDigits = (form.phone || "").replace(/\D/g, "");
+    if (form.phone && rawDigits.length > 0 && rawDigits.length < 10) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (duplicateGstinParty) {
+      const confirmSave = typeof window !== "undefined" && window.confirm
+        ? window.confirm(`A party named "${duplicateGstinParty.partyName || duplicateGstinParty.name}" already has GSTIN "${form.gstin.trim().toUpperCase()}". Do you still want to proceed?`)
+        : true;
+      if (!confirmSave) return;
+    }
+    if (duplicatePhoneParty) {
+      const confirmPhone = typeof window !== "undefined" && window.confirm
+        ? window.confirm(`A party named "${duplicatePhoneParty.partyName || duplicatePhoneParty.name}" is already registered with phone "${form.phone.trim()}". Do you still want to proceed?`)
+        : true;
+      if (!confirmPhone) return;
     }
     setSaving(true);
     setError("");
@@ -344,7 +384,14 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className={`grid gap-4 md:grid-cols-2 ${(appSettings.enablePartyGrouping ?? true) ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
           <Input label="Party Name *" value={form.partyName} onChange={(event) => setField("partyName", event.target.value)} placeholder="Party Name" />
-          <Input label="GSTIN" value={form.gstin} onChange={(event) => setField("gstin", event.target.value)} placeholder="GSTIN" />
+          <div>
+            <Input label="GSTIN" value={form.gstin} onChange={(event) => setField("gstin", event.target.value)} placeholder="GSTIN" />
+            {duplicateGstinParty && (
+              <p className="mt-1 text-xs font-semibold text-amber-700 bg-amber-50 rounded px-2 py-1 border border-amber-200">
+                Warning: GSTIN already used by "{duplicateGstinParty.partyName || duplicateGstinParty.name}".
+              </p>
+            )}
+          </div>
           <Input label="Phone Number" value={form.phone} onChange={(event) => setField("phone", event.target.value)} placeholder="Phone Number" />
           {(appSettings.enablePartyGrouping ?? true) && (
             <Input label="Party Group" value={form.group || ""} onChange={(event) => setField("group", event.target.value)} placeholder="e.g. General, Retailers, Wholesalers" />

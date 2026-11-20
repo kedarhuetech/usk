@@ -178,6 +178,7 @@ export function calculateGSTR3BData({
   sales = [],
   purchases = [],
   saleReturns = [],
+  purchaseReturns = [],
   parties = [],
   companyProfile = null,
   fromMonthYear = "11/2026",
@@ -214,6 +215,12 @@ export function calculateGSTR3BData({
   });
 
   const returnsInPeriod = (saleReturns || []).filter((r) => {
+    if (isRecordCancelled(r)) return false;
+    const dt = getRecordDate(r);
+    return dt && dt >= fromDate && dt <= toDate;
+  });
+
+  const purchaseReturnsInPeriod = (purchaseReturns || []).filter((r) => {
     if (isRecordCancelled(r)) return false;
     const dt = getRecordDate(r);
     return dt && dt >= fromDate && dt <= toDate;
@@ -427,6 +434,60 @@ export function calculateGSTR3BData({
     });
   });
 
+  // Process business expenses with GST for Input Tax Credit (ITC)
+  let expenses = [];
+  try {
+    expenses = JSON.parse(localStorage.getItem("ledgerly:expenses.v1") || "[]");
+  } catch {}
+
+  const expensesInPeriod = (expenses || []).filter((exp) => {
+    if (isRecordCancelled(exp)) return false;
+    const dt = getRecordDate(exp);
+    return dt && dt >= fromDate && dt <= toDate;
+  });
+
+  expensesInPeriod.forEach((exp) => {
+    const suppName = String(exp.party || exp.vendor || exp.category || "").trim();
+    const party = partyMap.get(suppName.toLowerCase()) || {};
+    const gstin = String(exp.gstin || party.gstin || "").trim();
+    const isInterstate = Boolean(gstin && gstin.length >= 2 && !gstin.startsWith("27") && homeState === "maharashtra");
+
+    (exp.rows || []).forEach((row) => {
+      const taxRateNum = Number(row.tax || exp.tax || 0);
+      if (taxRateNum > 0 && (exp.gst || Number(row.tax || 0) > 0)) {
+        const base = (Number(row.qty) || 1) * (Number(row.price) || 0);
+        const netBase = Math.max(0, base - (base * (Number(row.discount) || 0)) / 100);
+        const taxAmt = (netBase * taxRateNum) / 100;
+        if (isInterstate) {
+          itc_allOther_igst += taxAmt;
+        } else {
+          itc_allOther_cgst += taxAmt / 2;
+          itc_allOther_sgst += taxAmt / 2;
+        }
+      }
+    });
+  });
+
+  // Deduct purchase returns (debit notes) from ITC All Other
+  purchaseReturnsInPeriod.forEach((pr) => {
+    const suppName = String(pr.party || pr.supplier || "").trim();
+    const party = partyMap.get(suppName.toLowerCase()) || {};
+    const stateOfSupply = String(pr.stateOfSupply || party.state || "").trim();
+    const isExplicitInterstate = stateOfSupply && stateOfSupply.toLowerCase() !== "none" && stateOfSupply.toLowerCase() !== homeState;
+    const gstin = String(party.gstin || pr.gstin || "").trim();
+    const isInterstate = Boolean(isExplicitInterstate || (gstin.length >= 2 && !gstin.startsWith("27") && homeState === "maharashtra"));
+
+    const rows = pr.rows || pr.items || [];
+    rows.forEach((row) => {
+      if (!row || !row.item) return;
+      const gst = resolveLineGst(row, isInterstate);
+      itc_allOther_cgst = Math.max(0, itc_allOther_cgst - gst.cgst);
+      itc_allOther_sgst = Math.max(0, itc_allOther_sgst - gst.sgst);
+      itc_allOther_igst = Math.max(0, itc_allOther_igst - gst.igst);
+      itc_allOther_cess = Math.max(0, itc_allOther_cess - gst.cess);
+    });
+  });
+
   // Calculate Net Tax Payable
   const totalOutwardTax = s1_otherThanZero_igst + s1_otherThanZero_cgst + s1_otherThanZero_sgst + s1_otherThanZero_cess;
   const totalRcmTax = s1_rcm_igst + s1_rcm_cgst + s1_rcm_sgst + s1_rcm_cess;
@@ -530,11 +591,13 @@ export function calculateGSTR3B({ sales, purchases, periodFrom, periodTo }) {
   const parties = readLocal("ledgerly:parties.v1");
   const companyProfile = readLocal("ledgerly:companyProfile.v1")?.[0] || {};
   const saleReturns = readLocal("ledgerly:saleReturns.v1");
+  const purchaseReturns = readLocal("ledgerly:purchaseReturns.v1");
 
   const full = calculateGSTR3BData({
     sales,
     purchases,
     saleReturns,
+    purchaseReturns,
     parties,
     companyProfile,
     fromMonthYear: m1,

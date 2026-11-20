@@ -233,6 +233,7 @@ export async function saveCashAdjustment(adjustment) {
 
 export function validateCashAdjustment({ recordedBalance, actualBalance, reason } = {}) {
   const recorded = Number(recordedBalance);
+  if (actualBalance === "" || actualBalance == null) return "Enter a valid physical cash count of zero or more.";
   const actual = Number(actualBalance);
   if (!Number.isFinite(recorded)) return "The recorded cash balance is unavailable.";
   if (!Number.isFinite(actual) || actual < 0) return "Enter a valid physical cash count of zero or more.";

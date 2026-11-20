@@ -716,6 +716,34 @@ export default function GSTRateReport({ initialTab = "summary" }) {
         </div>
       </section>
 
+      {/* Statutory GSTR-1 Table 8 Zero Tax / Non-Taxable Supplies Breakdown */}
+      {metrics.table8Breakdown && metrics.table8Breakdown.totalZeroTax > 0 && (
+        <section className="mx-5 mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/60 pb-2">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-amber-900">
+              GSTR-1 Table 8: Nil-Rated, Exempted &amp; Non-GST Supplies
+            </h3>
+            <span className="text-xs font-black text-amber-900">
+              Total Zero-Tax: {money(metrics.table8Breakdown.totalZeroTax)}
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg bg-white p-3 border border-amber-100">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase">Nil-Rated Supplies</p>
+              <p className="mt-1 text-base font-bold text-slate-800">{money(metrics.table8Breakdown.nilRated)}</p>
+            </div>
+            <div className="rounded-lg bg-white p-3 border border-amber-100">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase">Exempted Supplies</p>
+              <p className="mt-1 text-base font-bold text-slate-800">{money(metrics.table8Breakdown.exempted)}</p>
+            </div>
+            <div className="rounded-lg bg-white p-3 border border-amber-100">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase">Non-GST Supplies</p>
+              <p className="mt-1 text-base font-bold text-slate-800">{money(metrics.table8Breakdown.nonGst)}</p>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Main Content Area */}
       <div className="mx-5 mb-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
         {activeTab === "summary" ? (

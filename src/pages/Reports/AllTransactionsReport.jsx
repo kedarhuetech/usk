@@ -67,6 +67,8 @@ function isoDate(d = new Date()) {
   ).padStart(2, "0")}`;
 }
 
+const ACCOUNTING_TYPES = new Set(["Sale", "Purchase", "Payment-In", "Payment-Out", "Expense", "Credit Note", "Debit Note"]);
+
 export default function AllTransactionsReport() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState("This Month");
@@ -494,7 +496,9 @@ export default function AllTransactionsReport() {
       if (from && ymd && ymd < from) return false;
       if (to && ymd && ymd > to) return false;
 
-      if (txnType !== "All Transaction" && row.type !== txnType) {
+      if (txnType === "Accounting Transactions (Finalized)") {
+        if (!ACCOUNTING_TYPES.has(row.type)) return false;
+      } else if (txnType !== "All Transaction" && row.type !== txnType) {
         return false;
       }
 
@@ -538,6 +542,13 @@ export default function AllTransactionsReport() {
 
   // Export Excel
   const handleExportExcel = () => {
+    const toExcelNumber = (val) => {
+      if (val === null || val === undefined || val === "" || val === "—") return 0;
+      if (typeof val === "number") return val;
+      const num = Number(String(val).replace(/[^0-9.-]/g, ""));
+      return isNaN(num) ? 0 : num;
+    };
+
     const data = filtered.map((row, idx) => ({
       "#": idx + 1,
       Date: row.date,
@@ -545,9 +556,9 @@ export default function AllTransactionsReport() {
       "Party Name": row.partyName,
       Category: row.category,
       Type: row.type,
-      Total: row.total,
-      Received: row.received,
-      Balance: row.balance,
+      Total: toExcelNumber(row.total),
+      Received: toExcelNumber(row.received),
+      Balance: toExcelNumber(row.balance),
       Status: row.status,
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -651,6 +662,7 @@ export default function AllTransactionsReport() {
           className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 outline-none cursor-pointer"
         >
           <option>All Transaction</option>
+          <option>Accounting Transactions (Finalized)</option>
           <option>Sale</option>
           <option>Purchase</option>
           <option>Payment-In</option>

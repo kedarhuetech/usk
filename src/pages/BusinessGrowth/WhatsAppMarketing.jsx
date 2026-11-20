@@ -350,12 +350,16 @@ function normalizePartyRecipient(record = {}, index = 0) {
   const name = record.partyName || record.name || record.customerName || record.displayName || "";
   const phone = record.phone || record.mobile || record.mobileNumber || record.contactNumber || "";
   if (!phone) return null;
+  const balance = Number(record.balance ?? record.currentBalance ?? record.netBalance ?? 0);
+  const receivable = Number(record.receivable ?? record.receivableBalance ?? (record.openingBalanceType === "to-receive" ? record.openingBalance : 0) ?? 0);
   return {
     id: record.id || record.partyId || `party-${index}-${phone}`,
     name: name || phone,
     phone: String(phone),
     source: "party",
     optedIn: Boolean(record.whatsappOptIn || record.optedIn || record.consent?.whatsapp),
+    balance,
+    receivable,
   };
 }
 
@@ -1819,6 +1823,7 @@ function SendConnectionGate({ state, loading, error, onContinueMeta, onRetryConn
 function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck, onClose, onContinueMeta, onRetryConnection, onManageConnection }) {
   const [step, setStep] = useState(0);
   const [query, setQuery] = useState("");
+  const [audienceFilter, setAudienceFilter] = useState("all");
   const [selectedRecipientIds, setSelectedRecipientIds] = useState([]);
   const [messageDraft, setMessageDraft] = useState({ caption: draft?.values?.whatsappText || whatsappMarketingDefaults.whatsappText, templateId: "", variables: {} });
   const [consentConfirmed, setConsentConfirmed] = useState(false);
@@ -1854,7 +1859,13 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
   const templateVariables = extractTemplateVariables(selectedMetaTemplate);
   const renderedMessage = renderTemplateMessage(selectedMetaTemplate, messageDraft.variables, messageDraft.caption);
   const selectedIds = new Set(selectedRecipientIds);
-  const filteredRecipients = partyRecipients.filter((recipient) => `${recipient.name} ${recipient.phone}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const filteredRecipients = partyRecipients.filter((recipient) => {
+    if (audienceFilter === "outstanding") {
+      const hasReceivable = (Number(recipient.receivable) || 0) > 0.01 || (Number(recipient.balance) || 0) > 0.01;
+      if (!hasReceivable) return false;
+    }
+    return `${recipient.name} ${recipient.phone}`.toLowerCase().includes(query.trim().toLowerCase());
+  });
   const selectedRecipients = partyRecipients.filter((recipient) => selectedIds.has(recipient.id));
   const canUseConnectedTemplates = Boolean(status.connected && approvedTemplates.length);
   const connectionState = resolveSendConnectionState(status, assets, selection, connectionCheck);
@@ -2143,6 +2154,22 @@ function SendOnWhatsAppModal({ draft, status, assets, selection, connectionCheck
                 <FiSearch className="text-slate-400" />
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customers or phone numbers" className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none" />
               </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAudienceFilter("all")}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition cursor-pointer ${audienceFilter === "all" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                  All ({partyRecipients.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAudienceFilter("outstanding")}
+                  className={`rounded-full px-3 py-1 text-xs font-bold transition cursor-pointer ${audienceFilter === "outstanding" ? "bg-emerald-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+                >
+                  With Outstanding Balance ({partyRecipients.filter((r) => (Number(r.receivable) || 0) > 0.01 || (Number(r.balance) || 0) > 0.01).length})
+                </button>
+              </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <button type="button" onClick={toggleAllVisible} disabled={!filteredRecipients.length} className="mb-3 h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:bg-slate-50 disabled:text-slate-300">
                   Select All

@@ -4,7 +4,9 @@ import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter,
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
+import { applyPaymentToPurchaseBill } from "../../services/purchaseBillsStorage";
 import { getPaymentOuts, savePaymentOuts } from "../../services/transactionRepository.js";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import {
   buildUnifiedDocumentHtml,
@@ -215,7 +217,7 @@ export default function PaymentOut() {
     [visible]
   );
 
-  const persist = (next) => { setRecords(next); savePaymentOuts(next); };
+  const persist = (next) => { setRecords(next); savePaymentOuts(next); notifyBusinessDataChanged(); };
   const newPayment = () => setEditor({ mode: "new", entry: { number: String(records.length + 1), date: today(), payments: [blankPayment()], description: "", partyId: "", partyName: "", received: "" } });
   const savePayment = async () => {
     const entry = editor.entry;
@@ -255,6 +257,13 @@ export default function PaymentOut() {
         payments: saved.payments || [],
       });
       toast.success(editor.mode === "edit" ? "Payment updated successfully." : "Payment-Out recorded.");
+
+      // Settle linked purchase bill if linked
+      if (saved.linkedInvoiceId) {
+        try {
+          applyPaymentToPurchaseBill(saved.linkedInvoiceId, amount);
+        } catch {}
+      }
     } catch (err) {
       console.warn("[PaymentOut MySQL Save Notice]", err?.message);
       toast.error(`Saved locally, but backend sync failed: ${err.message}`);

@@ -676,7 +676,7 @@ export default function BillWiseProfitReport() {
                           title={`Purchase cost not recorded for: ${row.missingCostItems.join(", ")}.\nAdd a purchase bill or enter the item's purchase price.\nProfit cannot be calculated until the missing cost is available.`}
                         >
                           <FiAlertCircle className="h-3 w-3" />
-                          Cost details needed
+                          No Purchase Cost Recorded
                         </span>
                         <p className="text-[10px] text-amber-600 mt-0.5 truncate max-w-[170px] ml-auto">
                           Cost missing: {row.missingCostItems.join(", ")}

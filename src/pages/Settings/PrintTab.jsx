@@ -131,7 +131,83 @@ export default function PrintTab({ settings, update }) {
             LEFT COLUMN: Controls & Preferences (Scrollable)
             ========================================================= */}
         <div className="space-y-6 max-h-[calc(100vh-210px)] overflow-y-auto pr-3 text-slate-800">
-          {/* Sub-tabs: CHANGE LAYOUT / CHANGE COLORS */}
+          {activePrinterTab === "thermal" ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-xs">
+                <h3 className="text-sm font-bold text-slate-800 mb-3 border-b border-slate-100 pb-2">Thermal Printer Configuration</h3>
+                <div className="space-y-3.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Thermal Paper Width
+                    <select
+                      value={settings.thermalPaperSize || "3-inch (80mm)"}
+                      onChange={(e) => update("thermalPaperSize", e.target.value)}
+                      className="mt-1.5 block w-full rounded border border-slate-300 bg-white px-3 py-2 text-xs font-normal text-slate-800 focus:border-blue-500 outline-none"
+                    >
+                      <option value="2-inch (58mm)">2-inch (58mm receipt roll)</option>
+                      <option value="3-inch (80mm)">3-inch (80mm standard POS roll)</option>
+                      <option value="4-inch (104mm)">4-inch (104mm wide roll)</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer pt-1">
+                    <span>Print Company Name & Address in Header</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.printCompanyName !== false}
+                      onChange={(e) => update("printCompanyName", e.target.checked)}
+                      className="accent-blue-600 h-4 w-4 rounded"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
+                    <span>Print Contact Phone Number</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.printPhoneNumber !== false}
+                      onChange={(e) => update("printPhoneNumber", e.target.checked)}
+                      className="accent-blue-600 h-4 w-4 rounded"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
+                    <span>Print GSTIN Number</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.printGstinOnSale !== false}
+                      onChange={(e) => update("printGstinOnSale", e.target.checked)}
+                      className="accent-blue-600 h-4 w-4 rounded"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
+                    <span>Print GST & Tax Breakdown Table</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.printTaxDetails !== false}
+                      onChange={(e) => update("printTaxDetails", e.target.checked)}
+                      className="accent-blue-600 h-4 w-4 rounded"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
+                    <span>Print Cash Received & Change Returned</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.printReceivedAmount !== false}
+                      onChange={(e) => update("printReceivedAmount", e.target.checked)}
+                      className="accent-blue-600 h-4 w-4 rounded"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
+                    <span>Print Thank You Footer Note</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.printThermalFooter !== false}
+                      onChange={(e) => update("printThermalFooter", e.target.checked)}
+                      className="accent-blue-600 h-4 w-4 rounded"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Sub-tabs: CHANGE LAYOUT / CHANGE COLORS */}
           <div className="flex items-center gap-6 border-b border-slate-200">
             <button
               type="button"
@@ -780,6 +856,8 @@ export default function PrintTab({ settings, update }) {
               </label>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* =========================================================
@@ -793,31 +871,115 @@ export default function PrintTab({ settings, update }) {
               settings={settings}
             />
           ) : (
-            /* Thermal POS Receipt Preview */
-            <div className="mx-auto max-w-[280px] rounded bg-white p-3 font-mono text-[10px] text-slate-900 shadow border border-slate-300 space-y-2">
-              <div className="text-center border-b border-dashed border-slate-300 pb-2">
-                <div className="font-bold text-xs uppercase">{settings.companyNamePrint || "sai kirana stores"}</div>
-                <div className="text-[9px]">Ph: {settings.phoneNumberPrint || "8369501991"}</div>
-                {settings.printGstinOnSale && <div className="text-[8px] text-slate-500">GSTIN: 29AABCU9603R1ZM</div>}
-                <div className="mt-1 font-bold">TAX INVOICE</div>
+            /* Thermal POS Receipt Live Simulator */
+            <div className="flex flex-col items-center">
+              <div className="mb-2 flex items-center justify-between w-full max-w-[320px] px-1 text-xs text-slate-500 font-sans">
+                <span className="font-semibold text-slate-700">Thermal Receipt Simulator</span>
+                <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-mono font-bold">
+                  {settings.thermalPaperSize || "3-inch (80mm)"}
+                </span>
               </div>
-              <div className="text-[9px] border-b border-dashed border-slate-300 pb-1">
-                <div className="flex justify-between"><span>Inv: 101</span><span>02/11/2026</span></div>
-                <div>Customer: Classic enterprises</div>
-              </div>
-              <div className="border-b border-dashed border-slate-300 pb-1 text-[9px]">
-                <div className="flex justify-between font-bold"><span>ITEM</span><span>QTY</span><span>AMT</span></div>
-                <div className="flex justify-between"><span>ITEM 1</span><span>1</span><span>₹10.40</span></div>
-                <div className="flex justify-between"><span>ITEM 2</span><span>1</span><span>₹35.40</span></div>
-              </div>
-              <div className="space-y-0.5 text-right font-bold border-b border-dashed border-slate-300 pb-1 text-[9px]">
-                <div className="flex justify-between"><span>TOTAL:</span><span>₹42.32</span></div>
-                {settings.printReceivedAmount && <div className="flex justify-between text-slate-600"><span>RECEIVED:</span><span>₹12.00</span></div>}
-                {settings.printBalanceAmount && <div className="flex justify-between text-rose-600"><span>BALANCE:</span><span>₹30.32</span></div>}
-              </div>
-              <div className="text-center text-[8px] text-slate-500 pt-1">
-                <div>Thank You! Visit Again</div>
-                <div>*** {settings.companyNamePrint || "sai kirana stores"} ***</div>
+              <div
+                style={{ width: (settings.thermalPaperSize || "").includes("2") ? "240px" : "310px" }}
+                className="rounded bg-white p-4 font-mono text-[10px] text-slate-900 shadow-xl border border-slate-300 space-y-2 relative transition-all"
+              >
+                {/* Paper Tear / Header */}
+                <div className="border-b border-dashed border-slate-400 pb-2 text-center">
+                  <div className="font-bold text-xs uppercase tracking-wide">
+                    {settings.companyNamePrint || settings.companyName || "Sai Kirana Stores"}
+                  </div>
+                  {settings.printAddress && (
+                    <div className="text-[9px] text-slate-600">
+                      {settings.companyAddress || "Koramangala, Bangalore, KA"}
+                    </div>
+                  )}
+                  {settings.printPhoneNumber && (
+                    <div className="text-[9px] text-slate-600">
+                      Ph: {settings.phoneNumberPrint || settings.companyPhone || "8369501991"}
+                    </div>
+                  )}
+                  {settings.printGstinOnSale && (
+                    <div className="text-[8.5px] font-semibold text-slate-700">
+                      GSTIN: {settings.companyGstin || "29AABCU9603R1ZM"}
+                    </div>
+                  )}
+                  <div className="mt-1.5 inline-block border-y border-slate-400 py-0.5 text-[9.5px] font-bold tracking-wider">
+                    TAX INVOICE
+                  </div>
+                </div>
+
+                <div className="space-y-0.5 border-b border-dashed border-slate-400 pb-1.5 text-[9px]">
+                  <div className="flex justify-between">
+                    <span>Invoice #: INV-101</span>
+                    <span>02/11/2026</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Customer: Classic Enterprises</span>
+                    <span>12:30 PM</span>
+                  </div>
+                </div>
+
+                <div className="border-b border-dashed border-slate-400 pb-1 text-[9px]">
+                  <div className="flex justify-between font-bold border-b border-slate-200 pb-0.5">
+                    <span className="w-1/2">ITEM</span>
+                    <span className="w-1/4 text-center">QTY</span>
+                    <span className="w-1/4 text-right">AMT</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="w-1/2 truncate">ITEM 1 (Rice 5kg)</span>
+                    <span className="w-1/4 text-center">1</span>
+                    <span className="w-1/4 text-right">₹10.40</span>
+                  </div>
+                  <div className="flex justify-between pt-0.5">
+                    <span className="w-1/2 truncate">ITEM 2 (Oil 1L)</span>
+                    <span className="w-1/4 text-center">1</span>
+                    <span className="w-1/4 text-right">₹35.40</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1 border-b border-dashed border-slate-400 pb-1.5 text-[9px]">
+                  <div className="flex justify-between font-bold text-[10.5px]">
+                    <span>GRAND TOTAL:</span>
+                    <span>₹45.80</span>
+                  </div>
+                  {settings.printReceivedAmount !== false && (
+                    <div className="flex justify-between text-slate-600">
+                      <span>CASH RECEIVED:</span>
+                      <span>₹50.00</span>
+                    </div>
+                  )}
+                  {settings.printBalanceAmount !== false && (
+                    <div className="flex justify-between text-emerald-700 font-semibold">
+                      <span>CHANGE RETURNED:</span>
+                      <span>₹4.20</span>
+                    </div>
+                  )}
+                </div>
+
+                {settings.printTaxDetails !== false && (
+                  <div className="border-b border-dashed border-slate-400 pb-1 text-[8px] text-slate-600">
+                    <div className="flex justify-between font-bold text-slate-800">
+                      <span>GST BREAKUP</span>
+                      <span>RATE</span>
+                      <span>TAX AMT</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>CGST (2.5%)</span>
+                      <span>2.5%</span>
+                      <span>₹1.26</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>SGST (2.5%)</span>
+                      <span>2.5%</span>
+                      <span>₹1.26</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-1 text-center text-[8.5px] text-slate-600 space-y-0.5">
+                  <p className="font-bold">THANK YOU! VISIT AGAIN</p>
+                  <p className="text-[7.5px] text-slate-400">*** {settings.companyNamePrint || settings.companyName || "Sai Kirana Stores"} ***</p>
+                </div>
               </div>
             </div>
           )}

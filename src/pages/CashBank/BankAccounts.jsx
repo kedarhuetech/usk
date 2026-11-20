@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FiAlertCircle, FiArrowDownLeft, FiArrowUpRight, FiCheckCircle, FiCreditCard, FiEdit2, FiPlus, FiSearch, FiX } from "react-icons/fi";
+import { FiAlertCircle, FiArrowDownLeft, FiArrowUpRight, FiCheckCircle, FiCreditCard, FiEdit2, FiPlus, FiSearch, FiTrash2, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import {
   calculateBankBalances,
+  deleteBankTransaction,
   formatBankAmount,
   listBankAccounts,
   listBankTransactions,
@@ -13,6 +14,7 @@ import {
   validateBankAccount,
   validateBankTransaction,
 } from "../../services/bankAccounts";
+import { saveCashAdjustment } from "../../services/cashInHand";
 
 const today = () => {
   const date = new Date();
@@ -92,7 +94,7 @@ function AccountForm({ initialAccount, accounts, onClose, onSaved }) {
 
 function TransactionForm({ account, onClose, onSaved }) {
   const [recordId] = useState(() => crypto.randomUUID());
-  const [form, setForm] = useState({ type: "money-in", amount: "", date: today(), description: "", reference: "", relatedParty: "" });
+  const [form, setForm] = useState({ type: "money-in", amount: "", date: today(), description: "", reference: "", relatedParty: "", isCashTransfer: false });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -105,6 +107,20 @@ function TransactionForm({ account, onClose, onSaved }) {
     setSaving(true);
     try {
       const saved = await saveBankTransaction({ ...payload, id: recordId });
+      if (form.isCashTransfer) {
+        try {
+          const isDeposit = form.type === "money-in";
+          const delta = isDeposit ? -Number(form.amount) : Number(form.amount);
+          saveCashAdjustment({
+            id: `contra-${recordId}`,
+            date: form.date,
+            actualBalance: 0,
+            amount: delta,
+            reason: `Contra transfer: ${isDeposit ? "Deposit from Cash" : "Withdrawal to Cash"} (${account.accountName})`,
+            relatedBankTransactionId: recordId,
+          }).catch(() => {});
+        } catch {}
+      }
       onSaved(saved);
     } catch (saveError) {
       setError(saveError.message || "Could not save this transaction. Check that the backend and database are available.");
@@ -124,6 +140,15 @@ function TransactionForm({ account, onClose, onSaved }) {
           <label className="block text-sm font-semibold text-slate-700">Reference (optional)<input maxLength={120} value={form.reference} disabled={saving} onChange={(event) => setForm((current) => ({ ...current, reference: event.target.value }))} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 font-normal" /></label>
           <label className="block text-sm font-semibold text-slate-700 sm:col-span-2">Description<input required maxLength={240} value={form.description} disabled={saving} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 font-normal" /></label>
           <label className="block text-sm font-semibold text-slate-700 sm:col-span-2">Related party (optional)<input maxLength={120} value={form.relatedParty} disabled={saving} onChange={(event) => setForm((current) => ({ ...current, relatedParty: event.target.value }))} className="mt-1.5 h-10 w-full rounded-md border border-slate-300 px-3 font-normal" /></label>
+          <label className="flex items-center gap-2 sm:col-span-2 text-sm text-slate-700 cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={Boolean(form.isCashTransfer)}
+              onChange={(e) => setForm(c => ({ ...c, isCashTransfer: e.target.checked }))}
+              className="h-4 w-4 accent-blue-600 rounded"
+            />
+            Transfer from / to Cash-in-Hand (Auto-sync contra entry)
+          </label>
         </div>
         {error && <p role="alert" className="flex items-start gap-2 rounded-md bg-rose-50 p-3 text-sm text-rose-800"><FiAlertCircle className="mt-0.5 shrink-0" />{error}</p>}
         <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4"><Button onClick={onClose} disabled={saving} className="border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</Button><Button type="submit" disabled={saving} className="bg-[#1A1F71] text-white hover:bg-[#14185D] disabled:opacity-60">{saving ? "Saving…" : "Save Transaction"}</Button></footer>
@@ -248,7 +273,7 @@ function BankAccounts() {
           {detailAccount.notes && <p className="text-sm text-slate-600">{detailAccount.notes}</p>}
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold text-slate-900">Transaction history</h3><p className="text-xs text-slate-500">Saved movements are retained as an append-only history.</p></div><div className="flex gap-2"><Button onClick={() => { setEditingAccount(detailAccount); setShowAccountForm(true); }} className="border border-slate-300 text-slate-700 hover:bg-slate-50"><FiEdit2 /> Edit</Button><Button onClick={() => setTransactionAccount(detailAccount)} disabled={detailAccount.status === "inactive"} className="bg-[#1A1F71] text-white hover:bg-[#14185D] disabled:opacity-50"><FiPlus /> Record Transaction</Button><Button onClick={() => toggleStatus(detailAccount)} className={detailAccount.status === "inactive" ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-amber-100 text-amber-900 hover:bg-amber-200"}>{detailAccount.status === "inactive" ? "Reactivate" : "Deactivate"}</Button></div></div>
           <div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold text-slate-600">From<input type="date" value={historyFrom} onChange={(event) => setHistoryFrom(event.target.value)} className="mt-1 block h-9 rounded border border-slate-300 px-2 text-sm font-normal" /></label><label className="text-xs font-semibold text-slate-600">To<input type="date" value={historyTo} onChange={(event) => setHistoryTo(event.target.value)} className="mt-1 block h-9 rounded border border-slate-300 px-2 text-sm font-normal" /></label><button type="button" onClick={() => { setHistoryFrom(""); setHistoryTo(""); }} className="h-9 px-2 text-sm font-semibold text-blue-700">Clear dates</button></div>
-          {!detailHistory.length ? <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No saved bank transactions match this date range.</p> : <div className="overflow-x-auto"><table className="min-w-[680px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Description / reference</th><th className="px-4 py-3">Party</th><th className="px-4 py-3 text-right">Amount</th></tr></thead><tbody>{detailHistory.map((transaction) => <tr key={transaction.id} className="border-t border-slate-100"><td className="px-4 py-3">{transaction.date}</td><td className={`px-4 py-3 font-semibold ${transaction.type === "money-in" ? "text-emerald-700" : "text-rose-700"}`}><span className="inline-flex items-center gap-1">{transaction.type === "money-in" ? <FiArrowDownLeft /> : <FiArrowUpRight />}{transaction.type === "money-in" ? "Money In" : "Money Out"}</span></td><td className="px-4 py-3">{transaction.description}{transaction.reference && <span className="block text-xs text-slate-500">Ref: {transaction.reference}</span>}</td><td className="px-4 py-3">{transaction.relatedParty || "—"}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{formatBankAmount(transaction.amount)}</td></tr>)}</tbody></table></div>}
+          {!detailHistory.length ? <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">No saved bank transactions match this date range.</p> : <div className="overflow-x-auto"><table className="min-w-[680px] w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Description / reference</th><th className="px-4 py-3">Party</th><th className="px-4 py-3 text-right">Amount</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody>{detailHistory.map((transaction) => <tr key={transaction.id} className="border-t border-slate-100"><td className="px-4 py-3">{transaction.date}</td><td className={`px-4 py-3 font-semibold ${transaction.type === "money-in" ? "text-emerald-700" : "text-rose-700"}`}><span className="inline-flex items-center gap-1">{transaction.type === "money-in" ? <FiArrowDownLeft /> : <FiArrowUpRight />}{transaction.type === "money-in" ? "Money In" : "Money Out"}</span></td><td className="px-4 py-3">{transaction.description}{transaction.reference && <span className="block text-xs text-slate-500">Ref: {transaction.reference}</span>}</td><td className="px-4 py-3">{transaction.relatedParty || "—"}</td><td className="px-4 py-3 text-right font-semibold tabular-nums">{formatBankAmount(transaction.amount)}</td><td className="px-4 py-3 text-right"><button type="button" title="Delete transaction" onClick={async () => { if (typeof window !== "undefined" && window.confirm && !window.confirm(`Delete ${transaction.type === "money-in" ? "deposit" : "withdrawal"} of ${formatBankAmount(transaction.amount)}?`)) return; try { await deleteBankTransaction(transaction.id); setTransactions(curr => curr.filter(t => t.id !== transaction.id)); setNotice("Transaction deleted."); } catch (err) { setNotice(err.message || "Could not delete transaction."); } }} className="p-1 text-slate-400 hover:text-rose-600 rounded transition"><FiTrash2 className="h-4 w-4" /></button></td></tr>)}</tbody></table></div>}
         </div>
       </Dialog>}
     </div>

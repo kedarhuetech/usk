@@ -40,6 +40,31 @@ export function AppPasscodeProvider({ children }) {
     return () => { active = false; };
   }, []);
 
+  // Idle auto-lock: locks the session after inactivity if passcode is enabled
+  useEffect(() => {
+    if (!enabled || !unlocked) return;
+
+    let timer = null;
+    const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of inactivity
+
+    const resetTimer = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setUnlocked(false);
+      }, IDLE_TIMEOUT_MS);
+    };
+
+    resetTimer();
+
+    const activityEvents = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    activityEvents.forEach((ev) => window.addEventListener(ev, resetTimer, { passive: true }));
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [enabled, unlocked]);
+
   // Unlocks only after repository passcode verification succeeds.
   const unlock = async (passcode) => {
     await appPasscodeRepository.verify(passcode);

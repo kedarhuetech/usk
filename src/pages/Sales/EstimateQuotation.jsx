@@ -236,20 +236,20 @@ export default function EstimateQuotation() {
     const rect = event.currentTarget.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const needed = Math.max(200, (menuHeight || 120) + 24);
-    const shouldFlipUp = spaceBelow < needed && spaceAbove > spaceBelow;
+    const estHeight = menuHeight || 120;
+    const shouldFlipUp = spaceBelow < estHeight + 20;
 
     if (shouldFlipUp) {
       setActionMenuPosition({
         bottom: Math.max(8, window.innerHeight - rect.top + 4),
         right: Math.max(8, window.innerWidth - rect.right),
-        maxHeight: Math.min(560, Math.max(100, spaceAbove - 16)),
+        maxHeight: Math.min(560, Math.max(80, spaceAbove - 16)),
       });
     } else {
       setActionMenuPosition({
-        top: Math.max(8, rect.bottom + 4),
+        top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - estHeight - 20)),
         right: Math.max(8, window.innerWidth - rect.right),
-        maxHeight: Math.min(560, Math.max(100, spaceBelow - 16)),
+        maxHeight: Math.min(560, Math.max(80, spaceBelow - 16)),
       });
     }
     setActionMenu(key);

@@ -67,8 +67,8 @@ test("Adding an item from Online Store saves to universal items inventory", asyn
   const inventory = getInventoryItems();
   const matched = inventory.find((it) => it.id === saved.id || it.itemName === "BluePeak Gel Pen - Blue");
   assert.ok(matched, "Item added from Online Store must be in universal Items section inventory");
-  assert.equal(matched.salePrice, "20");
-  assert.equal(matched.openingQuantity, "60");
+  assert.equal(String(matched.salePrice), "20");
+  assert.equal(String(matched.openingQuantity), "60");
 
   // 3. Verify it is also returned by loadGrowthItems()
   const onlineItems = await loadGrowthItems();

@@ -927,6 +927,12 @@ export default function PointOfSale() {
         showToast(`Insufficient stock for ${line.name}. Available: ${stock}.`, "warning");
         return;
       }
+      if (appSettings.enableItemSerialTracking && (product.hasSerialTracking || product.enableSerialTracking || (Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0))) {
+        const serials = Array.isArray(line.serialNumbers) ? line.serialNumbers : [];
+        if (serials.length < line.qty && Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0) {
+          line.serialNumbers = product.serialNumbers.slice(0, line.qty);
+        }
+      }
     }
     if (saveBillLockRef.current) return;
     saveBillLockRef.current = true;
@@ -1880,10 +1886,11 @@ export default function PointOfSale() {
                     <button
                       type="button"
                       onClick={() =>
-                        setModal((m) => ({
-                          ...m,
-                          qty: String(Math.max(1, Number(m.qty) - 1)),
-                        }))
+                        setModal((m) => {
+                          const currentVal = Number(m.qty) || 1;
+                          const nextVal = currentVal > 1 ? currentVal - 1 : Math.max(0.01, Number((currentVal - 0.25).toFixed(2)));
+                          return { ...m, qty: String(nextVal) };
+                        })
                       }
                       className="h-10 w-10 rounded-lg border bg-slate-100 font-bold text-lg hover:bg-slate-200"
                     >
@@ -1904,7 +1911,7 @@ export default function PointOfSale() {
                       onClick={() =>
                         setModal((m) => ({
                           ...m,
-                          qty: String(Number(m.qty || 0) + 1),
+                          qty: String(Number((Number(m.qty || 0) + 1).toFixed(2))),
                         }))
                       }
                       className="h-10 w-10 rounded-lg border bg-slate-100 font-bold text-lg hover:bg-slate-200"
@@ -1914,13 +1921,13 @@ export default function PointOfSale() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  {[1, 2, 5, 10].map((step) => (
+                <div className="flex flex-wrap gap-2">
+                  {[0.25, 0.5, 1, 2, 5, 10].map((step) => (
                     <button
                       key={step}
                       type="button"
                       onClick={() => setModal((m) => ({ ...m, qty: String(step) }))}
-                      className="flex-1 rounded-md border border-slate-200 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="flex-1 min-w-[48px] rounded-md border border-slate-200 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                     >
                       {step} {modal.item.unit}
                     </button>
@@ -2250,11 +2257,12 @@ export default function PointOfSale() {
                 onSubmit={async (e) => {
                   e.preventDefault();
                   const rawVal = Number(modal.discountValue) || 0;
+                  const maxAllowedDiscount = Math.max(0, calculations.subtotal - (calculations.itemDiscount || 0));
                   let finalDiscount = rawVal;
                   if (modal.discountType === "percent") {
-                    finalDiscount = (calculations.subtotal * rawVal) / 100;
+                    finalDiscount = (maxAllowedDiscount * rawVal) / 100;
                   }
-                  finalDiscount = Math.min(calculations.subtotal, Math.max(0, finalDiscount));
+                  finalDiscount = Math.min(maxAllowedDiscount, Math.max(0, finalDiscount));
                   updateDraft({ billDiscount: finalDiscount });
                   showToast(`Bill discount applied: ₹${money(finalDiscount)}`);
                   setModal(null);

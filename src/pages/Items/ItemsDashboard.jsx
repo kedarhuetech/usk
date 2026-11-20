@@ -530,12 +530,16 @@ function ItemsDashboard() {
 
   const getItemType = (item) => String(item?.type || item?.itemType || item?.item_type || "product").toLowerCase();
 
-  const categories = useMemo(() => ["All categories", ...new Set(items.filter((item) => getItemType(item) === activeTab && item.category).map((item) => item.category))], [items, activeTab]);
+  const lowStockCount = useMemo(() => {
+    return items.filter((item) => getItemType(item) === "product" && quantity(item) <= Number(item.minimumStock || 0)).length;
+  }, [items]);
+
+  const categories = useMemo(() => ["All categories", ...new Set(items.filter((item) => getItemType(item) === activeTab && (item.category || "").trim()).map((item) => (item.category || "").trim()))], [items, activeTab]);
   const filteredItems = useMemo(() => {
     const unique = new Map();
     items.filter((item) => {
       if (getItemType(item) !== activeTab || activeTab === "units") return false;
-      if (enableItemCategory && category !== "All categories" && item.category !== category) return false;
+      if (enableItemCategory && category !== "All categories" && (item.category || "").trim().toLowerCase() !== category.trim().toLowerCase()) return false;
       if (lowStockOnly && activeTab === "product" && quantity(item) > Number(item.minimumStock || 0)) return false;
       const q = search.trim().toLowerCase();
       if (!q) return true;
@@ -647,7 +651,14 @@ function ItemsDashboard() {
   // Creates conversion.
   const createConversion = () => {
     const factor = Number(conversionFactor);
-    if (!conversionUnit || !Number.isFinite(factor) || factor <= 0) return;
+    if (!conversionUnit) {
+      setError("Please select a target unit.");
+      return;
+    }
+    if (!Number.isFinite(factor) || factor <= 0) {
+      setError("Conversion factor must be greater than zero.");
+      return;
+    }
     addUnitConversion(selectedUnit, { factor, toUnit: conversionUnit });
     setConversionModal(false);
     setConversionUnit("");
@@ -854,7 +865,7 @@ function ItemsDashboard() {
               </button>
             </div>
             <div className="grid grid-cols-[minmax(0,1fr)_auto_30px] items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 text-xs font-bold uppercase text-slate-500"><span>Item</span><span>{activeTab === "product" ? "Quantity" : "Unit"}</span><button type="button" aria-label="Filter items" onClick={() => setFiltersOpen((open) => !open)} className={`grid h-7 w-7 place-items-center rounded ${filtersOpen ? "bg-blue-100 text-blue-700" : "hover:bg-slate-200"}`}><FiFilter /></button></div>
-            {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3">{enableItemCategory && <label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>}{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" />Low stock only</label>}</div>}
+            {filtersOpen && <div className="grid gap-2 border-b border-slate-200 bg-white p-3">{enableItemCategory && <label className="text-[11px] font-semibold uppercase text-slate-500">Category<select value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1 h-9 w-full rounded border border-slate-200 bg-white px-2 text-xs font-normal text-slate-700">{categories.map((value) => <option key={value}>{value}</option>)}</select></label>}{activeTab === "product" && <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer"><input type="checkbox" checked={lowStockOnly} onChange={(event) => setLowStockOnly(event.target.checked)} className="accent-blue-600" /><span>Low stock only</span><span className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${lowStockCount > 0 ? "bg-rose-100 text-rose-700 border border-rose-300" : "bg-slate-100 text-slate-500"}`}>{lowStockCount}</span></label>}</div>}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {filteredItems.map((item) => <div key={item.id} data-item-row-actions className={`group relative grid min-h-[58px] grid-cols-[minmax(0,1fr)_auto_28px] items-center gap-2 px-3 ${selectedItem?.id === item.id ? "bg-sky-100" : "bg-white hover:bg-slate-50"}`}>
                 <button

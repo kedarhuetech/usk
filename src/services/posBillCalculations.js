@@ -13,17 +13,31 @@ export function calculatePosBill(draft = {}) {
     const qty = Number.isFinite(parsedQty) && parsedQty > 0 ? parsedQty : 0;
     const price = nonNegativeNumber(item.price);
     const discount = Math.min(price * qty, nonNegativeNumber(item.discount));
-    const taxable = Math.max(0, price * qty - discount);
+    const netLine = Math.max(0, price * qty - discount);
     const taxRate = nonNegativeNumber(item.taxRate);
-    const itemTax = taxable * taxRate / 100;
-    const total = taxable + itemTax;
+    const isInclusive = String(item.taxMode || item.saleTaxMode || "").toLowerCase() === "inclusive" || Boolean(item.inclusive);
+
+    let taxable = netLine;
+    let itemTax = 0;
+    let total = netLine;
+
+    if (isInclusive && taxRate > 0) {
+      taxable = Math.round((netLine / (1 + taxRate / 100)) * 100) / 100;
+      itemTax = Math.round((netLine - taxable) * 100) / 100;
+      total = netLine;
+    } else {
+      taxable = netLine;
+      itemTax = Math.round((taxable * taxRate / 100) * 100) / 100;
+      total = Math.round((taxable + itemTax) * 100) / 100;
+    }
+
     subtotal += price * qty;
     itemDiscount += discount;
     tax += itemTax;
-    return { ...item, qty, price, discount, taxable, taxRate, itemTax, total };
+    return { ...item, qty, price, discount, taxable, taxRate, itemTax, total, isInclusive };
   });
 
-  const discountableTotal = Math.max(0, subtotal - itemDiscount + tax);
+  const discountableTotal = Math.max(0, lines.reduce((acc, l) => acc + l.total, 0));
   const billDiscount = Math.min(discountableTotal, nonNegativeNumber(draft.billDiscount));
   const loyaltyDiscount = Math.min(
     Math.max(0, discountableTotal - billDiscount),

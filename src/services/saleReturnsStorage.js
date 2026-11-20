@@ -177,43 +177,46 @@ export function saveSaleReturn(input) {
     const batchMode = Boolean(getAppSettings().enableBatchTracking || existingRecord?.batchStockAdjustedAt);
     const history = readList(inventoryHistoryKey);
     const historyEntries = [];
-    if (["Credit Note", "Sale Return"].includes(input.type) && !batchMode) {
-      const qtyByItem = (rows, sign) => (rows || []).filter((row) => row.restockable)
-        .forEach((row) => { const key = inventoryKey(row); if (key) qtyByItemMap.set(key, (qtyByItemMap.get(key) || 0) + sign * toNumber(row.qty)); });
-      const qtyByItemMap = new Map();
-      if (["Credit Note", "Sale Return"].includes(existingRecord?.type)) qtyByItem(existingRecord.rows, -1);
-      qtyByItem(saved.rows, 1);
-      nextInventory = inventory.map((item) => {
-        const delta = qtyByItemMap.get(itemInventoryKey(item)) || 0;
-        if (!delta) return item;
-        const current = toNumber(item.openingQuantity != null && item.openingQuantity !== "" ? item.openingQuantity : item.stock);
-        if (delta < 0 && current + delta < -1e-9) throw new Error(`Cannot reduce restocked quantity for ${item.itemName || item.name}; some returned stock is no longer available.`);
-        const quantity = String(Math.max(0, current + delta));
-        historyEntries.push({ id: crypto.randomUUID(), itemId: item.id, itemName: item.itemName || item.name, type: "Sales Return", direction: delta > 0 ? "add" : "reduce", quantity: Math.abs(delta), note: `${delta > 0 ? "Credit Note" : "Credit Note edit"} ${saved.number}`, reference: saved.number, returnId: saved.id, createdAt: new Date().toISOString() });
-        return { ...item, openingQuantity: quantity, stock: quantity, updatedAt: new Date().toISOString() };
-      });
-    }
-    if (["Credit Note", "Sale Return"].includes(input.type) && batchMode) {
-      const oldRows = (existingRecord?.rows || []).filter((row) => row.restockable);
-      const newRows = (saved.rows || []).filter((row) => row.restockable);
-      if (oldRows.some((row) => Number(row.qty) > 0 && !row.batchNo) || newRows.some((row) => Number(row.qty) > 0 && !row.batchNo)) throw new Error("This return has no traceable batch allocation. Select a batch allocation before restocking while batch tracking is enabled.");
-      if (oldRows.length) {
+    if (["Credit Note", "Sale Return"].includes(input.type)) {
+      const isBatchRow = (row) => Boolean(batchMode && row.batchNo);
+      const oldBatchRows = (existingRecord?.rows || []).filter((row) => row.restockable && isBatchRow(row));
+      const newBatchRows = (saved.rows || []).filter((row) => row.restockable && isBatchRow(row));
+
+      const oldNonBatchRows = (existingRecord?.rows || []).filter((row) => row.restockable && !isBatchRow(row));
+      const newNonBatchRows = (saved.rows || []).filter((row) => row.restockable && !isBatchRow(row));
+
+      if (oldNonBatchRows.length || newNonBatchRows.length) {
+        const qtyByItemMap = new Map();
+        const qtyByItem = (rows, sign) => (rows || []).forEach((row) => { const key = inventoryKey(row); if (key) qtyByItemMap.set(key, (qtyByItemMap.get(key) || 0) + sign * toNumber(row.qty)); });
+        if (["Credit Note", "Sale Return"].includes(existingRecord?.type)) qtyByItem(oldNonBatchRows, -1);
+        qtyByItem(newNonBatchRows, 1);
+        nextInventory = inventory.map((item) => {
+          const delta = qtyByItemMap.get(itemInventoryKey(item)) || 0;
+          if (!delta) return item;
+          const current = toNumber(item.openingQuantity != null && item.openingQuantity !== "" ? item.openingQuantity : item.stock);
+          if (delta < 0 && current + delta < -1e-9) throw new Error(`Cannot reduce restocked quantity for ${item.itemName || item.name}; some returned stock is no longer available.`);
+          const quantity = String(Math.max(0, current + delta));
+          historyEntries.push({ id: crypto.randomUUID(), itemId: item.id, itemName: item.itemName || item.name, type: "Sales Return", direction: delta > 0 ? "add" : "reduce", quantity: Math.abs(delta), note: `${delta > 0 ? "Credit Note" : "Credit Note edit"} ${saved.number}`, reference: saved.number, returnId: saved.id, createdAt: new Date().toISOString() });
+          return { ...item, openingQuantity: quantity, stock: quantity, updatedAt: new Date().toISOString() };
+        });
+        window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(nextInventory));
+      }
+
+      if (oldBatchRows.length) {
         if (existingRecord?.batchMovementId) reverseBatchMovement(existingRecord.batchMovementId, "sale-return");
-        else applyBatchRowsToInventory(oldRows, "reduce");
+        else applyBatchRowsToInventory(oldBatchRows, "reduce");
         saved.batchMovementId = "";
         saved.batchStockAdjustedAt = "";
       }
-      if (newRows.length) {
+      if (newBatchRows.length) {
         saved.batchMovementId = `${saved.id}:${Date.now()}:${crypto.randomUUID()}`;
-        moveBatchRows(newRows, "add", { referenceId: saved.batchMovementId, sourceType: "sale-return" });
+        moveBatchRows(newBatchRows, "add", { referenceId: saved.batchMovementId, sourceType: "sale-return" });
         saved.batchStockAdjustedAt = new Date().toISOString();
       }
-      nextInventory = inventory;
     }
     window.localStorage.setItem(saleReturnsStorageKey, JSON.stringify(nextRecords));
     if (original) window.localStorage.setItem(invoicesKey, JSON.stringify(nextInvoices));
     if (toNumber(saved.received) > 0 || existingRefund) window.localStorage.setItem(paymentsOutKey, JSON.stringify(paymentOuts));
-    if (nextInventory !== inventory) window.localStorage.setItem(inventoryItemsStorageKey, JSON.stringify(nextInventory));
     if (historyEntries.length) window.localStorage.setItem(inventoryHistoryKey, JSON.stringify([...history, ...historyEntries]));
     if (!readList(saleReturnsStorageKey).some((record) => record.id === saved.id)) throw new Error("Credit Note could not be verified after saving.");
     notifyBusinessDataChanged();

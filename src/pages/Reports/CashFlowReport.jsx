@@ -161,6 +161,8 @@ export default function CashFlowReport() {
     const adjustments = readLocal("ledgerly:cashAdjustments.v1");
     const saleInvoiceUi = readLocalObject("ledgerly:saleInvoiceUiActions.v1");
     const bankTransactions = readLocal("ledgerly:bankTransactions.v1", "bank-transactions");
+    const saleReturns = readLocal("ledgerly:saleReturns.v1");
+    const purchaseReturns = readLocal("ledgerly:purchaseReturns.v1");
 
     return buildCashFlowEntries({
       sales,
@@ -170,6 +172,8 @@ export default function CashFlowReport() {
       expenses,
       adjustments,
       bankTransactions,
+      saleReturns,
+      purchaseReturns,
       saleInvoiceUi,
     });
   }, [refreshTrigger]);

@@ -288,6 +288,11 @@ export default function DeliveryChallans() {
   const convertSelected = () => {
     const selected = conversionCandidates.filter((challan) => selectedIds.includes(challan.id));
     if (!selected.length) return;
+    const partiesInSelected = new Set(selected.map((c) => (c.party || "").trim().toLowerCase()).filter(Boolean));
+    if (partiesInSelected.size > 1) {
+      toast.error("Please select delivery challans belonging to the same customer for bulk conversion.");
+      return;
+    }
     setSelectorOpen(false);
     navigate("/sales/sale-invoices/new", { state: { from: "/sales/delivery-challan", deliveryChallansConversion: selected } });
   };
@@ -476,9 +481,13 @@ export default function DeliveryChallans() {
                       <th className="px-3 py-3 text-center">HSN / SAC</th>
                       <th className="px-3 py-3 text-center">Qty</th>
                       <th className="px-3 py-3 text-center">Unit</th>
-                      <th className="px-3 py-3 text-right">Price / Unit</th>
-                      <th className="px-3 py-3 text-right">Discount</th>
-                      <th className="px-3 py-3 text-right">Amount</th>
+                      {Boolean(getAppSettings().printAmountInDeliveryChallan) && (
+                        <>
+                          <th className="px-3 py-3 text-right">Price / Unit</th>
+                          <th className="px-3 py-3 text-right">Discount</th>
+                          <th className="px-3 py-3 text-right">Amount</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -489,11 +498,15 @@ export default function DeliveryChallans() {
                         <td className="px-3 py-3 text-center text-slate-600">{row.hsn || row.sac || "—"}</td>
                         <td className="px-3 py-3 text-center font-medium text-slate-800">{row.qty || "0"}</td>
                         <td className="px-3 py-3 text-center text-slate-600">{row.unit || "—"}</td>
-                        <td className="px-3 py-3 text-right text-slate-700">{money(row.price)}</td>
-                        <td className="px-3 py-3 text-right text-slate-600">
-                          {money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)} ({row.discount || 0}%)
-                        </td>
-                        <td className="px-3 py-3 text-right font-bold text-slate-900">{money(rowAmount(row))}</td>
+                        {Boolean(getAppSettings().printAmountInDeliveryChallan) && (
+                          <>
+                            <td className="px-3 py-3 text-right text-slate-700">{money(row.price)}</td>
+                            <td className="px-3 py-3 text-right text-slate-600">
+                              {money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)} ({row.discount || 0}%)
+                            </td>
+                            <td className="px-3 py-3 text-right font-bold text-slate-900">{money(rowAmount(row))}</td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -508,14 +521,18 @@ export default function DeliveryChallans() {
                       {(previewChallan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Subtotal</span>
-                    <span className="font-semibold text-slate-800">{money(previewChallan.total)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-300 pt-2 text-base font-black text-sky-700">
-                    <span>Total Amount</span>
-                    <span>{money(previewChallan.total)}</span>
-                  </div>
+                  {Boolean(getAppSettings().printAmountInDeliveryChallan) && (
+                    <>
+                      <div className="flex justify-between text-slate-600">
+                        <span>Subtotal</span>
+                        <span className="font-semibold text-slate-800">{money(previewChallan.total)}</span>
+                      </div>
+                      <div className="flex justify-between border-t border-slate-300 pt-2 text-base font-black text-sky-700">
+                        <span>Total Amount</span>
+                        <span>{money(previewChallan.total)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>

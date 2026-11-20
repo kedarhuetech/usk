@@ -941,6 +941,14 @@ function PartyDetails() {
 
   const removeParty = () => {
     if (!selectedParty) return;
+    const balanceInfo = getPartyBalanceInfo(selectedParty);
+    const hasOutstanding = (balanceInfo?.receivable > 0) || (balanceInfo?.payable > 0) || (Math.abs(balanceInfo?.net || 0) > 0.01) || (Number(selectedParty.openingBalance || 0) !== 0);
+    if (hasOutstanding) {
+      const msg = `Cannot delete ${selectedParty.partyName}. This party has an outstanding balance (${balanceInfo?.receivable > 0 ? `Receivable: ₹${balanceInfo.receivable}` : `Payable: ₹${balanceInfo.payable}`}). Please settle the outstanding balance before deleting.`;
+      setLoadError(msg);
+      toast.error(msg);
+      return;
+    }
     const blockReason = getPartyDeletionBlockReason(selectedParty);
     if (blockReason) {
       const msg = `Cannot delete ${selectedParty.partyName}. ${blockReason}`;
@@ -1050,7 +1058,7 @@ function PartyDetails() {
       receivableBalance: selectedBalanceType === "to-receive" ? selectedOpeningBalance : 0,
       payableBalance: selectedBalanceType === "to-pay" ? selectedOpeningBalance : 0,
     }] : []),
-    ...partyTransactions.map((entry) => ({
+    ...visiblePartyTransactions.map((entry) => ({
       id: entry.id,
       date: entry.date,
       source: entry.source,
@@ -1062,7 +1070,7 @@ function PartyDetails() {
       receivableBalance: Number(entry.receivableBalance || 0),
       payableBalance: Number(entry.payableBalance || 0),
     })),
-  ], [selectedParty, selectedOpeningBalance, selectedBalanceType, partyTransactions]);
+  ], [selectedParty, selectedOpeningBalance, selectedBalanceType, visiblePartyTransactions]);
 
   const statementTotals = useMemo(() => ({
     totalAmount: statementRows.reduce((sum, r) => sum + Number(r.total || 0), 0),
@@ -1607,7 +1615,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
 
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Payment Reminder Action Button */}
-              {selectedParty && (appSettings.enablePaymentReminder ?? true) && (selectedPartyBalance?.receivable > 0 || (selectedBalanceType === "to-receive" && selectedOpeningBalance > 0)) && (
+              {selectedParty && (appSettings.enablePaymentReminder ?? true) && ((selectedPartyBalance?.receivable || 0) > 0.01) && (
                 <button
                   type="button"
                   onClick={() => {

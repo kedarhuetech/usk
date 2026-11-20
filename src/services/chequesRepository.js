@@ -118,6 +118,8 @@ export async function updateCheque(id, changes) {
   return updated;
 }
 
+import { saveBankTransaction } from "./bankAccounts.js";
+
 export async function updateChequeStatus(id, status) {
   const records = readRecords();
   const index = records.findIndex((record) => record.id === id);
@@ -127,6 +129,23 @@ export async function updateChequeStatus(id, status) {
   const updated = { ...records[index], status, updatedAt: new Date().toISOString(), history: [...(records[index].history || []), event(status)] };
   records[index] = updated;
   writeRecords(records);
+
+  if (status === "Cleared" && Number(records[index].amount) > 0) {
+    try {
+      const isReceived = records[index].type === "Received";
+      saveBankTransaction({
+        id: `txn-cheque-${records[index].id}`,
+        accountId: records[index].bankAccountId || records[index].accountId || "bank-1",
+        amount: Number(records[index].amount),
+        type: isReceived ? "money-in" : "money-out",
+        date: new Date().toISOString().slice(0, 10),
+        description: isReceived
+          ? `Cheque cleared: #${records[index].chequeNumber || records[index].number || ""} from ${records[index].partyName || ""}`
+          : `Issued cheque cleared: #${records[index].chequeNumber || records[index].number || ""} to ${records[index].partyName || ""}`,
+      }).catch(() => {});
+    } catch {}
+  }
+
   return updated;
 }
 

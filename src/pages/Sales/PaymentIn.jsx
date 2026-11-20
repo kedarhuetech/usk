@@ -4,6 +4,7 @@ import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter,
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
+import { applyPaymentToSaleInvoice } from "../../services/salesStorage";
 import { getPaymentIns, savePaymentIns } from "../../services/transactionRepository.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
@@ -17,6 +18,7 @@ import {
 } from "../../services/unifiedPrintService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
+import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -252,6 +254,13 @@ export default function PaymentIn() {
         payments: saved.payments || [],
       });
       toast.success(editor.mode === "edit" ? "Receipt updated successfully." : "Payment-In receipt created.");
+
+      // Settle linked sale invoice if linked
+      if (saved.linkedInvoiceId) {
+        try {
+          applyPaymentToSaleInvoice(saved.linkedInvoiceId, amount);
+        } catch {}
+      }
     } catch (err) {
       console.warn("[PaymentIn MySQL Save Notice]", err?.message);
       toast.error(`Saved locally, but backend sync failed: ${err.message}`);
@@ -279,6 +288,7 @@ export default function PaymentIn() {
       // Non-blocking
     }
 
+    notifyBusinessDataChanged();
     setEditor(null);
   };
   const toggleMenu = (entry, event) => {
@@ -315,9 +325,11 @@ export default function PaymentIn() {
         persist(records.filter((record) => record.id !== entry.id));
         try {
           await transactionsDb.remove(entry.id);
+          notifyBusinessDataChanged();
           toast.success(`Receipt ${entry.number} deleted.`);
         } catch (err) {
           console.warn("[PaymentIn MySQL Delete Notice]", err?.message);
+          notifyBusinessDataChanged();
           toast.error(`Deleted locally, but backend delete failed: ${err.message}`);
         }
       },

@@ -80,12 +80,37 @@ function normalizeOrder(order = {}) {
   };
 }
 
-// Gets online store orders.
-export function getOnlineStoreOrders() {
-  return businessGrowthApi.list("orders").then((orders) => orders.map(normalizeOrder));
+const ONLINE_ORDERS_LOCAL_KEY = "ledgerly:onlineStoreOrders.v1";
+
+function readLocalOrders() {
+  try {
+    const raw = localStorage.getItem(ONLINE_ORDERS_LOCAL_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 }
 
-// Saves online store order.
+function writeLocalOrders(orders) {
+  try {
+    localStorage.setItem(ONLINE_ORDERS_LOCAL_KEY, JSON.stringify(orders));
+  } catch {}
+}
+
+// Gets online store orders with MySQL backend and local cache fallback.
+export async function getOnlineStoreOrders() {
+  try {
+    const orders = await businessGrowthApi.list("orders");
+    const normalized = (orders || []).map(normalizeOrder);
+    writeLocalOrders(normalized);
+    return normalized;
+  } catch (err) {
+    console.warn("[OnlineStoreOrders] Fetching from local fallback:", err?.message);
+    return readLocalOrders().map(normalizeOrder);
+  }
+}
+
+// Saves online store order to MySQL and updates local cache.
 export async function saveOnlineStoreOrder(order) {
   const timestamp = new Date().toISOString();
   const nextOrder = normalizeOrder({
@@ -96,7 +121,20 @@ export async function saveOnlineStoreOrder(order) {
     updatedAt: timestamp,
   });
 
-  return businessGrowthApi.save("orders", nextOrder);
+  const local = readLocalOrders();
+  const existingIdx = local.findIndex((o) => o.id === nextOrder.id);
+  const updatedLocal = existingIdx >= 0
+    ? local.map((o, idx) => (idx === existingIdx ? nextOrder : o))
+    : [nextOrder, ...local];
+  writeLocalOrders(updatedLocal);
+
+  try {
+    const saved = await businessGrowthApi.save("orders", nextOrder);
+    return saved || nextOrder;
+  } catch (err) {
+    console.warn("[OnlineStoreOrders] Saved to local cache, backend error:", err?.message);
+    return nextOrder;
+  }
 }
 
 // Updates online store order status.

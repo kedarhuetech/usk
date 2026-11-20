@@ -177,6 +177,27 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     ? { ...defaultCompany, ...opts.company, appSettings: { ...(defaultCompany.appSettings || {}), ...(opts.company.appSettings || {}) } }
     : defaultCompany;
 
+  // Issue #27: Check if terms apply to this document type
+  let effectiveTerms = terms;
+  const docType = opts.docType || opts.title || "";
+  const termsApplicableFor = company.appSettings?.termsApplicableFor;
+  if (termsApplicableFor && docType) {
+    const norm = docType.toLowerCase().replace(/[^a-z]/g, "");
+    const matchingKey = Object.keys(termsApplicableFor).find(
+      (k) => k.toLowerCase().replace(/[^a-z]/g, "") === norm
+    );
+    if (matchingKey && termsApplicableFor[matchingKey] === false) {
+      effectiveTerms = "";
+    }
+  }
+
+  // Issue #22: Standard dynamic UPI QR URI format
+  const bankDetails = opts.bankDetails || company.appSettings?.bankAccount || null;
+  const upiId = opts.upiId || bankDetails?.upiId || company.appSettings?.upiId || company.upiId || "";
+  const standardUpiUri = upiId
+    ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company.name || "Business")}&am=${grandTotal}&cu=INR`
+    : "";
+
   const themeColor = company.themeColor || "#881337";
   const rawSym = String(company.currencySymbol || "₹").trim();
   const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
@@ -405,10 +426,10 @@ export function buildUnifiedDocumentHtml(opts = {}) {
         </div>
 
         ${
-          terms
+          effectiveTerms
             ? `<div style="margin-top:12px;font-size:11px;color:#475569;">
                 <b style="color:#0f172a;">Terms and Conditions:</b>
-                <p style="margin:2px 0;white-space:pre-wrap;">${escapeHtml(terms)}</p>
+                <p style="margin:2px 0;white-space:pre-wrap;">${escapeHtml(effectiveTerms)}</p>
               </div>`
             : ""
         }
@@ -417,6 +438,28 @@ export function buildUnifiedDocumentHtml(opts = {}) {
           notes
             ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">
                 <b>Notes:</b> ${escapeHtml(notes)}
+              </div>`
+            : ""
+        }
+
+        ${
+          company.appSettings?.printBankDetails !== false && (bankDetails || standardUpiUri)
+            ? `<div style="margin-top:12px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;color:#334155;display:flex;align-items:center;gap:12px;">
+                <div style="flex:1;">
+                  <b style="color:${themeColor};text-transform:uppercase;font-size:10px;display:block;margin-bottom:2px;">Bank Details:</b>
+                  ${bankDetails?.bankName ? `<div>Bank: ${escapeHtml(bankDetails.bankName)}</div>` : ""}
+                  ${bankDetails?.accountNumber ? `<div>A/c No: ${escapeHtml(bankDetails.accountNumber)}</div>` : ""}
+                  ${bankDetails?.ifscCode ? `<div>IFSC: ${escapeHtml(bankDetails.ifscCode)}</div>` : ""}
+                  ${upiId ? `<div>UPI ID: ${escapeHtml(upiId)}</div>` : ""}
+                </div>
+                ${
+                  standardUpiUri
+                    ? `<div style="text-align:center;">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(standardUpiUri)}" alt="UPI QR" style="width:64px;height:64px;display:block;border:1px solid #cbd5e1;padding:2px;background:#fff;border-radius:4px;"/>
+                        <span style="font-size:8px;font-weight:700;color:#059669;display:block;margin-top:2px;">SCAN & PAY UPI</span>
+                      </div>`
+                    : ""
+                }
               </div>`
             : ""
         }

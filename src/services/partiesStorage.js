@@ -32,15 +32,24 @@ export function setMemoryParties(list) {
 
 // Reads parties.
 function readParties() {
-  if (memoryParties.length > 0) return memoryParties;
-  if (isDatabaseMode()) return [];
-  if (typeof window === "undefined" || !window.localStorage) return [];
-  try {
-    const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
+  if (typeof window !== "undefined" && window.localStorage) {
+    const raw = window.localStorage.getItem(PARTIES_KEY);
+    if (raw) {
+      try {
+        const value = JSON.parse(raw);
+        if (Array.isArray(value)) {
+          memoryParties = value;
+          return value;
+        }
+      } catch {}
+    } else if (memoryParties.length > 0 && isDatabaseMode()) {
+      return memoryParties;
+    } else {
+      memoryParties = [];
+      return [];
+    }
   }
+  return memoryParties;
 }
 
 function readList(key) {
@@ -84,6 +93,7 @@ export function saveParty(party) {
     updatedAt: new Date().toISOString(),
   };
   const next = [saved, ...readParties().filter((entry) => String(entry.id) !== String(saved.id))];
+  memoryParties = next;
   if (typeof window !== "undefined" && window.localStorage) {
     window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   }
@@ -98,6 +108,7 @@ export function saveParty(party) {
 export function deleteParty(partyId) {
   if (typeof window === "undefined" || !window.localStorage) return;
   const next = readParties().filter((entry) => String(entry.id) !== String(partyId));
+  memoryParties = next;
   window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   if (isDatabaseMode()) {
     partiesDb.remove(partyId).catch((err) => console.warn("[MySQL] Background party delete notice:", err.message));
