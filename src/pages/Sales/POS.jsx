@@ -35,6 +35,7 @@ import {
   loadBusinessParties,
 } from "../../services/businessRecords";
 import AddItem from "../Items/AddItem";
+import AddPartyModal from "../Parties/AddPartyModal";
 import BarcodeScanModal from "../../components/items/BarcodeScanModal";
 import {
   addPosBill,
@@ -618,13 +619,13 @@ export default function PointOfSale() {
   // Filter customers for dropdown
   const filteredCustomers = useMemo(() => {
     const query = customerSearch.trim().toLowerCase();
-    return customers
-      .filter((customer) =>
-        [customer.name, customer.phone].some((val) =>
-          String(val || "").toLowerCase().includes(query)
-        )
+    const list = Array.isArray(customers) ? customers : [];
+    if (!query) return list;
+    return list.filter((customer) =>
+      [customer.name, customer.phone, customer.partyName].some((val) =>
+        String(val || "").toLowerCase().includes(query)
       )
-      .slice(0, 8);
+    );
   }, [customers, customerSearch]);
 
   // Get currently selected line item
@@ -1557,9 +1558,9 @@ export default function PointOfSale() {
 
                   {/* Customer Dropdown */}
                   {customerOpen && (
-                    <div className="absolute left-0 right-0 top-full z-20 max-h-48 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                    <div className="absolute left-0 right-0 top-full z-20 max-h-72 overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl">
                       <div className="bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500 border-b">
-                        Customers ({customers.length})
+                        All Customers ({filteredCustomers.length})
                       </div>
                       {filteredCustomers.map((customer) => (
                         <button
@@ -2443,103 +2444,48 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* 9. Add Customer Modal */}
+          {/* 9. Add Customer Modal (Official AddPartyModal from Parties Section) */}
           {modal.type === "addCustomer" && (
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-              <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiUser className="text-blue-600" /> Add New Customer
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setModal(null)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-200"
-                >
-                  <FiX size={18} />
-                </button>
-              </div>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!modal.name?.trim()) return;
-                  const newCust = {
-                    id: `c-${crypto.randomUUID()}`,
-                    name: modal.name.trim(),
-                    partyName: modal.name.trim(),
-                    phone: modal.phone?.trim() || "",
-                    phoneNumber: modal.phone?.trim() || "",
-                    address: modal.address?.trim() || "",
-                  };
-                  try {
-                    await saveBusinessParty(newCust);
-                  } catch (error) {
-                    showToast(`Could not save customer: ${error.message || "Save failed."}`, "warning");
-                    return;
-                  }
-                  setCustomers((current) => [...current, newCust]);
-                  updateDraft({ customer: newCust.name, customerPhone: newCust.phone });
-                  showToast(`Saved customer "${newCust.name}"!`);
-                  setModal(null);
+            <div
+              className="w-full max-w-6xl max-h-[88vh] overflow-y-auto"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <AddPartyModal
+                embedded
+                initialParty={{
+                  partyName: modal.name || "",
+                  phone: modal.phone || "",
+                  billingAddress: modal.address || "",
                 }}
-                className="p-5 space-y-3.5"
-              >
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Customer Name*
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    placeholder="Enter customer name"
-                    value={modal.name}
-                    onChange={(e) => setModal((m) => ({ ...m, name: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. 9876543210"
-                    value={modal.phone}
-                    onChange={(e) => setModal((m) => ({ ...m, phone: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Address (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="City, Area"
-                    value={modal.address}
-                    onChange={(e) => setModal((m) => ({ ...m, address: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <button
-                    type="button"
-                    onClick={() => setModal(null)}
-                    className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 shadow-sm"
-                  >
-                    Save Customer
-                  </button>
-                </div>
-              </form>
+                appSettings={appSettings}
+                onClose={() => setModal(null)}
+                onSave={async (partyData) => {
+                  try {
+                    const saved = await saveBusinessParty(partyData);
+                    const mapped = {
+                      id: saved.id,
+                      name: saved.partyName || saved.name || "Customer",
+                      partyName: saved.partyName || saved.name || "Customer",
+                      phone: saved.phoneNumber || saved.phone || "",
+                      address: saved.billingAddress || saved.address || "",
+                      loyaltyPoints: Number(saved.loyaltyPoints || saved.points || 0),
+                      status: saved.status,
+                      isActive: saved.isActive !== false && saved.status !== "inactive",
+                    };
+                    setCustomers((curr) => [...curr.filter((c) => c.id !== mapped.id), mapped]);
+                    updateDraft({
+                      customer: mapped.name,
+                      customerPhone: mapped.phone,
+                    });
+                    showToast(`Saved party "${mapped.name}" and selected for bill!`);
+                    setModal(null);
+                    return saved;
+                  } catch (error) {
+                    showToast(`Could not save party: ${error.message || "Save failed."}`, "warning");
+                    throw error;
+                  }
+                }}
+              />
             </div>
           )}
 
