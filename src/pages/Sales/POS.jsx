@@ -1047,14 +1047,14 @@ export default function PointOfSale() {
   ];
 
   return (
-    <main className="flex h-[100dvh] w-full max-w-full flex-col overflow-hidden bg-[#e8edf5] text-[#41485d]">
+    <main className="flex h-full w-full max-w-full flex-col overflow-hidden bg-[#e8edf5] text-[#41485d]">
       {/* Bill Tabs & Actions Bar */}
-      <nav className="flex h-10 shrink-0 items-center justify-between gap-1.5 border-b border-slate-200 bg-white px-2 sm:px-3 w-full max-w-full overflow-hidden">
-        <div className="flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1">
+      <nav className="flex h-9 shrink-0 items-center justify-between gap-1 border-b border-slate-200 bg-white px-2 w-full max-w-full overflow-hidden select-none">
+        <div className="flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto py-0.5">
           {billSession.bills.map((bill) => (
             <div
               key={bill.id}
-              className={`flex h-full shrink-0 items-center gap-1.5 rounded-t-md border-t-2 px-2 sm:px-2.5 ${
+              className={`flex h-full shrink-0 items-center gap-1 rounded-t border-t-2 px-2 ${
                 bill.id === billSession.activeBillId
                   ? "border-blue-600 bg-[#f8f9fc]"
                   : "border-transparent bg-white"
@@ -1074,23 +1074,23 @@ export default function PointOfSale() {
                 aria-label={`Close bill ${bill.invoiceNo}`}
                 className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
               >
-                <FiX size={13} />
+                <FiX size={12} />
               </button>
             </div>
           ))}
           <button
             type="button"
             onClick={handleNewBillClick}
-            className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+            className="flex h-6.5 shrink-0 items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
           >
-            <FiPlus className="text-blue-600" size={13} />
+            <FiPlus className="text-blue-600" size={12} />
             <span>New Bill</span>
           </button>
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <div className="hidden text-xs text-slate-500 xl:block">
-            Saved bills: <span className="font-semibold text-slate-700">{bills.length}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="hidden text-[11px] text-slate-500 xl:block">
+            Saved: <span className="font-semibold text-slate-700">{bills.length}</span>
           </div>
           <button
             type="button"
@@ -1098,22 +1098,22 @@ export default function PointOfSale() {
             onClick={() => setModal({ type: "settings" })}
             className="rounded p-1 text-slate-600 hover:bg-slate-100 transition"
           >
-            <FiSettings size={16} />
+            <FiSettings size={15} />
           </button>
           <button
             type="button"
             title="Close POS"
             aria-label="Close POS"
             onClick={handleClosePOS}
-            className="flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer shadow-sm"
+            className="flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer shadow-xs"
           >
-            <FiX className="h-3.5 w-3.5" />
+            <FiX className="h-3 w-3" />
             <span>Close</span>
           </button>
         </div>
       </nav>
 
-      {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-4 py-1.5 text-xs text-rose-700">{storageError}</p>}
+      {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-700">{storageError}</p>}
 
       {/* Main Split Grid */}
       <div className="flex-1 min-h-0 w-full max-w-full flex flex-col lg:flex-row gap-1 p-1 overflow-hidden">
@@ -1122,7 +1122,7 @@ export default function PointOfSale() {
           <section className="flex flex-col flex-1 min-h-0 min-w-0 max-w-full gap-1 overflow-hidden">
             {/* Item Search Bar */}
             <div className="relative shrink-0">
-              <label className="flex h-10 items-center gap-2 rounded-md border-2 border-blue-500 bg-white px-2.5 shadow-sm">
+              <label className="flex h-9 items-center gap-2 rounded-md border-2 border-blue-500 bg-white px-2 shadow-xs">
                 <input
                   ref={searchRef}
                   aria-label="Search items"
@@ -1172,15 +1172,15 @@ export default function PointOfSale() {
                     aria-label="Clear search"
                     className="rounded p-0.5 text-slate-400 hover:text-slate-600"
                   >
-                    <FiX size={14} />
+                    <FiX size={13} />
                   </button>
                 )}
-                <FiSearch size={18} className="shrink-0 text-blue-500" />
+                <FiSearch size={16} className="shrink-0 text-blue-500" />
               </label>
 
               {/* Product Dropdown Results */}
               {productOpen && (
-                <div className="absolute left-0 right-0 top-full z-20 max-h-64 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-20 max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
                   <div className="bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 border-b">
                     Stored Items in LocalStorage ({products.length} total)
                   </div>
@@ -1190,18 +1190,18 @@ export default function PointOfSale() {
                       key={product.id}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => addProduct(product)}
-                      className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-2 text-left transition hover:bg-blue-50"
+                      className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-1.5 text-left transition hover:bg-blue-50"
                     >
                       <div>
-                        <span className="block font-semibold text-slate-800 text-xs sm:text-sm">{product.name}</span>
-                        <span className="text-[11px] text-slate-500">
+                        <span className="block font-semibold text-slate-800 text-xs">{product.name}</span>
+                        <span className="text-[10px] text-slate-500">
                           {product.code} · {product.unit} · GST {product.taxRate}%
                           {product.type !== "service" ? ` · Stock: ${product.stock}` : ""}
                           {enableItemCategory && product.category ? ` · ${product.category}` : ""}
                           {enableBarcodeScanning && product.barcode ? ` · Barcode: ${product.barcode}` : ""}
                         </span>
                       </div>
-                      <span className="font-bold text-slate-900 text-xs sm:text-sm">₹{money(product.price)}</span>
+                      <span className="font-bold text-slate-900 text-xs">₹{money(product.price)}</span>
                     </button>
                   ))}
 
@@ -1234,12 +1234,12 @@ export default function PointOfSale() {
 
             {/* Items Table */}
             <div
-              className="flex-1 min-h-0 w-full max-w-full overflow-y-auto overflow-x-auto rounded-md border border-slate-300 bg-white shadow-sm"
+              className="flex-1 min-h-0 w-full max-w-full overflow-y-auto overflow-x-auto rounded-md border border-slate-300 bg-white shadow-xs"
               onClick={() => setProductOpen(false)}
             >
               <table className="w-full min-w-[620px] border-collapse text-xs">
                 <thead className="sticky top-0 z-10 bg-[#f3f4f6] text-left font-semibold text-slate-600">
-                  <tr className="h-8">
+                  <tr className="h-7.5">
                     <th className="border border-slate-200 px-2">#</th>
                     <th className="border border-slate-200 px-2">ITEM CODE</th>
                     <th className="border border-slate-200 px-2">ITEM NAME</th>
@@ -1259,7 +1259,7 @@ export default function PointOfSale() {
                       <tr
                         key={item.lineId}
                         onClick={() => setSelectedId(item.lineId)}
-                        className={`h-8.5 cursor-pointer transition ${isSelected
+                        className={`h-8 cursor-pointer transition ${isSelected
                           ? "bg-[#e3f1ff] ring-1 ring-blue-300"
                           : "hover:bg-slate-50"
                           }`}
@@ -1338,7 +1338,7 @@ export default function PointOfSale() {
                             title="Remove item"
                             className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
                           >
-                            <FiTrash2 size={15} />
+                            <FiTrash2 size={14} />
                           </button>
                         </td>
                       </tr>
@@ -1349,9 +1349,9 @@ export default function PointOfSale() {
                     <tr>
                       <td
                         colSpan={10}
-                        className="py-6 border border-slate-200 text-center text-slate-400 text-xs"
+                        className="py-4 border border-slate-200 text-center text-slate-400 text-xs"
                       >
-                        <FiFileText size={22} className="mx-auto mb-1 opacity-40" />
+                        <FiFileText size={18} className="mx-auto mb-1 opacity-40" />
                         No items added. Search or scan a product above to add.
                       </td>
                     </tr>
@@ -1361,13 +1361,13 @@ export default function PointOfSale() {
             </div>
 
             {/* Bottom Action Buttons Bar */}
-            <div className="grid shrink-0 grid-cols-2 gap-1 rounded-md border border-slate-200 bg-white p-1 sm:grid-cols-4 lg:grid-cols-7">
+            <div className="grid shrink-0 grid-cols-4 sm:grid-cols-4 lg:grid-cols-7 gap-1 rounded-md border border-slate-200 bg-white p-1">
               {shortcuts.map(([label, action]) => (
                 <button
                   key={label}
                   type="button"
                   onClick={action}
-                  className="h-7 sm:h-8 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-slate-700 px-1 text-[11px] font-medium leading-none text-center transition active:scale-[0.98] truncate"
+                  className="h-7 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-slate-700 px-1 text-[11px] font-medium leading-none text-center transition active:scale-[0.98] truncate"
                   title={label}
                 >
                   {label}
@@ -1376,12 +1376,12 @@ export default function PointOfSale() {
             </div>
 
             {/* Backup & Status Bar */}
-            <div className="flex shrink-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] shadow-sm">
+            <div className="flex shrink-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] shadow-xs">
               <span className="flex items-center gap-1.5 text-slate-600 truncate">
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                 <span className="truncate">All products loaded ({products.length} products).</span>
               </span>
-              <div className="flex items-center gap-2.5 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 font-medium">
                 <button
                   type="button"
                   onClick={() => {
@@ -1395,13 +1395,13 @@ export default function PointOfSale() {
                       stock: "",
                     });
                   }}
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="text-blue-600 hover:underline"
                 >
                   + Add Product
                 </button>
                 <button
                   type="button"
-                  className="font-semibold text-slate-600 hover:text-blue-600 hover:underline"
+                  className="text-slate-600 hover:text-blue-600 hover:underline"
                   onClick={() => {
                     const data = JSON.stringify({ products, customers, bills, draft }, null, 2);
                     const blob = new Blob([data], { type: "application/json" });
@@ -1421,42 +1421,89 @@ export default function PointOfSale() {
           </section>
 
           {/* Right Section: Bill Details, Totals & Payment Controls */}
-          <aside className="w-full lg:w-[320px] xl:w-[350px] shrink-0 flex flex-col min-h-0 gap-1 overflow-y-auto">
-            {/* Customer & Date Selector */}
-            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-2 shadow-sm space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <label className="flex h-8 flex-1 items-center justify-between rounded-md border border-slate-300 px-2 text-xs">
-                  <span className="font-semibold text-slate-600 text-[11px]">Date</span>
+          <aside className="w-full lg:w-[310px] xl:w-[340px] shrink-0 flex flex-col min-h-0 gap-1 overflow-y-auto">
+            {/* Customer & Date Selector (Compact Side-by-Side) */}
+            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-1.5 shadow-xs">
+              <div className="grid grid-cols-[105px_1fr] gap-1.5">
+                <label className="flex h-7.5 items-center justify-between rounded border border-slate-300 px-1.5 text-[11px]">
                   <input
                     type="date"
                     aria-label="Bill date"
                     value={draft.date}
                     onChange={(event) => updateDraft({ date: event.target.value })}
-                    className="bg-transparent text-[11px] font-medium text-slate-800 outline-none"
+                    className="bg-transparent text-[10px] font-medium text-slate-800 outline-none w-full"
                   />
-                  <FiCalendar className="text-blue-500 shrink-0" size={14} />
                 </label>
-              </div>
 
-              <div className="relative">
-                <div className="flex h-8 items-center rounded-md border border-slate-300 px-2">
-                  <FiUser className="mr-1.5 text-slate-400 shrink-0" size={13} />
-                  <input
-                    value={customerOpen ? customerSearch : draft.customer}
-                    onChange={(event) => {
-                      setCustomerSearch(event.target.value);
-                      setCustomerOpen(true);
-                    }}
-                    onFocus={() => {
-                      setCustomerSearch(draft.customer);
-                      setCustomerOpen(true);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && customerSearch.trim()) {
-                        event.preventDefault();
-                        const existing = filteredCustomers[0];
-                        if (existing) selectCustomer(existing);
-                        else {
+                <div className="relative">
+                  <div className="flex h-7.5 items-center rounded border border-slate-300 px-1.5">
+                    <FiUser className="mr-1 text-slate-400 shrink-0" size={12} />
+                    <input
+                      value={customerOpen ? customerSearch : draft.customer}
+                      onChange={(event) => {
+                        setCustomerSearch(event.target.value);
+                        setCustomerOpen(true);
+                      }}
+                      onFocus={() => {
+                        setCustomerSearch(draft.customer);
+                        setCustomerOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && customerSearch.trim()) {
+                          event.preventDefault();
+                          const existing = filteredCustomers[0];
+                          if (existing) selectCustomer(existing);
+                          else {
+                            setModal({
+                              type: "addCustomer",
+                              name: customerSearch.trim(),
+                              phone: "",
+                              address: "",
+                            });
+                            setCustomerOpen(false);
+                          }
+                        }
+                      }}
+                      placeholder="Customer name / phone"
+                      className="min-w-0 flex-1 bg-transparent text-[11px] font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCustomerOpen((open) => !open)}
+                      aria-label="Show customers"
+                      className="p-0.5"
+                    >
+                      <FiChevronDown className="text-blue-500 shrink-0" size={13} />
+                    </button>
+                  </div>
+
+                  {/* Customer Dropdown */}
+                  {customerOpen && (
+                    <div className="absolute left-0 right-0 top-full z-20 max-h-48 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                      <div className="bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500 border-b">
+                        Customers ({customers.length})
+                      </div>
+                      {filteredCustomers.map((customer) => (
+                        <button
+                          type="button"
+                          key={customer.id}
+                          onClick={() => selectCustomer(customer)}
+                          className="block w-full border-b border-slate-100 px-2.5 py-1 text-left hover:bg-blue-50 transition"
+                        >
+                          <span className="flex items-center gap-1.5 font-semibold text-slate-800 text-xs">
+                            <span>{customer.name}</span>
+                            {(customer.status === "Inactive" || customer.isInactive) && (
+                              <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-semibold text-amber-800">
+                                Inactive
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-500">{customer.phone || "No phone"}</span>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
                           setModal({
                             type: "addCustomer",
                             name: customerSearch.trim(),
@@ -1464,74 +1511,25 @@ export default function PointOfSale() {
                             address: "",
                           });
                           setCustomerOpen(false);
-                        }
-                      }
-                    }}
-                    placeholder="Search customer name or phone"
-                    className="min-w-0 flex-1 bg-transparent text-[11px] font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setCustomerOpen((open) => !open)}
-                    aria-label="Show customers"
-                    className="p-0.5"
-                  >
-                    <FiChevronDown className="text-blue-500 shrink-0" size={14} />
-                  </button>
-                </div>
-
-                {/* Customer Dropdown */}
-                {customerOpen && (
-                  <div className="absolute left-0 right-0 top-full z-20 max-h-52 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
-                    <div className="bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 border-b">
-                      Customers in LocalStorage ({customers.length})
-                    </div>
-                    {filteredCustomers.map((customer) => (
+                        }}
+                        className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-blue-600 hover:bg-blue-50 border-t"
+                      >
+                        <FiPlus className="mr-1 inline" /> + Add customer
+                      </button>
                       <button
                         type="button"
-                        key={customer.id}
-                        onClick={() => selectCustomer(customer)}
-                        className="block w-full border-b border-slate-100 px-3 py-1.5 text-left hover:bg-blue-50 transition"
+                        onClick={() => {
+                          updateDraft({ customer: "", customerPhone: "" });
+                          setCustomerOpen(false);
+                          showToast("Set as Walk-in Customer");
+                        }}
+                        className="w-full px-2.5 py-1 text-left text-[11px] font-medium text-slate-500 hover:bg-slate-50"
                       >
-                        <span className="flex items-center gap-1.5 font-semibold text-slate-800 text-xs">
-                          <span>{customer.name}</span>
-                          {(customer.status === "Inactive" || customer.isInactive) && (
-                            <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-semibold text-amber-800">
-                              Inactive
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-[10px] text-slate-500">{customer.phone || "No phone number"}</span>
+                        Walk-in customer (default)
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModal({
-                          type: "addCustomer",
-                          name: customerSearch.trim(),
-                          phone: "",
-                          address: "",
-                        });
-                        setCustomerOpen(false);
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-bold text-blue-600 hover:bg-blue-50 border-t"
-                    >
-                      <FiPlus className="mr-1.5 inline" /> + Add new customer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateDraft({ customer: "", customerPhone: "" });
-                        setCustomerOpen(false);
-                        showToast("Set as Walk-in Customer");
-                      }}
-                      className="w-full px-3 py-1.5 text-left text-[11px] font-medium text-slate-500 hover:bg-slate-50"
-                    >
-                      Walk-in customer (default)
-                    </button>
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1539,11 +1537,11 @@ export default function PointOfSale() {
             <button
               type="button"
               onClick={handleBreakupClick}
-              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-left shadow-sm hover:bg-slate-50 transition"
+              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1 text-left shadow-xs hover:bg-slate-50 transition"
             >
               <span className="flex items-center gap-2">
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-blue-50 text-blue-500 shrink-0">
-                  <FiFileText size={16} />
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-blue-50 text-blue-500 shrink-0">
+                  <FiFileText size={15} />
                 </span>
                 <span>
                   <span className="block text-base font-bold text-slate-900 leading-tight">
@@ -1557,19 +1555,19 @@ export default function PointOfSale() {
               </span>
               <span className="flex items-center gap-0.5 text-right text-[11px] font-bold leading-tight text-blue-600">
                 <span>Full Breakup</span>
-                <FiChevronRight size={15} />
+                <FiChevronRight size={14} />
               </span>
             </button>
 
             {/* Payment & Charges Box */}
-            <div className="flex flex-col rounded-md border border-slate-200 bg-white shadow-sm overflow-hidden shrink-0">
-              <div className="grid grid-cols-2 gap-1.5 p-2 shrink-0">
+            <div className="flex flex-col rounded-md border border-slate-200 bg-white shadow-xs overflow-hidden shrink-0">
+              <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0">
                 <label className="text-[10px] font-semibold text-slate-600">
                   Payment Mode
                   <select
                     value={draft.paymentMode}
                     onChange={(event) => updateDraft({ paymentMode: event.target.value })}
-                    className="mt-0.5 h-7.5 w-full rounded border border-slate-300 bg-white px-1.5 text-[11px] font-semibold text-slate-700 outline-blue-500"
+                    className="mt-0.5 h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] font-semibold text-slate-700 outline-blue-500"
                   >
                     <option>Cash</option>
                     <option>UPI</option>
@@ -1587,39 +1585,45 @@ export default function PointOfSale() {
                     value={draft.amountReceived}
                     onChange={(event) => updateDraft({ amountReceived: event.target.value })}
                     placeholder={money(calculations.total)}
-                    className="mt-0.5 h-7.5 w-full rounded border border-slate-300 px-1.5 text-[11px] font-semibold text-slate-700 outline-blue-500"
+                    className="mt-0.5 h-7 w-full rounded border border-slate-300 px-1 text-[11px] font-semibold text-slate-700 outline-blue-500"
                   />
                 </label>
               </div>
 
-              <div className="border-t border-slate-100 bg-[#fafafa] px-2.5 py-1 text-[11px] space-y-0.5">
+              <div className="border-t border-slate-100 bg-[#fafafa] px-2 py-1 text-[11px] space-y-0.5">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
                   <span>₹ {money(calculations.subtotal)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Item discounts</span>
-                  <span className="text-emerald-600 font-medium">− ₹ {money(calculations.itemDiscount)}</span>
-                </div>
+                {calculations.itemDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-medium">
+                    <span>Item discounts</span>
+                    <span>− ₹ {money(calculations.itemDiscount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-slate-600">
                   <span>Tax (GST)</span>
                   <span>₹ {money(calculations.tax)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Bill discount</span>
-                  <span className="text-emerald-600 font-medium">− ₹ {money(calculations.billDiscount)}</span>
-                </div>
+                {calculations.billDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-medium">
+                    <span>Bill discount</span>
+                    <span>− ₹ {money(calculations.billDiscount)}</span>
+                  </div>
+                )}
                 {calculations.loyaltyDiscount > 0 && (
                   <div className="flex justify-between text-purple-700 font-medium">
                     <span>Loyalty Redeemed</span>
                     <span>− ₹ {money(calculations.loyaltyDiscount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-slate-600">
-                  <span>Additional charges</span>
-                  <span>₹ {money(calculations.charges)}</span>
-                </div>
-                <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-800">
+                {calculations.charges > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Additional charges</span>
+                    <span>₹ {money(calculations.charges)}</span>
+                  </div>
+                )}
+                <div className="mt-0.5 flex justify-between border-t border-slate-200 pt-0.5 font-bold text-slate-800">
                   <span>Change to Return</span>
                   <span className="text-emerald-700">₹ {money(calculations.change)}</span>
                 </div>
@@ -1633,27 +1637,27 @@ export default function PointOfSale() {
             </div>
 
             {/* Save / Print Buttons */}
-            <div className="shrink-0 space-y-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-sm">
+            <div className="shrink-0 space-y-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-xs">
               <button
                 type="button"
                 onClick={() => saveBill(true)}
-                className="flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm active:scale-[0.99] transition cursor-pointer"
+                className="flex h-8.5 w-full items-center justify-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs active:scale-[0.99] transition cursor-pointer"
               >
-                <FiPrinter size={15} />
+                <FiPrinter size={14} />
                 <span>Save &amp; Print Bill</span>
               </button>
               <div className="grid grid-cols-2 gap-1">
                 <button
                   type="button"
                   onClick={handleOtherPaymentsClick}
-                  className="flex h-8 items-center justify-center rounded border border-blue-300 bg-blue-50 text-blue-700 font-semibold text-[11px] hover:bg-blue-100 active:scale-[0.99] transition text-center px-1 truncate cursor-pointer"
+                  className="flex h-7.5 items-center justify-center rounded border border-blue-300 bg-blue-50 text-blue-700 font-semibold text-[11px] hover:bg-blue-100 active:scale-[0.99] transition text-center px-1 truncate cursor-pointer"
                 >
                   Other/Credit
                 </button>
                 <button
                   type="button"
                   onClick={() => saveBill(false)}
-                  className="flex h-8 items-center justify-center rounded border border-slate-300 bg-slate-100 text-slate-800 font-semibold text-[11px] hover:bg-slate-200 active:scale-[0.99] transition cursor-pointer"
+                  className="flex h-7.5 items-center justify-center rounded border border-slate-300 bg-slate-100 text-slate-800 font-semibold text-[11px] hover:bg-slate-200 active:scale-[0.99] transition cursor-pointer"
                 >
                   Save Bill
                 </button>
@@ -1661,15 +1665,15 @@ export default function PointOfSale() {
             </div>
 
             {/* Saved Bills Accordion */}
-            <details className="shrink-0 rounded-md border border-slate-200 bg-white p-1.5 text-[11px] shadow-sm">
+            <details className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] shadow-xs">
               <summary className="cursor-pointer font-semibold text-slate-700">
                 Saved bills ({bills.length})
               </summary>
-              <div className="mt-1.5 max-h-28 space-y-1 overflow-auto">
+              <div className="mt-1 max-h-24 space-y-0.5 overflow-auto">
                 {bills.map((bill) => (
                   <div
                     key={bill.invoiceNo}
-                    className="flex items-center justify-between gap-2 border-b border-slate-100 py-1 text-[11px]"
+                    className="flex items-center justify-between gap-1 border-b border-slate-100 py-0.5 text-[10px]"
                   >
                     <button
                       type="button"
@@ -1697,11 +1701,11 @@ export default function PointOfSale() {
               )}
             </details>
           </aside>
-        </> : <section className="col-span-full flex min-h-[300px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-sm">
+        </> : <section className="col-span-full flex min-h-[300px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-xs">
           <h2 className="text-base font-bold text-slate-800">No open bills</h2>
           <p className="mt-1 text-xs text-slate-500">Start a new bill to add products and take payment.</p>
           <button type="button" onClick={handleNewBillClick} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"><FiPlus /> New Bill</button>
-          {bills.length > 0 && <div className="mt-4 max-h-48 w-full max-w-lg overflow-auto rounded border border-slate-200 p-2.5 text-left"><h3 className="mb-1.5 text-xs font-semibold text-slate-700">Saved bills</h3>{bills.map((bill) => <button key={bill.id || bill.invoiceNo} type="button" onClick={() => openSavedBill(bill)} className="flex w-full items-center justify-between border-t border-slate-100 py-1.5 text-left text-xs hover:text-blue-600"><span>{bill.invoiceNo} · {bill.customer || "Walk-in"}</span><span>₹{money(bill.total)}</span></button>)}</div>}
+          {bills.length > 0 && <div className="mt-4 max-h-48 w-full max-w-lg overflow-auto rounded border border-slate-200 p-2 text-left"><h3 className="mb-1.5 text-xs font-semibold text-slate-700">Saved bills</h3>{bills.map((bill) => <button key={bill.id || bill.invoiceNo} type="button" onClick={() => openSavedBill(bill)} className="flex w-full items-center justify-between border-t border-slate-100 py-1 text-xs hover:text-blue-600"><span>{bill.invoiceNo} · {bill.customer || "Walk-in"}</span><span>₹{money(bill.total)}</span></button>)}</div>}
         </section>}
       </div>
 
