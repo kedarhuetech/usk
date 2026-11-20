@@ -659,23 +659,33 @@ function ItemsDashboard() {
   // Exports transactions.
   const exportTransactions = () => downloadCsv(`item-transactions-${selectedItem?.itemName || ""}.csv`, [["Type", "Invoice", "Name", "Date", "Quantity", "Unit", "Price", "Amount", "Status"], ...filteredTransactions.map((row) => [row.type, row.invoice, row.name, row.date, row.quantity, row.unit, row.price, row.amount, row.status])]);
   // Applies bulk update.
-  const applyBulkUpdate = (makeUpdate, message) => {
+  const applyBulkUpdate = async (makeUpdate, message) => {
     const overrides = readItemUiOverrides();
     const edits = { ...(overrides.edits || {}) };
     const targetIds = new Set(selectedBulkItems.map((item) => item.id));
     if (!targetIds.size) { setNotice("Select one or more visible items first."); setBulkAction(""); return; }
-    const updatedItems = items.map((item) => {
-      if (!targetIds.has(item.id)) return item;
-      const updated = makeUpdate(item);
-      edits[item.id] = updated;
-      saveInventoryItem(updated);
-      return updated;
-    });
-    writeItemUiOverrides({ ...overrides, edits });
-    setItems(updatedItems);
-    setNotice(`${message} applied to ${targetIds.size} selected ${activeTab}${targetIds.size === 1 ? "" : "s"}.`);
-    setSelectedBulkIds((current) => current.filter((id) => !targetIds.has(id)));
-    setBulkAction("");
+    try {
+      const updatedItems = [];
+      for (const item of items) {
+        if (!targetIds.has(item.id)) {
+          updatedItems.push(item);
+          continue;
+        }
+        const updated = makeUpdate(item);
+        edits[item.id] = updated;
+        const saved = await saveBusinessItem(updated);
+        updatedItems.push(saved || updated);
+      }
+      writeItemUiOverrides({ ...overrides, edits });
+      setItems(updatedItems);
+      setNotice(`${message} applied to ${targetIds.size} selected ${activeTab}${targetIds.size === 1 ? "" : "s"}.`);
+      setSelectedBulkIds((current) => current.filter((id) => !targetIds.has(id)));
+    } catch (error) {
+      setNotice(error.message || `Failed to apply ${message}.`);
+      toast.error(error.message || `Failed to apply ${message}.`);
+    } finally {
+      setBulkAction("");
+    }
   };
   // Starts bulk action.
   const startBulkAction = (action) => {
@@ -891,7 +901,7 @@ function ItemsDashboard() {
                             if (isDatabaseMode()) {
                               await itemsDb.reactivate(item.id);
                             }
-                            saveInventoryItem({ ...item, isActive: true });
+                            saveInventoryItem({ ...item, isActive: true }, { skipRemoteSync: true });
                             await refresh();
                             setNotice(`"${item.itemName}" marked as Active.`);
                             toast.success(`"${item.itemName}" marked as Active.`);
@@ -912,7 +922,7 @@ function ItemsDashboard() {
                             if (isDatabaseMode()) {
                               await itemsDb.deactivate(item.id);
                             }
-                            saveInventoryItem({ ...item, isActive: false });
+                            saveInventoryItem({ ...item, isActive: false }, { skipRemoteSync: true });
                             await refresh();
                             setNotice(`"${item.itemName}" marked as Inactive.`);
                             toast.success(`"${item.itemName}" marked as Inactive.`);
@@ -1027,7 +1037,7 @@ function ItemsDashboard() {
                             if (nextActive) await itemsDb.reactivate(selectedItem.id);
                             else await itemsDb.deactivate(selectedItem.id);
                           }
-                          saveInventoryItem({ ...selectedItem, isActive: nextActive });
+                          saveInventoryItem({ ...selectedItem, isActive: nextActive }, { skipRemoteSync: true });
                           await refresh();
                           toast.success(`"${selectedItem.itemName}" is now ${nextActive ? "Active" : "Inactive"}.`);
                         } catch (err) {
@@ -1402,7 +1412,7 @@ function ItemsDashboard() {
                     const item = itemStatusModal;
                     try {
                       if (isDatabaseMode()) await itemsDb.reactivate(item.id);
-                      saveInventoryItem({ ...item, isActive: true });
+                      saveInventoryItem({ ...item, isActive: true }, { skipRemoteSync: true });
                       await refresh();
                       toast.success(`"${item.itemName}" set to Active.`);
                       setItemStatusModal(null);
@@ -1442,7 +1452,7 @@ function ItemsDashboard() {
                     const item = itemStatusModal;
                     try {
                       if (isDatabaseMode()) await itemsDb.deactivate(item.id);
-                      saveInventoryItem({ ...item, isActive: false });
+                      saveInventoryItem({ ...item, isActive: false }, { skipRemoteSync: true });
                       await refresh();
                       toast.success(`"${item.itemName}" marked as Inactive.`);
                       setItemStatusModal(null);

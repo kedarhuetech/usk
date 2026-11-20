@@ -39,6 +39,13 @@ export function setMemoryCollection(key, records) {
         window.localStorage.setItem(key, JSON.stringify(records));
       } catch {}
     }
+  } else {
+    memoryStore.delete(key);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.removeItem(key);
+      } catch {}
+    }
   }
 }
 
@@ -55,7 +62,6 @@ export function readTransactionCollection(key) {
   if (memoryStore.has(key)) {
     return memoryStore.get(key) || [];
   }
-  if (isDatabaseMode()) return [];
   if (typeof window === "undefined" || !window.localStorage) return [];
   const raw = window.localStorage.getItem(key);
   if (raw == null) return [];
@@ -63,25 +69,27 @@ export function readTransactionCollection(key) {
   try { value = JSON.parse(raw); }
   catch (error) { throw new Error(`Saved transaction data (${key}) is corrupted: ${error.message}`, { cause: error }); }
   if (!Array.isArray(value)) throw new Error(`Saved transaction data (${key}) must be a list.`);
+  memoryStore.set(key, value);
   return value;
 }
 
 export function writeTransactionCollection(key, records) {
   if (!Array.isArray(records)) throw new Error("Transaction records must be an array.");
   memoryStore.set(key, records);
-  if (!isDatabaseMode()) {
-    try { storage().setItem(key, JSON.stringify(records)); } catch {}
-  }
+  try { storage().setItem(key, JSON.stringify(records)); } catch {}
   return records;
 }
 
 export function readTransactionValue(key, fallback = null) {
   if (memoryStore.has(key)) return memoryStore.get(key);
-  if (isDatabaseMode()) return fallback;
   if (typeof window === "undefined" || !window.localStorage) return fallback;
   const raw = window.localStorage.getItem(key);
   if (raw == null) return fallback;
-  try { return JSON.parse(raw); }
+  try {
+    const value = JSON.parse(raw);
+    memoryStore.set(key, value);
+    return value;
+  }
   catch (error) { throw new Error(`Saved transaction data (${key}) is corrupted: ${error.message}`, { cause: error }); }
 }
 

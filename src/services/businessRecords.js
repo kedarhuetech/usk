@@ -1,14 +1,15 @@
 import { apiRequest } from "./apiClient.js";
-import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem, writeItems } from "./itemsStorage.js";
+import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem, writeItems, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice, saleInvoicesStorageKey } from "./salesStorage.js";
-import { getParties, saveParty, deleteParty } from "./partiesStorage.js";
-import { getPurchaseBills, savePurchaseBill, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
+import { batchMovementStorageKey } from "./batchInventoryService.js";
+import { getParties, saveParty, deleteParty, partiesStorageKey } from "./partiesStorage.js";
+import { getPurchaseBills, savePurchaseBill, deletePurchaseBill, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { itemsDb, partiesDb, transactionsDb } from "./databaseRepository.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
-import { writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
+import { writeTransactionCollection, setMemoryCollection, transactionStorageKeys } from "./transactionRepository.js";
 
 // This helper handles id logic.
 function withId(record = {}) {
@@ -35,17 +36,19 @@ export async function loadBusinessItems() {
 // Saves business item directly to MySQL database with awaited persistence
 export async function saveBusinessItem(value) {
   const normalized = normalizeInventoryItem(value);
-  const saved = saveInventoryItem(normalized);
   if (typeof window !== "undefined" && typeof window.document !== "undefined" && isDatabaseMode()) {
     try {
-      const remote = await itemsDb.save(saved);
-      return { ...saved, ...(remote || {}) };
+      const remote = await itemsDb.save(normalized);
+      const saved = { ...normalized, ...(remote || {}) };
+      saveInventoryItem(saved, { skipRemoteSync: true });
+      notifyBusinessDataChanged();
+      return saved;
     } catch (e) {
       console.warn("[MySQL] Item save failure:", e.message);
       throw e;
     }
   }
-  return saved;
+  return saveInventoryItem(normalized);
 }
 
 // Deletes business item directly from MySQL database with awaited persistence
@@ -82,7 +85,7 @@ export async function deleteBusinessItem(itemOrId, options = {}) {
 
   // 2. Synchronize local cache after backend confirms success
   if (result?.action === "deactivated" || options?.deactivate) {
-    saveInventoryItem({ ...(target || { id: itemId }), isActive: false });
+    saveInventoryItem({ ...(target || { id: itemId }), isActive: false }, { skipRemoteSync: true });
   } else {
     deleteInventoryItem(itemOrId, { skipRemoteSync: true });
   }
@@ -143,27 +146,33 @@ export async function loadBusinessSummary() {
 // Saves business party directly to MySQL database with awaited persistence
 export async function saveBusinessParty(value) {
   const party = withId(value);
-  const saved = saveParty(party);
   if (isDatabaseMode()) {
     try {
-      const remote = await partiesDb.save(saved);
-      return { ...saved, ...(remote || {}) };
+      const remote = await partiesDb.save(party);
+      const saved = { ...party, ...(remote || {}) };
+      saveParty(saved, { skipRemoteSync: true });
+      notifyBusinessDataChanged();
+      return saved;
     } catch (e) {
-      // Rollback local party on database failure
-      try { deleteParty(saved.id); } catch {}
       console.warn("[MySQL] Party save failure:", e.message);
       throw e;
     }
   }
-  return saved;
+  return saveParty(party);
 }
 
 // Deletes business party with backend confirmation
 export async function deleteBusinessParty(partyId) {
-  deleteParty(partyId);
   if (isDatabaseMode()) {
-    await partiesDb.remove(partyId);
+    try {
+      await partiesDb.remove(partyId);
+    } catch (e) {
+      console.warn("[MySQL] Party delete failure:", e.message);
+      throw e;
+    }
   }
+  deleteParty(partyId, { skipRemoteSync: true });
+  notifyBusinessDataChanged();
 }
 
 // Loads sales invoices directly from MySQL database transactions table
@@ -196,6 +205,11 @@ export async function nextSalesInvoiceNumber() {
 
 // Saves business sale invoice directly to MySQL database
 export async function saveBusinessSaleInvoice(value) {
+  const canUseStorage = typeof window !== "undefined" && Boolean(window.localStorage);
+  const before = canUseStorage
+    ? [saleInvoicesStorageKey, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)])
+    : [];
+
   const localInvoice = saveSaleInvoice(value, { skipRemoteSync: true });
   if (!isDatabaseMode()) return localInvoice;
 
@@ -203,25 +217,43 @@ export async function saveBusinessSaleInvoice(value) {
   try {
     const remote = await transactionsDb.save(localInvoice);
     saved = { ...localInvoice, ...(remote || {}) };
+
+    const changedItems = getInventoryItems();
+    const touchedIds = new Set((localInvoice.rows || []).map((row) => row.sourceItemId || row.itemId).filter(Boolean));
+    for (const item of changedItems) {
+      if (touchedIds.has(item.id)) {
+        try {
+          await saveBusinessItem(item);
+        } catch (itemErr) {
+          console.warn("[MySQL] Item stock sync notice after sale:", itemErr.message);
+        }
+      }
+    }
   } catch (error) {
-    try {
-      deleteSaleInvoice(localInvoice.id);
-    } catch {}
+    if (canUseStorage) {
+      for (const [key, stored] of before) {
+        if (stored === null) window.localStorage.removeItem(key);
+        else window.localStorage.setItem(key, stored);
+      }
+      try {
+        const storedInvoices = before.find(([k]) => k === saleInvoicesStorageKey)?.[1];
+        setMemoryCollection(saleInvoicesStorageKey, storedInvoices ? JSON.parse(storedInvoices) : null);
+      } catch {}
+      try {
+        const storedItems = before.find(([k]) => k === inventoryItemsStorageKey)?.[1];
+        if (storedItems) writeItems(JSON.parse(storedItems));
+      } catch {}
+    }
+    console.warn("[MySQL] Sale invoice save failure:", error.message);
     throw error;
   }
 
-  const changedItems = getInventoryItems();
-  const touchedIds = new Set((localInvoice.rows || []).map((row) => row.sourceItemId || row.itemId).filter(Boolean));
-  for (const item of changedItems) {
-    if (touchedIds.has(item.id)) await saveBusinessItem(item);
-  }
   notifyBusinessDataChanged();
   return saved;
 }
 
 // Deletes sales invoice directly from MySQL database transactions table
 export async function deleteBusinessSaleInvoice(invoiceId) {
-  deleteSaleInvoice(invoiceId);
   if (isDatabaseMode()) {
     try {
       await transactionsDb.remove(invoiceId);
@@ -230,6 +262,7 @@ export async function deleteBusinessSaleInvoice(invoiceId) {
       throw e;
     }
   }
+  deleteSaleInvoice(invoiceId, { skipRemoteSync: true });
   notifyBusinessDataChanged();
 }
 
@@ -262,26 +295,65 @@ export async function nextPurchaseBillNumber() {
 
 // Saves business purchase bill directly to MySQL database
 export async function saveBusinessPurchaseBill(value) {
+  const canUseStorage = typeof window !== "undefined" && Boolean(window.localStorage);
+  const before = canUseStorage
+    ? [purchaseBillsStorageKey, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)])
+    : [];
+
   const bill = withId({ ...value, transactionType: "purchase" });
-  const localSaved = savePurchaseBill(bill);
+  const localSaved = savePurchaseBill(bill, { skipRemoteSync: true });
 
   if (!isDatabaseMode()) return localSaved;
 
+  let saved = localSaved;
   try {
-    await transactionsDb.save(localSaved);
+    const remote = await transactionsDb.save(localSaved);
+    saved = { ...localSaved, ...(remote || {}) };
+
     const changedItems = getInventoryItems();
     const touchedItemIds = new Set((bill.rows || []).map((row) => row.sourceItemId || row.itemId).filter(Boolean));
     for (const item of changedItems) {
       if (touchedItemIds.has(item.id)) {
         try {
           await saveBusinessItem(item);
-        } catch {}
+        } catch (itemErr) {
+          console.warn("[MySQL] Item stock sync notice after purchase:", itemErr.message);
+        }
       }
     }
   } catch (error) {
-    console.warn("[MySQL] Saved purchase bill to local cache:", error.message);
+    if (canUseStorage) {
+      for (const [key, stored] of before) {
+        if (stored === null) window.localStorage.removeItem(key);
+        else window.localStorage.setItem(key, stored);
+      }
+      try {
+        const storedBills = before.find(([k]) => k === purchaseBillsStorageKey)?.[1];
+        setMemoryCollection(purchaseBillsStorageKey, storedBills ? JSON.parse(storedBills) : null);
+      } catch {}
+      try {
+        const storedItems = before.find(([k]) => k === inventoryItemsStorageKey)?.[1];
+        if (storedItems) writeItems(JSON.parse(storedItems));
+      } catch {}
+    }
+    console.warn("[MySQL] Purchase bill save failure:", error.message);
+    throw error;
   }
 
   notifyBusinessDataChanged();
-  return localSaved;
+  return saved;
+}
+
+// Deletes purchase bill directly from MySQL database transactions table
+export async function deleteBusinessPurchaseBill(billId) {
+  if (isDatabaseMode()) {
+    try {
+      await transactionsDb.remove(billId);
+    } catch (e) {
+      console.warn("[MySQL] Purchase bill delete failure:", e.message);
+      throw e;
+    }
+  }
+  deletePurchaseBill(billId, { skipRemoteSync: true });
+  notifyBusinessDataChanged();
 }

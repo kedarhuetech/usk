@@ -21,8 +21,12 @@ router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
-    const offset = (page - 1) * limit;
+    const limitParam = req.query.limit;
+    const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
+    const limit = isAll
+      ? 100000
+      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+    const offset = isAll ? 0 : (page - 1) * limit;
     const filter = (req.query.filter || "").trim().toLowerCase();
     const search = (req.query.search || "").trim();
 
@@ -49,41 +53,49 @@ router.get("/", async (req, res) => {
     );
     const total = countRows[0]?.total || 0;
 
-    const [rows] = await pool.query(
-      `SELECT * FROM service_reminders
+    let querySql = `SELECT * FROM service_reminders
        WHERE ${whereClause}
-       ORDER BY service_due_date ASC, created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+       ORDER BY service_due_date ASC, created_at DESC`;
+    let queryParams = [...params];
+
+    if (!isAll) {
+      querySql += " LIMIT ? OFFSET ?";
+      queryParams.push(limit, offset);
+    }
+
+    const [rows] = await pool.query(querySql, queryParams);
 
     // Fetch history from normalized service_reminder_history table
     const reminderIds = rows.map((r) => r.id);
     let historyMap = new Map();
     if (reminderIds.length > 0) {
-      const placeholders = reminderIds.map(() => "?").join(",");
-      const [histRows] = await pool.query(
-        `SELECT id, reminder_id, channel, recipient, message_text, status, sent_at
-         FROM service_reminder_history
-         WHERE business_id = ? AND reminder_id IN (${placeholders})
-         ORDER BY sent_at DESC`,
-        [businessId, ...reminderIds]
-      );
+      for (let i = 0; i < reminderIds.length; i += 500) {
+        const chunk = reminderIds.slice(i, i + 500);
+        const placeholders = chunk.map(() => "?").join(",");
+        const [histRows] = await pool.query(
+          `SELECT id, reminder_id, channel, recipient, message_text, status, sent_at
+           FROM service_reminder_history
+           WHERE business_id = ? AND reminder_id IN (${placeholders})
+           ORDER BY sent_at DESC`,
+          [businessId, ...chunk]
+        );
 
-      for (const h of histRows) {
-        if (!historyMap.has(h.reminder_id)) {
-          historyMap.set(h.reminder_id, []);
+        for (const h of histRows) {
+          if (!historyMap.has(h.reminder_id)) {
+            historyMap.set(h.reminder_id, []);
+          }
+          historyMap.get(h.reminder_id).push({
+            id: h.id,
+            channel: h.channel,
+            recipient: h.recipient,
+            messageText: h.message_text,
+            message: h.message_text,
+            status: h.status,
+            sentAt: h.sent_at,
+            at: h.sent_at,
+            timestamp: h.sent_at,
+          });
         }
-        historyMap.get(h.reminder_id).push({
-          id: h.id,
-          channel: h.channel,
-          recipient: h.recipient,
-          message: h.message_text,
-          status: h.status,
-          sentAt: h.sent_at,
-          at: h.sent_at,
-          timestamp: h.sent_at,
-        });
       }
     }
 
@@ -113,11 +125,11 @@ router.get("/", async (req, res) => {
       success: true,
       data: reminders,
       pagination: {
-        page,
-        limit,
+        page: isAll ? 1 : page,
+        limit: isAll ? total : limit,
         total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasMore: offset + rows.length < total,
+        totalPages: isAll ? 1 : (Math.ceil(total / limit) || 1),
+        hasMore: isAll ? false : (offset + rows.length < total),
       },
     });
   } catch (err) {

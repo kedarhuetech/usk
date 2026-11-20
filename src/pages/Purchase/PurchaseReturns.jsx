@@ -461,31 +461,7 @@ export default function PurchaseReturns() {
             />
           </div>
 
-          {/* ALL FIRMS dropdown */}
-          <div className="relative">
-            <select
-              value={firmFilter}
-              onChange={(e) => setFirmFilter(e.target.value)}
-              className="appearance-none bg-white border border-gray-300 rounded px-3 py-1.5 pr-7 text-xs font-medium text-gray-700 cursor-pointer focus:outline-none focus:border-blue-500 h-[30px]"
-            >
-              <option value="ALL FIRMS">ALL FIRMS</option>
-              <option value="Sai Kirana Stores">Sai Kirana Stores</option>
-            </select>
-            <FiChevronDown className="absolute right-2 top-2.5 pointer-events-none text-gray-500 text-xs" />
-          </div>
 
-          {/* ALL USERS dropdown */}
-          <div className="relative">
-            <select
-              value={userFilter}
-              onChange={(e) => setUserFilter(e.target.value)}
-              className="appearance-none bg-white border border-gray-300 rounded px-3 py-1.5 pr-7 text-xs font-medium text-gray-700 cursor-pointer focus:outline-none focus:border-blue-500 h-[30px]"
-            >
-              <option value="ALL USERS">ALL USERS</option>
-              <option value="Admin">Admin</option>
-            </select>
-            <FiChevronDown className="absolute right-2 top-2.5 pointer-events-none text-gray-500 text-xs" />
-          </div>
         </div>
 
         {/* Action icons on right */}

@@ -329,18 +329,6 @@ export default function CashFlowReport() {
             />
           </div>
 
-          {/* Firms select */}
-          <div className="relative">
-            <select
-              value={firm}
-              onChange={(e) => setFirm(e.target.value)}
-              className="appearance-none rounded-md border border-gray-200 bg-white px-3 py-1.5 pr-7 text-xs font-semibold text-gray-700 outline-none cursor-pointer hover:bg-slate-50"
-            >
-              <option>ALL FIRMS</option>
-              <option>Sai Kirana Stores</option>
-            </select>
-            <FiChevronDown className="absolute right-2 top-2.5 h-3.5 w-3.5 pointer-events-none text-gray-500" />
-          </div>
 
           {/* Account Filter (Explicitly separated or combined) */}
           <div className="relative">

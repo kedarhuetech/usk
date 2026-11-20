@@ -1,24 +1,78 @@
-import { businessGrowthApi } from "./apiClient.js";
+import { apiRequest } from "./apiClient.js";
 
 export const BANK_ACCOUNTS_RESOURCE = "bank-accounts";
 export const BANK_TRANSACTIONS_RESOURCE = "bank-transactions";
 
-export function listBankAccounts() {
-  return businessGrowthApi.list(BANK_ACCOUNTS_RESOURCE);
+/**
+ * Lists all bank accounts for the active company using the relational MySQL backend.
+ * Zero fallback to localStorage or stale cache.
+ * @returns {Promise<Array>}
+ */
+export async function listBankAccounts() {
+  const result = await apiRequest("/bank-accounts");
+  return Array.isArray(result) ? result : (result?.data || []);
 }
 
-export function listBankTransactions() {
-  return businessGrowthApi.list(BANK_TRANSACTIONS_RESOURCE);
+/**
+ * Lists all bank transactions for the active company using the relational MySQL backend.
+ * Zero fallback to localStorage or stale cache.
+ * @param {string} [accountId] - Optional filter for a specific bank account.
+ * @returns {Promise<Array>}
+ */
+export async function listBankTransactions(accountId) {
+  const query = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
+  const result = await apiRequest(`/bank-accounts/transactions${query}`);
+  return Array.isArray(result) ? result : (result?.data || []);
 }
 
-export function saveBankAccount(account) {
-  const storedAccount = { ...account };
-  delete storedAccount.currentBalance;
-  return businessGrowthApi.save(BANK_ACCOUNTS_RESOURCE, storedAccount);
+/**
+ * Creates or updates a bank account via the relational MySQL backend.
+ * Safely preserves the account's existing book balance in MySQL.
+ * @param {Object} account
+ * @returns {Promise<Object>}
+ */
+export async function saveBankAccount(account) {
+  const payload = { ...account };
+  if (payload.accountNumber) {
+    payload.accountNumber = String(payload.accountNumber).replace(/\s/g, "");
+  }
+  if (payload.ifsc) {
+    payload.ifsc = String(payload.ifsc).trim().toUpperCase();
+  }
+  const result = await apiRequest("/bank-accounts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return result?.data ?? result;
 }
 
-export function saveBankTransaction(transaction) {
-  return businessGrowthApi.save(BANK_TRANSACTIONS_RESOURCE, transaction);
+/**
+ * Records an append-only bank transaction in MySQL and recalculates book balance atomically.
+ * @param {Object} transaction
+ * @returns {Promise<Object>}
+ */
+export async function saveBankTransaction(transaction) {
+  const payload = { ...transaction };
+  if (payload.amount !== undefined) {
+    payload.amount = Number(payload.amount);
+  }
+  const result = await apiRequest("/bank-accounts/transactions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return result?.data ?? result;
+}
+
+/**
+ * Safely deletes a bank account in MySQL (if zero transactions exist).
+ * @param {string} id
+ * @returns {Promise<Object>}
+ */
+export async function deleteBankAccount(id) {
+  const result = await apiRequest(`/bank-accounts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  return result?.data ?? result;
 }
 
 function asPaise(value) {
@@ -27,6 +81,14 @@ function asPaise(value) {
 }
 
 export function calculateBankBalances(accounts = [], transactions = []) {
+  if (!transactions || transactions.length === 0) {
+    return accounts.map((account) => ({
+      ...account,
+      currentBalance: Number.isFinite(Number(account.currentBalance))
+        ? Number(account.currentBalance)
+        : (Number(account.openingBalance) || 0),
+    }));
+  }
   const totals = new Map(accounts.map((account) => [account.id, asPaise(account.openingBalance)]));
   for (const transaction of transactions) {
     const amount = asPaise(transaction.amount);

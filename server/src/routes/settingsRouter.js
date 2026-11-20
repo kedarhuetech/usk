@@ -8,12 +8,26 @@
 
 import { Router } from "express";
 import crypto from "node:crypto";
+import multer from "multer";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
 
 const router = Router();
 
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, done) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (allowed.includes(file.mimetype)) {
+      done(null, true);
+    } else {
+      done(new Error("Only JPG, PNG, WEBP, and GIF images are accepted."));
+    }
+  },
+});
+
 /**
- * Safely persists a Base64 data URL into business_growth_assets
+ * Safely persists a Base64 data URL into company_profile_assets
  * and returns the persistent asset reference URL.
  */
 async function persistBase64Asset(val, entityType, businessId) {
@@ -30,11 +44,11 @@ async function persistBase64Asset(val, entityType, businessId) {
     const ext = mimeType.split("/")[1] || "png";
     const filename = `${entityType}-${Date.now()}.${ext}`;
     await pool.execute(
-      `INSERT INTO business_growth_assets (id, business_id, entity_type, entity_id, original_filename, mime_type, size_bytes, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, businessId, entityType, entityType, filename, mimeType, buffer.length, buffer]
+      `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, businessId, entityType, filename, mimeType, buffer.length, buffer]
     );
-    return `/api/business-growth/assets/${id}?businessId=${encodeURIComponent(businessId)}`;
+    return `/api/settings/company-profile/assets/${id}?businessId=${encodeURIComponent(businessId)}`;
   } catch (err) {
     console.error(`Failed to persist Base64 asset (${entityType}):`, err.message);
     return null;
@@ -99,6 +113,104 @@ router.post("/", async (req, res) => {
 });
 
 /**
+ * POST /api/settings/company-profile/assets
+ * Uploads a company logo or signature image directly into company_profile_assets
+ */
+router.post(
+  "/company-profile/assets",
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ success: false, message: "Image must be 10 MB or smaller." });
+        }
+        return res.status(400).json({ success: false, message: err.message || "File upload error." });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const businessId = businessIdFromRequest(req);
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "A JPG, PNG, WEBP, or GIF image is required." });
+      }
+      const id = crypto.randomUUID();
+      const assetType = String(req.body.assetType || req.body.entityType || "company-logo").slice(0, 32);
+      const originalFilename = (req.file.originalname || "").slice(0, 255);
+      const mimeType = req.file.mimetype || "application/octet-stream";
+      const sizeBytes = req.file.size;
+      const data = req.file.buffer;
+
+      await pool.execute(
+        `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, businessId, assetType, originalFilename, mimeType, sizeBytes, data]
+      );
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          id,
+          name: originalFilename,
+          mimeType,
+          size: sizeBytes,
+          url: `/api/settings/company-profile/assets/${id}`,
+        },
+      });
+    } catch (error) {
+      return res.status(error.status || 500).json({
+        success: false,
+        message: error.message || "Failed to upload company profile asset.",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/settings/company-profile/assets/:id
+ * Streams image binary from company_profile_assets with read fallback
+ */
+router.get("/company-profile/assets/:id", async (req, res) => {
+  try {
+    const businessId = req.query.businessId || req.get("x-business-id");
+    let rows;
+    if (businessId && businessId !== "local-development") {
+      [rows] = await pool.execute(
+        "SELECT mime_type, original_filename, size_bytes, data FROM company_profile_assets WHERE id = ? AND business_id = ?",
+        [req.params.id, businessId]
+      );
+    }
+    if (!rows || !rows.length) {
+      [rows] = await pool.execute(
+        "SELECT mime_type, original_filename, size_bytes, data FROM company_profile_assets WHERE id = ?",
+        [req.params.id]
+      );
+    }
+    // Backward-compatibility: If asset not found in company_profile_assets, read-only fallback to business_growth_assets
+    if (!rows || !rows.length) {
+      try {
+        [rows] = await pool.execute(
+          "SELECT mime_type, original_filename, size_bytes, data FROM business_growth_assets WHERE id = ?",
+          [req.params.id]
+        );
+      } catch {}
+    }
+    if (!rows || !rows.length) {
+      return res.status(404).json({ success: false, message: "Asset not found." });
+    }
+    const asset = rows[0];
+    return res
+      .type(asset.mime_type || "application/octet-stream")
+      .set("Content-Length", String(asset.size_bytes || asset.data?.length || 0))
+      .set("Cache-Control", "private, max-age=86400")
+      .send(asset.data);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
  * GET /api/settings/company-profile
  * Fetches company profile with pure relational columns
  */
@@ -157,7 +269,9 @@ router.get("/company-profile", async (req, res) => {
     const row = rows[0];
     const normalizeUrl = (url) => {
       if (!url || typeof url !== "string") return "";
-      return url.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
+      let res = url.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
+      res = res.replace(/\/api\/business-growth\/assets\//g, "/api/settings/company-profile/assets/");
+      return res;
     };
 
     return res.json({
@@ -344,6 +458,7 @@ router.post("/company-profile", async (req, res) => {
     }
     if (signatureUrl && typeof signatureUrl === "string") {
       signatureUrl = signatureUrl.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
+      signatureUrl = signatureUrl.replace(/\/api\/business-growth\/assets\//g, "/api/settings/company-profile/assets/");
     }
 
     // Logo resolution (supports aliases, explicit clear, Base64 persistence, or omission preservation)
@@ -366,6 +481,7 @@ router.post("/company-profile", async (req, res) => {
     }
     if (logoUrl && typeof logoUrl === "string") {
       logoUrl = logoUrl.replace(/([?&]businessId=)local-development\b/g, `$1${encodeURIComponent(businessId)}`);
+      logoUrl = logoUrl.replace(/\/api\/business-growth\/assets\//g, "/api/settings/company-profile/assets/");
     }
 
     const termsAndConditions = resolveField(["termsAndConditions"], existing?.terms_and_conditions);

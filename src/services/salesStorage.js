@@ -411,7 +411,7 @@ export function saveSaleInvoice(invoice, options = {}) {
 }
 
 // Deletes sale invoice.
-export function deleteSaleInvoice(invoiceId) {
+export function deleteSaleInvoice(invoiceId, options = {}) {
   if (!canUseStorage()) return;
   const beforeItems = window.localStorage.getItem(inventoryItemsStorageKey);
   const beforeMovements = window.localStorage.getItem(batchMovementStorageKey);
@@ -440,7 +440,7 @@ export function deleteSaleInvoice(invoiceId) {
     throw error;
   }
   notifyBusinessDataChanged();
-  if (isDatabaseMode() && invoiceId) {
+  if (isDatabaseMode() && !options?.skipRemoteSync && invoiceId) {
     transactionsDb.remove(invoiceId).catch((err) => console.warn("[MySQL] Background sale delete notice:", err.message));
   }
   recordAuditTrail({

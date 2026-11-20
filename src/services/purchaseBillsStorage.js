@@ -33,7 +33,7 @@ export function getPurchaseBills() {
   return readBills().map(normalizeBill);
 }
 
-export function savePurchaseBill(value) {
+export function savePurchaseBill(value, options = {}) {
   const before = canUseStorage() ? [PURCHASE_BILLS_KEY, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)]) : [];
   try {
     let bill = normalizeBill({ ...value, updatedAt: new Date().toISOString() });
@@ -67,7 +67,7 @@ export function savePurchaseBill(value) {
     const next = [bill, ...currentBills.filter((entry) => entry.id !== bill.id && entry.invoiceId !== bill.invoiceId)];
     if (canUseStorage()) writeTransactionCollection(PURCHASE_BILLS_KEY, next);
     notifyBusinessDataChanged();
-    if (isDatabaseMode()) {
+    if (isDatabaseMode() && !options?.skipRemoteSync) {
       transactionsDb.save({
         ...bill,
         transactionType: "purchase",
@@ -85,6 +85,34 @@ export function savePurchaseBill(value) {
       else window.localStorage.setItem(key, stored);
     }
     throw error;
+  }
+}
+
+export function deletePurchaseBill(billId, options = {}) {
+  if (!canUseStorage()) return;
+  const before = [PURCHASE_BILLS_KEY, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)]);
+  const currentBills = readBills();
+  const target = currentBills.find((b) => b.id === billId || b.invoiceId === billId);
+  try {
+    if (target && target.batchStockAdjustedAt && !target.batchStockRestoredAt) {
+      if (target.batchMovementId) reverseBatchMovement(target.batchMovementId, "purchase");
+      else applyBatchRowsToInventory(target.batchAllocationRows || target.rows || [], "reduce");
+    }
+    if (target && target.stockAdjustedAt) {
+      applyPurchaseBillStockUpdate(target, "reduce");
+    }
+    const next = currentBills.filter((b) => b.id !== billId && b.invoiceId !== billId);
+    writeTransactionCollection(PURCHASE_BILLS_KEY, next);
+  } catch (error) {
+    for (const [key, stored] of before) {
+      if (stored === null) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, stored);
+    }
+    throw error;
+  }
+  notifyBusinessDataChanged();
+  if (!options?.skipRemoteSync && isDatabaseMode() && billId) {
+    transactionsDb.remove(billId).catch((err) => console.warn("[MySQL] Background purchase delete notice:", err.message));
   }
 }
 

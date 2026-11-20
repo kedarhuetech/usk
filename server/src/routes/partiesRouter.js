@@ -90,8 +90,12 @@ router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
-    const offset = (page - 1) * limit;
+    const limitParam = req.query.limit;
+    const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
+    const limit = isAll
+      ? 100000
+      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+    const offset = isAll ? 0 : (page - 1) * limit;
     const type = (req.query.type || "").trim().toLowerCase();
     const search = (req.query.search || "").trim();
 
@@ -118,29 +122,33 @@ router.get("/", async (req, res) => {
     );
     const total = countRows[0]?.total || 0;
 
-    // Query 2: Fetch paginated slice of parties (pure columns)
-    const [rows] = await pool.query(
-      `SELECT id, business_id, party_name, phone, email, gstin, pan,
+    // Query 2: Fetch parties (pure columns)
+    let querySql = `SELECT id, business_id, party_name, phone, email, gstin, pan,
               party_type, opening_balance, current_balance, balance_type,
               credit_limit, billing_street, billing_city, billing_state,
               billing_pincode, shipping_street, shipping_city, shipping_state,
               shipping_pincode, is_active, created_at, updated_at
        FROM parties
        WHERE ${whereClause}
-       ORDER BY party_name ASC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+       ORDER BY party_name ASC`;
+    let queryParams = [...params];
+
+    if (!isAll) {
+      querySql += " LIMIT ? OFFSET ?";
+      queryParams.push(limit, offset);
+    }
+
+    const [rows] = await pool.query(querySql, queryParams);
 
     return res.json({
       success: true,
       data: rows.map(mapPartyRow),
       pagination: {
-        page,
-        limit,
+        page: isAll ? 1 : page,
+        limit: isAll ? total : limit,
         total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasMore: offset + rows.length < total,
+        totalPages: isAll ? 1 : (Math.ceil(total / limit) || 1),
+        hasMore: isAll ? false : (offset + rows.length < total),
       },
     });
   } catch (err) {
