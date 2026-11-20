@@ -1810,6 +1810,14 @@ export default function PointOfSale() {
       {/* PROPER POPUP MODALS WITH RICH UI (ZERO PROMPT / ALERT DIALOGS) */}
       {/* ============================================================== */}
 
+      {/* Barcode Scanner Modal */}
+      {barcodeModal && (
+        <BarcodeScanModal
+          onClose={() => setBarcodeModal(false)}
+          onScan={handleBarcodeScan}
+        />
+      )}
+
       {modal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
