@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   FiAlertCircle,
   FiCalendar,
+  FiCamera,
   FiCheck,
   FiChevronDown,
   FiChevronRight,
@@ -34,6 +35,7 @@ import {
   loadBusinessParties,
 } from "../../services/businessRecords";
 import AddItem from "../Items/AddItem";
+import BarcodeScanModal from "../../components/items/BarcodeScanModal";
 import {
   addPosBill,
   closePosBill,
@@ -513,6 +515,7 @@ export default function PointOfSale() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [productOpen, setProductOpen] = useState(false);
+  const [barcodeModal, setBarcodeModal] = useState(false);
 
   // Modal State Management
   const [modal, setModal] = useState(null); // { type: string, data?: any }
@@ -602,17 +605,14 @@ export default function PointOfSale() {
   // Filter products for search
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return products.filter((product) => product.isActive !== false).slice(0, 10);
-
-    return products
-      .filter((product) => {
-        if (product.isActive === false) return false;
-        const matchFields = [product.name, product.code, product.id];
-        if (enableBarcodeScanning) matchFields.push(product.barcode);
-        if (enableItemCategory) matchFields.push(product.category);
-        return matchFields.some((val) => String(val || "").toLowerCase().includes(query));
-      })
-      .slice(0, 12);
+    const active = products.filter((product) => product.isActive !== false);
+    if (!query) return active;
+    return active.filter((product) => {
+      const matchFields = [product.name, product.code];
+      if (enableBarcodeScanning) matchFields.push(product.barcode);
+      if (enableItemCategory && product.category) matchFields.push(product.category);
+      return matchFields.some((value) => String(value || "").toLowerCase().includes(query));
+    });
   }, [products, search, enableBarcodeScanning, enableItemCategory]);
 
   // Filter customers for dropdown
@@ -634,6 +634,31 @@ export default function PointOfSale() {
     }
     return draft.items.find((item) => item.lineId === selectedId) || null;
   }, [draft.items, selectedId]);
+
+  function handleBarcodeScan(scannedCode) {
+    const code = String(scannedCode || "").trim();
+    if (!code) return;
+    setBarcodeModal(false);
+
+    const matched = products.find((product) => {
+      if (product.isActive === false) return false;
+      const fields = [product.barcode, product.code];
+      return fields.some((val) => String(val || "").trim().toLowerCase() === code.toLowerCase());
+    });
+
+    if (matched) {
+      addProduct(matched);
+      showToast(`Scanned & added "${matched.name}" to bill!`);
+    } else {
+      setModal({
+        type: "addProduct",
+        name: "",
+        code,
+        barcode: code,
+      });
+      showToast(`Barcode "${code}" not found. Add it as a new item now.`, "info");
+    }
+  }
 
   // Add product to bill
   function addProduct(product) {
@@ -1208,9 +1233,24 @@ export default function PointOfSale() {
                     type="button"
                     onClick={() => setSearch("")}
                     aria-label="Clear search"
-                    className="rounded p-0.5 text-slate-400 hover:text-slate-600"
+                    className="rounded p-0.5 text-slate-400 hover:text-slate-600 mr-1"
                   >
                     <FiX size={13} />
+                  </button>
+                )}
+                {enableBarcodeScanning && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setBarcodeModal(true);
+                    }}
+                    title="Scan Barcode (Camera / USB Scanner)"
+                    className="flex shrink-0 items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition mr-1"
+                  >
+                    <FiCamera size={13} />
+                    <span>Scan</span>
                   </button>
                 )}
                 <FiSearch size={16} className="shrink-0 text-blue-500" />
@@ -1218,9 +1258,9 @@ export default function PointOfSale() {
 
               {/* Product Dropdown Results */}
               {productOpen && (
-                <div className="absolute left-0 right-0 top-full z-20 max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                <div className="absolute left-0 right-0 top-full z-20 max-h-80 overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl">
                   <div className="bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 border-b">
-                    All Items ({products.length})
+                    All Items ({filteredProducts.length})
                   </div>
                   {filteredProducts.map((product) => (
                     <button
@@ -2507,6 +2547,8 @@ export default function PointOfSale() {
                 initialItem={{
                   itemName: modal.name || "",
                   salePrice: modal.price || "",
+                  barcode: modal.barcode || "",
+                  itemCode: modal.code || "",
                 }}
                 onClose={() => setModal(null)}
                 onSave={async (itemPayload) => {
