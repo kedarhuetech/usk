@@ -26,7 +26,14 @@ import {
 } from "../../services/itemsStorage";
 import { getParties, saveParty, partiesStorageKey } from "../../services/partiesStorage";
 import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey } from "../../services/salesStorage";
-import { saveBusinessSaleInvoice } from "../../services/businessRecords";
+import {
+  saveBusinessSaleInvoice,
+  saveBusinessItem,
+  loadBusinessItems,
+  saveBusinessParty,
+  loadBusinessParties,
+} from "../../services/businessRecords";
+import AddItem from "../Items/AddItem";
 import {
   addPosBill,
   closePosBill,
@@ -523,15 +530,46 @@ export default function PointOfSale() {
     toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // Sync with storage changes
+  // Sync with storage & database changes
   useEffect(() => {
-    const handleStorageChange = () => {
+    let mounted = true;
+    async function syncFromDb() {
+      try {
+        const [items, parties] = await Promise.all([
+          loadBusinessItems(),
+          loadBusinessParties(),
+        ]);
+        if (!mounted) return;
+        if (Array.isArray(items)) {
+          setProducts(loadProducts());
+        }
+        if (Array.isArray(parties)) {
+          setCustomers(loadCustomers());
+        }
+      } catch (err) {
+        console.warn("POS syncFromDb fallback:", err);
+      }
+    }
+    syncFromDb();
+
+    const handleDataChanged = () => {
       setProducts(loadProducts());
       setCustomers(loadCustomers());
       setStorageError(validatePosStorage());
     };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+
+    window.addEventListener("storage", handleDataChanged);
+    window.addEventListener("inventory-items-changed", handleDataChanged);
+    window.addEventListener("parties-changed", handleDataChanged);
+    window.addEventListener("ledgerly:business-data-changed", handleDataChanged);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", handleDataChanged);
+      window.removeEventListener("inventory-items-changed", handleDataChanged);
+      window.removeEventListener("parties-changed", handleDataChanged);
+      window.removeEventListener("ledgerly:business-data-changed", handleDataChanged);
+    };
   }, [loadProducts, loadCustomers]);
 
   useEffect(() => {
@@ -609,7 +647,7 @@ export default function PointOfSale() {
     }
     const existing = draft.items.find((item) => item.productId === product.id);
     const requestedQuantity = Number(existing?.qty || 0) + 1;
-    if (product.type !== "service" && requestedQuantity > Number(product.stock || 0)) {
+    if (appSettings.stopSaleOnNegativeStock && product.type !== "service" && requestedQuantity > Number(product.stock || 0)) {
       showToast(`Only ${Number(product.stock || 0)} ${product.unit || "unit(s)"} available.`, "warning");
       return;
     }
@@ -859,7 +897,7 @@ export default function PointOfSale() {
       const quantityInBill = calculations.lines
         .filter((entry) => entry.productId === line.productId)
         .reduce((sum, entry) => sum + entry.qty, 0);
-      if ((product.type || product.itemType) !== "service" && quantityInBill > stock) {
+      if (appSettings.stopSaleOnNegativeStock && (product.type || product.itemType) !== "service" && quantityInBill > stock) {
         showToast(`Insufficient stock for ${line.name}. Available: ${stock}.`, "warning");
         return;
       }
@@ -1182,7 +1220,7 @@ export default function PointOfSale() {
               {productOpen && (
                 <div className="absolute left-0 right-0 top-full z-20 max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
                   <div className="bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 border-b">
-                    Stored Items in LocalStorage ({products.length} total)
+                    All Items ({products.length})
                   </div>
                   {filteredProducts.map((product) => (
                     <button
@@ -1207,7 +1245,7 @@ export default function PointOfSale() {
 
                   {filteredProducts.length === 0 && (
                     <div className="p-3 text-xs text-slate-500">
-                      No matching item found in local storage.
+                      No matching item found.
                       <button
                         type="button"
                         onClick={() => {
@@ -1224,7 +1262,7 @@ export default function PointOfSale() {
                         }}
                         className="ml-2 font-bold text-blue-600 hover:underline"
                       >
-                        + Add this item to LocalStorage
+                        + Add Item
                       </button>
                     </div>
                   )}
@@ -1755,7 +1793,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const qty = Number(modal.qty);
                   const product = products.find((entry) => entry.id === modal.item.productId);
@@ -1763,7 +1801,7 @@ export default function PointOfSale() {
                     showToast("Quantity must be greater than zero.", "warning");
                     return;
                   }
-                  if (product && product.type !== "service" && qty > Number(product.stock || 0)) {
+                  if (appSettings.stopSaleOnNegativeStock && product && product.type !== "service" && qty > Number(product.stock || 0)) {
                     showToast(`Only ${Number(product.stock || 0)} ${product.unit || "unit(s)"} available.`, "warning");
                     return;
                   }
@@ -1875,7 +1913,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const rawVal = Number(modal.discountValue) || 0;
                   const maxAllowed = Number(modal.item.price) * Number(modal.item.qty);
@@ -1970,7 +2008,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   if (modal.unit?.trim()) {
                     updateItem(modal.item.lineId, { unit: modal.unit.trim() });
@@ -2089,7 +2127,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const val = Math.max(0, Number(modal.charges) || 0);
                   updateDraft({ additionalCharges: val });
@@ -2160,7 +2198,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const rawVal = Number(modal.discountValue) || 0;
                   let finalDiscount = rawVal;
@@ -2250,7 +2288,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const points = Math.max(0, Math.min(modal.availablePoints, Number(modal.pointsToRedeem) || 0));
                   updateDraft({ loyaltyPointsRedeemed: points });
@@ -2316,7 +2354,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   updateDraft({ remarks: modal.remarks });
                   showToast("Remarks saved for this bill");
@@ -2362,7 +2400,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiUser className="text-blue-600" /> Add Customer to LocalStorage
+                  <FiUser className="text-blue-600" /> Add New Customer
                 </h3>
                 <button
                   type="button"
@@ -2373,7 +2411,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   if (!modal.name?.trim()) return;
                   const newCust = {
@@ -2385,14 +2423,14 @@ export default function PointOfSale() {
                     address: modal.address?.trim() || "",
                   };
                   try {
-                    saveParty(newCust);
+                    await saveBusinessParty(newCust);
                   } catch (error) {
-                    showToast(`Could not save customer: ${error.message || "Storage write failed."}`, "warning");
+                    showToast(`Could not save customer: ${error.message || "Save failed."}`, "warning");
                     return;
                   }
                   setCustomers((current) => [...current, newCust]);
                   updateDraft({ customer: newCust.name, customerPhone: newCust.phone });
-                  showToast(`Saved customer "${newCust.name}" to local storage!`);
+                  showToast(`Saved customer "${newCust.name}"!`);
                   setModal(null);
                 }}
                 className="p-5 space-y-3.5"
@@ -2457,170 +2495,49 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* 10. Add Custom Product to Inventory Modal */}
+          {/* 10. Add Item Modal (Integrated from Items Section) */}
           {modal.type === "addProduct" && (
-            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-              <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiPlus className="text-blue-600" /> Add Product to LocalStorage Inventory
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setModal(null)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-200"
-                >
-                  <FiX size={18} />
-                </button>
-              </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!modal.name?.trim()) return;
-
-                  if (!Number.isFinite(Number(modal.price)) || Number(modal.price) < 0
-                    || !Number.isFinite(Number(modal.stock || 0)) || Number(modal.stock || 0) < 0) {
-                    showToast("Enter a valid price and stock quantity.", "warning");
-                    return;
-                  }
-                  const generatedCode = `ITM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-                  const newProduct = {
-                    id: `p-${crypto.randomUUID()}`,
-                    itemName: modal.name.trim(),
-                    name: modal.name.trim(),
-                    itemCode: modal.code?.trim() || generatedCode,
-                    code: modal.code?.trim() || generatedCode,
-                    salePrice: Number(modal.price) || 0,
-                    price: Number(modal.price) || 0,
-                    unit: modal.unit || "Pcs",
-                    taxRate: appSettings.enableGst === false ? "0%" : `${Number(modal.taxRate) || 0}%`,
-                    stock: Number(modal.stock) || 0,
-                  };
-
-                  try {
-                    saveInventoryItem(newProduct);
-                    setProducts((curr) => [...curr.filter((item) => item.id !== newProduct.id), newProduct]);
-                  } catch (error) {
-                    showToast(`Could not save product: ${error.message || "Storage write failed."}`, "warning");
-                    return;
-                  }
-                  addProduct(newProduct);
-                  showToast(`Saved "${newProduct.name}" to inventory & added to bill!`);
-                  setModal(null);
+            <div
+              className="w-full max-w-6xl max-h-[88vh] overflow-y-auto"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <AddItem
+                embedded
+                mode="add"
+                initialItem={{
+                  itemName: modal.name || "",
+                  salePrice: modal.price || "",
                 }}
-                className="p-5 space-y-3.5"
-              >
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Product Name*
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    placeholder="e.g. Masala Tea 250g"
-                    value={modal.name}
-                    onChange={(e) => setModal((m) => ({ ...m, name: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Selling Price (₹)*
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="any"
-                      placeholder="0.00"
-                      value={modal.price}
-                      onChange={(e) => setModal((m) => ({ ...m, price: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Unit
-                    </label>
-                    <select
-                      value={modal.unit}
-                      onChange={(e) => setModal((m) => ({ ...m, unit: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-blue-500"
-                    >
-                      <option>Pcs</option>
-                      <option>Kg</option>
-                      <option>Gm</option>
-                      <option>Litre</option>
-                      <option>Box</option>
-                      <option>Pack</option>
-                      <option>Dozen</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      {enableBarcodeScanning ? "Item Code / Barcode" : "Item Code"}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ITM-102"
-                      value={modal.code}
-                      onChange={(e) => setModal((m) => ({ ...m, code: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      GST Rate (%)
-                    </label>
-                    <select
-                      value={modal.taxRate}
-                      onChange={(e) => setModal((m) => ({ ...m, taxRate: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-blue-500"
-                    >
-                      <option value="0">0% (None)</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Opening Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="100"
-                    value={modal.stock}
-                    onChange={(e) => setModal((m) => ({ ...m, stock: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <button
-                    type="button"
-                    onClick={() => setModal(null)}
-                    className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 shadow-sm"
-                  >
-                    Save &amp; Add to Bill
-                  </button>
-                </div>
-              </form>
+                onClose={() => setModal(null)}
+                onSave={async (itemPayload) => {
+                  try {
+                    const saved = await saveBusinessItem(itemPayload);
+                    const normalized = {
+                      id: saved.id,
+                      isActive: saved.isActive !== false,
+                      code: saved.itemCode || saved.code || `ITM-${String(saved.id || "").slice(-4)}`,
+                      name: saved.itemName || saved.name || "Item",
+                      price: Number(saved.salePrice ?? saved.price ?? 0),
+                      taxRate: appSettings.enableGst === false ? 0 : Number(String(saved.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
+                      unit: saved.unit || saved.baseUnit || "Pcs",
+                      stock: Number(saved.currentStock ?? saved.stock ?? saved.openingQuantity ?? 0),
+                      discount: Number(saved.discount || 0),
+                      discountType: saved.discountType || "Percentage",
+                      category: saved.category || "",
+                      barcode: saved.barcode || saved.barCode || saved.itemBarcode || "",
+                      type: saved.type || saved.itemType || "product",
+                    };
+                    setProducts((curr) => [...curr.filter((p) => p.id !== normalized.id), normalized]);
+                    addProduct(normalized);
+                    showToast(`Saved "${normalized.name}" & added to bill!`);
+                    setModal(null);
+                    return saved;
+                  } catch (error) {
+                    showToast(`Could not save item: ${error.message || "Save failed"}`, "warning");
+                    throw error;
+                  }
+                }}
+              />
             </div>
           )}
 
@@ -2741,7 +2658,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   updateDraft({
                     paymentMode: modal.paymentMode,
@@ -2900,7 +2817,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiSettings className="text-blue-600" /> POS Settings &amp; LocalStorage
+                  <FiSettings className="text-blue-600" /> POS Settings &amp; Data
                 </h3>
                 <button
                   type="button"
@@ -2913,11 +2830,11 @@ export default function PointOfSale() {
               <div className="p-5 space-y-4 text-sm">
                 <div className="rounded-lg bg-slate-50 p-3.5 border border-slate-200 space-y-2">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600">Inventory Items (LocalStorage):</span>
+                    <span className="text-slate-600">Inventory Items:</span>
                     <strong className="text-slate-900">{products.length} items</strong>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600">Customers (LocalStorage):</span>
+                    <span className="text-slate-600">Customers:</span>
                     <strong className="text-slate-900">{customers.length} customers</strong>
                   </div>
                   <div className="flex justify-between text-xs">
