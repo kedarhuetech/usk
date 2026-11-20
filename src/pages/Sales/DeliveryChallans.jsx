@@ -4,6 +4,7 @@ import { FiArrowLeft, FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlu
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties } from "../../services/partiesStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
@@ -97,6 +98,7 @@ export default function DeliveryChallans() {
   const [filterPreset, setFilterPreset] = useState("This Month");
   const [fromDate, setFromDate] = useState(() => `${today().slice(0, 7)}-01`);
   const [toDate, setToDate] = useState(today);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const parties = useMemo(() => getParties(), []);
   const business = useMemo(() => getCompanyProfile(), []);
   const companyDisplayName = business.companyName || business.businessName || "Sai Kirana Stores";
@@ -212,6 +214,14 @@ export default function DeliveryChallans() {
     const showAmount = Boolean(appSettings.printAmountInDeliveryChallan);
     const totalQty = (challan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
 
+    const partyObj = parties.find(
+      (p) => (p.partyName || "").trim().toLowerCase() === (challan.party || "").trim().toLowerCase()
+    );
+    const partyBillingAddress = challan.billingAddress || partyObj?.billingAddress || partyObj?.address || "";
+    const partyShippingAddress = challan.shippingAddress || partyObj?.shippingAddress || "";
+    const partyPhone = challan.phone || partyObj?.phone || "";
+    const partyGstin = challan.gstin || partyObj?.gstin || "";
+
     const rows = (challan.rows || []).map((row) => ({
       item: row.item || "Item",
       hsn: row.hsn || row.sac || "—",
@@ -253,7 +263,10 @@ export default function DeliveryChallans() {
       dueDate: dateLabel(challan.dueDate),
       status: challan.status || "Open",
       partyName: challan.party || "",
-      partyPhone: challan.phone || "",
+      partyPhone,
+      partyBillingAddress,
+      partyShippingAddress,
+      partyGstin,
       columns,
       rows,
       totals,
@@ -371,7 +384,9 @@ export default function DeliveryChallans() {
         },
       });
     }
-    if (["Preview", "Open PDF", "Print"].includes(action)) setPreviewChallan(challan);
+    if (action === "Print") printChallan(challan, true);
+    if (action === "Open PDF") printChallan(challan, false);
+    if (action === "Preview") setPreviewChallan(challan);
   };
 
   return <main className="flex h-full min-h-0 flex-col gap-1.5 bg-slate-100 p-1.5 text-slate-700">
@@ -380,7 +395,7 @@ export default function DeliveryChallans() {
       <label className="relative text-lg font-semibold"> <select value={filterPreset} onChange={(event) => setFilterPreset(event.target.value)} className="appearance-none bg-transparent pr-7 outline-none">{["This Month", "Today", "All Time", "Custom"].map((preset) => <option key={preset}>{preset}</option>)}</select><FiChevronDown className="pointer-events-none absolute right-0 top-1.5" /></label>
       <span className="flex items-center gap-2 rounded border px-3 py-2 text-sm text-slate-600"><span className="bg-slate-400 px-2 py-1 font-semibold text-white">Between</span><FiCalendar /><input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="w-32 outline-none" />To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="w-32 outline-none" /></span>
       <select className="rounded border px-4 py-3 text-sm"><option>ALL FIRMS</option></select><select className="rounded border px-4 py-3 text-sm"><option>ALL USERS</option></select>
-      <div className="ml-auto flex gap-6"><button type="button" onClick={exportExcel} className="flex flex-col items-center gap-1 text-sm"><span className="text-2xl text-emerald-700">▦</span>Excel Report</button><button type="button" onClick={() => window.print()} className="flex flex-col items-center gap-1 text-sm"><FiPrinter className="text-2xl" />Print</button></div>
+      <div className="ml-auto flex gap-6"><button type="button" onClick={exportExcel} className="flex flex-col items-center gap-1 text-sm"><span className="text-2xl text-emerald-700">▦</span>Excel Report</button><button type="button" onClick={() => setPrintModalOpen(true)} className="flex flex-col items-center gap-1 text-sm"><FiPrinter className="text-2xl" />Print</button></div>
     </section>
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-4"><div className="flex flex-wrap items-center justify-between gap-3 py-2"><h2 className="text-lg font-semibold">TRANSACTIONS</h2><div className="flex flex-wrap items-center gap-3"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search challans" className="h-10 w-56 rounded border border-slate-300 pl-9 pr-3 outline-none" /></label><Button onClick={openBulkConvert} className="border border-rose-500 text-rose-600">Bulk Convert To Sale</Button><Button onClick={startNew} className="rounded-md bg-blue-600 text-white"><FiPlus /> Add Delivery Challan</Button></div></div>
       {filtered.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[950px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["DATE", "PARTY", "CHALLAN NO.", "DUE DATE", "TOTAL AMOUNT", "STATUS", "ACTION"].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-4">{heading}{heading !== "ACTION" && <FiFilter className="ml-2 inline" />}</th>)}</tr></thead><tbody>{filtered.map((challan) => <tr key={challan.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white"><td className="px-3 py-4">{dateLabel(challan.date)}</td><td className="px-3 py-4 font-medium">{challan.party}</td><td className="px-3 py-4">{challan.number}</td><td className="px-3 py-4">{dateLabel(challan.dueDate)} Due: {challan.dueDate === today() ? "Today" : "—"}</td><td className="px-3 py-4 text-right">{money(challan.total)}</td><td className={`px-3 py-4 ${challan.status === "Converted to Sale" ? "text-emerald-600" : "text-blue-600"}`}>{challan.status}</td><td className="relative px-3 py-2"><div className="flex items-center gap-2"><Button disabled={challan.status === "Converted to Sale"} onClick={() => convertOne(challan)} className="h-8 rounded-sm bg-slate-100 px-3 text-xs text-blue-600 shadow">Convert to Sale</Button><button aria-label="Challan actions" onClick={() => setMenuId(menuId === challan.id ? "" : challan.id)} className="p-2 text-slate-500"><FiMoreVertical /></button></div>{menuId === challan.id && <div className="absolute right-3 top-10 z-20 w-48 rounded-lg bg-white p-1 shadow-xl">{["View/Edit", "Delete", "Open PDF", "Preview", "Print"].map((action) => <button key={action} onClick={() => act(action, challan)} className="block w-full rounded px-3 py-2.5 text-left hover:bg-blue-50">{action}</button>)}</div>}</td></tr>)}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"><div className="mb-5 grid h-36 w-36 place-items-center rounded-full bg-blue-50 text-6xl text-sky-500">▤</div><h3 className="text-lg font-semibold">No Transactions to show</h3><p className="mt-2 text-slate-400">You haven't added any delivery challans yet.</p><Button onClick={startNew} className="mt-7 rounded-full bg-rose-600 px-6 py-3 text-base text-white"><FiPlus /> Add Delivery Challan</Button></div>}</Card>
@@ -553,6 +568,34 @@ export default function DeliveryChallans() {
         <div className="overflow-x-auto bg-white"><table className="w-full min-w-[1450px] border-collapse text-sm"><thead><tr className="h-14 bg-white text-center font-semibold">{["#", "ITEM", "DESCRIPTION", "SIZE", "QTY", "UNIT", "PRICE/UNIT", "DISCOUNT %", "DISCOUNT AMOUNT", "TAX %", "TAX AMOUNT", "ADD CESS", "AMOUNT"].map((heading) => <th key={heading} className="border border-slate-300 px-2">{heading}</th>)}</tr></thead><tbody>{editor.value.rows.map((row, index) => <tr key={row.id} className="h-14 odd:bg-slate-100 even:bg-slate-50"><td className="border px-3 text-center">{index + 1}</td><td className="border"><div className="relative h-full"><input value={row.item} onFocus={() => setOpenItemRow(row.id)} onChange={(event) => { changeRow(row.id, "item", event.target.value); setOpenItemRow(row.id); }} placeholder="Select item" className="h-full w-full bg-transparent px-3"/>{openItemRow === row.id && <div className="absolute left-0 top-full z-40 max-h-56 w-72 overflow-auto rounded border bg-white p-1 shadow-xl">{inventory.filter((item) => String(item.itemName || item.name).toLowerCase().includes(row.item.toLowerCase())).map((item) => <button type="button" key={item.id} onMouseDown={(event) => event.preventDefault()} onClick={() => { changeRow(row.id, "item", item.itemName || item.name); changeRow(row.id, "unit", item.unit || item.baseUnit || "NONE"); changeRow(row.id, "price", item.salePrice || item.price || ""); if (!row.qty) changeRow(row.id, "qty", "1"); setOpenItemRow(""); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">{item.itemName || item.name}</button>)}</div>}</div></td>{[["description", "text"], ["size", "text"], ["qty", "number"], ["unit", "text"], ["price", "number"], ["discount", "number"]].map(([key, type]) => <td key={key} className="border"><input type={type} value={row[key]} onChange={(event) => changeRow(row.id, key, event.target.value)} className="h-full w-full bg-transparent px-2 text-center"/></td>)}<td className="border text-right">{money(Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100)}</td><td className="border"><select value={row.tax} onChange={(event) => changeRow(row.id, "tax", event.target.value)} className="h-full w-full bg-transparent"><option value="NONE">Select</option>{[5, 12, 18, 28].map((rate) => <option key={rate} value={rate}>{rate}%</option>)}</select></td><td className="border text-right">{money(rowAmount(row) - rowAmount({ ...row, tax: 0, cess: 0 }))}</td><td className="border"><input type="number" value={row.cess} onChange={(event) => changeRow(row.id, "cess", event.target.value)} className="w-full px-2"/></td><td className="border px-2 text-right">{money(rowAmount(row))}</td></tr>)}</tbody><tfoot><tr className="h-14 font-semibold"><td className="border px-2"><button onClick={() => change("rows", [...editor.value.rows, freshRow()])} className="rounded border border-blue-400 px-3 py-2 text-blue-600">ADD ROW</button></td><td colSpan="3" className="border px-3 text-right">TOTAL</td><td className="border text-center">{editor.value.rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}</td><td colSpan="7" className="border"/><td className="border px-3 text-right">{money(subtotal)}</td></tr></tfoot></table></div>
         <section className="grid min-h-72 gap-6 px-7 py-8 lg:grid-cols-[1fr_1fr_1fr]"><button type="button" onClick={() => change("terms", "1. Goods once sold will not be taken back.\n2. Subject to local jurisdiction.")} className="h-14 rounded border text-slate-500 hover:text-blue-600 hover:border-blue-300">☷ ADD TERMS &amp; CONDITIONS</button><textarea value={editor.value.description} onChange={(event) => change("description", event.target.value)} placeholder="Description" className="h-24 rounded border bg-white p-3"/><div className="flex items-start justify-end gap-3"><label className="flex items-center gap-2"><input type="checkbox" defaultChecked/>Round Off</label><b className="pt-2">Total</b><div className="grid h-12 min-w-48 place-items-center rounded border bg-white font-bold">{money(Math.round(subtotal))}</div></div></section>
       </div><footer className="flex shrink-0 justify-end gap-3 border-t bg-white px-5 py-3"><Button onClick={() => printChallan({ ...editor.value, total: Math.round(subtotal) }, false)} className="border border-blue-300 text-blue-600">Share</Button><Button onClick={save} className="min-w-40 bg-blue-600 text-white">Save</Button></footer></div>}
+    <ReportPrintPreviewModal
+      isOpen={printModalOpen}
+      onClose={() => setPrintModalOpen(false)}
+      title="Delivery Challans Report"
+      dateFrom={fromDate}
+      dateTo={toDate}
+      user="All Users"
+      records={filtered.map((challan) => ({
+        ...challan,
+        date: challan.date,
+        invoiceNumber: challan.number,
+        customer: challan.party,
+        paymentType: "Delivery Challan",
+        totalAmount: challan.total,
+        receivedAmount: 0,
+        balanceAmount: challan.total,
+        status: challan.status,
+        form: {
+          invoiceNumber: challan.number,
+          customer: challan.party,
+          invoiceDate: challan.date,
+          paymentType: "Delivery Challan",
+        },
+        rows: challan.rows || [],
+      }))}
+      totalLabel="Total Challan Amount:"
+      totalAmount={filtered.reduce((sum, c) => sum + Number(c.total || 0), 0)}
+    />
     <ConfirmModal
       isOpen={confirmModal.isOpen}
       title={confirmModal.title}

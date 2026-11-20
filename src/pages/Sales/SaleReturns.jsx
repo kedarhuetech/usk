@@ -5,6 +5,7 @@ import { FiCalendar, FiMoreHorizontal, FiPlus, FiPrinter, FiSearch, FiX, FiEye }
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
@@ -394,6 +395,7 @@ export default function SaleReturns() {
   const [fromDate, setFromDate] = useState(`${today().slice(0, 7)}-01`);
   const [toDate, setToDate] = useState(today());
   const [datePreset, setDatePreset] = useState("This Month");
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [recordType, setRecordType] = useState("Credit Note");
   const displayedRecordType = recordType === "Sale Return" ? "Credit Note" : recordType;
   const [statusFilter, setStatusFilter] = useState("All statuses");
@@ -723,7 +725,7 @@ export default function SaleReturns() {
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
         <label className="relative w-full max-w-md"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search reference, party or transaction" className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm outline-none focus:border-blue-500"/></label>
-        <div className="flex items-center gap-2"><Button onClick={exportExcel} className="h-10 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">Export</Button><Button onClick={() => window.print()} className="h-10 rounded-lg border border-slate-300 px-3 text-sm text-slate-700"><FiPrinter/> Print list</Button></div>
+        <div className="flex items-center gap-2"><Button onClick={exportExcel} className="h-10 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">Export</Button><Button onClick={() => setPrintModalOpen(true)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm text-slate-700"><FiPrinter/> Print list</Button></div>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <table className="w-full min-w-[900px] border-collapse text-left text-sm">
@@ -738,6 +740,34 @@ export default function SaleReturns() {
     {editor && <CreditNoteEditor value={editor.value} mode={editor.mode} records={records} parties={allParties} invoices={allInvoices} onChange={(value) => setEditor((current) => ({ ...current, value }))} onClose={() => setEditor(null)} onSave={save}/>}
     {jobWorkEditor && <PurchaseJobWorkEditor initial={jobWorkEditor.id ? jobWorkEditor : null} parties={parties} items={inventoryItems} onClose={() => setJobWorkEditor(null)} onSave={() => setJobWorkEditor(null)}/>}
     {viewDetailModal && <ViewTransactionModal record={viewDetailModal} onClose={() => setViewDetailModal(null)}/>}
+    <ReportPrintPreviewModal
+      isOpen={printModalOpen}
+      onClose={() => setPrintModalOpen(false)}
+      title={`${displayedRecordType} Transactions Report`}
+      dateFrom={fromDate}
+      dateTo={toDate}
+      user="All Users"
+      records={visibleTransactions.map((record) => ({
+        ...record,
+        date: record.date,
+        invoiceNumber: record.number,
+        customer: record.party,
+        paymentType: record.type || displayedRecordType,
+        totalAmount: record.total,
+        receivedAmount: record.received,
+        balanceAmount: record.balance,
+        status: record.status,
+        form: {
+          invoiceNumber: record.number,
+          customer: record.party,
+          invoiceDate: record.date,
+          paymentType: record.type || displayedRecordType,
+        },
+        rows: record.rows || [],
+      }))}
+      totalLabel="Total Amount:"
+      totalAmount={totalSum}
+    />
     <ConfirmModal
       isOpen={confirmModal.isOpen}
       title={confirmModal.title}
