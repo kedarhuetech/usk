@@ -242,16 +242,44 @@ router.get("/cash-flow", async (req, res) => {
 router.get("/all-transactions", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
-    const [rows] = await pool.query(
-      `SELECT id, transaction_type, document_number, transaction_date, party_name,
+    const limitParam = req.query.limit;
+    const isAll = limitParam === "all" || req.query.all === "true" || !limitParam;
+    const limit = isAll
+      ? 100000
+      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 100));
+
+    const startDate = (req.query.startDate || "").trim();
+    const endDate = (req.query.endDate || "").trim();
+    const type = (req.query.type || "").trim();
+
+    const conditions = ["business_id = ?"];
+    const params = [businessId];
+
+    if (startDate) {
+      conditions.push("transaction_date >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("transaction_date <= ?");
+      params.push(endDate);
+    }
+    if (type && type !== "all") {
+      conditions.push("transaction_type = ?");
+      params.push(type);
+    }
+
+    let sql = `SELECT id, transaction_type, document_number, transaction_date, party_name,
               total_amount, paid_amount, balance_amount, payment_mode, payment_status
        FROM transactions
-       WHERE business_id = ?
-       ORDER BY transaction_date DESC, created_at DESC
-       LIMIT ?`,
-      [businessId, limit]
-    );
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY transaction_date DESC, created_at DESC`;
+
+    if (!isAll) {
+      sql += " LIMIT ?";
+      params.push(limit);
+    }
+
+    const [rows] = await pool.query(sql, params);
 
     return res.json({ success: true, count: rows.length, data: rows });
   } catch (err) {

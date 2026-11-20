@@ -21,10 +21,11 @@ router.get("/", async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limitParam = req.query.limit;
-    const limit = (limitParam === "all" || req.query.all === "true")
-      ? 10000
-      : Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 50));
-    const offset = (page - 1) * limit;
+    const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
+    const limit = isAll
+      ? 100000
+      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+    const offset = isAll ? 0 : (page - 1) * limit;
     const search = (req.query.search || "").trim();
     const category = (req.query.category || "").trim();
     const itemType = (req.query.type || req.query.item_type || "").trim();
@@ -68,48 +69,55 @@ router.get("/", async (req, res) => {
     );
     const total = countRows[0]?.total || 0;
 
-    // Query 2: Fetch paginated items slice
-    const [rows] = await pool.query(
-      `SELECT id, business_id, name, item_code, barcode, category, hsn_code, unit,
+    // Query 2: Fetch items
+    let querySql = `SELECT id, business_id, name, item_code, barcode, category, hsn_code, unit,
               item_type, sale_price, purchase_price, tax_rate, cess_rate,
               opening_stock, current_stock, min_stock, is_batch_tracked,
               is_serial_tracked, description, is_active, created_at, updated_at
        FROM inventory_items
        WHERE ${whereClause}
-       ORDER BY name ASC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+       ORDER BY name ASC`;
+    let queryParams = [...params];
+
+    if (!isAll) {
+      querySql += " LIMIT ? OFFSET ?";
+      queryParams.push(limit, offset);
+    }
+
+    const [rows] = await pool.query(querySql, queryParams);
 
     // Query 3: Fetch batches for these items from normalized item_batches table
     const itemIds = rows.map((r) => r.id);
     let batchesMap = new Map();
     if (itemIds.length > 0) {
-      const placeholders = itemIds.map(() => "?").join(",");
-      const [batchRows] = await pool.query(
-        `SELECT id, item_id, batch_no, mfg_date, exp_date, opening_qty,
-                current_qty, sale_price, purchase_price, mrp
-         FROM item_batches
-         WHERE business_id = ? AND item_id IN (${placeholders})
-         ORDER BY exp_date ASC, batch_no ASC`,
-        [businessId, ...itemIds]
-      );
+      for (let i = 0; i < itemIds.length; i += 500) {
+        const chunk = itemIds.slice(i, i + 500);
+        const placeholders = chunk.map(() => "?").join(",");
+        const [batchRows] = await pool.query(
+          `SELECT id, item_id, batch_no, mfg_date, exp_date, opening_qty,
+                  current_qty, sale_price, purchase_price, mrp
+           FROM item_batches
+           WHERE business_id = ? AND item_id IN (${placeholders})
+           ORDER BY exp_date ASC, batch_no ASC`,
+          [businessId, ...chunk]
+        );
 
-      for (const b of batchRows) {
-        if (!batchesMap.has(b.item_id)) {
-          batchesMap.set(b.item_id, []);
+        for (const b of batchRows) {
+          if (!batchesMap.has(b.item_id)) {
+            batchesMap.set(b.item_id, []);
+          }
+          batchesMap.get(b.item_id).push({
+            id: b.id,
+            batchNo: b.batch_no,
+            mfgDate: b.mfg_date,
+            expDate: b.exp_date,
+            openingQty: parseFloat(b.opening_qty) || 0,
+            currentQty: parseFloat(b.current_qty) || 0,
+            salePrice: parseFloat(b.sale_price) || 0,
+            purchasePrice: parseFloat(b.purchase_price) || 0,
+            mrp: parseFloat(b.mrp) || 0,
+          });
         }
-        batchesMap.get(b.item_id).push({
-          id: b.id,
-          batchNo: b.batch_no,
-          mfgDate: b.mfg_date,
-          expDate: b.exp_date,
-          openingQty: parseFloat(b.opening_qty) || 0,
-          currentQty: parseFloat(b.current_qty) || 0,
-          salePrice: parseFloat(b.sale_price) || 0,
-          purchasePrice: parseFloat(b.purchase_price) || 0,
-          mrp: parseFloat(b.mrp) || 0,
-        });
       }
     }
 
@@ -146,11 +154,11 @@ router.get("/", async (req, res) => {
       success: true,
       data: items,
       pagination: {
-        page,
-        limit,
+        page: isAll ? 1 : page,
+        limit: isAll ? total : limit,
         total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasMore: offset + rows.length < total,
+        totalPages: isAll ? 1 : (Math.ceil(total / limit) || 1),
+        hasMore: isAll ? false : (offset + rows.length < total),
       },
     });
   } catch (err) {

@@ -4,7 +4,8 @@ import { FiAlertCircle, FiCheckCircle, FiSearch, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { units, taxModes, taxOptions, discountTypes } from "../../constants/itemsData";
-import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
+import { getInventoryItems } from "../../services/itemsStorage";
+import { saveBusinessItem } from "../../services/businessRecords";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import { businessDataApi } from "../../services/apiClient.js";
@@ -129,19 +130,25 @@ function UpdateItemsInBulk() {
     setError("");
     setStatus("");
     const value = fieldValues[selectedField] ?? "";
-    const updated = selectedItems.map((item) => {
-      const next = saveInventoryItem(changedItem(item, selectedField, value));
-      try {
-        businessDataApi.save("items", next).catch(() => {});
-      } catch {}
-      return next;
-    });
-    setItems((current) => current.map((item) => updated.find((next) => next.id === item.id) || item));
-    notifyBusinessDataChanged();
-    setStatus(`Updated ${updated.length} item${updated.length === 1 ? "" : "s"} and synchronized with database.`);
-    setSelectedIds([]);
-    setStep("select");
-    setSaving(false);
+    try {
+      const updated = [];
+      for (const item of selectedItems) {
+        const saved = await saveBusinessItem(changedItem(item, selectedField, value));
+        try {
+          businessDataApi.save("items", saved).catch(() => {});
+        } catch {}
+        updated.push(saved);
+      }
+      setItems((current) => current.map((item) => updated.find((next) => next.id === item.id) || item));
+      notifyBusinessDataChanged();
+      setStatus(`Updated ${updated.length} item${updated.length === 1 ? "" : "s"} and synchronized with database.`);
+      setSelectedIds([]);
+      setStep("select");
+    } catch (err) {
+      setError(err.message || "Failed to update items.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (

@@ -1160,156 +1160,7 @@ function GeneralTab({
 // TRANSACTION TAB (Matches USK layout with 3 columns & modals)
 // -------------------------------------------------------------
 
-// Renders the PrefixDropdown component matching USK desktop layout
-function PrefixDropdown({ label, value, onChange, firmName = "sai kirana stores", docCode }) {
-  const [open, setOpen] = useState(false);
-  const [customText, setCustomText] = useState("");
-  const dropdownRef = useRef(null);
 
-  const firmInitials = (firmName || "SKS")
-    .split(" ")
-    .map((w) => w[0]?.toUpperCase())
-    .filter(Boolean)
-    .join("") || "SKS";
-
-  const currentYear = new Date().getFullYear();
-  const nextYearShort = String(currentYear + 1).slice(-2);
-  const fyFull = `${currentYear}-${nextYearShort}`;
-  const fyShort = `FY${String(currentYear).slice(-2)}-${nextYearShort}`;
-
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
-  const selectValue = (val) => {
-    onChange(val);
-    setOpen(false);
-  };
-
-  const handleAddCustom = () => {
-    if (customText.trim()) {
-      onChange(customText.trim());
-      setCustomText("");
-      setOpen(false);
-    }
-  };
-
-  return (
-    <div ref={dropdownRef} className="relative">
-      <label className="block text-[11px] font-medium text-slate-500 mb-1">{label}</label>
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-slate-300 bg-white px-2.5 text-xs text-slate-800 shadow-2xs hover:border-blue-400 focus:border-blue-500 focus:outline-none transition cursor-pointer"
-      >
-        <span className="font-semibold text-slate-800 truncate">{value || "None"}</span>
-        <FiChevronDown className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-
-      {open && (
-        <div className="absolute left-0 top-full mt-1 w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100">
-          {/* None option */}
-          <div
-            onClick={() => selectValue("None")}
-            className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition ${
-              (!value || value === "None") ? "bg-slate-100 font-bold text-slate-900" : "text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <span>None</span>
-          </div>
-
-          {/* 2026-27 (MOST USED) */}
-          <div
-            onClick={() => selectValue(fyFull)}
-            className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition ${
-              value === fyFull ? "bg-slate-100 font-bold text-slate-900" : "text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <span className="font-medium text-slate-800">{fyFull}</span>
-            <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 tracking-wider">
-              MOST USED
-            </span>
-          </div>
-
-          {/* FY26-27 (Financial Year) */}
-          <div
-            onClick={() => selectValue(fyShort)}
-            className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition ${
-              value === fyShort ? "bg-slate-100 font-bold text-slate-900" : "text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <span className="font-medium text-slate-800">{fyShort}</span>
-            <span className="text-[11px] text-slate-400">Financial Year</span>
-          </div>
-
-          {/* Doc code (e.g. INV) */}
-          {docCode && (
-            <div
-              onClick={() => selectValue(docCode.code)}
-              className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition ${
-                value === docCode.code ? "bg-slate-100 font-bold text-slate-900" : "text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              <span className="font-medium text-slate-800">{docCode.code}</span>
-              <span className="text-[11px] text-slate-400 truncate max-w-[130px]">{docCode.desc}</span>
-            </div>
-          )}
-
-          {/* Firm Initials (e.g. SKS) */}
-          <div
-            onClick={() => selectValue(firmInitials)}
-            className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs transition ${
-              value === firmInitials ? "bg-slate-100 font-bold text-slate-900" : "text-slate-700 hover:bg-slate-50"
-            }`}
-          >
-            <span className="font-medium text-slate-800">{firmInitials}</span>
-            <span className="text-[11px] text-slate-400">(Firm name initials)</span>
-          </div>
-
-          {/* Custom added prefix if not in defaults */}
-          {value && !["None", fyFull, fyShort, docCode?.code, firmInitials].includes(value) && (
-            <div
-              onClick={() => selectValue(value)}
-              className="flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-xs bg-slate-100 font-bold text-slate-900"
-            >
-              <span>{value}</span>
-              <span className="text-[10px] text-blue-600 font-semibold">(Custom)</span>
-            </div>
-          )}
-
-          {/* Input + ADD button */}
-          <div className="mt-2 border-t border-slate-100 pt-2 flex items-center gap-1.5 px-1">
-            <input
-              type="text"
-              value={customText}
-              onChange={(e) => setCustomText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddCustom();
-              }}
-              placeholder="Custom prefix..."
-              className="h-8 flex-1 rounded-md border border-slate-300 px-2 text-xs outline-none focus:border-blue-500 text-slate-800"
-            />
-            <button
-              type="button"
-              onClick={handleAddCustom}
-              className="h-8 rounded-md bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 cursor-pointer shadow-xs"
-            >
-              ADD
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function TransactionTab({ settings, update, updateMultiple }) {
   // Modal states
@@ -1334,8 +1185,6 @@ function TransactionTab({ settings, update, updateMultiple }) {
   const [countModal, setCountModal] = useState(false);
   const [countLabel, setCountLabel] = useState(settings.itemCountLabel || "Count");
 
-  const firmName = settings.firms?.[0]?.name || "sai kirana stores";
-
   const handleSaveTerms = () => {
     update("termsTitle", termsTitle);
     update("termsAndConditions", termsText);
@@ -1345,11 +1194,11 @@ function TransactionTab({ settings, update, updateMultiple }) {
 
   return (
     <div className="space-y-6">
-      {/* 3-Column Layout matching USK desktop layout */}
+      {/* 3-Column Layout: evenly balanced across 3 columns with no empty space */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* =========================================
-            COLUMN 1: Transaction Header & More Features
-            ========================================= */}
+        {/* ========================================================
+            COLUMN 1: Transaction Header, Taxes & Billing Type (~560px)
+            ======================================================== */}
         <div className="space-y-6">
           {/* Card: Transaction Header */}
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -1415,6 +1264,207 @@ function TransactionTab({ settings, update, updateMultiple }) {
             </div>
           </section>
 
+          {/* Card: Taxes, Discount & Totals */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              Taxes, Discount & Totals
+            </h3>
+
+            <div className="mt-4 space-y-4">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.transactionWiseTax || false}
+                  onChange={(e) => update("transactionWiseTax", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Transaction wise Tax
+                <InfoTooltip text="Apply overall tax percentage across invoice rather than per item." />
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.transactionWiseDiscount || false}
+                  onChange={(e) => update("transactionWiseDiscount", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Transaction wise Discount
+                <InfoTooltip text="Allow applying total invoice discount before tax." />
+              </label>
+
+              <div>
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={settings.roundOffTotal ?? true}
+                    onChange={(e) => update("roundOffTotal", e.target.checked)}
+                    className="h-4 w-4 rounded accent-blue-600"
+                  />
+                  Round Off Total
+                  <InfoTooltip text="Automatically round final invoice payable total." />
+                </label>
+
+                {settings.roundOffTotal !== false && (
+                  <div className="ml-6 mt-3 flex items-center gap-2 text-xs">
+                    <select
+                      value={settings.roundOffMode || "Nearest"}
+                      onChange={(e) => update("roundOffMode", e.target.value)}
+                      className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500"
+                    >
+                      <option value="Nearest">Nearest</option>
+                      <option value="Upward">Upward</option>
+                      <option value="Downward">Downward</option>
+                    </select>
+
+                    <span className="text-xs text-slate-500">To</span>
+
+                    <select
+                      value={settings.roundOffTo ?? 1}
+                      onChange={(e) => update("roundOffTo", Number(e.target.value))}
+                      className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500"
+                    >
+                      <option value="1">1</option>
+                      <option value="5">5</option>
+                      <option value="10">10</option>
+                      <option value="0.5">0.5</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Card: Billing Type */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              Billing Type
+            </h3>
+
+            <div className="mt-4 space-y-3">
+              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-semibold text-slate-700">
+                <input
+                  type="radio"
+                  name="billingType"
+                  value="Lite Sale"
+                  checked={settings.billingType === "Lite Sale"}
+                  onChange={() => update("billingType", "Lite Sale")}
+                  className="h-4 w-4 accent-blue-600"
+                />
+                Lite Sale
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-semibold text-slate-700">
+                <input
+                  type="radio"
+                  name="billingType"
+                  value="Full Sale"
+                  checked={settings.billingType !== "Lite Sale"}
+                  onChange={() => update("billingType", "Full Sale")}
+                  className="h-4 w-4 accent-blue-600"
+                />
+                Full Sale
+              </label>
+            </div>
+          </section>
+        </div>
+
+        {/* ========================================================
+            COLUMN 2: Items Table (~580px)
+            ======================================================== */}
+        <div className="space-y-6">
+          {/* Card: Items Table */}
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
+              Items Table
+            </h3>
+
+            <div className="mt-4 space-y-3.5">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.inclusiveTaxOnRate ?? true}
+                  onChange={(e) => update("inclusiveTaxOnRate", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Inclusive/Exclusive Tax on Rate(Price/Unit)
+                <InfoTooltip text="Toggle whether item rate entered already includes tax or is exclusive." />
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.displayPurchasePriceOfItems ?? true}
+                  onChange={(e) => update("displayPurchasePriceOfItems", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Display Purchase Price of Items
+                <InfoTooltip text="Show reference cost price when picking items to prevent under-pricing." />
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.showLast5SalePrice || false}
+                  onChange={(e) => update("showLast5SalePrice", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Show last 5 Sale Price of Items
+                <InfoTooltip text="View the 5 most recent sale prices charged to this customer." />
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.showLast5PurchasePrice || false}
+                  onChange={(e) => update("showLast5PurchasePrice", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Show last 5 Purchase Price of Items
+                <InfoTooltip text="View the 5 most recent purchase prices paid to suppliers." />
+              </label>
+
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={settings.enableFreeItemQuantity || false}
+                  onChange={(e) => update("enableFreeItemQuantity", e.target.checked)}
+                  className="h-4 w-4 rounded accent-blue-600"
+                />
+                Free Item Quantity
+                <InfoTooltip text="Add a separate Free Quantity column for promotional Buy-1-Get-1 schemes." />
+              </label>
+
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={settings.enableItemCount || false}
+                    onChange={(e) => update("enableItemCount", e.target.checked)}
+                    className="h-4 w-4 rounded accent-blue-600"
+                  />
+                  <span>{settings.itemCountLabel || "Count"}</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCountLabel(settings.itemCountLabel || "Count");
+                    setCountModal(true);
+                  }}
+                  className="text-[11px] text-blue-600 hover:underline"
+                >
+                  Change Text
+                </button>
+                <InfoTooltip text="Display distinct item count in bill summary footer." />
+              </div>
+            </div>
+          </section>
+        </div>
+
+        {/* ========================================================
+            COLUMN 3: More Transaction Features (~590px)
+            ======================================================== */}
+        <div className="space-y-6">
           {/* Card: More Transaction Features */}
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
@@ -1583,291 +1633,6 @@ function TransactionTab({ settings, update, updateMultiple }) {
                   <span className="text-slate-400">&gt;</span>
                 </button>
               </div>
-            </div>
-          </section>
-        </div>
-
-        {/* =========================================
-            COLUMN 2: Items Table & Transaction Prefixes
-            ========================================= */}
-        <div className="space-y-6">
-          {/* Card: Items Table */}
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-              Items Table
-            </h3>
-
-            <div className="mt-4 space-y-3.5">
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.inclusiveTaxOnRate ?? true}
-                  onChange={(e) => update("inclusiveTaxOnRate", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Inclusive/Exclusive Tax on Rate(Price/Unit)
-                <InfoTooltip text="Toggle whether item rate entered already includes tax or is exclusive." />
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.displayPurchasePriceOfItems ?? true}
-                  onChange={(e) => update("displayPurchasePriceOfItems", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Display Purchase Price of Items
-                <InfoTooltip text="Show reference cost price when picking items to prevent under-pricing." />
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.showLast5SalePrice || false}
-                  onChange={(e) => update("showLast5SalePrice", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Show last 5 Sale Price of Items
-                <InfoTooltip text="View the 5 most recent sale prices charged to this customer." />
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.showLast5PurchasePrice || false}
-                  onChange={(e) => update("showLast5PurchasePrice", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Show last 5 Purchase Price of Items
-                <InfoTooltip text="View the 5 most recent purchase prices paid to suppliers." />
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.enableFreeItemQuantity || false}
-                  onChange={(e) => update("enableFreeItemQuantity", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Free Item Quantity
-                <InfoTooltip text="Add a separate Free Quantity column for promotional Buy-1-Get-1 schemes." />
-              </label>
-
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                <label className="flex cursor-pointer items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={settings.enableItemCount || false}
-                    onChange={(e) => update("enableItemCount", e.target.checked)}
-                    className="h-4 w-4 rounded accent-blue-600"
-                  />
-                  <span>{settings.itemCountLabel || "Count"}</span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCountLabel(settings.itemCountLabel || "Count");
-                    setCountModal(true);
-                  }}
-                  className="text-[11px] text-blue-600 hover:underline"
-                >
-                  Change Text
-                </button>
-                <InfoTooltip text="Display distinct item count in bill summary footer." />
-              </div>
-            </div>
-          </section>
-
-          {/* Card: Transaction Prefixes */}
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-              Transaction Prefixes
-            </h3>
-
-            {/* Firm Dropdown */}
-            <div className="mt-4">
-              <label className="block text-[11px] font-semibold text-slate-500">Firm</label>
-              <select
-                value={settings.selectedPrefixFirm || "firm-1"}
-                onChange={(e) => update("selectedPrefixFirm", e.target.value)}
-                className="mt-1 h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-              >
-                <option value="firm-1">{firmName}</option>
-              </select>
-            </div>
-
-            {/* Prefixes Inner Group Container */}
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
-              <span className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                Prefixes
-              </span>
-
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <PrefixDropdown
-                  label="Sale"
-                  value={settings.salePrefix || "None"}
-                  onChange={(val) => update("salePrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "INV", desc: "(INV- for Invoice)" }}
-                />
-
-                <PrefixDropdown
-                  label="Credit Note"
-                  value={settings.creditNotePrefix || "None"}
-                  onChange={(val) => update("creditNotePrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "CN", desc: "(CN- for Credit Note)" }}
-                />
-
-                <PrefixDropdown
-                  label="Sale Order"
-                  value={settings.saleOrderPrefix || "None"}
-                  onChange={(val) => update("saleOrderPrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "SO", desc: "(SO- for Sale Order)" }}
-                />
-
-                <PrefixDropdown
-                  label="Purchase Order"
-                  value={settings.purchaseOrderPrefix || "None"}
-                  onChange={(val) => update("purchaseOrderPrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "PO", desc: "(PO- for Purchase Order)" }}
-                />
-
-                <PrefixDropdown
-                  label="Proforma Invoice"
-                  value={settings.proformaInvoicePrefix || "None"}
-                  onChange={(val) => update("proformaInvoicePrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "PR", desc: "(PR- for Proforma)" }}
-                />
-
-                <PrefixDropdown
-                  label="Delivery Challan"
-                  value={settings.deliveryChallanPrefix || "None"}
-                  onChange={(val) => update("deliveryChallanPrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "DC", desc: "(DC- for Challan)" }}
-                />
-
-                <PrefixDropdown
-                  label="Payment In"
-                  value={settings.paymentInPrefix || "None"}
-                  onChange={(val) => update("paymentInPrefix", val)}
-                  firmName={firmName}
-                  docCode={{ code: "PI", desc: "(PI- for Payment In)" }}
-                />
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* =========================================
-            COLUMN 3: Taxes, Discount & Totals & Billing Type
-            ========================================= */}
-        <div className="space-y-6">
-          {/* Card: Taxes, Discount & Totals */}
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-              Taxes, Discount & Totals
-            </h3>
-
-            <div className="mt-4 space-y-4">
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.transactionWiseTax || false}
-                  onChange={(e) => update("transactionWiseTax", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Transaction wise Tax
-                <InfoTooltip text="Apply overall tax percentage across invoice rather than per item." />
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={settings.transactionWiseDiscount || false}
-                  onChange={(e) => update("transactionWiseDiscount", e.target.checked)}
-                  className="h-4 w-4 rounded accent-blue-600"
-                />
-                Transaction wise Discount
-                <InfoTooltip text="Allow applying total invoice discount before tax." />
-              </label>
-
-              <div>
-                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={settings.roundOffTotal ?? true}
-                    onChange={(e) => update("roundOffTotal", e.target.checked)}
-                    className="h-4 w-4 rounded accent-blue-600"
-                  />
-                  Round Off Total
-                  <InfoTooltip text="Automatically round final invoice payable total." />
-                </label>
-
-                {settings.roundOffTotal !== false && (
-                  <div className="ml-6 mt-3 flex items-center gap-2 text-xs">
-                    <select
-                      value={settings.roundOffMode || "Nearest"}
-                      onChange={(e) => update("roundOffMode", e.target.value)}
-                      className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="Nearest">Nearest</option>
-                      <option value="Upward">Upward</option>
-                      <option value="Downward">Downward</option>
-                    </select>
-
-                    <span className="text-xs text-slate-500">To</span>
-
-                    <select
-                      value={settings.roundOffTo ?? 1}
-                      onChange={(e) => update("roundOffTo", Number(e.target.value))}
-                      className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500"
-                    >
-                      <option value="1">1</option>
-                      <option value="5">5</option>
-                      <option value="10">10</option>
-                      <option value="0.5">0.5</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Card: Billing Type */}
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">
-              Billing Type
-            </h3>
-
-            <div className="mt-4 space-y-3">
-              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-semibold text-slate-700">
-                <input
-                  type="radio"
-                  name="billingType"
-                  value="Lite Sale"
-                  checked={settings.billingType === "Lite Sale"}
-                  onChange={() => update("billingType", "Lite Sale")}
-                  className="h-4 w-4 accent-blue-600"
-                />
-                Lite Sale
-              </label>
-
-              <label className="flex cursor-pointer items-center gap-2.5 text-xs font-semibold text-slate-700">
-                <input
-                  type="radio"
-                  name="billingType"
-                  value="Full Sale"
-                  checked={settings.billingType !== "Lite Sale"}
-                  onChange={() => update("billingType", "Full Sale")}
-                  className="h-4 w-4 accent-blue-600"
-                />
-                Full Sale
-              </label>
             </div>
           </section>
         </div>

@@ -1112,33 +1112,6 @@ function Reports({ defaultReport }) {
               />
             </div>
 
-            <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
-              <select
-                aria-label="Firm filter"
-                value={store}
-                onChange={(event) => setStore(event.target.value)}
-                className="bg-transparent outline-none"
-              >
-                <option>All Stores</option>
-                {storeOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-
-            <label className="rounded-full bg-sky-100 px-4 py-2 text-sm">
-              <select
-                aria-label="User filter"
-                value={user}
-                onChange={(event) => setUser(event.target.value)}
-                className="bg-transparent outline-none"
-              >
-                <option>All Users</option>
-                {userOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
 
             {isAllTransactions && (
               <div className="basis-full h-0" aria-hidden="true" />

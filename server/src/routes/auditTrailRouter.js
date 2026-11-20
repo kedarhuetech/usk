@@ -15,12 +15,21 @@ const router = Router();
 router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const limit = Math.min(200, parseInt(req.query.limit, 10) || 50);
+    const limitParam = req.query.limit;
+    const isAll = limitParam === "all" || req.query.all === "true";
+    const limit = isAll
+      ? 50000
+      : Math.min(5000, Math.max(1, parseInt(limitParam, 10) || 100));
 
-    const [rows] = await pool.query(
-      `SELECT * FROM audit_trails WHERE business_id = ? ORDER BY created_at DESC LIMIT ?`,
-      [businessId, limit]
-    );
+    let sql = `SELECT * FROM audit_trails WHERE business_id = ? ORDER BY created_at DESC`;
+    const params = [businessId];
+
+    if (!isAll) {
+      sql += " LIMIT ?";
+      params.push(limit);
+    }
+
+    const [rows] = await pool.query(sql, params);
 
     return res.json({
       success: true,

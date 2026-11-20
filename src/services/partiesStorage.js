@@ -27,27 +27,24 @@ export function setMemoryParties(list) {
         isActive: !isInactive,
       };
     });
+  } else {
+    memoryParties = [];
   }
 }
 
 // Reads parties.
 function readParties() {
-  if (typeof window !== "undefined" && window.localStorage) {
-    const raw = window.localStorage.getItem(PARTIES_KEY);
-    if (raw) {
-      try {
-        const value = JSON.parse(raw);
-        if (Array.isArray(value)) {
-          memoryParties = value;
-          return value;
-        }
-      } catch {}
-    } else if (memoryParties.length > 0 && isDatabaseMode()) {
-      return memoryParties;
-    } else {
-      memoryParties = [];
-      return [];
+  if (memoryParties.length > 0) return memoryParties;
+  if (typeof window === "undefined" || !window.localStorage) return [];
+  try {
+    const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
+    if (Array.isArray(value) && value.length > 0) {
+      if (isDatabaseMode()) memoryParties = value;
+      return value;
     }
+    return [];
+  } catch {
+    return [];
   }
   return memoryParties;
 }
@@ -83,7 +80,7 @@ export async function fetchPartiesFromDb() {
 }
 
 // Saves party.
-export function saveParty(party) {
+export function saveParty(party, options = {}) {
   const isInactive = party?.status === "inactive" || party?.isActive === false;
   const saved = {
     ...party,
@@ -97,7 +94,8 @@ export function saveParty(party) {
   if (typeof window !== "undefined" && window.localStorage) {
     window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   }
-  if (isDatabaseMode()) {
+  setMemoryParties(next);
+  if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.save(saved).catch((err) => console.warn("[MySQL] Background party sync notice:", err.message));
   }
   notifyBusinessDataChanged();
@@ -105,12 +103,13 @@ export function saveParty(party) {
 }
 
 // Deletes party.
-export function deleteParty(partyId) {
+export function deleteParty(partyId, options = {}) {
   if (typeof window === "undefined" || !window.localStorage) return;
   const next = readParties().filter((entry) => String(entry.id) !== String(partyId));
   memoryParties = next;
   window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
-  if (isDatabaseMode()) {
+  setMemoryParties(next);
+  if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.remove(partyId).catch((err) => console.warn("[MySQL] Background party delete notice:", err.message));
   }
   notifyBusinessDataChanged();

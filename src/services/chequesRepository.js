@@ -43,29 +43,97 @@ function event(status, note = "") {
   return { status, at: new Date().toISOString(), note };
 }
 
+export function toDbPayload(cheque) {
+  const isReceived = String(cheque.type || "").toLowerCase() === "received";
+  const nowSqlDate = new Date().toISOString().slice(0, 10);
+  const statusLower = String(cheque.status || "pending").toLowerCase();
+
+  let depositDate = cheque.depositDate || (isReceived ? cheque.expectedDate : null) || null;
+  if (statusLower === "deposited" && !depositDate) {
+    depositDate = nowSqlDate;
+  }
+
+  let clearanceDate = cheque.clearanceDate || (!isReceived ? cheque.expectedDate : null) || null;
+  if (statusLower === "cleared" && !clearanceDate) {
+    clearanceDate = nowSqlDate;
+  }
+
+  return {
+    id: cheque.id,
+    partyId: cheque.partyId || null,
+    partyName: (cheque.partyName || "Party").trim(),
+    chequeNumber: (cheque.chequeNumber || "").trim(),
+    bankName: (cheque.bankName || "Bank").trim(),
+    amount: parseFloat(cheque.amount) || 0,
+    chequeDate: cheque.chequeDate ? String(cheque.chequeDate).slice(0, 10) : nowSqlDate,
+    chequeType: isReceived ? "received" : "issued",
+    status: statusLower,
+    depositDate: depositDate ? String(depositDate).slice(0, 10) : null,
+    clearanceDate: clearanceDate ? String(clearanceDate).slice(0, 10) : null,
+    notes: cheque.notes || "",
+  };
+}
+
 export async function getAllCheques() {
   if (isDatabaseMode()) {
     try {
       const res = await cashBankDb.getCheques();
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
-        const mapped = list.map((r) => ({
-          ...r,
-          type: r.chequeType ? (r.chequeType.charAt(0).toUpperCase() + r.chequeType.slice(1)) : "Received",
-          status: r.status ? (r.status.charAt(0).toUpperCase() + r.status.slice(1)) : "Pending",
-        }));
+        const localRecords = readRecords();
+        const localMap = new Map(localRecords.map((r) => [r.id, r]));
+        const mapped = list.map((r) => {
+          const local = localMap.get(r.id) || {};
+          const isReceived = String(r.chequeType || local.type || "received").toLowerCase() === "received";
+          const rawStatus = String(r.status || local.status || "pending").toLowerCase();
+          const normalizedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1);
+          const type = isReceived ? "Received" : "Issued";
+          const chequeDate = r.chequeDate ? String(r.chequeDate).slice(0, 10) : (local.chequeDate || "");
+          const depositDate = r.depositDate ? String(r.depositDate).slice(0, 10) : (local.depositDate || null);
+          const clearanceDate = r.clearanceDate ? String(r.clearanceDate).slice(0, 10) : (local.clearanceDate || null);
+          const expectedDate = local.expectedDate || (isReceived ? (depositDate || chequeDate) : (clearanceDate || chequeDate));
+
+          return {
+            ...local,
+            ...r,
+            id: r.id,
+            partyId: r.partyId || local.partyId || null,
+            partyName: r.partyName || local.partyName || "Party",
+            chequeNumber: r.chequeNumber || local.chequeNumber || "",
+            bankName: r.bankName || local.bankName || "",
+            amount: parseFloat(r.amount) || local.amount || 0,
+            chequeDate,
+            depositDate,
+            clearanceDate,
+            expectedDate,
+            type,
+            status: normalizedStatus,
+            notes: r.notes ?? local.notes ?? "",
+            createdAt: r.createdAt || local.createdAt || new Date().toISOString(),
+            updatedAt: r.updatedAt || local.updatedAt || new Date().toISOString(),
+            history: Array.isArray(local.history) && local.history.length > 0
+              ? local.history
+              : [{ status: normalizedStatus, at: r.updatedAt || r.createdAt || new Date().toISOString(), note: "" }],
+          };
+        });
         writeRecords(mapped);
-        return mapped;
+        return mapped.sort((left, right) => String(right.updatedAt || right.chequeDate || "").localeCompare(String(left.updatedAt || left.chequeDate || "")));
       }
     } catch (err) {
       console.warn("[Cheques] Failed to fetch from MySQL:", err.message);
     }
   }
-  return readRecords().sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")));
+  return readRecords().sort((left, right) => String(right.updatedAt || right.chequeDate || "").localeCompare(String(left.updatedAt || left.chequeDate || "")));
 }
 
 export async function getChequeById(id) {
-  return readRecords().find((record) => record.id === id) || null;
+  const local = readRecords().find((record) => record.id === id);
+  if (local) return local;
+  if (isDatabaseMode()) {
+    const all = await getAllCheques();
+    return all.find((record) => record.id === id) || null;
+  }
+  return null;
 }
 
 export async function createCheque(cheque) {
@@ -76,43 +144,48 @@ export async function createCheque(cheque) {
   const now = new Date().toISOString();
   const saved = {
     ...candidate,
-    id: cheque.id || crypto.randomUUID(),
+    id: cheque.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `chq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`),
     createdAt: now,
     updatedAt: now,
-    history: [event(cheque.status)],
+    history: [event(candidate.status)],
   };
   if (records.some((record) => record.id === saved.id)) throw new Error("This cheque was already saved.");
 
   if (isDatabaseMode()) {
-    try {
-      await cashBankDb.saveCheque({
-        id: saved.id,
-        partyId: saved.partyId || null,
-        partyName: saved.partyName || "Party",
-        chequeNumber: saved.chequeNumber || "",
-        bankName: saved.bankName || "",
-        amount: parseFloat(saved.amount) || 0,
-        chequeDate: saved.chequeDate || new Date().toISOString().slice(0, 10),
-        chequeType: (saved.type || "received").toLowerCase(),
-        status: (saved.status || "pending").toLowerCase(),
-        notes: saved.notes || "",
-      });
-    } catch (err) {
-      console.warn("[Cheques] Failed to persist to MySQL, using local fallback:", err.message);
-    }
+    await cashBankDb.saveCheque(toDbPayload(saved));
   }
   writeRecords([saved, ...records]);
   return saved;
 }
 
 export async function updateCheque(id, changes) {
-  const records = readRecords();
-  const index = records.findIndex((record) => record.id === id);
-  if (index < 0) throw new Error("Cheque record not found.");
-  const editableChanges = Object.fromEntries(Object.entries(changes).filter(([key]) => !["status", "history", "id", "createdAt", "updatedAt"].includes(key)));
-  const updated = { ...records[index], ...editableChanges, id, updatedAt: new Date().toISOString() };
+  let records = readRecords();
+  let index = records.findIndex((record) => record.id === id);
+  if (index < 0) {
+    await getAllCheques();
+    records = readRecords();
+    index = records.findIndex((record) => record.id === id);
+    if (index < 0) throw new Error("Cheque record not found.");
+  }
+  const current = records[index];
+  const editableChanges = Object.fromEntries(
+    Object.entries(changes || {}).filter(
+      ([key]) => !["status", "history", "id", "createdAt", "updatedAt"].includes(key)
+    )
+  );
+  const updated = {
+    ...current,
+    ...editableChanges,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
   const validation = validateCheque(updated);
   if (validation) throw new Error(validation);
+
+  if (isDatabaseMode()) {
+    await cashBankDb.saveCheque(toDbPayload(updated));
+  }
+
   records[index] = updated;
   writeRecords(records);
   return updated;
@@ -121,12 +194,40 @@ export async function updateCheque(id, changes) {
 import { saveBankTransaction } from "./bankAccounts.js";
 
 export async function updateChequeStatus(id, status) {
-  const records = readRecords();
-  const index = records.findIndex((record) => record.id === id);
-  if (index < 0) throw new Error("Cheque record not found.");
-  const validation = validateChequeStatusChange(records[index], status);
+  let records = readRecords();
+  let index = records.findIndex((record) => record.id === id);
+  if (index < 0) {
+    await getAllCheques();
+    records = readRecords();
+    index = records.findIndex((record) => record.id === id);
+    if (index < 0) throw new Error("Cheque record not found.");
+  }
+  const current = records[index];
+  const validation = validateChequeStatusChange(current, status);
   if (validation) throw new Error(validation);
-  const updated = { ...records[index], status, updatedAt: new Date().toISOString(), history: [...(records[index].history || []), event(status)] };
+
+  const nowIso = new Date().toISOString();
+  const nowDate = nowIso.slice(0, 10);
+  const dateUpdates = {};
+  if (status === "Deposited" && !current.depositDate) {
+    dateUpdates.depositDate = nowDate;
+  }
+  if (status === "Cleared" && !current.clearanceDate) {
+    dateUpdates.clearanceDate = nowDate;
+  }
+
+  const updated = {
+    ...current,
+    ...dateUpdates,
+    status,
+    updatedAt: nowIso,
+    history: [...(current.history || []), event(status)],
+  };
+
+  if (isDatabaseMode()) {
+    await cashBankDb.saveCheque(toDbPayload(updated));
+  }
+
   records[index] = updated;
   writeRecords(records);
 

@@ -4,10 +4,12 @@ import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey, setSaleInvoic
 import { calculateInvoiceSettlement } from "./partyBalances.js";
 import { APP_SETTINGS_KEY } from "./appSettingsStorage.js";
 import { inventoryItemsStorageKey } from "./itemsStorage.js";
+import { STORAGE_MODE_KEY } from "./dataStorageConfig.js";
 
 test("editing a received amount updates the canonical saved sale and survives reload", () => {
   const previousWindow = globalThis.window;
   const data = new Map();
+  data.set(STORAGE_MODE_KEY, "local");
   globalThis.window = {
     localStorage: {
       getItem: (key) => data.has(key) ? data.get(key) : null,

@@ -352,7 +352,7 @@ export async function fetchInventoryItemsFromDb() {
 }
 
 // Saves inventory item.
-export function saveInventoryItem(itemForm) {
+export function saveInventoryItem(itemForm, options = {}) {
   const item = normalizeInventoryItem(itemForm);
   const existingItems = readItems();
   const exists = existingItems.some((current) => current.id === item.id);
@@ -361,7 +361,7 @@ export function saveInventoryItem(itemForm) {
     : [...existingItems, item];
 
   writeItems(nextItems);
-  if (isDatabaseMode()) {
+  if (isDatabaseMode() && !options?.skipRemoteSync) {
     itemsDb.save(item).catch((err) => console.warn("[MySQL] Background item sync notice:", err.message));
   }
   return item;

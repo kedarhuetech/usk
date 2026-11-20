@@ -50,6 +50,21 @@ export async function apiRequest(path, options = {}) {
   return payload?.data ?? payload;
 }
 
+export const companyProfileApi = {
+  get: () => apiRequest("/settings/company-profile"),
+  save: (profile) =>
+    apiRequest("/settings/company-profile", {
+      method: "POST",
+      body: JSON.stringify(profile),
+    }),
+  uploadAsset: (file, assetType) => {
+    const body = new FormData();
+    body.append("file", file);
+    if (assetType) body.append("assetType", assetType);
+    return apiRequest("/settings/company-profile/assets", { method: "POST", body });
+  },
+};
+
 export const businessGrowthApi = {
   list: (resource) => apiRequest(`/business-growth/${resource}`),
   listPage: (resource, { limit = 50, cursor = "" } = {}) => {
