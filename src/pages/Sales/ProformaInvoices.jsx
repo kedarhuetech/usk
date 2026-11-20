@@ -243,6 +243,10 @@ export default function ProformaInvoices() {
       navigate("/sales/sale-invoices/new", { state: { from: pathname, proformaConversion: entry } });
       return;
     }
+    if (destination === "Sale Order") {
+      navigate("/sales/sale-order", { state: { from: pathname, proformaConversion: entry } });
+      return;
+    }
     persist(proformas.map((value) => value.id === entry.id ? { ...value, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order" } : value));
     toast.success("Converted to Sale Order.");
   };

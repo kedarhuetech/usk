@@ -256,14 +256,17 @@ export default function EstimateQuotation() {
   };
 
   const convertEstimate = (estimate, destination) => {
+    setActionMenu("");
     if (destination === "Sale") {
-      setActionMenu("");
       navigate("/sales/sale-invoices/new", { state: { from: pathname, quotationConversion: estimate } });
+      return;
+    }
+    if (destination === "Sale Order") {
+      navigate("/sales/sale-order", { state: { from: pathname, quotationConversion: estimate } });
       return;
     }
     const status = `Converted to ${destination}`;
     saveEstimates(estimates.map((item) => item.id === estimate.id ? { ...item, status, convertedAt: new Date().toISOString(), conversionType: destination } : item));
-    setActionMenu("");
   };
 
   const openEstimateDocument = (estimate, printNow = false) => {

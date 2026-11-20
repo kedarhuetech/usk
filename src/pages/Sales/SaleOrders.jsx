@@ -246,13 +246,60 @@ export default function SaleOrders() {
     };
   }, []);
 
-  // Handle incoming navigation state (e.g. from All Transactions report)
+  // Handle incoming navigation state (e.g. from All Transactions report, Quotations, Proformas)
   useEffect(() => {
     if (location.state?.editOrder || location.state?.editInvoice) {
       const target = location.state.editOrder || location.state.editInvoice;
       setEditor({ mode: "edit", value: normalizeSaleOrder(target) });
     } else if (location.state?.printOrder) {
       printSaleOrderDoc(location.state.printOrder);
+    } else if (location.state?.quotationConversion || location.state?.proformaConversion) {
+      const source = location.state.quotationConversion || location.state.proformaConversion;
+      const isQuotation = Boolean(location.state.quotationConversion);
+      const rawRows = (source.rows && source.rows.length > 0)
+        ? source.rows
+        : (source.items && source.items.length > 0)
+        ? source.items
+        : [];
+      const rows = rawRows.map((r) => ({
+        id: crypto.randomUUID(),
+        item: r.item || r.itemName || r.name || "",
+        description: r.description || "",
+        size: r.size || "",
+        qty: String(r.qty ?? r.quantity ?? 1),
+        unit: r.unit || "NONE",
+        price: String(r.price ?? r.unitPrice ?? 0),
+        discount: String(r.discount ?? r.discountPercent ?? ""),
+        tax: String(r.tax ?? r.taxRate ?? "NONE"),
+        cess: String(r.cess ?? ""),
+      }));
+      const existingOrders = readOrders();
+      const nextNumber = String(Math.max(0, ...existingOrders.map((o) => Number(o.number) || 0)) + 1);
+      setEditor({
+        mode: "new",
+        value: {
+          id: "",
+          number: nextNumber,
+          customer: source.customer || source.partyName || "",
+          phone: source.phone || source.partyPhone || "",
+          date: localDate(),
+          dueDate: source.dueDate || localDate(),
+          state: source.state || source.stateOfSupply || "Select",
+          billingAddress: source.billingAddress || "",
+          shippingAddress: source.shippingAddress || "",
+          rows: rows.length > 0 ? rows : [newRow(), newRow()],
+          payments: [newPayment()],
+          roundOff: true,
+          roundOffValue: "",
+          terms: source.terms || "",
+          description: `Converted from ${isQuotation ? "Quotation" : "Proforma"} ${source.number || ""}. ${source.description || ""}`.trim(),
+          status: "Open",
+          linkedOrderIds: [],
+          convertedFromQuotationId: isQuotation ? source.id : undefined,
+          convertedFromProformaId: !isQuotation ? source.id : undefined,
+          convertedFromNumber: source.number,
+        },
+      });
     }
   }, [location.state]);
 
@@ -306,6 +353,47 @@ export default function SaleOrders() {
     const saved = { ...value, id: orderId, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
     persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]);
     setEditor(null);
+
+    // Update the source quotation or proforma status if converted
+    if (value.convertedFromQuotationId) {
+      const estimatesKey = "ledgerly:estimates.v1";
+      try {
+        const localEstimates = JSON.parse(window.localStorage.getItem(estimatesKey) || "[]");
+        const updated = localEstimates.map((item) =>
+          item.id === value.convertedFromQuotationId
+            ? { ...item, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order", convertedSaleOrderId: orderId }
+            : item
+        );
+        window.localStorage.setItem(estimatesKey, JSON.stringify(updated));
+        transactionsDb.save({
+          id: value.convertedFromQuotationId,
+          status: "Converted to Sale Order",
+          convertedAt: new Date().toISOString(),
+          conversionType: "Sale Order",
+          convertedSaleOrderId: orderId,
+        }).catch(() => {});
+        window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
+      } catch {}
+    } else if (value.convertedFromProformaId) {
+      const proformasKey = "ledgerly:proformas.v1";
+      try {
+        const localProformas = JSON.parse(window.localStorage.getItem(proformasKey) || "[]");
+        const updated = localProformas.map((item) =>
+          item.id === value.convertedFromProformaId
+            ? { ...item, status: "Converted to Sale Order", convertedAt: new Date().toISOString(), conversionType: "Sale Order", convertedSaleOrderId: orderId }
+            : item
+        );
+        window.localStorage.setItem(proformasKey, JSON.stringify(updated));
+        transactionsDb.save({
+          id: value.convertedFromProformaId,
+          status: "Converted to Sale Order",
+          convertedAt: new Date().toISOString(),
+          conversionType: "Sale Order",
+          convertedSaleOrderId: orderId,
+        }).catch(() => {});
+        window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
+      } catch {}
+    }
 
     // Persist to MySQL backend with clear failure distinction
     try {
