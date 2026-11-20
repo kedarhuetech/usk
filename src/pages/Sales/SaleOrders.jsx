@@ -137,7 +137,64 @@ export default function SaleOrders() {
   const [inventory, setInventory] = useState(() => getInventoryItems().filter(isItemActive));
   const [openItemRow, setOpenItemRow] = useState("");
   const [tab, setTab] = useState("orders");
-  const [editor, setEditor] = useState(null);
+  const [editorTabs, setEditorTabs] = useState([]);
+  const [activeTabId, setActiveTabId] = useState(null);
+  const editor = editorTabs.find((t) => t.tabId === activeTabId) || null;
+
+  const closeTab = (tabIdToClose) => {
+    setEditorTabs((current) => {
+      const remaining = current.filter((t) => t.tabId !== tabIdToClose);
+      if (!remaining.length) {
+        setActiveTabId(null);
+      } else if (activeTabId === tabIdToClose) {
+        const nextActive = remaining[remaining.length - 1];
+        setActiveTabId(nextActive ? nextActive.tabId : null);
+      }
+      return remaining;
+    });
+  };
+
+  const openEditor = (newEditor) => {
+    if (!newEditor) {
+      setEditorTabs([]);
+      setActiveTabId(null);
+      return;
+    }
+    const tabId = newEditor.tabId || (newEditor.value?.id ? `so-${newEditor.value.id}` : `so-tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`);
+    const tabObj = { ...newEditor, tabId };
+    setEditorTabs((current) => {
+      const existingIdx = current.findIndex((t) => (newEditor.value?.id && t.value?.id === newEditor.value.id) || t.tabId === tabId);
+      if (existingIdx >= 0) {
+        const updated = [...current];
+        updated[existingIdx] = tabObj;
+        return updated;
+      }
+      return [...current, tabObj];
+    });
+    setActiveTabId(tabId);
+  };
+
+  const setEditor = (action) => {
+    if (action === null) {
+      if (activeTabId) {
+        closeTab(activeTabId);
+      } else {
+        setEditorTabs([]);
+        setActiveTabId(null);
+      }
+      return;
+    }
+    if (typeof action === "function") {
+      setEditorTabs((current) => {
+        const activeTab = current.find((t) => t.tabId === activeTabId);
+        if (!activeTab) return current;
+        const updated = action(activeTab);
+        return current.map((t) => (t.tabId === activeTabId ? { ...updated, tabId: t.tabId } : t));
+      });
+      return;
+    }
+    openEditor(action);
+  };
   const [search, setSearch] = useState("");
   const [menuId, setMenuId] = useState("");
   const [selector, setSelector] = useState(null);
@@ -321,7 +378,38 @@ export default function SaleOrders() {
   };
   const visible = orders.filter((order) => `${order.customer} ${order.number} ${order.status}`.toLowerCase().includes(search.toLowerCase()));
   const amount = (order) => Number(order.amount || (order.rows || []).reduce((sum, row) => sum + rowAmount(row), 0));
-  const beginNew = () => setEditor({ mode: "new", value: { id: "", number: String(Math.max(0, ...orders.map((order) => Number(order.number) || 0)) + 1), customer: "", phone: "", date: localDate(), dueDate: localDate(), state: "Select", rows: [newRow(), newRow()], payments: [newPayment()], roundOff: true, roundOffValue: "", terms: "", description: "", status: "Open", linkedOrderIds: [] } });
+  const beginNew = () => {
+    const existingOrders = readOrders();
+    const existingNumbers = [
+      ...existingOrders.map((order) => Number(order.number) || 0),
+      ...editorTabs.map((tabItem) => Number(tabItem.value?.number) || 0),
+    ];
+    const nextNumber = String(Math.max(0, ...existingNumbers) + 1);
+    const tabId = `so-tab-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newTab = {
+      tabId,
+      mode: "new",
+      value: {
+        id: "",
+        number: nextNumber,
+        customer: "",
+        phone: "",
+        date: localDate(),
+        dueDate: localDate(),
+        state: "Select",
+        rows: [newRow(), newRow()],
+        payments: [newPayment()],
+        roundOff: true,
+        roundOffValue: "",
+        terms: "",
+        description: "",
+        status: "Open",
+        linkedOrderIds: [],
+      },
+    };
+    setEditorTabs((current) => [...current, newTab]);
+    setActiveTabId(tabId);
+  };
   const save = async () => {
     const value = editor.value;
     if (!value.customer.trim()) { toast.error("Select or enter a customer."); return; }
@@ -660,10 +748,76 @@ export default function SaleOrders() {
         );
       })}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"><div className="grid h-56 w-72 place-items-center rounded-full bg-blue-50 text-7xl text-amber-500">▤</div><p className="mt-4 text-lg text-slate-500">Make &amp; share sale orders &amp; convert them to sale invoice instantly.</p><Button onClick={beginNew} className="mt-7 rounded-md bg-amber-500 px-6 py-3 text-base text-white shadow">Add Your First Sale Order</Button></div>}</Card>
 
-    {editor && <div className="fixed inset-0 z-50 flex flex-col bg-white"><div className="flex h-12 shrink-0 items-center gap-3 bg-slate-200 px-5"><span className="rounded-t-lg bg-white px-5 py-3">Sale Order #{editor.value.number}</span><button onClick={beginNew} className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus /></button><div className="ml-auto flex gap-5 text-xl text-slate-500"><button type="button" title="Calculator" onClick={() => toast.info("Use item quantities and rates to compute totals.")} className="hover:text-slate-700">▦</button><button type="button" title="Settings" onClick={() => navigate("/settings?tab=transaction")} className="hover:text-slate-700">⚙</button><button onClick={() => setEditor(null)} title="Close"><FiX /></button></div></div><header className="flex h-[74px] shrink-0 items-center border-b px-7"><h1 className="text-xl font-bold">Sale Order</h1><Button onClick={() => openSelector("attach")} className="ml-auto border border-blue-300 text-blue-600">Attach Orders</Button></header>
+    {editor && (
+      <div className="fixed inset-0 z-50 flex flex-col bg-white">
+        <div className="flex h-12 shrink-0 items-end gap-1.5 bg-slate-200 px-4 pt-1">
+          {editorTabs.map((tabItem) => {
+            const isActive = tabItem.tabId === activeTabId;
+            return (
+              <div
+                key={tabItem.tabId}
+                onClick={() => setActiveTabId(tabItem.tabId)}
+                className={`flex h-10 min-w-36 cursor-pointer items-center justify-between gap-3 rounded-t-lg px-4 text-sm font-semibold transition select-none ${
+                  isActive
+                    ? "bg-white text-slate-800 shadow-xs"
+                    : "bg-slate-300/80 text-slate-600 hover:bg-slate-100/90"
+                }`}
+              >
+                <span>Sale Order #{tabItem.value?.number || ""}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeTab(tabItem.tabId);
+                  }}
+                  title="Close tab"
+                  aria-label={`Close Sale Order #${tabItem.value?.number}`}
+                  className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                >
+                  <FiX className="h-4 w-4" />
+                </button>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={beginNew}
+            title="Add Sale Order"
+            aria-label="Add new sale order"
+            className="mb-1.5 ml-1 grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white shadow-xs hover:opacity-90 transition"
+          >
+            <FiPlus className="h-4 w-4" />
+          </button>
+          <div className="ml-auto flex items-center gap-4 pb-1.5 pr-1 text-xl text-slate-500">
+            <button
+              type="button"
+              title="Settings"
+              onClick={() => navigate("/settings?tab=transaction")}
+              className="p-1 hover:text-slate-700 transition"
+            >
+              ⚙
+            </button>
+            <button
+              type="button"
+              onClick={() => closeTab(activeTabId)}
+              title="Close"
+              aria-label="Close"
+              className="p-1 hover:text-slate-700 transition"
+            >
+              <FiX className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <header className="flex h-[74px] shrink-0 items-center border-b px-7">
+          <h1 className="text-xl font-bold">Sale Order</h1>
+          <Button onClick={() => openSelector("attach")} className="ml-auto border border-blue-300 text-blue-600">
+            Attach Orders
+          </Button>
+        </header>
       <div className="min-h-0 flex-1 overflow-auto bg-[#f3f3f3]"><section className="grid min-h-[345px] grid-cols-1 gap-8 px-7 py-8 lg:grid-cols-[1fr_420px]"><div className="grid content-start gap-5 sm:grid-cols-[minmax(280px,1fr)_225px]"><div><label className="block text-sm text-slate-500">Customer *</label><input list="sale-order-parties" value={editor.value.customer} onChange={(event) => { const party = parties.find((entry) => entry.partyName === event.target.value); change("customer", event.target.value); if (party) change("phone", party.phone || ""); }} placeholder="Search by Name/Phone *" className="mt-1 h-14 w-full rounded-md border bg-white px-4"/><datalist id="sale-order-parties">{parties.map((party) => <option key={party.id} value={party.partyName}>{party.phone}</option>)}</datalist><input value={editor.value.phone} onChange={(event) => change("phone", event.target.value)} placeholder="Phone No." className="mt-3 h-12 w-full rounded-md border bg-white px-4"/></div><div className="space-y-3"><label className="flex items-center justify-between gap-4 text-slate-500">Order No.<input value={editor.value.number} onChange={(event) => change("number", event.target.value)} className="w-36 border-b bg-transparent p-2 text-slate-800"/></label><label className="flex items-center justify-between gap-4 text-slate-500">Order Date<input type="date" value={editor.value.date} onChange={(event) => change("date", event.target.value)} className="w-44 border-b bg-transparent p-2 text-slate-800"/></label><label className="flex items-center justify-between gap-4 text-slate-500">Due Date<input type="date" value={editor.value.dueDate} onChange={(event) => change("dueDate", event.target.value)} className="w-44 border-b bg-transparent p-2 text-slate-800"/></label><label className="flex items-center justify-between gap-4 text-slate-500">State of supply<select value={editor.value.state} onChange={(event) => change("state", event.target.value)} className="w-44 bg-transparent p-2 text-slate-800"><option>Select</option>{["Andhra Pradesh", "Delhi", "Gujarat", "Karnataka", "Maharashtra", "Tamil Nadu", "Telangana"].map((state) => <option key={state}>{state}</option>)}</select></label></div></div></section>
       <div className="overflow-x-auto bg-white"><table className="w-full min-w-[1350px] border-collapse text-sm"><thead><tr className="h-14 bg-white text-center font-semibold">{["#", "ITEM", "DESCRIPTION", "SIZE", "QTY", "UNIT", "PRICE/UNIT", "DISCOUNT %", "DISCOUNT AMOUNT", "TAX %", "TAX AMOUNT", "ADD CESS", "AMOUNT"].map((label) => <th key={label} className="border border-slate-300 px-2">{label}</th>)}</tr></thead><tbody>{editor.value.rows.map((row, index) => <tr key={row.id} className="h-14 odd:bg-slate-100 even:bg-slate-50"> <td className="border px-3 text-center">{index + 1}</td><td className="border"><div className="relative h-full"><input value={row.item} onFocus={() => setOpenItemRow(row.id)} onChange={(event) => { changeRow(row.id, "item", event.target.value); setOpenItemRow(row.id); }} className="h-full w-full bg-transparent px-3" placeholder="Select item" />{openItemRow === row.id && <div className="absolute left-0 top-full z-40 max-h-56 w-72 overflow-auto rounded-md border border-slate-200 bg-white p-1 text-left shadow-xl">{inventory.filter((item) => String(item.itemName || item.name || "").toLowerCase().includes(row.item.toLowerCase())).map((item) => <button type="button" key={item.id || item.itemCode || item.itemName} onMouseDown={(event) => event.preventDefault()} onClick={() => { changeRow(row.id, "item", item.itemName || item.name || ""); changeRow(row.id, "itemId", item.id || ""); changeRow(row.id, "sourceItemId", item.id || ""); changeRow(row.id, "unit", item.unit || item.baseUnit || "NONE"); changeRow(row.id, "price", item.salePrice || item.price || ""); if (!row.qty) changeRow(row.id, "qty", "1"); setOpenItemRow(""); }} className="block w-full rounded px-3 py-2 text-left hover:bg-blue-50">{item.itemName || item.name}<span className="ml-2 text-xs text-slate-400">{item.itemCode || item.code || ""}</span></button>)}{!inventory.filter((item) => String(item.itemName || item.name || "").toLowerCase().includes(row.item.toLowerCase())).length && <p className="px-3 py-2 text-sm text-slate-500">No matching saved items.</p>}</div>}</div></td>{[["description",""],["size",""],["qty","number"],["unit",""],["price","number"],["discount","number"]].map(([key,type]) => <td key={key} className="border"><input type={type || "text"} value={row[key]} onChange={(event) => changeRow(row.id,key,event.target.value)} className="h-full w-full bg-transparent px-2 text-center"/></td>)}<td className="border px-2 text-right">{money(rowAmount({ ...row, tax: 0, cess: 0 }) * Number(row.discount || 0) / 100)}</td><td className="border"><select value={row.tax} onChange={(event) => changeRow(row.id,"tax",event.target.value)} className="h-full w-full bg-transparent"><option value="NONE">Select</option>{[5,12,18,28].map((rate)=><option key={rate} value={rate}>{rate}%</option>)}</select></td><td className="border px-2 text-right">{money(rowAmount(row) - rowAmount({ ...row, tax: 0, cess: 0 }))}</td><td className="border"><input type="number" value={row.cess} onChange={(event)=>changeRow(row.id,"cess",event.target.value)} className="h-full w-full px-2"/></td><td className="border px-2 text-right">{money(rowAmount(row))}</td></tr>)}</tbody><tfoot><tr className="h-14 font-semibold"><td className="border px-2"><button onClick={()=>change("rows",[...editor.value.rows,newRow()])} className="rounded border border-blue-400 px-3 py-2 text-blue-600">ADD ROW</button></td><td colSpan="3" className="border px-3 text-right">TOTAL</td><td className="border text-center">{editor.value.rows.reduce((sum,row)=>sum+(Number(row.qty)||0),0)}</td><td colSpan="7" className="border"/><td className="border px-3 text-right">{money(subtotal)}</td></tr></tfoot></table></div>
-      <section className="grid min-h-72 gap-6 px-7 py-8 lg:grid-cols-[1fr_1fr_1fr]"><div><button className="mb-2 rounded-md border bg-white px-5 py-3 text-slate-500" onClick={()=>change("terms",editor.value.terms ? "" : "Payment due as agreed.")}>☷ ADD TERMS &amp; CONDITIONS</button><textarea value={editor.value.terms} onChange={(event)=>change("terms",event.target.value)} placeholder="Terms and conditions" className="h-20 w-full rounded border bg-white p-3"/></div><div className="space-y-3"><label className="block text-sm text-slate-500">Payment Type<select value={editor.value.payments[0]?.type || "Cash"} onChange={(event)=>change("payments",[{...editor.value.payments[0],type:event.target.value}])} className="mt-1 block h-12 w-full rounded border bg-white px-3">{["Cash","Cheque","UPI","Card","Bank Transfer"].map((method)=><option key={method}>{method}</option>)}</select></label><button onClick={()=>change("payments",[...editor.value.payments,newPayment()])} className="text-blue-600"><FiPlus className="inline"/> Add Payment type</button><textarea value={editor.value.description} onChange={(event)=>change("description",event.target.value)} placeholder="Description" className="h-20 w-full rounded border bg-white p-3"/></div><div className="flex flex-wrap items-start justify-end gap-3"><label className="flex items-center gap-2"><input type="checkbox" checked={editor.value.roundOff} onChange={(event)=>change("roundOff",event.target.checked)}/>Round Off</label><input type="number" value={editor.value.roundOffValue} onChange={(event)=>change("roundOffValue",event.target.value)} disabled={!editor.value.roundOff} className="h-10 w-20 rounded border px-2"/><b className="pt-2">Total</b><div className="grid h-12 min-w-48 place-items-center rounded border bg-white font-bold">{money(total)}</div></div></section></div><footer className="flex shrink-0 justify-end gap-3 border-t bg-white px-5 py-3"><Button onClick={()=>act("Print", editor.value)} className="border border-blue-300 text-blue-600">Print / Share</Button><Button onClick={save} className="min-w-40 bg-blue-600 text-white">Save</Button></footer></div>}
+      <section className="grid min-h-72 gap-6 px-7 py-8 lg:grid-cols-[1fr_1fr_1fr]"><div><button className="mb-2 rounded-md border bg-white px-5 py-3 text-slate-500" onClick={()=>change("terms",editor.value.terms ? "" : "Payment due as agreed.")}>☷ ADD TERMS &amp; CONDITIONS</button><textarea value={editor.value.terms} onChange={(event)=>change("terms",event.target.value)} placeholder="Terms and conditions" className="h-20 w-full rounded border bg-white p-3"/></div><div className="space-y-3"><label className="block text-sm text-slate-500">Payment Type<select value={editor.value.payments[0]?.type || "Cash"} onChange={(event)=>change("payments",[{...editor.value.payments[0],type:event.target.value}])} className="mt-1 block h-12 w-full rounded border bg-white px-3">{["Cash","Cheque","UPI","Card","Bank Transfer"].map((method)=><option key={method}>{method}</option>)}</select></label><button onClick={()=>change("payments",[...editor.value.payments,newPayment()])} className="text-blue-600"><FiPlus className="inline"/> Add Payment type</button><textarea value={editor.value.description} onChange={(event)=>change("description",event.target.value)} placeholder="Description" className="h-20 w-full rounded border bg-white p-3"/></div><div className="flex flex-wrap items-start justify-end gap-3"><label className="flex items-center gap-2"><input type="checkbox" checked={editor.value.roundOff} onChange={(event)=>change("roundOff",event.target.checked)}/>Round Off</label><input type="number" value={editor.value.roundOffValue} onChange={(event)=>change("roundOffValue",event.target.value)} disabled={!editor.value.roundOff} className="h-10 w-20 rounded border px-2"/><b className="pt-2">Total</b><div className="grid h-12 min-w-48 place-items-center rounded border bg-white font-bold">{money(total)}</div></div></section></div><footer className="flex shrink-0 justify-end gap-3 border-t bg-white px-5 py-3"><Button onClick={()=>act("Print", editor.value)} className="border border-blue-300 text-blue-600">Print / Share</Button><Button onClick={save} className="min-w-40 bg-blue-600 text-white">Save</Button></footer></div>
+      )}
 
     {selector && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4"><section className="flex max-h-[90vh] w-full max-w-5xl flex-col rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-semibold">Select orders to attach</h2><button onClick={()=>setSelector(null)}><FiX className="text-2xl"/></button></header><div className="space-y-5 overflow-auto px-6 py-5"><label className="block max-w-md text-sm text-slate-500">Customer *<select value={selectorParty} onChange={(event)=>setSelectorParty(event.target.value)} className="mt-1 h-12 w-full rounded border bg-white px-3"><option value="">All customers</option>{parties.map((party)=><option key={party.id}>{party.partyName}</option>)}</select></label><div className="flex flex-wrap items-center gap-3 border-y py-4"><span className="font-semibold">Filter By:</span><select className="rounded px-3 py-2" defaultValue="This Month"><option>This Month</option><option>All Time</option><option>Custom</option></select><span>Between</span><input type="date" value={selectorFrom} onChange={(event)=>setSelectorFrom(event.target.value)} className="rounded border p-2"/><span>To</span><input type="date" value={selectorTo} onChange={(event)=>setSelectorTo(event.target.value)} className="rounded border p-2"/></div><div className="flex items-center justify-between gap-4"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={selectorSearch} onChange={(event)=>setSelectorSearch(event.target.value)} placeholder="Search By order No." className="h-10 w-80 rounded-full border pl-9 pr-3"/></label><span className="italic text-slate-400">{candidates.length} Orders found</span></div><div className="max-h-[45vh] overflow-auto"><table className="w-full border-collapse text-left"><thead className="sticky top-0 bg-slate-100"><tr><th className="border p-3"><input type="checkbox" checked={candidates.length>0 && candidates.every((order)=>selectedIds.includes(order.id))} onChange={(event)=>setSelectedIds(event.target.checked?candidates.map((order)=>order.id):[])}/> Select All</th>{["DATE","ORDER NO.","DUE DATE","TOTAL AMOUNT (₹)"].map((label)=><th key={label} className="border p-3">{label}</th>)}</tr></thead><tbody>{candidates.map((order)=><tr key={order.id}><td className="border p-3"><input type="checkbox" checked={selectedIds.includes(order.id)} onChange={(event)=>setSelectedIds((ids)=>event.target.checked?[...ids,order.id]:ids.filter((id)=>id!==order.id))}/></td><td className="border p-3">{displayDate(order.date)}</td><td className="border p-3">{order.number}</td><td className="border p-3">{displayDate(order.dueDate)}</td><td className="border p-3">{money(amount(order))}</td></tr>)}</tbody></table>{!candidates.length&&<p className="p-12 text-center text-slate-400">No open sale orders match the selected filters.</p>}</div></div><footer className="flex justify-end gap-3 border-t px-6 py-4"><Button onClick={()=>setSelector(null)} className="bg-slate-100">Cancel</Button><Button disabled={!selectedIds.length} onClick={attachSelected} className="bg-blue-600 text-white">{selector === "attach" ? "Attach" : "Convert"} {selectedIds.length} Orders</Button></footer></section></div>}
     {historyModal && (
