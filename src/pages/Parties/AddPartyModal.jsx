@@ -245,6 +245,8 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const isEditMode = Boolean(initialParty?.id);
+
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
   const setAdditionalField = (fieldId, prop, value, settingMeta = null) => {
@@ -312,7 +314,7 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
     <section className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
       <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-semibold text-slate-800">{initialParty ? "Edit Party" : "Add Party"}</h2>
+          <h2 className="text-lg font-semibold text-slate-800">{isEditMode ? "Edit Party" : "Add Party"}</h2>
           {(appSettings.managePartyStatus ?? true) && (
             <button
               type="button"
@@ -387,7 +389,7 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
 
       <footer className="flex justify-end gap-4 border-t border-slate-200 bg-white px-6 py-4">
         {error && <p className="mr-auto self-center text-sm font-semibold text-red-600">{error}</p>}
-        {!initialParty && <Button disabled={saving} onClick={() => save(true)} className="border border-blue-600 bg-white text-blue-600 hover:bg-blue-50">Save & New</Button>}
+        {!isEditMode && <Button disabled={saving} onClick={() => save(true)} className="border border-blue-600 bg-white text-blue-600 hover:bg-blue-50">Save & New</Button>}
         <Button disabled={saving} onClick={() => save(false)} className="bg-blue-600 text-white shadow-sm hover:bg-blue-700">{saving ? "Saving…" : "Save"}</Button>
       </footer>
     </section>
