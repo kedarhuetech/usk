@@ -11,7 +11,7 @@
  *    - Items & Units (Inventory master, batches child table, stock adjustments, units)
  *    - Sales & POS (Sale Invoices, Estimates, Proforma, Payment-In, Orders, Challans, Credit Notes, POS)
  *    - Purchase & Expense (Purchase Bills, Payment-Out, Expenses, Expense Categories, Purchase Orders, Debit Notes, Job Work)
- *    - Cash & Bank (Bank Accounts, Cash in Hand ledger, Cheques management, Loan Accounts)
+ *    - Cash & Bank (Bank Accounts, Bank Transactions, Cash in Hand ledger, Cheques management, Loan Accounts)
  *    - Business Growth (Online Store settings, orders, order items; Smart Ads campaigns)
  *    - Sync, Share & Backup (Database exports, verification)
  *    - Utilities (Audit trail, bulk updates, HSN master)
@@ -116,6 +116,40 @@ export async function initializeDatabaseSchema() {
 
       await addCol("bank_accounts", "account_type VARCHAR(50) DEFAULT 'Savings'");
       await addCol("bank_accounts", "branch_name VARCHAR(100)");
+
+      // Safe column migration for bank_accounts (account holder name, notes, status)
+      const addBankCol = async (colDef) => {
+        try {
+          await pool.query(`ALTER TABLE bank_accounts ADD COLUMN ${colDef}`);
+        } catch (err) {
+          // Ignore if table does not exist yet (1146) or column already exists (MySQL error 1060: ER_DUP_FIELDNAME)
+          if (err.errno !== 1060 && err.errno !== 1146 && !String(err.message).includes("Duplicate column name")) {
+            console.warn(`[MySQL Schema] Warning adding column to bank_accounts (${colDef}):`, err.message);
+          }
+        }
+      };
+      await addBankCol("account_holder_name VARCHAR(120) NULL");
+      await addBankCol("notes TEXT NULL");
+      await addBankCol("status VARCHAR(50) NOT NULL DEFAULT 'active'");
+
+      // Safe column migration for loan_accounts status and closure tracking
+      const addLoanCol = async (colDef) => {
+        try {
+          await pool.query(`ALTER TABLE loan_accounts ADD COLUMN ${colDef}`);
+        } catch (err) {
+          // Ignore if column already exists (MySQL error 1060: ER_DUP_FIELDNAME)
+          if (err.errno !== 1060 && !String(err.message).includes("Duplicate column name")) {
+            console.warn(`[MySQL Schema] Warning adding column to loan_accounts (${colDef}):`, err.message);
+          }
+        }
+      };
+      await addLoanCol("status VARCHAR(50) NOT NULL DEFAULT 'Active'");
+      await addLoanCol("closed_date DATE NULL");
+
+      // Ensure cheques table status column accommodates all lifecycle statuses (including 'issued' and 'cancelled')
+      try {
+        await pool.query("ALTER TABLE cheques MODIFY status VARCHAR(50) NOT NULL DEFAULT 'pending'");
+      } catch {}
     } catch (_e) {
       // Continue even if drop column was already done
     }
@@ -400,6 +434,7 @@ export async function initializeDatabaseSchema() {
       id VARCHAR(64) PRIMARY KEY,
       business_id VARCHAR(64) NOT NULL DEFAULT 'default',
       account_name VARCHAR(255) NOT NULL,
+      account_holder_name VARCHAR(120) NULL,
       account_number VARCHAR(64),
       bank_name VARCHAR(100),
       ifsc_code VARCHAR(32),
@@ -408,6 +443,8 @@ export async function initializeDatabaseSchema() {
       current_balance DECIMAL(12,2) DEFAULT 0.00,
       account_type VARCHAR(50) DEFAULT 'Savings',
       as_of_date DATE,
+      notes TEXT NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'active',
       is_default TINYINT(1) DEFAULT 0,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -441,7 +478,7 @@ export async function initializeDatabaseSchema() {
       amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
       cheque_date DATE NOT NULL,
       cheque_type ENUM('received', 'issued') NOT NULL,
-      status ENUM('pending', 'deposited', 'cleared', 'bounced') NOT NULL DEFAULT 'pending',
+      status VARCHAR(50) NOT NULL DEFAULT 'pending',
       deposit_date DATE,
       clearance_date DATE,
       notes TEXT,
@@ -464,6 +501,8 @@ export async function initializeDatabaseSchema() {
       term_months INT DEFAULT 12,
       emi_amount DECIMAL(12,2) DEFAULT 0.00,
       start_date DATE,
+      status VARCHAR(50) NOT NULL DEFAULT 'Active',
+      closed_date DATE NULL,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_loan_biz (business_id)
@@ -665,6 +704,38 @@ export async function initializeDatabaseSchema() {
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_mig_batch (batch_id),
       INDEX idx_mig_biz (business_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 29. Bank Transactions Child Table (Normalized Rows & Columns)
+    `CREATE TABLE IF NOT EXISTS bank_transactions (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'default',
+      account_id VARCHAR(64) NOT NULL,
+      type ENUM('money-in', 'money-out') NOT NULL,
+      amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      transaction_date DATE NOT NULL,
+      reference VARCHAR(120) NULL,
+      description VARCHAR(240) NOT NULL,
+      related_party VARCHAR(120) NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_bank_tx_biz (business_id),
+      INDEX idx_bank_tx_account (business_id, account_id),
+      INDEX idx_bank_tx_date (business_id, transaction_date)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 30. Company Profile Assets Table (Logos, Signatures, etc. with pure MySQL BLOB storage)
+    `CREATE TABLE IF NOT EXISTS company_profile_assets (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      asset_type VARCHAR(32) NOT NULL,
+      original_filename VARCHAR(255) NULL,
+      mime_type VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+      data MEDIUMBLOB NOT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      INDEX idx_cpa_biz (business_id),
+      INDEX idx_cpa_type (business_id, asset_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`
   ];
 
@@ -693,5 +764,36 @@ export async function initializeDatabaseSchema() {
     );
   } catch {}
 
-  console.log("[MySQL Schema] All 28 production tables verified successfully (ZERO JSON columns, pure rows & columns).");
+  // Safe non-destructive migration of existing company logo and signature assets from business_growth_assets
+  try {
+    const [tables] = await pool.query("SHOW TABLES");
+    const tableNames = tables.map((t) => Object.values(t)[0]);
+    if (tableNames.includes("business_growth_assets") && tableNames.includes("company_profile_assets")) {
+      await pool.query(
+        `INSERT IGNORE INTO company_profile_assets (
+          id, business_id, asset_type, original_filename, mime_type, size_bytes, data, created_at, updated_at
+        )
+        SELECT 
+          id, business_id, entity_type, original_filename, mime_type, size_bytes, data, created_at, updated_at
+        FROM business_growth_assets
+        WHERE entity_type IN ('company-logo', 'company-signature', 'logo', 'signature');`
+      );
+
+      // Normalize existing company_profiles logo_url and signature_url from /api/business-growth/assets/ to /api/settings/company-profile/assets/
+      await pool.query(
+        `UPDATE company_profiles 
+         SET logo_url = REPLACE(logo_url, '/api/business-growth/assets/', '/api/settings/company-profile/assets/')
+         WHERE logo_url LIKE '%/api/business-growth/assets/%';`
+      );
+      await pool.query(
+        `UPDATE company_profiles 
+         SET signature_url = REPLACE(signature_url, '/api/business-growth/assets/', '/api/settings/company-profile/assets/')
+         WHERE signature_url LIKE '%/api/business-growth/assets/%';`
+      );
+    }
+  } catch (migErr) {
+    console.warn("[MySQL Schema] Notice during company profile assets migration:", migErr.message);
+  }
+
+  console.log("[MySQL Schema] All 30 production tables verified successfully (ZERO JSON columns, pure rows & columns).");
 }

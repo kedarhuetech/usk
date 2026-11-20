@@ -596,25 +596,6 @@ export default function AllTransactionsReport() {
             />
           </div>
 
-          {/* Firms select */}
-          <select
-            value={firm}
-            onChange={(e) => setFirm(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer hover:bg-slate-50"
-          >
-            <option>ALL FIRMS</option>
-            {availableFirms.map((name) => <option key={name}>{name}</option>)}
-          </select>
-
-          {/* Users select */}
-          <select
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none cursor-pointer hover:bg-slate-50"
-          >
-            <option>ALL USERS</option>
-            {availableUsers.map((name) => <option key={name}>{name}</option>)}
-          </select>
         </div>
 
         {/* Excel & Print Actions */}

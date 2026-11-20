@@ -16,7 +16,7 @@ import {
   loadAuthoritativeCompanyProfile,
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
-import { businessGrowthApi } from "../../services/apiClient";
+import { companyProfileApi } from "../../services/apiClient";
 import { getActiveBusinessId } from "../../config/businessConfig";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -265,7 +265,7 @@ export default function EditProfile() {
       // 1. Upload new logo if user selected a file
       if (logoFile) {
         try {
-          const asset = await businessGrowthApi.upload(logoFile, "company-logo", "logo");
+          const asset = await companyProfileApi.uploadAsset(logoFile, "company-logo");
           finalLogoUrl = asset?.url
             ? `${asset.url}?businessId=${encodeURIComponent(businessId)}`
             : "";
@@ -279,7 +279,7 @@ export default function EditProfile() {
       // 2. Upload new signature if user selected a file
       if (signatureFile) {
         try {
-          const asset = await businessGrowthApi.upload(signatureFile, "company-signature", "signature");
+          const asset = await companyProfileApi.uploadAsset(signatureFile, "company-signature");
           finalSignatureUrl = asset?.url
             ? `${asset.url}?businessId=${encodeURIComponent(businessId)}`
             : "";

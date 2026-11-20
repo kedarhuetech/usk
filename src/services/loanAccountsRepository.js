@@ -57,6 +57,13 @@ function normalizeLoan(loan) {
       }))
     : [];
 
+  const rawStatus = loan.status;
+  const status = ["Active", "Closed"].includes(rawStatus)
+    ? rawStatus
+    : (String(rawStatus || "").toLowerCase() === "closed" ? "Closed" : "Active");
+
+  const closedDate = loan.closedDate || loan.closed_date || null;
+
   return {
     ...loan,
     id,
@@ -70,9 +77,10 @@ function normalizeLoan(loan) {
     startDate: loan.startDate ? String(loan.startDate).slice(0, 10) : todayStr,
     firstEmiDate: loan.firstEmiDate ? String(loan.firstEmiDate).slice(0, 10) : todayStr,
     repaymentFrequency: loan.repaymentFrequency || loan.loanType || loan.loan_type || "Monthly",
-    status: ["Active", "Closed"].includes(loan.status) ? loan.status : "Active",
+    status,
+    closedDate: closedDate ? String(closedDate).slice(0, 10) : null,
     repayments,
-    statusHistory: Array.isArray(loan.statusHistory) && loan.statusHistory.length ? loan.statusHistory : [event(loan.status || "Active")],
+    statusHistory: Array.isArray(loan.statusHistory) && loan.statusHistory.length ? loan.statusHistory : [event(status)],
     notes: String(loan.notes || ""),
   };
 }
@@ -93,15 +101,60 @@ function writeLoans(loans) {
 
 const event = (status) => ({ status, at: new Date().toISOString() });
 
+export function toLoanDbPayload(loan) {
+  const estimatedEmi = calculateLoanEmi(loan.originalAmount, loan.annualInterestRate, loan.tenureMonths);
+  const emiToStore = (loan.emiOverride !== "" && loan.emiOverride !== null && Number(loan.emiOverride) > 0)
+    ? Number(loan.emiOverride)
+    : estimatedEmi;
+
+  return {
+    id: loan.id,
+    accountName: loan.loanName,
+    lenderName: loan.lenderName,
+    accountNumber: loan.accountNumber || loan.id.slice(0, 8),
+    loanType: loan.repaymentFrequency || "Monthly",
+    principalAmount: parseFloat(loan.originalAmount) || 0,
+    currentBalance: parseFloat(calculateLoanOutstanding(loan)) || 0,
+    interestRate: parseFloat(loan.annualInterestRate) || 0,
+    termMonths: parseInt(loan.tenureMonths, 10) || 12,
+    emiAmount: emiToStore,
+    startDate: loan.startDate || null,
+    status: loan.status || "Active",
+    closedDate: loan.closedDate || null,
+  };
+}
+
 export async function getAllLoans() {
   if (isDatabaseMode()) {
     try {
       const res = await cashBankDb.getLoanAccounts();
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
-        const mapped = list.map(normalizeLoan).filter(Boolean);
+        const localLoans = readLoans();
+        const localMap = new Map(localLoans.map((l) => [l.id, l]));
+
+        const mapped = list.map((item) => {
+          const local = localMap.get(item.id) || {};
+          const status = ["Active", "Closed"].includes(item.status)
+            ? item.status
+            : (String(item.status || "").toLowerCase() === "closed" ? "Closed" : (local.status || "Active"));
+
+          const closedDate = item.closedDate || item.closed_date || (status === "Closed" ? local.closedDate : null);
+
+          const merged = {
+            ...local,
+            ...item,
+            status,
+            closedDate,
+            statusHistory: Array.isArray(local.statusHistory) && local.statusHistory.length
+              ? local.statusHistory
+              : [event(status)],
+          };
+          return normalizeLoan(merged);
+        }).filter(Boolean);
+
         writeLoans(mapped);
-        return mapped;
+        return mapped.sort((left, right) => String(right.updatedAt || right.startDate || "").localeCompare(String(left.updatedAt || left.startDate || "")));
       }
     } catch (err) {
       console.warn("[LoanAccounts] Failed to fetch from MySQL:", err.message);
@@ -111,7 +164,13 @@ export async function getAllLoans() {
 }
 
 export async function getLoanById(id) {
-  return readLoans().find((loan) => loan.id === id) || null;
+  const local = readLoans().find((loan) => loan.id === id);
+  if (local) return local;
+  if (isDatabaseMode()) {
+    const all = await getAllLoans();
+    return all.find((loan) => loan.id === id) || null;
+  }
+  return null;
 }
 
 export async function createLoan(loan) {
@@ -119,28 +178,13 @@ export async function createLoan(loan) {
   const validation = validateLoan(normalized);
   if (validation) throw new Error(validation);
   const loans = readLoans();
-  const id = loan.id || crypto.randomUUID();
+  const id = loan.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `loan_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
   if (loans.some((entry) => entry.id === id)) throw new Error("This loan was already saved.");
   const now = new Date().toISOString();
   const saved = { ...normalized, id, repayments: [], statusHistory: [event(normalized.status)], createdAt: now, updatedAt: now };
 
   if (isDatabaseMode()) {
-    const estimatedEmi = calculateLoanEmi(saved.originalAmount, saved.annualInterestRate, saved.tenureMonths);
-    const emiToStore = (saved.emiOverride !== "" && Number(saved.emiOverride) > 0) ? Number(saved.emiOverride) : estimatedEmi;
-
-    await cashBankDb.saveLoanAccount({
-      id: saved.id,
-      accountName: saved.loanName,
-      lenderName: saved.lenderName,
-      accountNumber: saved.id.slice(0, 8),
-      loanType: saved.repaymentFrequency || "Monthly",
-      principalAmount: parseFloat(saved.originalAmount) || 0,
-      currentBalance: parseFloat(saved.originalAmount) || 0,
-      interestRate: parseFloat(saved.annualInterestRate) || 0,
-      termMonths: parseInt(saved.tenureMonths, 10) || 12,
-      emiAmount: emiToStore,
-      startDate: saved.startDate || null,
-    });
+    await cashBankDb.saveLoanAccount(toLoanDbPayload(saved));
   }
   writeLoans([saved, ...loans]);
   return saved;
@@ -155,38 +199,38 @@ export async function updateLoan(id, changes) {
     loans = all;
   }
   if (index < 0) throw new Error("Loan account not found.");
-  const nextStatus = changes.status && ["Active", "Closed"].includes(changes.status) ? changes.status : loans[index].status;
-  const statusHistory = nextStatus !== loans[index].status ? [...(loans[index].statusHistory || []), event(nextStatus)] : (loans[index].statusHistory || [event(loans[index].status)]);
+
+  const current = loans[index];
+  const nextStatus = changes.status && ["Active", "Closed"].includes(changes.status) ? changes.status : current.status;
+  const statusHistory = nextStatus !== current.status ? [...(current.statusHistory || []), event(nextStatus)] : (current.statusHistory || [event(current.status)]);
   const editable = Object.fromEntries(Object.entries(changes).filter(([key]) => !["id", "repayments", "statusHistory", "createdAt", "updatedAt"].includes(key)));
-  const nextOverride = Object.hasOwn(editable, "emiOverride") ? (editable.emiOverride === "" || editable.emiOverride == null ? "" : Number(editable.emiOverride)) : loans[index].emiOverride;
-  const updated = { ...loans[index], ...editable, status: nextStatus, statusHistory, originalAmount: Number(editable.originalAmount ?? loans[index].originalAmount), annualInterestRate: Number(editable.annualInterestRate ?? loans[index].annualInterestRate), tenureMonths: Number(editable.tenureMonths ?? loans[index].tenureMonths), emiOverride: nextOverride, updatedAt: new Date().toISOString() };
+  const nextOverride = Object.hasOwn(editable, "emiOverride") ? (editable.emiOverride === "" || editable.emiOverride == null ? "" : Number(editable.emiOverride)) : current.emiOverride;
+  const closedDate = nextStatus === "Closed"
+    ? (editable.closedDate || current.closedDate || new Date().toISOString().slice(0, 10))
+    : null;
+
+  const updated = {
+    ...current,
+    ...editable,
+    status: nextStatus,
+    closedDate,
+    statusHistory,
+    originalAmount: Number(editable.originalAmount ?? current.originalAmount),
+    annualInterestRate: Number(editable.annualInterestRate ?? current.annualInterestRate),
+    tenureMonths: Number(editable.tenureMonths ?? current.tenureMonths),
+    emiOverride: nextOverride,
+    updatedAt: new Date().toISOString(),
+  };
   const validation = validateLoan(updated);
   if (validation) throw new Error(validation);
-  const previouslyPaid = (loans[index].repayments || []).reduce((sum, repayment) => sum + Math.round(Number(repayment.principalPaid || 0) * 100), 0);
+  const previouslyPaid = (current.repayments || []).reduce((sum, repayment) => sum + Math.round(Number(repayment.principalPaid || 0) * 100), 0);
   if (Math.round(updated.originalAmount * 100) < previouslyPaid) throw new Error("Original amount cannot be lower than principal already repaid.");
-  loans[index] = updated;
-  if (isDatabaseMode()) {
-    try {
-      const estimatedEmi = calculateLoanEmi(updated.originalAmount, updated.annualInterestRate, updated.tenureMonths);
-      const emiToStore = (updated.emiOverride !== "" && Number(updated.emiOverride) > 0) ? Number(updated.emiOverride) : estimatedEmi;
 
-      await cashBankDb.saveLoanAccount({
-        id: updated.id,
-        accountName: updated.loanName,
-        lenderName: updated.lenderName,
-        accountNumber: updated.accountNumber || updated.id.slice(0, 8),
-        loanType: updated.repaymentFrequency || "Monthly",
-        principalAmount: parseFloat(updated.originalAmount) || 0,
-        currentBalance: parseFloat(calculateLoanOutstanding(updated)) || 0,
-        interestRate: parseFloat(updated.annualInterestRate) || 0,
-        termMonths: parseInt(updated.tenureMonths, 10) || 12,
-        emiAmount: emiToStore,
-        startDate: updated.startDate || null,
-      });
-    } catch (dbErr) {
-      console.warn("[LoanAccounts] Failed to sync update to MySQL:", dbErr.message);
-    }
+  if (isDatabaseMode()) {
+    await cashBankDb.saveLoanAccount(toLoanDbPayload(updated));
   }
+
+  loans[index] = updated;
   writeLoans(loans);
   return updated;
 }
@@ -223,7 +267,7 @@ export async function recordRepayment(loanId, repayment) {
   if (index < 0) throw new Error("Loan account not found.");
   const loan = loans[index];
   if (loan.status !== "Active") throw new Error("Repayments cannot be added to a closed loan.");
-  const id = repayment.id || crypto.randomUUID();
+  const id = repayment.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `rep_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
   const existing = (loan.repayments || []).find((entry) => entry.id === id);
   if (existing) return existing;
   const normalized = { ...repayment, id, loanId, amountPaid: Number(repayment.amountPaid), principalPaid: Number(repayment.principalPaid), interestPaid: Math.round((Number(repayment.amountPaid) - Number(repayment.principalPaid)) * 100) / 100, reference: String(repayment.reference || "").trim(), notes: String(repayment.notes || "").trim() };
@@ -241,11 +285,31 @@ export async function recordRepayment(loanId, repayment) {
 }
 
 export async function closeLoan(id) {
-  const loans = readLoans();
-  const index = loans.findIndex((loan) => loan.id === id);
+  let loans = readLoans();
+  let index = loans.findIndex((loan) => loan.id === id);
+  if (index < 0) {
+    const all = await getAllLoans();
+    index = all.findIndex((loan) => loan.id === id);
+    loans = all;
+  }
   if (index < 0) throw new Error("Loan account not found.");
   if (loans[index].status === "Closed") return loans[index];
-  const closed = { ...loans[index], status: "Closed", statusHistory: [...(loans[index].statusHistory || []), event("Closed")], updatedAt: new Date().toISOString() };
+
+  const nowIso = new Date().toISOString();
+  const todayDate = nowIso.slice(0, 10);
+  const current = loans[index];
+  const closed = {
+    ...current,
+    status: "Closed",
+    closedDate: todayDate,
+    statusHistory: [...(current.statusHistory || []), event("Closed")],
+    updatedAt: nowIso,
+  };
+
+  if (isDatabaseMode()) {
+    await cashBankDb.saveLoanAccount(toLoanDbPayload(closed));
+  }
+
   loans[index] = closed;
   writeLoans(loans);
   return closed;

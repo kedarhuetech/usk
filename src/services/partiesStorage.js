@@ -27,17 +27,22 @@ export function setMemoryParties(list) {
         isActive: !isInactive,
       };
     });
+  } else {
+    memoryParties = [];
   }
 }
 
 // Reads parties.
 function readParties() {
   if (memoryParties.length > 0) return memoryParties;
-  if (isDatabaseMode()) return [];
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
     const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
-    return Array.isArray(value) ? value : [];
+    if (Array.isArray(value) && value.length > 0) {
+      if (isDatabaseMode()) memoryParties = value;
+      return value;
+    }
+    return [];
   } catch {
     return [];
   }
@@ -74,7 +79,7 @@ export async function fetchPartiesFromDb() {
 }
 
 // Saves party.
-export function saveParty(party) {
+export function saveParty(party, options = {}) {
   const isInactive = party?.status === "inactive" || party?.isActive === false;
   const saved = {
     ...party,
@@ -87,7 +92,8 @@ export function saveParty(party) {
   if (typeof window !== "undefined" && window.localStorage) {
     window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   }
-  if (isDatabaseMode()) {
+  setMemoryParties(next);
+  if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.save(saved).catch((err) => console.warn("[MySQL] Background party sync notice:", err.message));
   }
   notifyBusinessDataChanged();
@@ -95,11 +101,12 @@ export function saveParty(party) {
 }
 
 // Deletes party.
-export function deleteParty(partyId) {
+export function deleteParty(partyId, options = {}) {
   if (typeof window === "undefined" || !window.localStorage) return;
   const next = readParties().filter((entry) => String(entry.id) !== String(partyId));
   window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
-  if (isDatabaseMode()) {
+  setMemoryParties(next);
+  if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.remove(partyId).catch((err) => console.warn("[MySQL] Background party delete notice:", err.message));
   }
   notifyBusinessDataChanged();

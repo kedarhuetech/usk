@@ -81,7 +81,7 @@ export const partiesDb = {
    */
   async listAll() {
     try {
-      const res = await apiRequest("/parties?limit=200");
+      const res = await apiRequest("/parties?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         setMemoryParties(list);
@@ -155,7 +155,7 @@ export const itemsDb = {
    */
   async listAll() {
     try {
-      const res = await apiRequest("/items?limit=1000");
+      const res = await apiRequest("/items?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         setMemoryItems(list);
@@ -262,7 +262,7 @@ export const transactionsDb = {
    */
   async listByType(type) {
     try {
-      const res = await apiRequest(`/transactions?type=${encodeURIComponent(type)}&limit=200`);
+      const res = await apiRequest(`/transactions?type=${encodeURIComponent(type)}&limit=all`);
       const list = Array.isArray(res) ? res : (res?.data || []);
       return list;
     } catch (err) {
@@ -276,7 +276,7 @@ export const transactionsDb = {
    */
   async listAll() {
     try {
-      const res = await apiRequest("/transactions?limit=200");
+      const res = await apiRequest("/transactions?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list) && list.length > 0) {
         const sales = list.filter((t) => t.transactionType === "sale" || t.transactionType === "pos" || t.type === "sale" || t.type === "pos");
@@ -580,7 +580,7 @@ export const serviceRemindersDb = {
 
   async listAll() {
     try {
-      const res = await apiRequest("/service-reminders?limit=200");
+      const res = await apiRequest("/service-reminders?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list) && list.length > 0) {
         writeLocal(SERVICE_REMINDERS_KEY, list);
@@ -686,6 +686,13 @@ export const settingsDb = {
 
   async saveCompanyProfile(profile) {
     return apiRequest("/settings/company-profile", { method: "POST", body: JSON.stringify(profile) });
+  },
+
+  async uploadCompanyAsset(file, assetType) {
+    const body = new FormData();
+    body.append("file", file);
+    if (assetType) body.append("assetType", assetType);
+    return apiRequest("/settings/company-profile/assets", { method: "POST", body });
   },
 };
 

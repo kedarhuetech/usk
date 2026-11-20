@@ -422,13 +422,10 @@ export function buildReportHtml({
       )}</h2>
     </div>
 
-    <!-- Metadata: Duration & User -->
+    <!-- Metadata: Duration -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:11px;font-weight:700;color:#334155;border-bottom:1px solid #cbd5e1;padding-bottom:8px;">
       <div>Duration: <span style="font-weight:600;">${escapeHtml(
         durationStr
-      )}</span></div>
-      <div>User: <span style="font-weight:600;">${escapeHtml(
-        user || "All Users"
       )}</span></div>
     </div>
 
@@ -594,9 +591,6 @@ export function generateReportPdfBlob({
       doc.setFont("helvetica", "bold");
       doc.setTextColor(51, 65, 85);
       doc.text(`Duration: ${durationStr}`, margin, currentY);
-      doc.text(`User: ${user || "All Users"}`, pageWidth - margin, currentY, {
-        align: "right",
-      });
       currentY += 2;
 
       doc.setDrawColor(203, 213, 225);
@@ -1316,13 +1310,10 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
               </h2>
             </div>
 
-            {/* Metadata: Duration & User */}
+            {/* Metadata: Duration */}
             <div className="mb-4 text-xs font-bold text-slate-900 space-y-1">
               <div>
                 Duration: <span className="font-semibold">{durationStr}</span>
-              </div>
-              <div>
-                User: <span className="font-semibold">{user || "All Users"}</span>
               </div>
             </div>
 

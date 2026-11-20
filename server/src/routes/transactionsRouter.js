@@ -54,8 +54,12 @@ router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
-    const offset = (page - 1) * limit;
+    const limitParam = req.query.limit;
+    const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
+    const limit = isAll
+      ? 100000
+      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+    const offset = isAll ? 0 : (page - 1) * limit;
     const type = (req.query.type || "").trim().toLowerCase();
     const partyId = (req.query.partyId || "").trim();
     const search = (req.query.search || "").trim();
@@ -100,9 +104,8 @@ router.get("/", async (req, res) => {
     );
     const total = countRows[0]?.total || 0;
 
-    // Query 2: Fetch paginated transaction headers with resolved party fields
-    const [rows] = await pool.query(
-      `SELECT t.id, t.business_id, t.transaction_type, t.document_number, t.transaction_date, t.due_date,
+    // Query 2: Fetch transaction headers with resolved party fields
+    let querySql = `SELECT t.id, t.business_id, t.transaction_type, t.document_number, t.transaction_date, t.due_date,
               t.party_id,
               COALESCE(NULLIF(TRIM(t.party_name), ''), p.party_name, IF(t.payment_mode = 'Cash' OR t.transaction_type = 'pos', 'Cash Sale', '')) AS party_name,
               COALESCE(NULLIF(TRIM(t.party_phone), ''), p.phone, '') AS party_phone,
@@ -116,67 +119,75 @@ router.get("/", async (req, res) => {
        FROM transactions t
        LEFT JOIN parties p ON t.party_id = p.id
        WHERE ${whereClause}
-       ORDER BY t.transaction_date DESC, t.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
+       ORDER BY t.transaction_date DESC, t.created_at DESC`;
+    let queryParams = [...params];
+
+    if (!isAll) {
+      querySql += " LIMIT ? OFFSET ?";
+      queryParams.push(limit, offset);
+    }
+
+    const [rows] = await pool.query(querySql, queryParams);
 
     // Query 3: Fetch normalized line items from transaction_items child table
     const txnIds = rows.map((r) => r.id);
     let itemsMap = new Map();
     if (txnIds.length > 0) {
-      const placeholders = txnIds.map(() => "?").join(",");
-      const [itemRows] = await pool.query(
-        `SELECT id, transaction_id, item_id, item_name, item_code, barcode, hsn_code,
-                batch_no, serial_no, quantity, free_qty, unit, unit_price,
-                purchase_price, discount_percent, discount_amount, tax_rate,
-                tax_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
-                igst_rate, igst_amount, cess_rate, cess_amount, total_amount, is_active
-         FROM transaction_items
-         WHERE business_id = ? AND transaction_id IN (${placeholders})
-         ORDER BY id ASC`,
-        [businessId, ...txnIds]
-      );
+      for (let i = 0; i < txnIds.length; i += 500) {
+        const chunk = txnIds.slice(i, i + 500);
+        const placeholders = chunk.map(() => "?").join(",");
+        const [itemRows] = await pool.query(
+          `SELECT id, transaction_id, item_id, item_name, item_code, barcode, hsn_code,
+                  batch_no, serial_no, quantity, free_qty, unit, unit_price,
+                  purchase_price, discount_percent, discount_amount, tax_rate,
+                  tax_amount, cgst_rate, cgst_amount, sgst_rate, sgst_amount,
+                  igst_rate, igst_amount, cess_rate, cess_amount, total_amount, is_active
+           FROM transaction_items
+           WHERE business_id = ? AND transaction_id IN (${placeholders})
+           ORDER BY id ASC`,
+          [businessId, ...chunk]
+        );
 
-      for (const item of itemRows) {
-        if (!itemsMap.has(item.transaction_id)) {
-          itemsMap.set(item.transaction_id, []);
+        for (const item of itemRows) {
+          if (!itemsMap.has(item.transaction_id)) {
+            itemsMap.set(item.transaction_id, []);
+          }
+          itemsMap.get(item.transaction_id).push({
+            id: item.id,
+            itemId: item.item_id,
+            sourceItemId: item.item_id,
+            item: item.item_name,
+            name: item.item_name,
+            itemName: item.item_name,
+            itemCode: item.item_code || "",
+            barcode: item.barcode || item.item_code || "",
+            size: item.item_code || "",
+            hsn: item.hsn_code || "",
+            hsnCode: item.hsn_code || "",
+            batchNo: item.batch_no || "",
+            serialNo: item.serial_no || "",
+            description: item.serial_no || "",
+            qty: parseFloat(item.quantity) || 0,
+            quantity: parseFloat(item.quantity) || 0,
+            freeQty: parseFloat(item.free_qty) || 0,
+            unit: item.unit || "PCS",
+            price: parseFloat(item.unit_price) || 0,
+            unitPrice: parseFloat(item.unit_price) || 0,
+            purchasePrice: parseFloat(item.purchase_price) || 0,
+            discountPercent: parseFloat(item.discount_percent) || 0,
+            discountAmount: parseFloat(item.discount_amount) || 0,
+            taxRate: parseFloat(item.tax_rate) || 0,
+            taxAmount: parseFloat(item.tax_amount) || 0,
+            cgstAmount: parseFloat(item.cgst_amount) || 0,
+            sgstAmount: parseFloat(item.sgst_amount) || 0,
+            igstAmount: parseFloat(item.igst_amount) || 0,
+            cessAmount: parseFloat(item.cess_amount) || 0,
+            amount: parseFloat(item.total_amount) || 0,
+            totalAmount: parseFloat(item.total_amount) || 0,
+            isActive: item.is_active !== 0,
+            is_active: item.is_active,
+          });
         }
-        itemsMap.get(item.transaction_id).push({
-          id: item.id,
-          itemId: item.item_id,
-          sourceItemId: item.item_id,
-          item: item.item_name,
-          name: item.item_name,
-          itemName: item.item_name,
-          itemCode: item.item_code || "",
-          barcode: item.barcode || item.item_code || "",
-          size: item.item_code || "",
-          hsn: item.hsn_code || "",
-          hsnCode: item.hsn_code || "",
-          batchNo: item.batch_no || "",
-          serialNo: item.serial_no || "",
-          description: item.serial_no || "",
-          qty: parseFloat(item.quantity) || 0,
-          quantity: parseFloat(item.quantity) || 0,
-          freeQty: parseFloat(item.free_qty) || 0,
-          unit: item.unit || "PCS",
-          price: parseFloat(item.unit_price) || 0,
-          unitPrice: parseFloat(item.unit_price) || 0,
-          purchasePrice: parseFloat(item.purchase_price) || 0,
-          discountPercent: parseFloat(item.discount_percent) || 0,
-          discountAmount: parseFloat(item.discount_amount) || 0,
-          taxRate: parseFloat(item.tax_rate) || 0,
-          taxAmount: parseFloat(item.tax_amount) || 0,
-          cgstAmount: parseFloat(item.cgst_amount) || 0,
-          sgstAmount: parseFloat(item.sgst_amount) || 0,
-          igstAmount: parseFloat(item.igst_amount) || 0,
-          cessAmount: parseFloat(item.cess_amount) || 0,
-          amount: parseFloat(item.total_amount) || 0,
-          totalAmount: parseFloat(item.total_amount) || 0,
-          isActive: item.is_active !== 0,
-          is_active: item.is_active,
-        });
       }
     }
 
@@ -298,11 +309,11 @@ router.get("/", async (req, res) => {
       success: true,
       data: transactions,
       pagination: {
-        page,
-        limit,
+        page: isAll ? 1 : page,
+        limit: isAll ? total : limit,
         total,
-        totalPages: Math.ceil(total / limit) || 1,
-        hasMore: offset + rows.length < total,
+        totalPages: isAll ? 1 : (Math.ceil(total / limit) || 1),
+        hasMore: isAll ? false : (offset + rows.length < total),
       },
     });
   } catch (err) {

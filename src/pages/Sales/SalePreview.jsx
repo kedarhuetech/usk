@@ -1280,21 +1280,7 @@ function SalePreview() {
 
   return (
     <div className="min-h-full bg-slate-100">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-4 print:hidden">
-        <h1 className="text-xl font-bold text-slate-900">Preview</h1>
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <input type="checkbox" className="h-5 w-5 accent-blue-600" />
-            Do not show invoice preview again
-          </label>
-          <button type="button" onClick={() => navigate("/sales/sale-invoices")} className="text-sm font-bold text-blue-600 hover:underline">
-            Save &amp; Close
-          </button>
-          <button type="button" onClick={() => navigate("/sales/sale-invoices/new")} className="rounded-full p-1 text-slate-500 hover:bg-slate-100">
-            <FiX className="h-5 w-5" />
-          </button>
-        </div>
-      </header>
+      
 
       <main className="grid gap-4 p-4 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_240px] print:block print:p-0">
         {/* Theme & Color Selector */}

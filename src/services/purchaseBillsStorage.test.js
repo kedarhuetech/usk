@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { APP_SETTINGS_KEY } from "./appSettingsStorage.js";
 import { inventoryItemsStorageKey } from "./itemsStorage.js";
+import { STORAGE_MODE_KEY } from "./dataStorageConfig.js";
 import { savePurchaseBill, replacePurchaseBills, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 
 test("purchase batch receipt, edit and deletion update multiple batch allocations once", () => {
   const prior = globalThis.window;
   const data = new Map();
+  data.set(STORAGE_MODE_KEY, "local");
   globalThis.window = { localStorage: { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: (key) => data.delete(key) }, dispatchEvent: () => true };
   try {
     data.set(APP_SETTINGS_KEY, JSON.stringify({ enableBatchTracking: true }));

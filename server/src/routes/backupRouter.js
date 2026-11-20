@@ -11,11 +11,11 @@ import { pool, businessIdFromRequest } from "../db/mysql.js";
 
 const router = Router();
 
-const BACKUP_TABLES = [
-  "businesses", "company_profiles", "app_settings", "parties",
+export const BACKUP_TABLES = [
+  "businesses", "company_profiles", "company_profile_assets", "app_settings", "parties",
   "units", "inventory_items", "item_batches", "inventory_adjustments",
   "transactions", "transaction_items", "service_reminders", "service_reminder_history",
-  "bank_accounts", "cash_in_hand", "cheques", "loan_accounts",
+  "bank_accounts", "bank_transactions", "cash_in_hand", "cheques", "loan_accounts",
   "expense_categories", "online_store_settings", "online_store_orders",
   "online_store_order_items", "smart_ads", "audit_trails"
 ];
@@ -99,7 +99,12 @@ router.post("/restore", async (req, res) => {
 
       for (const row of rows) {
         const keys = Object.keys(row).map((k) => `\`${k}\``);
-        const values = Object.values(row);
+        const values = Object.values(row).map((v) => {
+          if (v && typeof v === "object" && v.type === "Buffer" && Array.isArray(v.data)) {
+            return Buffer.from(v.data);
+          }
+          return v;
+        });
         const placeholders = keys.map(() => "?").join(",");
 
         await conn.query(

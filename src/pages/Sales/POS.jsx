@@ -25,7 +25,7 @@ import {
 } from "../../services/itemsStorage";
 import { getParties, saveParty, partiesStorageKey } from "../../services/partiesStorage";
 import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey } from "../../services/salesStorage";
-import { saveBusinessSaleInvoice } from "../../services/businessRecords";
+import { saveBusinessSaleInvoice, saveBusinessParty, saveBusinessItem } from "../../services/businessRecords";
 import {
   addPosBill,
   closePosBill,
@@ -2372,7 +2372,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   if (!modal.name?.trim()) return;
                   const newCust = {
@@ -2384,14 +2384,14 @@ export default function PointOfSale() {
                     address: modal.address?.trim() || "",
                   };
                   try {
-                    saveParty(newCust);
+                    await saveBusinessParty(newCust);
                   } catch (error) {
                     showToast(`Could not save customer: ${error.message || "Storage write failed."}`, "warning");
                     return;
                   }
                   setCustomers((current) => [...current, newCust]);
                   updateDraft({ customer: newCust.name, customerPhone: newCust.phone });
-                  showToast(`Saved customer "${newCust.name}" to local storage!`);
+                  showToast(`Saved customer "${newCust.name}"!`);
                   setModal(null);
                 }}
                 className="p-5 space-y-3.5"
@@ -2472,7 +2472,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   if (!modal.name?.trim()) return;
 
@@ -2496,8 +2496,8 @@ export default function PointOfSale() {
                   };
 
                   try {
-                    saveInventoryItem(newProduct);
-                    setProducts((curr) => [...curr.filter((item) => item.id !== newProduct.id), newProduct]);
+                    const saved = await saveBusinessItem(newProduct);
+                    setProducts((curr) => [...curr.filter((item) => item.id !== newProduct.id), saved || newProduct]);
                   } catch (error) {
                     showToast(`Could not save product: ${error.message || "Storage write failed."}`, "warning");
                     return;

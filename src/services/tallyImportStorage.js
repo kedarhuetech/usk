@@ -1,7 +1,7 @@
 // Saves Tally masters through the same local adapters used by the rest of the app.
-import { saveBusinessItem } from "./businessRecords.js";
+import { saveBusinessItem, saveBusinessParty } from "./businessRecords.js";
 import { getInventoryItems } from "./itemsStorage.js";
-import { getParties, saveParty } from "./partiesStorage.js";
+import { getParties } from "./partiesStorage.js";
 import { getTallyImportPayload, markStoredDuplicates } from "./tallyImportValidation.js";
 
 const LOCAL_MODE = "local-demo";
@@ -54,7 +54,7 @@ export async function importRecords(records) {
       if (record.recordType === "item") {
         await saveBusinessItem({ ...payload, id: undefined });
       } else {
-        saveParty({ ...payload, id: undefined });
+        await saveBusinessParty({ ...payload, id: undefined });
       }
       summary.imported += 1;
     } catch (error) {
@@ -107,7 +107,7 @@ export async function migrateLocalDemoRecords() {
       const payload = getTallyImportPayload(record);
       // Save each record through the same adapters used by a normal import.
       if (record.recordType === "item") await saveBusinessItem({ ...payload, id: undefined });
-      else saveParty({ ...payload, id: undefined });
+      else await saveBusinessParty({ ...payload, id: undefined });
       summary.imported += 1;
     } catch (error) {
       summary.failed += 1;

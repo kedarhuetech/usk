@@ -4,6 +4,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { FiClock, FiMoreVertical, FiX } from "react-icons/fi";
 import { deleteSaleInvoice, saveSaleInvoice } from "../../services/salesStorage.js";
 import { savePurchaseBill } from "../../services/purchaseBillsStorage.js";
+import { deleteBusinessSaleInvoice, deleteBusinessPurchaseBill } from "../../services/businessRecords.js";
+import { isDatabaseMode } from "../../services/dataStorageConfig.js";
+import { toast } from "./Toast.jsx";
 import {
   buildUnifiedDocumentHtml,
   openPrintWindow,
@@ -185,7 +188,7 @@ export default function TransactionActionMenu({
   }, [isOpen]);
 
   // Execute Action
-  const handleActionClick = (action, e) => {
+  const handleActionClick = async (action, e) => {
     e.stopPropagation();
     setIsOpen(false);
 
@@ -266,41 +269,51 @@ export default function TransactionActionMenu({
         } catch {}
       };
 
-      if (source === "Sale Order") {
-        filterStorage("ledgerly:saleOrders.v1");
-      } else if (source === "Purchase Order") {
-        filterStorage("ledgerly:purchaseOrders.v1");
-      } else if (source === "Sale") {
-        deleteSaleInvoice(rawId);
-        filterStorage("ledgerly:sales.v1");
-      } else if (source === "Purchase") {
-        filterStorage("ledgerly:purchaseBills.v1");
-        filterStorage("ledgerly:purchases.v1");
-      } else if (source === "Payment-In") {
-        filterStorage("ledgerly:paymentIns.v1");
-      } else if (source === "Payment-Out" || source === "Credit Note Refund") {
-        filterStorage("ledgerly:paymentOuts.v1");
-      } else if (source.includes("Estimate")) {
-        filterStorage("ledgerly:estimateQuotations.v1");
-      } else if (source.includes("Proforma")) {
-        filterStorage("ledgerly:proformaInvoices.v1");
-      } else if (source === "Credit Note") {
-        filterStorage("ledgerly:saleReturns.v1");
-      } else if (source === "Debit Note") {
-        filterStorage("ledgerly:purchaseReturns.v1");
+      try {
+        if (source === "Sale") {
+          await deleteBusinessSaleInvoice(rawId);
+          filterStorage("ledgerly:sales.v1");
+        } else if (source === "Purchase") {
+          await deleteBusinessPurchaseBill(rawId);
+          filterStorage("ledgerly:purchaseBills.v1");
+          filterStorage("ledgerly:purchases.v1");
+        } else {
+          if (isDatabaseMode()) {
+            await transactionsDb.remove(rawId);
+          }
+          if (source === "Sale Order") {
+            filterStorage("ledgerly:saleOrders.v1");
+          } else if (source === "Purchase Order") {
+            filterStorage("ledgerly:purchaseOrders.v1");
+          } else if (source === "Payment-In") {
+            filterStorage("ledgerly:paymentIns.v1");
+          } else if (source === "Payment-Out" || source === "Credit Note Refund") {
+            filterStorage("ledgerly:paymentOuts.v1");
+          } else if (source.includes("Estimate")) {
+            filterStorage("ledgerly:estimateQuotations.v1");
+          } else if (source.includes("Proforma")) {
+            filterStorage("ledgerly:proformaInvoices.v1");
+          } else if (source === "Credit Note") {
+            filterStorage("ledgerly:saleReturns.v1");
+          } else if (source === "Debit Note") {
+            filterStorage("ledgerly:purchaseReturns.v1");
+          }
+        }
+
+        recordAuditTrail({
+          action: "Transaction Deleted",
+          entity: source,
+          details: `${source} #${num} deleted`,
+          user: "Current User",
+        });
+
+        notifyBusinessDataChanged();
+        if (onRefresh) onRefresh();
+        toast.success(`${source} #${num} deleted.`);
+      } catch (error) {
+        console.error(`Failed to delete ${source}:`, error);
+        toast.error(error.message || `Could not delete ${source} #${num}.`);
       }
-
-      transactionsDb.remove(rawId).catch(() => {});
-
-      recordAuditTrail({
-        action: "Transaction Deleted",
-        entity: source,
-        details: `${source} #${num} deleted`,
-        user: "Current User",
-      });
-
-      notifyBusinessDataChanged();
-      if (onRefresh) onRefresh();
       return;
     }
 

@@ -28,7 +28,7 @@ export const pool = mysql.createPool({
 
 // This helper handles id from request logic.
 export function businessIdFromRequest(req) {
-  const imageRead = req.method === "GET" && /^\/assets\/[^/]+$/.test(req.path);
+  const imageRead = req.method === "GET" && /(?:^|\/)assets\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
   let requestedId = String(
     req.get("x-business-id") ||

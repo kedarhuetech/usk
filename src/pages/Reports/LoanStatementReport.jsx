@@ -353,35 +353,6 @@ export default function LoanStatementReport() {
           </select>
         </label>
 
-        {/* Store Filter */}
-        <label className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3.5 py-1.5 text-xs text-slate-700">
-          <span className="font-semibold text-slate-500">Store:</span>
-          <select
-            aria-label="Store filter"
-            value={store}
-            onChange={(e) => setStore(e.target.value)}
-            className="bg-transparent font-medium outline-none cursor-pointer"
-          >
-            {storeOptions.map((opt) => (
-              <option key={opt}>{opt}</option>
-            ))}
-          </select>
-        </label>
-
-        {/* User Filter */}
-        <label className="flex items-center gap-1.5 rounded-full bg-slate-100 px-3.5 py-1.5 text-xs text-slate-700">
-          <span className="font-semibold text-slate-500">User:</span>
-          <select
-            aria-label="User filter"
-            value={user}
-            onChange={(e) => setUser(e.target.value)}
-            className="bg-transparent font-medium outline-none cursor-pointer"
-          >
-            {userOptions.map((opt) => (
-              <option key={opt}>{opt}</option>
-            ))}
-          </select>
-        </label>
 
         {/* Search & Export Actions */}
         <div className="ml-auto flex items-center gap-3">

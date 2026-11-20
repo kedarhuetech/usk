@@ -313,17 +313,6 @@ export default function SalePurchaseByPartyGroupReport() {
               </div>
             </div>
 
-            {/* All Firms */}
-            <div className="relative">
-              <select
-                value={firm}
-                onChange={(e) => setFirm(e.target.value)}
-                className="appearance-none rounded-md border border-slate-300 bg-white px-3 py-1.5 pr-8 text-xs font-medium text-slate-700 outline-none cursor-pointer hover:border-slate-400"
-              >
-                <option value="ALL FIRMS">ALL FIRMS</option>
-              </select>
-              <FiChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs" />
-            </div>
           </div>
 
           {/* Excel & Print buttons */}

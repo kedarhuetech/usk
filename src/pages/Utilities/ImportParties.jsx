@@ -4,7 +4,8 @@ import { FiAlertCircle, FiCheckCircle, FiDownload, FiTrash2, FiUpload } from "re
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
+import { saveBusinessParty } from "../../services/businessRecords";
 
 const columns = [
   ["partyName", "Party Name", true],
@@ -165,7 +166,7 @@ function ImportParties() {
           const party = { ...row };
           delete party.rowNumber;
           delete party.errors;
-          saveParty({ ...party, id: undefined });
+          await saveBusinessParty({ ...party, id: undefined });
           keys.add(key);
           imported += 1;
         } catch {

@@ -82,11 +82,11 @@ function Sidebar() {
         item.path
           ? [{ id: item.id, label: item.label, path: item.path }]
           : (item.children || []).map((child) => ({
-              id: child.id,
-              label: child.label,
-              path: child.path,
-              parentLabel: item.label,
-            })),
+            id: child.id,
+            label: child.label,
+            path: child.path,
+            parentLabel: item.label,
+          })),
       ),
     [filteredNavigation],
   );
@@ -226,11 +226,10 @@ function Sidebar() {
             type="button"
             onClick={openCompanyProfile}
             title={companyProfile.businessName || companyProfile.companyName || "Company Profile"}
-            className={`flex h-9.5 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-semibold transition cursor-pointer ${
-              isProfileActive
-                ? "bg-[#FF5A1F] text-white shadow-xs"
-                : "bg-[#1A1E27] text-slate-200 hover:bg-[#222733] hover:text-white"
-            }`}
+            className={`flex h-9.5 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-semibold transition cursor-pointer ${isProfileActive
+              ? "bg-[#FF5A1F] text-white shadow-xs"
+              : "bg-[#1A1E27] text-slate-200 hover:bg-[#222733] hover:text-white"
+              }`}
           >
             <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#FF5A1F] text-white">
               {companyProfile.logo ? (

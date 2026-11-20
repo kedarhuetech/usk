@@ -246,10 +246,11 @@ const saveChequeHandler = async (req, res) => {
     const amount = parseFloat(body.amount) || 0;
     const rawChequeDate = body.chequeDate || body.date || new Date().toISOString().slice(0, 10);
     const chequeDate = toSqlDate(rawChequeDate) || new Date().toISOString().slice(0, 10);
-    const chequeType = body.chequeType || "received";
-    const status = body.status || "pending";
-    const depositDate = toSqlDate(body.depositDate);
-    const clearanceDate = toSqlDate(body.clearanceDate);
+    const chequeType = (body.chequeType || "received").toLowerCase();
+    const status = (body.status || "pending").toLowerCase();
+    const isReceived = chequeType === "received";
+    const depositDate = toSqlDate(body.depositDate || (isReceived ? body.expectedDate : null));
+    const clearanceDate = toSqlDate(body.clearanceDate || (!isReceived ? body.expectedDate : null));
     const notes = body.notes || null;
 
     await pool.query(
@@ -258,6 +259,7 @@ const saveChequeHandler = async (req, res) => {
         amount, cheque_date, cheque_type, status, deposit_date, clearance_date, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
+        party_id = VALUES(party_id),
         party_name = VALUES(party_name),
         cheque_number = VALUES(cheque_number),
         bank_name = VALUES(bank_name),
@@ -275,7 +277,7 @@ const saveChequeHandler = async (req, res) => {
       ]
     );
 
-    return res.json({ success: true, message: "Cheque saved successfully.", data: { id, chequeNumber, amount } });
+    return res.json({ success: true, message: "Cheque saved successfully.", data: { id, chequeNumber, amount, status } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -356,6 +358,8 @@ router.get("/loan-accounts", async (req, res) => {
           termMonths: parseInt(r.term_months, 10) || 12,
           emiAmount: parseFloat(r.emi_amount) || 0,
           startDate: r.start_date,
+          status: r.status || "Active",
+          closedDate: r.closed_date ? (toSqlDate(r.closed_date) || String(r.closed_date).slice(0, 10)) : null,
           createdAt: r.created_at,
           updatedAt: r.updated_at,
           repayments: loanRepayments,
@@ -397,12 +401,20 @@ const saveLoanHandler = async (req, res) => {
 
     const currentBalance = parseFloat(body.currentBalance ?? principalAmount) || 0;
     const startDate = body.startDate || null;
+    const rawStatus = String(body.status || "").trim();
+    const status = ["active", "closed"].includes(rawStatus.toLowerCase())
+      ? (rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase())
+      : "Active";
+    const closedDate = status === "Closed"
+      ? (toSqlDate(body.closedDate || body.closed_date) || new Date().toISOString().slice(0, 10))
+      : null;
 
     await pool.query(
       `INSERT INTO loan_accounts (
         id, business_id, account_name, lender_name, account_number, loan_type,
-        principal_amount, current_balance, interest_rate, term_months, emi_amount, start_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        principal_amount, current_balance, interest_rate, term_months, emi_amount, start_date,
+        status, closed_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         account_name = VALUES(account_name),
         lender_name = VALUES(lender_name),
@@ -414,14 +426,17 @@ const saveLoanHandler = async (req, res) => {
         term_months = VALUES(term_months),
         emi_amount = VALUES(emi_amount),
         start_date = VALUES(start_date),
+        status = VALUES(status),
+        closed_date = VALUES(closed_date),
         updated_at = CURRENT_TIMESTAMP`,
       [
         id, businessId, accountName, lenderName, accountNumber, loanType,
-        principalAmount, currentBalance, interestRate, termMonths, emiAmount, startDate
+        principalAmount, currentBalance, interestRate, termMonths, emiAmount, startDate,
+        status, closedDate
       ]
     );
 
-    return res.json({ success: true, message: "Loan account saved.", data: { id, accountName, currentBalance, emiAmount } });
+    return res.json({ success: true, message: "Loan account saved.", data: { id, accountName, currentBalance, emiAmount, status, closedDate } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
