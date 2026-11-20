@@ -1,6 +1,7 @@
 // Implements the backend whatsapp business service.
 import { graphGet, normalizeMetaError } from "./metaOAuthService.js";
 import { graphJsonPost } from "./whatsappOAuthService.js";
+import { getMetaOAuthConfig } from "../config/metaOAuth.js";
 
 const BUSINESS_FIELDS = "id,name,verification_status";
 const WABA_FIELDS = "id,name,currency,timezone_id,message_template_namespace";
