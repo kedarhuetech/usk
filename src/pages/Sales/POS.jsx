@@ -11,6 +11,7 @@ import {
   FiFileText,
   FiInfo,
   FiPlus,
+  FiPrinter,
   FiSearch,
   FiSettings,
   FiTag,
@@ -130,16 +131,16 @@ function billDraftSignature(bill) {
   });
 }
 
-function ActionButton({ children, primary = false, onClick, disabled = false }) {
+function ActionButton({ children, primary = false, onClick, disabled = false, className = "" }) {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`min-h-[48px] rounded-md border px-3 py-2 text-sm font-semibold transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${primary
+      className={`min-h-[36px] sm:min-h-[38px] rounded-md border px-2 sm:px-3 py-1.5 text-xs font-semibold transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 text-center flex items-center justify-center ${primary
         ? "border-emerald-500 bg-emerald-200 text-slate-800"
         : "border-blue-300 bg-blue-100 text-slate-700"
-        }`}
+        } ${className}`}
     >
       {children}
     </button>
@@ -1046,107 +1047,82 @@ export default function PointOfSale() {
   ];
 
   return (
-    <main className="flex h-screen w-screen min-h-[600px] flex-col overflow-hidden bg-[#e8edf5] text-[#41485d]">
-      {/* Top Header Bar */}
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 text-sm">
-        <div className="flex items-center gap-5 text-slate-700">
-          <button
-            type="button"
-            onClick={() => navigate("/company-profile")}
-            className="font-semibold text-slate-800 hover:text-blue-600 transition"
-          >
-            Company
-          </button>
-          <button
-            type="button"
-            onClick={() => setModal({ type: "shortcuts" })}
-            className="hover:text-blue-600 transition"
-          >
-            Help
-          </button>
+    <main className="flex h-[100dvh] w-full flex-col overflow-hidden bg-[#e8edf5] text-[#41485d]">
+      {/* Bill Tabs & Actions Bar */}
+      <nav className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-slate-200 bg-white px-2 sm:px-3">
+        <div className="flex h-full min-w-0 items-center gap-1.5 overflow-x-auto py-1">
+          {billSession.bills.map((bill) => (
+            <div
+              key={bill.id}
+              className={`flex h-full shrink-0 items-center gap-2 rounded-t-md border-t-2 px-2.5 sm:px-3 ${
+                bill.id === billSession.activeBillId
+                  ? "border-blue-600 bg-[#f8f9fc]"
+                  : "border-transparent bg-white"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => activateBill(bill.id)}
+                className="max-w-32 sm:max-w-40 truncate text-xs sm:text-sm font-semibold text-slate-800"
+                aria-current={bill.id === billSession.activeBillId ? "page" : undefined}
+              >
+                #{bill.invoiceNo}
+              </button>
+              <button
+                type="button"
+                onClick={() => requestCloseBill(bill.id)}
+                aria-label={`Close bill ${bill.invoiceNo}`}
+                className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+              >
+                <FiX size={14} />
+              </button>
+            </div>
+          ))}
           <button
             type="button"
             onClick={handleNewBillClick}
-            title="Start a new bill"
-            className="hover:text-blue-600 transition"
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
           >
-            ⟳
+            <FiPlus className="text-blue-600" />
+            <span>New Bill</span>
           </button>
         </div>
 
-        <div className="hidden items-center gap-2 text-xs md:flex">
-          <span>Customer Support:</span>
-          <a className="text-blue-600 hover:underline" href="tel:+9876544567">
-            +91-8764567987
-          </a>
-          <span className="text-slate-300">|</span>
-          <button
-            type="button"
-            onClick={() => showToast("Online Support is available 24/7 at supportudyog.com")}
-            className="text-blue-600 hover:underline"
-          >
-            Get Instant Online Support
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="hidden text-xs text-slate-500 md:block">
+            Saved bills: <span className="font-semibold text-slate-700">{bills.length}</span>
+          </div>
           <button
             type="button"
             title="Settings"
             onClick={() => setModal({ type: "settings" })}
             className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 transition"
           >
-            <FiSettings size={18} />
+            <FiSettings size={17} />
           </button>
           <button
             type="button"
-            title="Close POS (Esc)"
-            aria-label="Close POS and return to previous page"
+            title="Close POS"
+            aria-label="Close POS"
             onClick={handleClosePOS}
-            className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer shadow-sm"
+            className="flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer shadow-sm"
           >
-            <FiX className="h-4 w-4" />
-            <span>Close</span>
+            <FiX className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Close</span>
           </button>
-        </div>
-      </header>
-
-      {/* Bill Tabs & Actions Bar */}
-      <nav className="flex h-[48px] shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3">
-        <div className="flex h-full min-w-0 items-center gap-1 overflow-x-auto">
-          {billSession.bills.map((bill) => (
-            <div key={bill.id} className={`flex h-full shrink-0 items-center gap-3 rounded-t-md border-t-2 px-3 ${bill.id === billSession.activeBillId ? "border-blue-600 bg-[#f8f9fc]" : "border-transparent bg-white"}`}>
-              <button type="button" onClick={() => activateBill(bill.id)} className="max-w-40 truncate text-sm font-semibold text-slate-800" aria-current={bill.id === billSession.activeBillId ? "page" : undefined}>
-                #{bill.invoiceNo}
-              </button>
-              <button type="button" onClick={() => requestCloseBill(bill.id)} aria-label={`Close bill ${bill.invoiceNo}`} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 transition">
-                <FiX />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={handleNewBillClick}
-          className="flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition"
-        >
-          <FiPlus className="text-blue-600" /> New Bill [Ctrl+T]
-        </button>
-        <div className="ml-auto hidden text-xs text-slate-500 sm:block">
-          Saved bills: <span className="font-semibold text-slate-700">{bills.length}</span>
         </div>
       </nav>
 
       {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{storageError}</p>}
 
       {/* Main Split Grid */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-auto p-1.5 lg:grid-cols-[minmax(0,1.82fr)_minmax(340px,1fr)]">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-1.5 p-1.5 overflow-y-auto lg:overflow-hidden">
         {activeBill ? <>
           {/* Left Section: Search, Table, Shortcuts Bar */}
-          <section className="flex min-h-[500px] flex-col gap-1.5">
+          <section className="flex flex-col flex-1 min-h-0 min-w-0 gap-1.5">
             {/* Item Search Bar */}
             <div className="relative shrink-0">
-              <label className="flex h-[58px] items-center gap-3 rounded-md border-2 border-blue-500 bg-white px-3 shadow-sm">
+              <label className="flex h-11 sm:h-12 items-center gap-2.5 rounded-md border-2 border-blue-500 bg-white px-3 shadow-sm">
                 <input
                   ref={searchRef}
                   aria-label="Search items"
@@ -1187,7 +1163,7 @@ export default function PointOfSale() {
                     }
                   }}
                   placeholder={enableBarcodeScanning ? "Search item name or code, or scan barcode..." : "Search item name or code..."}
-                  className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:font-medium placeholder:text-slate-400 sm:text-lg"
+                  className="min-w-0 flex-1 bg-transparent text-sm sm:text-base outline-none placeholder:font-medium placeholder:text-slate-400"
                 />
                 {search && (
                   <button
@@ -1199,7 +1175,7 @@ export default function PointOfSale() {
                     <FiX />
                   </button>
                 )}
-                <FiSearch size={24} className="shrink-0 text-blue-500" />
+                <FiSearch size={20} className="shrink-0 text-blue-500" />
               </label>
 
               {/* Product Dropdown Results */}
@@ -1258,22 +1234,22 @@ export default function PointOfSale() {
 
             {/* Items Table */}
             <div
-              className="min-h-[220px] flex-1 overflow-auto rounded-md border border-slate-300 bg-white shadow-sm"
+              className="flex-1 min-h-[160px] sm:min-h-[200px] overflow-auto rounded-md border border-slate-300 bg-white shadow-sm"
               onClick={() => setProductOpen(false)}
             >
-              <table className="min-w-[900px] w-full border-collapse text-sm">
+              <table className="min-w-[760px] sm:min-w-[900px] w-full border-collapse text-xs sm:text-sm">
                 <thead className="sticky top-0 z-10 bg-[#f3f4f6] text-left font-semibold text-slate-600">
-                  <tr className="h-[55px]">
-                    <th className="border border-slate-200 px-3">#</th>
-                    <th className="border border-slate-200 px-3">ITEM CODE</th>
-                    <th className="border border-slate-200 px-3">ITEM NAME</th>
-                    <th className="border border-slate-200 px-2 text-center">QTY</th>
-                    <th className="border border-slate-200 px-2">UNIT</th>
-                    <th className="border border-slate-200 px-2">PRICE/UNIT (₹)</th>
-                    <th className="border border-slate-200 px-2">DISCOUNT (₹)</th>
-                    <th className="border border-slate-200 px-2">TAX (₹)</th>
-                    <th className="border border-slate-200 px-2">TOTAL (₹)</th>
-                    <th className="border border-slate-200 px-2 text-center">ACTION</th>
+                  <tr className="h-9 sm:h-10">
+                    <th className="border border-slate-200 px-2 sm:px-3">#</th>
+                    <th className="border border-slate-200 px-2 sm:px-3">ITEM CODE</th>
+                    <th className="border border-slate-200 px-2 sm:px-3">ITEM NAME</th>
+                    <th className="border border-slate-200 px-1 sm:px-2 text-center">QTY</th>
+                    <th className="border border-slate-200 px-1 sm:px-2">UNIT</th>
+                    <th className="border border-slate-200 px-1 sm:px-2">PRICE/UNIT (₹)</th>
+                    <th className="border border-slate-200 px-1 sm:px-2">DISCOUNT (₹)</th>
+                    <th className="border border-slate-200 px-1 sm:px-2">TAX (₹)</th>
+                    <th className="border border-slate-200 px-1 sm:px-2">TOTAL (₹)</th>
+                    <th className="border border-slate-200 px-1 sm:px-2 text-center">ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1283,16 +1259,16 @@ export default function PointOfSale() {
                       <tr
                         key={item.lineId}
                         onClick={() => setSelectedId(item.lineId)}
-                        className={`h-[52px] cursor-pointer transition ${isSelected
+                        className={`h-10 sm:h-11 cursor-pointer transition ${isSelected
                           ? "bg-[#e3f1ff] ring-1 ring-blue-300"
                           : "hover:bg-slate-50"
                           }`}
                       >
-                        <td className="border border-slate-200 px-3 font-medium">{index + 1}</td>
-                        <td className="border border-slate-200 px-3 text-slate-600">{item.code}</td>
-                        <td className="border border-slate-200 px-3">
+                        <td className="border border-slate-200 px-2 sm:px-3 font-medium">{index + 1}</td>
+                        <td className="border border-slate-200 px-2 sm:px-3 text-slate-600">{item.code}</td>
+                        <td className="border border-slate-200 px-2 sm:px-3">
                           <div className="font-semibold text-slate-800">{item.name}</div>
-                          <div className="text-xs text-slate-500">GST {item.taxRate}%</div>
+                          <div className="text-[11px] text-slate-500">GST {item.taxRate}%</div>
                         </td>
                         <td className="border border-slate-200 p-1 text-center">
                           <button
@@ -1385,7 +1361,7 @@ export default function PointOfSale() {
             </div>
 
             {/* Bottom Action Buttons Bar */}
-            <div className="grid shrink-0 grid-cols-2 gap-2 rounded-md border border-slate-200 bg-white p-2 sm:grid-cols-4">
+            <div className="grid shrink-0 grid-cols-2 gap-1.5 rounded-md border border-slate-200 bg-white p-1.5 sm:grid-cols-4 xl:grid-cols-7">
               {shortcuts.map(([label, action]) => (
                 <ActionButton key={label} onClick={action}>
                   {label}
@@ -1394,12 +1370,12 @@ export default function PointOfSale() {
             </div>
 
             {/* Backup & Status Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-              <span className="flex items-center gap-1.5 text-slate-600">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                All products loaded directly from LocalStorage ({products.length} products).
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 sm:px-3 py-1.5 text-xs shadow-sm">
+              <span className="flex items-center gap-1.5 text-slate-600 truncate">
+                <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+                <span className="truncate">All products loaded directly from LocalStorage ({products.length} products).</span>
               </span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1439,24 +1415,24 @@ export default function PointOfSale() {
           </section>
 
           {/* Right Section: Bill Details, Totals & Payment Controls */}
-          <aside className="flex min-h-[500px] flex-col gap-1.5">
+          <aside className="w-full lg:w-[350px] xl:w-[390px] shrink-0 flex flex-col min-h-0 gap-1.5 overflow-y-auto justify-between">
             {/* Customer & Date Selector */}
-            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-              <label className="flex h-[52px] items-center justify-between rounded-xl border border-slate-300 px-4">
-                <span className="text-sm font-semibold text-slate-700">Date</span>
+            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-2.5 shadow-sm space-y-2">
+              <label className="flex h-9 items-center justify-between rounded-lg border border-slate-300 px-3">
+                <span className="text-xs font-semibold text-slate-700">Date</span>
                 <input
                   type="date"
                   aria-label="Bill date"
                   value={draft.date}
                   onChange={(event) => updateDraft({ date: event.target.value })}
-                  className="max-w-[165px] bg-transparent text-sm font-medium text-slate-800 outline-none"
+                  className="bg-transparent text-xs font-medium text-slate-800 outline-none"
                 />
-                <FiCalendar className="text-blue-500" size={19} />
+                <FiCalendar className="text-blue-500 shrink-0" size={16} />
               </label>
 
-              <div className="relative mt-3">
-                <div className="flex h-[56px] items-center rounded-xl border border-slate-300 px-3">
-                  <FiUser className="mr-2 text-slate-400" />
+              <div className="relative">
+                <div className="flex h-9 items-center rounded-lg border border-slate-300 px-3">
+                  <FiUser className="mr-2 text-slate-400 shrink-0" size={15} />
                   <input
                     value={customerOpen ? customerSearch : draft.customer}
                     onChange={(event) => {
@@ -1484,7 +1460,7 @@ export default function PointOfSale() {
                       }
                     }}
                     placeholder="Search customer name or phone"
-                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                    className="min-w-0 flex-1 bg-transparent text-xs font-medium text-slate-800 outline-none placeholder:text-slate-400"
                   />
                   <button
                     type="button"
@@ -1492,7 +1468,7 @@ export default function PointOfSale() {
                     aria-label="Show customers"
                     className="p-1"
                   >
-                    <FiChevronDown className="text-blue-500" />
+                    <FiChevronDown className="text-blue-500 shrink-0" size={15} />
                   </button>
                 </div>
 
@@ -1555,41 +1531,37 @@ export default function PointOfSale() {
             <button
               type="button"
               onClick={handleBreakupClick}
-              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:bg-slate-50 transition"
+              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-left shadow-sm hover:bg-slate-50 transition"
             >
-              <span className="flex items-center gap-3">
-                <span className="grid h-12 w-12 place-items-center rounded-full bg-blue-50 text-blue-500">
-                  <FiFileText size={24} />
+              <span className="flex items-center gap-2.5">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-50 text-blue-500 shrink-0">
+                  <FiFileText size={20} />
                 </span>
                 <span>
-                  <span className="block text-xl font-bold text-slate-900">
+                  <span className="block text-lg font-bold text-slate-900 leading-tight">
                     Total ₹ {money(calculations.total)}
                   </span>
-                  <span className="block text-xs font-medium text-slate-500">
+                  <span className="block text-[11px] font-medium text-slate-500">
                     Items: {draft.items.length}, Quantity:{" "}
                     {calculations.lines.reduce((sum, item) => sum + item.qty, 0)}
                   </span>
                 </span>
               </span>
               <span className="flex items-center gap-1 text-right text-xs font-bold leading-tight text-blue-600">
-                <span>
-                  Full Breakup
-                  <br />
-                  [Ctrl+F]
-                </span>
-                <FiChevronRight size={20} />
+                <span>Full Breakup</span>
+                <FiChevronRight size={18} />
               </span>
             </button>
 
             {/* Payment & Charges Box */}
-            <div className="flex min-h-[210px] flex-1 flex-col rounded-md border border-slate-200 bg-white shadow-sm">
-              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold text-slate-600">
+            <div className="flex flex-1 flex-col rounded-md border border-slate-200 bg-white shadow-sm overflow-hidden min-h-0">
+              <div className="grid grid-cols-2 gap-2 p-2.5 shrink-0">
+                <label className="text-[11px] font-semibold text-slate-600">
                   Payment Mode
                   <select
                     value={draft.paymentMode}
                     onChange={(event) => updateDraft({ paymentMode: event.target.value })}
-                    className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-blue-500"
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 outline-blue-500"
                   >
                     <option>Cash</option>
                     <option>UPI</option>
@@ -1598,7 +1570,7 @@ export default function PointOfSale() {
                     <option>Credit</option>
                   </select>
                 </label>
-                <label className="text-xs font-semibold text-slate-600">
+                <label className="text-[11px] font-semibold text-slate-600">
                   Amount Received (₹)
                   <input
                     type="number"
@@ -1607,44 +1579,44 @@ export default function PointOfSale() {
                     value={draft.amountReceived}
                     onChange={(event) => updateDraft({ amountReceived: event.target.value })}
                     placeholder={money(calculations.total)}
-                    className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-blue-500"
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-700 outline-blue-500"
                   />
                 </label>
               </div>
 
-              <div className="flex-1 border-t border-slate-100 bg-[#fafafa] px-3 py-2.5">
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+              <div className="flex-1 overflow-y-auto border-t border-slate-100 bg-[#fafafa] px-3 py-2 text-xs">
+                <div className="flex justify-between py-0.5 text-slate-600">
                   <span>Subtotal</span>
                   <span>₹ {money(calculations.subtotal)}</span>
                 </div>
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+                <div className="flex justify-between py-0.5 text-slate-600">
                   <span>Item discounts</span>
                   <span className="text-emerald-600 font-medium">− ₹ {money(calculations.itemDiscount)}</span>
                 </div>
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+                <div className="flex justify-between py-0.5 text-slate-600">
                   <span>Tax (GST)</span>
                   <span>₹ {money(calculations.tax)}</span>
                 </div>
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+                <div className="flex justify-between py-0.5 text-slate-600">
                   <span>Bill discount</span>
                   <span className="text-emerald-600 font-medium">− ₹ {money(calculations.billDiscount)}</span>
                 </div>
                 {calculations.loyaltyDiscount > 0 && (
-                  <div className="flex justify-between py-1 text-sm text-purple-700 font-medium">
+                  <div className="flex justify-between py-0.5 text-purple-700 font-medium">
                     <span>Loyalty Redeemed</span>
                     <span>− ₹ {money(calculations.loyaltyDiscount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+                <div className="flex justify-between py-0.5 text-slate-600">
                   <span>Additional charges</span>
                   <span>₹ {money(calculations.charges)}</span>
                 </div>
-                <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-800">
+                <div className="mt-1.5 flex justify-between border-t border-slate-200 pt-1.5 font-bold text-slate-800">
                   <span>Change to Return</span>
                   <span className="text-emerald-700">₹ {money(calculations.change)}</span>
                 </div>
                 {calculations.due > 0 && (
-                  <div className="flex justify-between pt-1 font-bold text-rose-600">
+                  <div className="flex justify-between pt-0.5 font-bold text-rose-600">
                     <span>Balance Due</span>
                     <span>₹ {money(calculations.due)}</span>
                   </div>
@@ -1653,26 +1625,42 @@ export default function PointOfSale() {
             </div>
 
             {/* Save / Print Buttons */}
-            <div className="grid shrink-0 gap-2 rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <ActionButton primary onClick={() => saveBill(true)}>
-                Save &amp; Print Bill [Ctrl+P]
-              </ActionButton>
-              <ActionButton onClick={handleOtherPaymentsClick}>
-                Other/Credit Payments [Ctrl+M]
-              </ActionButton>
-              <ActionButton onClick={() => saveBill(false)}>Save Bill</ActionButton>
+            <div className="shrink-0 space-y-1.5 rounded-md border border-slate-200 bg-white p-2 shadow-sm">
+              <button
+                type="button"
+                onClick={() => saveBill(true)}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-md bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow hover:bg-emerald-600 active:scale-[0.99] transition"
+              >
+                <FiPrinter size={16} /> Save &amp; Print Bill
+              </button>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleOtherPaymentsClick}
+                  className="flex h-9 items-center justify-center rounded-md border border-blue-300 bg-blue-50 text-blue-700 font-semibold text-xs hover:bg-blue-100 active:scale-[0.99] transition text-center px-1"
+                >
+                  Other/Credit Payments
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveBill(false)}
+                  className="flex h-9 items-center justify-center rounded-md border border-slate-300 bg-slate-100 text-slate-800 font-semibold text-xs hover:bg-slate-200 active:scale-[0.99] transition"
+                >
+                  Save Bill
+                </button>
+              </div>
             </div>
 
             {/* Saved Bills Accordion */}
-            <details className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-              <summary className="cursor-pointer font-semibold text-slate-800">
+            <details className="shrink-0 rounded-md border border-slate-200 bg-white p-2 text-xs shadow-sm">
+              <summary className="cursor-pointer font-semibold text-slate-700">
                 Saved bills ({bills.length})
               </summary>
-              <div className="mt-2 max-h-48 space-y-2 overflow-auto">
+              <div className="mt-2 max-h-32 space-y-1.5 overflow-auto">
                 {bills.map((bill) => (
                   <div
                     key={bill.invoiceNo}
-                    className="flex items-center justify-between gap-2 border-b border-slate-100 py-2 text-sm"
+                    className="flex items-center justify-between gap-2 border-b border-slate-100 py-1.5 text-xs"
                   >
                     <button
                       type="button"
@@ -1680,20 +1668,20 @@ export default function PointOfSale() {
                       className="min-w-0 text-left hover:text-blue-600"
                     >
                       <span className="block font-semibold">{bill.invoiceNo}</span>
-                      <span className="block text-xs text-slate-500">
+                      <span className="block text-[11px] text-slate-500">
                         {bill.customer || "Walk-in"} · {bill.date}
                       </span>
                     </button>
                     <span className="shrink-0 font-bold text-slate-800">₹{money(bill.total)}</span>
                   </div>
                 ))}
-                {bills.length === 0 && <p className="text-sm text-slate-400">No saved bills yet.</p>}
+                {bills.length === 0 && <p className="text-slate-400">No saved bills yet.</p>}
               </div>
               {bills.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setModal({ type: "clearBills" })}
-                  className="mt-3 text-xs font-semibold text-rose-600 underline"
+                  className="mt-2 text-[11px] font-semibold text-rose-600 underline"
                 >
                   Clear saved bills
                 </button>
@@ -1703,7 +1691,7 @@ export default function PointOfSale() {
         </> : <section className="col-span-full flex min-h-[420px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-sm">
           <h2 className="text-lg font-bold text-slate-800">No open bills</h2>
           <p className="mt-2 text-sm text-slate-500">Start a new bill to add products and take payment.</p>
-          <button type="button" onClick={handleNewBillClick} className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"><FiPlus /> New Bill [Ctrl+T]</button>
+          <button type="button" onClick={handleNewBillClick} className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"><FiPlus /> New Bill</button>
           {bills.length > 0 && <div className="mt-6 max-h-56 w-full max-w-lg overflow-auto rounded border border-slate-200 p-3 text-left"><h3 className="mb-2 text-sm font-semibold text-slate-700">Saved bills</h3>{bills.map((bill) => <button key={bill.id || bill.invoiceNo} type="button" onClick={() => openSavedBill(bill)} className="flex w-full items-center justify-between border-t border-slate-100 py-2 text-left text-sm hover:text-blue-600"><span>{bill.invoiceNo} · {bill.customer || "Walk-in"}</span><span>₹{money(bill.total)}</span></button>)}</div>}
         </section>}
       </div>
@@ -2628,7 +2616,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiFileText className="text-blue-600" /> Bill Summary &amp; Breakup [Ctrl+F]
+                  <FiFileText className="text-blue-600" /> Bill Summary &amp; Breakup
                 </h3>
                 <button
                   type="button"
@@ -2729,7 +2717,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiDollarSign className="text-blue-600" /> Other / Credit Payments [Ctrl+M]
+                  <FiDollarSign className="text-blue-600" /> Other / Credit Payments
                 </h3>
                 <button
                   type="button"
