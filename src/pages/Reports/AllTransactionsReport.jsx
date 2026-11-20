@@ -118,12 +118,17 @@ export default function AllTransactionsReport() {
   const handleOpenMenu = (e, row) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
     const menuHeight = 220;
-    const top = rect.bottom + menuHeight > window.innerHeight
-      ? Math.max(10, rect.top - menuHeight)
-      : rect.bottom + 4;
-    const right = Math.max(10, window.innerWidth - rect.right);
-    setMenuState({ row, top, right });
+    const shouldFlipUp = spaceBelow < menuHeight + 16 && spaceAbove > spaceBelow;
+    setMenuState({
+      row,
+      ...(shouldFlipUp
+        ? { bottom: Math.max(8, window.innerHeight - rect.top + 4), maxHeight: Math.min(560, Math.max(100, spaceAbove - 16)) }
+        : { top: Math.max(8, rect.bottom + 4), maxHeight: Math.min(560, Math.max(100, spaceBelow - 16)) }),
+      right: Math.max(10, window.innerWidth - rect.right),
+    });
   };
 
   const handleAction = (action, row) => {
@@ -835,8 +840,10 @@ export default function AllTransactionsReport() {
           ref={menuRef}
           style={{
             position: "fixed",
-            top: menuState.top,
+            ...(menuState.bottom != null ? { bottom: menuState.bottom } : { top: menuState.top }),
             right: menuState.right,
+            maxHeight: menuState.maxHeight,
+            overflowY: "auto",
             zIndex: 9999,
           }}
           className="w-44 rounded-md bg-white py-1.5 shadow-2xl border border-gray-200 text-left text-xs divide-y divide-gray-50 animate-in fade-in zoom-in-95 duration-100"

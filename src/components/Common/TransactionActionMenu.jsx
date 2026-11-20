@@ -136,12 +136,22 @@ export default function TransactionActionMenu({
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       const menuHeight = actions.length * 36 + 16;
-      let top = rect.bottom + 4;
-      if (top + menuHeight > window.innerHeight) {
-        top = Math.max(8, rect.top - menuHeight - 4);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const shouldFlipUp = spaceBelow < menuHeight + 12 && spaceAbove > spaceBelow;
+      if (shouldFlipUp) {
+        setMenuPos({
+          bottom: Math.max(8, window.innerHeight - rect.top + 4),
+          right: Math.max(8, window.innerWidth - rect.right),
+          maxHeight: Math.min(560, Math.max(100, spaceAbove - 16)),
+        });
+      } else {
+        setMenuPos({
+          top: Math.max(8, rect.bottom + 4),
+          right: Math.max(8, window.innerWidth - rect.right),
+          maxHeight: Math.min(560, Math.max(100, spaceBelow - 16)),
+        });
       }
-      const right = Math.max(8, window.innerWidth - rect.right);
-      setMenuPos({ top, right });
     }
     setIsOpen(true);
   };
@@ -364,8 +374,10 @@ export default function TransactionActionMenu({
               ref={menuRef}
               style={{
                 position: "fixed",
-                top: `${menuPos.top}px`,
+                ...(menuPos.bottom != null ? { bottom: `${menuPos.bottom}px` } : { top: `${menuPos.top}px` }),
                 right: `${menuPos.right}px`,
+                maxHeight: menuPos.maxHeight ? `${menuPos.maxHeight}px` : undefined,
+                overflowY: "auto",
                 zIndex: 9999,
               }}
               className="w-40 rounded-lg border border-slate-200 bg-white py-1.5 shadow-xl transition-all select-none"

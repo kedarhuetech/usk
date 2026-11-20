@@ -6,6 +6,7 @@ import {
   getExpenseCategories,
   saveExpenseCategories,
   transactionStorageKeys,
+  clearMemoryCollections,
 } from "../../services/transactionRepository.js";
 import {
   DEFAULT_EXPENSE_CATEGORIES,
@@ -19,7 +20,11 @@ import {
 import { BACKUP_SOURCES } from "../../services/backupToComputer.js";
 
 function setupInMemoryStorage(initial = {}) {
-  const store = new Map(Object.entries(initial));
+  clearMemoryCollections();
+  const store = new Map(Object.entries({
+    "ledgerly:storageMode": "local",
+    ...initial,
+  }));
   globalThis.window = {
     localStorage: {
       getItem: (key) => store.get(key) ?? null,
