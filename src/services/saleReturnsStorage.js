@@ -72,7 +72,7 @@ export function saveSaleReturn(input) {
   const before = Object.fromEntries(keys.map((key) => [key, window.localStorage.getItem(key)]));
   try {
     const records = readList(saleReturnsStorageKey);
-    const invoices = readList(invoicesKey);
+    const invoices = readList(invoicesKey).length ? readList(invoicesKey) : readTransactionCollection(invoicesKey);
     const inventory = readList(inventoryItemsStorageKey);
     const existingRecord = input.id ? records.find((record) => record.id === input.id) : null;
     if (input.id && !existingRecord) throw new Error("This Credit Note no longer exists. Refresh the list and try again.");

@@ -19,6 +19,7 @@ const validCheque = (overrides = {}) => ({
 function withLocalStorage(run) {
   const originalWindow = globalThis.window;
   const values = new Map();
+  values.set("ledgerly:storageMode", "local");
   globalThis.window = { localStorage: { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) } };
   return Promise.resolve().then(() => run(values)).finally(() => {
     if (originalWindow === undefined) delete globalThis.window;

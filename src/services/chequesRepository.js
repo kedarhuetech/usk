@@ -19,9 +19,11 @@ function localStorageRef() {
 
 function readRecords() {
   const raw = localStorageRef().getItem(storageKey());
-  if (!raw) return [];
+  const fallbackRaw = storageKey() !== CHEQUE_STORAGE_KEY ? localStorageRef().getItem(CHEQUE_STORAGE_KEY) : null;
+  const content = raw || fallbackRaw;
+  if (!content) return [];
   try {
-    const records = JSON.parse(raw);
+    const records = JSON.parse(content);
     if (!Array.isArray(records)) return [];
     return records.filter((record) => {
       if (!record || typeof record !== "object" || typeof record.id !== "string" || validateCheque(record)) return false;
@@ -82,18 +84,22 @@ export async function createCheque(cheque) {
   if (records.some((record) => record.id === saved.id)) throw new Error("This cheque was already saved.");
 
   if (isDatabaseMode()) {
-    await cashBankDb.saveCheque({
-      id: saved.id,
-      partyId: saved.partyId || null,
-      partyName: saved.partyName || "Party",
-      chequeNumber: saved.chequeNumber || "",
-      bankName: saved.bankName || "",
-      amount: parseFloat(saved.amount) || 0,
-      chequeDate: saved.chequeDate || new Date().toISOString().slice(0, 10),
-      chequeType: (saved.type || "received").toLowerCase(),
-      status: (saved.status || "pending").toLowerCase(),
-      notes: saved.notes || "",
-    });
+    try {
+      await cashBankDb.saveCheque({
+        id: saved.id,
+        partyId: saved.partyId || null,
+        partyName: saved.partyName || "Party",
+        chequeNumber: saved.chequeNumber || "",
+        bankName: saved.bankName || "",
+        amount: parseFloat(saved.amount) || 0,
+        chequeDate: saved.chequeDate || new Date().toISOString().slice(0, 10),
+        chequeType: (saved.type || "received").toLowerCase(),
+        status: (saved.status || "pending").toLowerCase(),
+        notes: saved.notes || "",
+      });
+    } catch (err) {
+      console.warn("[Cheques] Failed to persist to MySQL, using local fallback:", err.message);
+    }
   }
   writeRecords([saved, ...records]);
   return saved;

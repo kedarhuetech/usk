@@ -55,7 +55,6 @@ export function readTransactionCollection(key) {
   if (memoryStore.has(key)) {
     return memoryStore.get(key) || [];
   }
-  if (isDatabaseMode()) return [];
   if (typeof window === "undefined" || !window.localStorage) return [];
   const raw = window.localStorage.getItem(key);
   if (raw == null) return [];
@@ -69,9 +68,7 @@ export function readTransactionCollection(key) {
 export function writeTransactionCollection(key, records) {
   if (!Array.isArray(records)) throw new Error("Transaction records must be an array.");
   memoryStore.set(key, records);
-  if (!isDatabaseMode()) {
-    try { storage().setItem(key, JSON.stringify(records)); } catch {}
-  }
+  try { storage().setItem(key, JSON.stringify(records)); } catch {}
   return records;
 }
 

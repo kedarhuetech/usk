@@ -79,7 +79,9 @@ function normalizeLoan(loan) {
 
 function readLoans() {
   try {
-    const parsed = JSON.parse(localStorageRef().getItem(storageKey()) || "[]");
+    const raw = localStorageRef().getItem(storageKey());
+    const fallbackRaw = storageKey() !== LOAN_ACCOUNTS_STORAGE_KEY ? localStorageRef().getItem(LOAN_ACCOUNTS_STORAGE_KEY) : null;
+    const parsed = JSON.parse(raw || fallbackRaw || "[]");
     return Array.isArray(parsed) ? parsed.map(normalizeLoan).filter(Boolean) : [];
   } catch (error) {
     if (error instanceof SyntaxError) return [];
@@ -125,22 +127,26 @@ export async function createLoan(loan) {
   const saved = { ...normalized, id, repayments: [], statusHistory: [event(normalized.status)], createdAt: now, updatedAt: now };
 
   if (isDatabaseMode()) {
-    const estimatedEmi = calculateLoanEmi(saved.originalAmount, saved.annualInterestRate, saved.tenureMonths);
-    const emiToStore = (saved.emiOverride !== "" && Number(saved.emiOverride) > 0) ? Number(saved.emiOverride) : estimatedEmi;
+    try {
+      const estimatedEmi = calculateLoanEmi(saved.originalAmount, saved.annualInterestRate, saved.tenureMonths);
+      const emiToStore = (saved.emiOverride !== "" && Number(saved.emiOverride) > 0) ? Number(saved.emiOverride) : estimatedEmi;
 
-    await cashBankDb.saveLoanAccount({
-      id: saved.id,
-      accountName: saved.loanName,
-      lenderName: saved.lenderName,
-      accountNumber: saved.id.slice(0, 8),
-      loanType: saved.repaymentFrequency || "Monthly",
-      principalAmount: parseFloat(saved.originalAmount) || 0,
-      currentBalance: parseFloat(saved.originalAmount) || 0,
-      interestRate: parseFloat(saved.annualInterestRate) || 0,
-      termMonths: parseInt(saved.tenureMonths, 10) || 12,
-      emiAmount: emiToStore,
-      startDate: saved.startDate || null,
-    });
+      await cashBankDb.saveLoanAccount({
+        id: saved.id,
+        accountName: saved.loanName,
+        lenderName: saved.lenderName,
+        accountNumber: saved.id.slice(0, 8),
+        loanType: saved.repaymentFrequency || "Monthly",
+        principalAmount: parseFloat(saved.originalAmount) || 0,
+        currentBalance: parseFloat(saved.originalAmount) || 0,
+        interestRate: parseFloat(saved.annualInterestRate) || 0,
+        termMonths: parseInt(saved.tenureMonths, 10) || 12,
+        emiAmount: emiToStore,
+        startDate: saved.startDate || null,
+      });
+    } catch (err) {
+      console.warn("[LoanAccounts] Failed to persist to MySQL, using local storage fallback:", err.message);
+    }
   }
   writeLoans([saved, ...loans]);
   return saved;
@@ -232,7 +238,11 @@ export async function recordRepayment(loanId, repayment) {
   normalized.createdAt = new Date().toISOString();
 
   if (isDatabaseMode()) {
-    await cashBankDb.saveRepayment(loanId, normalized);
+    try {
+      await cashBankDb.saveRepayment(loanId, normalized);
+    } catch (err) {
+      console.warn("[LoanRepayments] Failed to record repayment in MySQL, using local storage fallback:", err.message);
+    }
   }
 
   loans[index] = { ...loan, repayments: [normalized, ...(loan.repayments || [])], updatedAt: new Date().toISOString() };

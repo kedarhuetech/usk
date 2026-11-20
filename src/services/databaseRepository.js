@@ -261,14 +261,9 @@ export const transactionsDb = {
    * Fetches all transactions of a specific type (e.g. 'sale', 'purchase')
    */
   async listByType(type) {
-    try {
-      const res = await apiRequest(`/transactions?type=${encodeURIComponent(type)}&limit=200`);
-      const list = Array.isArray(res) ? res : (res?.data || []);
-      return list;
-    } catch (err) {
-      console.warn(`[MySQL] Falling back to local cache for ${type} transactions:`, err.message);
-      return [];
-    }
+    const res = await apiRequest(`/transactions?type=${encodeURIComponent(type)}&limit=200`);
+    const list = Array.isArray(res) ? res : (res?.data || []);
+    return list;
   },
 
   /**
