@@ -84,6 +84,12 @@ export async function initializeDatabaseSchema() {
         await pool.query("ALTER TABLE company_profile_assets MODIFY COLUMN data MEDIUMBLOB NULL");
       } catch {}
 
+      await addCol("business_growth_assets", "storage_key VARCHAR(500) NULL");
+      await addCol("business_growth_assets", "file_id VARCHAR(64) NULL");
+      try {
+        await pool.query("ALTER TABLE business_growth_assets MODIFY COLUMN data MEDIUMBLOB NULL");
+      } catch {}
+
       await addCol("inventory_items", "barcode VARCHAR(100)");
       await addCol("inventory_items", "item_type VARCHAR(32) DEFAULT 'product'");
       await addCol("inventory_items", "cess_rate DECIMAL(5,2) DEFAULT 0.00");
@@ -901,6 +907,15 @@ export async function initializeDatabaseSchema() {
     await migrateSettingsImages({ businessId: "demo-business" });
   } catch (setMigErr) {
     console.warn("[MySQL Schema] Notice during settings image filesystem migration:", setMigErr.message);
+  }
+
+  // Safe idempotent migration of Business Growth assets to storage driver and zeroing MySQL BLOBs
+  try {
+    const { migrateBusinessGrowthAssets, zeroVerifiedCompanyProfileBlobs } = await import("../services/storage/businessGrowthAssetMigration.js");
+    await migrateBusinessGrowthAssets({ businessId: "demo-business" });
+    await zeroVerifiedCompanyProfileBlobs({ businessId: "demo-business" });
+  } catch (bgMigErr) {
+    console.warn("[MySQL Schema] Notice during business growth assets migration:", bgMigErr.message);
   }
 
   console.log("[MySQL Schema] All 30 production tables verified successfully (ZERO JSON columns, pure rows & columns).");

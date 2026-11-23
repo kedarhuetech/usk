@@ -11,7 +11,8 @@
     "db:views": "node scripts/createBusinessGrowthViews.js",
     "import:hsn": "node scripts/importHsnMaster.js",
     "import:cbic": "node -e \"import('./src/services/hsnService.js').then(s => s.importCbicFilesOnly().then(() => process.exit(0)))\"",
-    "cloudinary:test": "node scripts/testCloudinaryConnection.js"
+    "cloudinary:test": "node scripts/testCloudinaryConnection.js",
+    "db:maintenance": "node scripts/runDbMaintenance.js"
   },
   "dependencies": {
     "cloudinary": "^2.11.0",

@@ -2,7 +2,9 @@
 // Defines backend API routes for business growth.
 import { Router } from "express";
 import multer from "multer";
+import crypto from "node:crypto";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { storageService } from "../services/storage/storageService.js";
 
 const router = Router();
 const resources = new Set([
@@ -294,17 +296,69 @@ router.use(async (req, res, next) => {
 
 router.get("/assets/:id", async (req, res) => {
   try {
-    const [rows] = await pool.execute("SELECT mime_type, original_filename, size_bytes, data FROM business_growth_assets WHERE id = ? AND business_id = ?", [req.params.id, req.businessId]);
+    const [rows] = await pool.execute(
+      "SELECT mime_type, original_filename, size_bytes, storage_key, file_id, data FROM business_growth_assets WHERE id = ? AND business_id = ?",
+      [req.params.id, req.businessId]
+    );
     if (!rows.length) return res.status(404).json({ success: false, message: "Asset not found." });
-    res.type(rows[0].mime_type).set("Content-Length", String(rows[0].size_bytes)).set("Cache-Control", "private, max-age=86400").send(rows[0].data);
+    const asset = rows[0];
+
+    // 1. Try reading from filesystem / Cloudinary storage via storageService
+    if (asset.storage_key) {
+      try {
+        if (await storageService.fileExists(asset.storage_key)) {
+          res.setHeader("Content-Type", asset.mime_type || "application/octet-stream");
+          res.setHeader("Cache-Control", "private, max-age=86400");
+          return storageService.streamFile(asset.storage_key, res);
+        }
+      } catch (streamErr) {
+        console.warn("[BusinessGrowth] Storage stream notice:", streamErr.message);
+      }
+    }
+
+    // 2. Fallback to legacy BLOB if present
+    if (asset.data) {
+      return res.type(asset.mime_type).set("Content-Length", String(asset.size_bytes)).set("Cache-Control", "private, max-age=86400").send(asset.data);
+    }
+
+    return res.status(404).json({ success: false, message: "Asset content unavailable." });
   } catch (error) { fail(res, error); }
 });
+
 router.post("/assets", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: "A JPG, PNG, WEBP, or GIF image is required." });
     const id = crypto.randomUUID();
-    await pool.execute("INSERT INTO business_growth_assets (id,business_id,entity_type,entity_id,original_filename,mime_type,size_bytes,data) VALUES (?,?,?,?,?,?,?,?)", [id, req.businessId, String(req.body.entityType || "asset").slice(0,64), req.body.entityId || null, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer]);
-    res.status(201).json({ success: true, data: { id, name: req.file.originalname, mimeType: req.file.mimetype, size: req.file.size, url: `/api/business-growth/assets/${id}` } });
+    const entityType = String(req.body.entityType || "asset").slice(0, 64);
+    const category = entityType === "marketing-design" ? "marketing-studio" : "business-growth";
+
+    // Save to unified storage driver (local disk or Cloudinary) + business_files metadata
+    const fileResult = await storageService.saveFileAndMetadata({
+      businessId: req.businessId,
+      category,
+      fileBuffer: req.file.buffer,
+      originalFilename: req.file.originalname,
+      mimeType: req.file.mimetype,
+      fileId: id,
+    });
+
+    // Insert record with NULL BLOB data and storage references
+    await pool.execute(
+      `INSERT INTO business_growth_assets (id, business_id, entity_type, entity_id, original_filename, mime_type, size_bytes, storage_key, file_id, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [id, req.businessId, entityType, req.body.entityId || null, req.file.originalname, req.file.mimetype, req.file.size, fileResult.storageKey, fileResult.id]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id,
+        name: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        url: "/api/business-growth/assets/" + id,
+      },
+    });
   } catch (error) { fail(res, error); }
 });
 router.get("/summary", async (req, res) => {
