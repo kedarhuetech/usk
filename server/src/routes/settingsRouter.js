@@ -31,6 +31,7 @@ const upload = multer({
 /**
  * Safely persists a Base64 data URL into filesystem storage and company_profile_assets
  * without storing binary BLOB in MySQL, and returns the persistent asset reference URL.
+ * Automatically de-duplicates identical assets sharing the same content hash.
  */
 async function persistBase64Asset(val, entityType, businessId) {
   if (!val || typeof val !== "string" || !val.startsWith("data:image/")) {
@@ -41,27 +42,48 @@ async function persistBase64Asset(val, entityType, businessId) {
     if (!matches || matches.length !== 3) return null;
     const mimeType = matches[1];
     const buffer = Buffer.from(matches[2], "base64");
-    if (buffer.length > 10 * 1024 * 1024) return null;
-    const ext = mimeType.split("/")[1] || "png";
+    if (buffer.length === 0 || buffer.length > 10 * 1024 * 1024) return null;
+    const ext = mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "png";
     const filename = `${entityType}-${Date.now()}.${ext}`;
 
-    // 1. Save to filesystem storage foundation (saves file to disk + business_files metadata)
-    const fileResult = await storageService.saveFileAndMetadata({
-      businessId,
-      category: "company-profile",
-      fileBuffer: buffer,
-      originalFilename: filename,
-      mimeType,
-    });
-
-    // 2. Insert into company_profile_assets with storage reference and NULL BLOB data
-    await pool.execute(
-      `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-      [fileResult.id, businessId, entityType, filename, mimeType, buffer.length, fileResult.storageKey, fileResult.id]
+    // De-duplication check: if a file with identical SHA-256 hash already exists for this business
+    const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
+    const [existingFiles] = await pool.query(
+      `SELECT id, storage_key FROM business_files WHERE business_id = ? AND sha256_hash = ? AND is_deleted = 0 LIMIT 1`,
+      [businessId, sha256]
     );
 
-    return `/api/settings/company-profile/assets/${fileResult.id}?businessId=${encodeURIComponent(businessId)}`;
+    let fileId;
+    let storageKey;
+
+    if (existingFiles.length > 0 && (await storageService.fileExists(existingFiles[0].storage_key))) {
+      fileId = existingFiles[0].id;
+      storageKey = existingFiles[0].storage_key;
+    } else {
+      // 1. Save to filesystem storage foundation (saves file to disk + business_files metadata)
+      const fileResult = await storageService.saveFileAndMetadata({
+        businessId,
+        category: "company-profile",
+        fileBuffer: buffer,
+        originalFilename: filename,
+        mimeType,
+      });
+      fileId = fileResult.id;
+      storageKey = fileResult.storageKey;
+    }
+
+    // 2. Insert or update into company_profile_assets with storage reference and NULL BLOB data
+    await pool.execute(
+      `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
+       ON DUPLICATE KEY UPDATE
+         storage_key = VALUES(storage_key),
+         file_id = VALUES(file_id),
+         updated_at = CURRENT_TIMESTAMP`,
+      [fileId, businessId, entityType, filename, mimeType, buffer.length, storageKey, fileId]
+    );
+
+    return `/api/settings/company-profile/assets/${fileId}?businessId=${encodeURIComponent(businessId)}`;
   } catch (err) {
     console.error(`Failed to persist Base64 asset (${entityType}):`, err.message);
     return null;
@@ -100,7 +122,7 @@ router.get("/app", getAppSettings);
 
 /**
  * POST /api/settings
- * Batch updates settings keys
+ * Batch updates settings keys, automatically persisting Base64 images to filesystem storage
  */
 router.post("/", async (req, res) => {
   try {
@@ -108,7 +130,15 @@ router.post("/", async (req, res) => {
     const body = req.body || {};
 
     for (const [key, val] of Object.entries(body)) {
-      const textVal = typeof val === "object" ? JSON.stringify(val) : String(val ?? "");
+      let textVal;
+      if (typeof val === "string" && val.startsWith("data:image/")) {
+        const assetType = key === "companyLogo" ? "company-logo" : (key === "signatureImage" ? "company-signature" : "app-setting");
+        const persistedUrl = await persistBase64Asset(val, assetType, businessId);
+        textVal = persistedUrl || "";
+      } else {
+        textVal = typeof val === "object" ? JSON.stringify(val) : String(val ?? "");
+      }
+
       await pool.query(
         `INSERT INTO app_settings (business_id, setting_key, setting_value)
          VALUES (?, ?, ?)

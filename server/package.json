@@ -10,9 +10,11 @@
     "migrate:growth-fields": "node scripts/migrateBusinessGrowthRecordFields.js",
     "db:views": "node scripts/createBusinessGrowthViews.js",
     "import:hsn": "node scripts/importHsnMaster.js",
-    "import:cbic": "node -e \"import('./src/services/hsnService.js').then(s => s.importCbicFilesOnly().then(() => process.exit(0)))\""
+    "import:cbic": "node -e \"import('./src/services/hsnService.js').then(s => s.importCbicFilesOnly().then(() => process.exit(0)))\"",
+    "cloudinary:test": "node scripts/testCloudinaryConnection.js"
   },
   "dependencies": {
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

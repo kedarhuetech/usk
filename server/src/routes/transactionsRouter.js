@@ -10,9 +10,209 @@
  */
 
 import { Router } from "express";
+import multer from "multer";
 import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
+import { storageService } from "../services/storage/storageService.js";
+import { getFileMetadataById, deleteFileMetadata } from "../db/businessFilesRepository.js";
 
 const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, done) => {
+    const allowed = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/gif",
+      "image/svg+xml",
+      "application/pdf",
+      "text/plain",
+      "application/json",
+      "application/zip",
+      "application/octet-stream",
+    ];
+    if (allowed.includes(file.mimetype)) {
+      done(null, true);
+    } else {
+      done(new Error("Unsupported file type for transaction attachment."));
+    }
+  },
+});
+
+/**
+ * Safely persists a Base64 data URL into filesystem storage and returns the fileId and fileUrl.
+ */
+async function persistBase64Attachment(val, originalFilename, businessId, transactionId) {
+  if (!val || typeof val !== "string" || !val.startsWith("data:")) {
+    return null;
+  }
+  try {
+    const matches = val.match(/^data:([A-Za-z-+/0-9.]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return null;
+    const mimeType = matches[1];
+    const buffer = Buffer.from(matches[2], "base64");
+    if (buffer.length === 0 || buffer.length > 10 * 1024 * 1024) return null;
+    const ext = mimeType.split("/")[1]?.replace(/[^a-z0-9]/gi, "") || "bin";
+    const filename = originalFilename || `attachment-${transactionId || Date.now()}-${Date.now()}.${ext}`;
+
+    const fileResult = await storageService.saveFileAndMetadata({
+      businessId,
+      category: "invoice-attachments",
+      fileBuffer: buffer,
+      originalFilename: filename,
+      mimeType,
+    });
+
+    return {
+      fileId: fileResult.id,
+      fileUrl: `/api/transactions/attachments/${fileResult.id}`,
+      originalFilename: filename,
+    };
+  } catch (err) {
+    console.error("Failed to persist Base64 transaction attachment:", err.message);
+    return null;
+  }
+}
+
+/**
+ * POST /api/transactions/attachments
+ * Uploads a transaction attachment directly to private filesystem storage with metadata in business_files.
+ */
+router.post(
+  "/attachments",
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ success: false, message: "Attachment must be 10 MB or smaller." });
+        }
+        return res.status(400).json({ success: false, message: err.message || "File upload error." });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const businessId = businessIdFromRequest(req);
+      if (!req.file || !req.file.buffer || req.file.buffer.length === 0) {
+        return res.status(400).json({ success: false, message: "An attachment file is required and cannot be empty." });
+      }
+      const originalFilename = (req.file.originalname || "").slice(0, 255) || "attachment";
+      const mimeType = req.file.mimetype || "application/octet-stream";
+      const sizeBytes = req.file.size;
+      const fileBuffer = req.file.buffer;
+
+      const fileResult = await storageService.saveFileAndMetadata({
+        businessId,
+        category: "invoice-attachments",
+        fileBuffer,
+        originalFilename,
+        mimeType,
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          id: fileResult.id,
+          fileId: fileResult.id,
+          url: `/api/transactions/attachments/${fileResult.id}`,
+          imageUrl: `/api/transactions/attachments/${fileResult.id}`,
+          documentUrl: `/api/transactions/attachments/${fileResult.id}`,
+          name: originalFilename,
+          fileName: originalFilename,
+          mimeType: fileResult.mimeType || mimeType,
+          size: fileResult.sizeBytes || sizeBytes,
+        },
+      });
+    } catch (error) {
+      const status = error.status || (error.message && (error.message.includes("empty") || error.message.includes("limit") || error.message.includes("Invalid") || error.message.includes("Forbidden")) ? 400 : 500);
+      return res.status(status).json({
+        success: false,
+        message: error.message || "Failed to upload transaction attachment.",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/transactions/attachments/:id
+ * Streams transaction attachment binary from private filesystem storage.
+ */
+router.get("/attachments/:id", async (req, res) => {
+  try {
+    const rawBusinessId = req.query.businessId || req.get("x-business-id");
+    const businessId = rawBusinessId && rawBusinessId !== "local-development" ? rawBusinessId : null;
+
+    let file = null;
+    if (businessId) {
+      file = await getFileMetadataById(req.params.id, businessId);
+    } else {
+      file = await getFileMetadataById(req.params.id, null, { allowAnyBusiness: true });
+    }
+
+    if (!file) {
+      return res.status(404).json({ success: false, message: "Attachment not found." });
+    }
+
+    const exists = await storageService.fileExists(file.storage_key);
+    if (!exists) {
+      return res.status(404).json({ success: false, message: "Physical attachment file not found." });
+    }
+
+    res.type(file.mime_type || "application/octet-stream");
+    if (file.size_bytes) {
+      res.set("Content-Length", String(file.size_bytes));
+    }
+    res.set("Cache-Control", "private, max-age=86400");
+    if (req.query.download === "true" || req.query.download === true) {
+      res.set("Content-Disposition", `attachment; filename="${encodeURIComponent(file.original_filename || "attachment")}"`);
+    }
+    const stream = storageService.createReadStream(file.storage_key);
+    return stream.pipe(res);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to load attachment." });
+  }
+});
+
+/**
+ * DELETE /api/transactions/attachments/:id
+ * Deletes a transaction attachment if not referenced by other transactions.
+ */
+router.delete("/attachments/:id", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const fileId = req.params.id;
+
+    const file = await getFileMetadataById(fileId, businessId);
+    if (!file) {
+      return res.status(404).json({ success: false, message: "Attachment not found." });
+    }
+
+    // Check if any transaction in transactions is currently using this attachment
+    const [referencingTxns] = await pool.query(
+      `SELECT COUNT(*) AS count FROM transactions WHERE business_id = ? AND (image_id = ? OR document_id = ?)`,
+      [businessId, fileId, fileId]
+    );
+    const refCount = referencingTxns[0]?.count || 0;
+    if (refCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Cannot delete attachment because it is referenced by ${refCount} transaction(s).`,
+      });
+    }
+
+    await storageService.deleteFile(file.storage_key, businessId).catch((err) => {
+      console.warn(`[TransactionsRouter] Failed to delete physical file ${file.storage_key}:`, err.message);
+    });
+    await deleteFileMetadata(fileId, businessId);
+
+    return res.json({ success: true, message: "Attachment deleted successfully." });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to delete attachment." });
+  }
+});
 
 function formatSqlDate(val) {
   return toSqlDate(val);
@@ -115,7 +315,8 @@ router.get("/", async (req, res) => {
               t.subtotal, t.discount_percent, t.discount_amount, t.tax_amount, t.round_off, t.total_amount,
               t.paid_amount, t.balance_amount, t.payment_mode, t.payment_status, t.payment_ref_no,
               t.cash_tendered, t.change_returned, t.vehicle_no, t.e_way_bill_no, t.po_number, t.po_date,
-              t.notes, t.terms, t.created_at, t.updated_at
+              t.notes, t.terms, t.image_id, t.image_url, t.image_name, t.document_id, t.document_url, t.document_name,
+              t.created_at, t.updated_at
        FROM transactions t
        LEFT JOIN parties p ON t.party_id = p.id
        WHERE ${whereClause}
@@ -300,6 +501,20 @@ router.get("/", async (req, res) => {
           balance: parseFloat(row.balance_amount) || 0,
         },
         customerPhone: row.party_phone || "",
+        imageId: row.image_id || null,
+        imageUrl: row.image_id ? `/api/transactions/attachments/${row.image_id}` : (row.image_url || null),
+        imageName: row.image_name || "",
+        documentId: row.document_id || null,
+        documentUrl: row.document_id ? `/api/transactions/attachments/${row.document_id}` : (row.document_url || null),
+        documentName: row.document_name || "",
+        files: {
+          image: row.image_id ? `/api/transactions/attachments/${row.image_id}` : (row.image_url || null),
+          imageId: row.image_id || null,
+          imageName: row.image_name || "",
+          document: row.document_id ? `/api/transactions/attachments/${row.document_id}` : (row.document_url || null),
+          documentId: row.document_id || null,
+          documentName: row.document_name || "",
+        },
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -524,6 +739,20 @@ router.get("/:id", async (req, res) => {
           received: parseFloat(row.paid_amount) || 0,
           balance: parseFloat(row.balance_amount) || 0,
         },
+        imageId: row.image_id || null,
+        imageUrl: row.image_id ? `/api/transactions/attachments/${row.image_id}` : (row.image_url || null),
+        imageName: row.image_name || "",
+        documentId: row.document_id || null,
+        documentUrl: row.document_id ? `/api/transactions/attachments/${row.document_id}` : (row.document_url || null),
+        documentName: row.document_name || "",
+        files: {
+          image: row.image_id ? `/api/transactions/attachments/${row.image_id}` : (row.image_url || null),
+          imageId: row.image_id || null,
+          imageName: row.image_name || "",
+          document: row.document_id ? `/api/transactions/attachments/${row.document_id}` : (row.document_url || null),
+          documentId: row.document_id || null,
+          documentName: row.document_name || "",
+        },
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
@@ -637,6 +866,49 @@ const saveTransactionHandler = async (req, res) => {
     const notes = body.notes || body.description || null;
     const terms = body.terms || null;
 
+    // Extract and persist attachments
+    const filesInput = (body.files && typeof body.files === "object") ? body.files : {};
+
+    let rawImage = body.imageUrl || body.image_url || filesInput.image || filesInput.imageUrl || null;
+    let imageName = body.imageName || body.image_name || filesInput.imageName || filesInput.image_name || (rawImage && typeof rawImage === "object" ? rawImage.name : null) || null;
+    let imageId = body.imageId || body.image_id || filesInput.imageId || filesInput.image_id || (rawImage && typeof rawImage === "object" ? (rawImage.fileId || rawImage.id) : null) || null;
+    let imageUrl = typeof rawImage === "string" ? rawImage : (rawImage && typeof rawImage === "object" ? (rawImage.url || rawImage.imageUrl) : null);
+
+    let rawDoc = body.documentUrl || body.document_url || filesInput.document || filesInput.documentUrl || null;
+    let documentName = body.documentName || body.document_name || filesInput.documentName || filesInput.document_name || (rawDoc && typeof rawDoc === "object" ? rawDoc.name : null) || null;
+    let documentId = body.documentId || body.document_id || filesInput.documentId || filesInput.document_id || (rawDoc && typeof rawDoc === "object" ? (rawDoc.fileId || rawDoc.id) : null) || null;
+    let documentUrl = typeof rawDoc === "string" ? rawDoc : (rawDoc && typeof rawDoc === "object" ? (rawDoc.url || rawDoc.documentUrl) : null);
+
+    // Auto-persist Base64 image
+    if (imageUrl && typeof imageUrl === "string" && imageUrl.startsWith("data:")) {
+      const persistedImg = await persistBase64Attachment(imageUrl, imageName, businessId, id);
+      if (persistedImg) {
+        imageId = persistedImg.fileId;
+        imageUrl = persistedImg.fileUrl;
+        imageName = imageName || persistedImg.originalFilename;
+      }
+    } else if (imageUrl && typeof imageUrl === "string" && imageUrl.includes("/api/transactions/attachments/")) {
+      if (!imageId) {
+        const parts = imageUrl.split("/");
+        imageId = parts[parts.length - 1].split("?")[0];
+      }
+    }
+
+    // Auto-persist Base64 document
+    if (documentUrl && typeof documentUrl === "string" && documentUrl.startsWith("data:")) {
+      const persistedDoc = await persistBase64Attachment(documentUrl, documentName, businessId, id);
+      if (persistedDoc) {
+        documentId = persistedDoc.fileId;
+        documentUrl = persistedDoc.fileUrl;
+        documentName = documentName || persistedDoc.originalFilename;
+      }
+    } else if (documentUrl && typeof documentUrl === "string" && documentUrl.includes("/api/transactions/attachments/")) {
+      if (!documentId) {
+        const parts = documentUrl.split("/");
+        documentId = parts[parts.length - 1].split("?")[0];
+      }
+    }
+
     if ((transactionType === "payment_in" || transactionType === "payment_out") && rawItems.length === 0) {
       rawItems = [{
         id: `${id}_pay_1`,
@@ -656,13 +928,36 @@ const saveTransactionHandler = async (req, res) => {
 
     // Check if transaction already exists in MySQL for safe differential accounting
     const [existingRows] = await conn.query(
-      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, image_id, document_id
        FROM transactions
        WHERE business_id = ? AND id = ?
        FOR UPDATE`,
       [businessId, id]
     );
     const existingTxn = existingRows[0] || null;
+
+    // Track replaced or removed attachments for cleanup after commit
+    const filesToCleanup = [];
+    if (existingTxn) {
+      if (existingTxn.image_id && existingTxn.image_id !== imageId && existingTxn.image_id !== documentId) {
+        const [refRows] = await conn.query(
+          `SELECT COUNT(*) AS count FROM transactions WHERE business_id = ? AND (image_id = ? OR document_id = ?) AND id != ?`,
+          [businessId, existingTxn.image_id, existingTxn.image_id, id]
+        );
+        if ((refRows[0]?.count || 0) === 0) {
+          filesToCleanup.push(existingTxn.image_id);
+        }
+      }
+      if (existingTxn.document_id && existingTxn.document_id !== documentId && existingTxn.document_id !== imageId && !filesToCleanup.includes(existingTxn.document_id)) {
+        const [refRows] = await conn.query(
+          `SELECT COUNT(*) AS count FROM transactions WHERE business_id = ? AND (image_id = ? OR document_id = ?) AND id != ?`,
+          [businessId, existingTxn.document_id, existingTxn.document_id, id]
+        );
+        if ((refRows[0]?.count || 0) === 0) {
+          filesToCleanup.push(existingTxn.document_id);
+        }
+      }
+    }
 
     // Inactive items validation: prevent inactive items from being added to new transactions (or as new lines)
     if (transactionType !== "payment_in" && transactionType !== "payment_out") {
@@ -722,8 +1017,8 @@ const saveTransactionHandler = async (req, res) => {
         subtotal, discount_percent, discount_amount, tax_amount, round_off, total_amount,
         paid_amount, balance_amount, payment_mode, payment_status, payment_ref_no,
         cash_tendered, change_returned, vehicle_no, e_way_bill_no, po_number, po_date,
-        notes, terms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        notes, terms, image_id, image_url, image_name, document_id, document_url, document_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         transaction_type = VALUES(transaction_type),
         document_number = VALUES(document_number),
@@ -754,6 +1049,12 @@ const saveTransactionHandler = async (req, res) => {
         po_date = VALUES(po_date),
         notes = VALUES(notes),
         terms = VALUES(terms),
+        image_id = VALUES(image_id),
+        image_url = VALUES(image_url),
+        image_name = VALUES(image_name),
+        document_id = VALUES(document_id),
+        document_url = VALUES(document_url),
+        document_name = VALUES(document_name),
         updated_at = CURRENT_TIMESTAMP`,
       [
         id, businessId, transactionType, documentNumber, transactionDate, dueDate,
@@ -761,7 +1062,7 @@ const saveTransactionHandler = async (req, res) => {
         subtotal, discountPercent, discountAmount, taxAmount, roundOff, totalAmount,
         paidAmount, balanceAmount, paymentMode, paymentStatus, paymentRefNo,
         cashTendered, changeReturned, vehicleNo, eWayBillNo, poNumber, poDate,
-        notes, terms
+        notes, terms, imageId, imageUrl, imageName, documentId, documentUrl, documentName
       ]
     );
 
@@ -969,6 +1270,18 @@ const saveTransactionHandler = async (req, res) => {
 
     await conn.commit();
 
+    for (const fId of filesToCleanup) {
+      try {
+        const meta = await getFileMetadataById(fId, businessId);
+        if (meta) {
+          await storageService.deleteFile(meta.storage_key, businessId).catch(() => {});
+          await deleteFileMetadata(fId, businessId).catch(() => {});
+        }
+      } catch (cleanupErr) {
+        console.warn(`[Transactions] Failed to clean up replaced file ${fId}:`, cleanupErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       message: "Transaction and line items saved successfully in pure relational rows and columns.",
@@ -980,6 +1293,12 @@ const saveTransactionHandler = async (req, res) => {
         totalAmount,
         paidAmount,
         balanceAmount,
+        imageId: imageId || null,
+        imageUrl: imageUrl || null,
+        imageName: imageName || "",
+        documentId: documentId || null,
+        documentUrl: documentUrl || null,
+        documentName: documentName || "",
       },
     });
   } catch (err) {
@@ -1006,7 +1325,7 @@ router.delete("/:id", async (req, res) => {
     const txnId = req.params.id;
 
     const [existingRows] = await conn.query(
-      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, image_id, document_id
        FROM transactions
        WHERE business_id = ? AND id = ?
        FOR UPDATE`,
@@ -1065,6 +1384,31 @@ router.delete("/:id", async (req, res) => {
     }
 
     await conn.commit();
+
+    // Safely clean up attachments if they are no longer referenced by any other transactions
+    if (existingRows.length > 0) {
+      const existing = existingRows[0];
+      const attachedIds = [existing.image_id, existing.document_id].filter(Boolean);
+      const uniqueAttachedIds = [...new Set(attachedIds)];
+      for (const fId of uniqueAttachedIds) {
+        try {
+          const [refRows] = await pool.query(
+            `SELECT COUNT(*) AS count FROM transactions WHERE business_id = ? AND (image_id = ? OR document_id = ?)`,
+            [businessId, fId, fId]
+          );
+          if ((refRows[0]?.count || 0) === 0) {
+            const meta = await getFileMetadataById(fId, businessId);
+            if (meta) {
+              await storageService.deleteFile(meta.storage_key, businessId).catch(() => {});
+              await deleteFileMetadata(fId, businessId).catch(() => {});
+            }
+          }
+        } catch (cleanupErr) {
+          console.warn(`[Transactions DELETE] Cleanup warning for ${fId}:`, cleanupErr.message);
+        }
+      }
+    }
+
     return res.json({ success: true, message: "Transaction deleted successfully." });
   } catch (err) {
     await conn.rollback();

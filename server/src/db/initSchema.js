@@ -78,6 +78,7 @@ export async function initializeDatabaseSchema() {
 
       await addCol("company_profile_assets", "storage_key VARCHAR(500) NULL");
       await addCol("company_profile_assets", "file_id VARCHAR(64) NULL");
+      await addCol("business_files", "public_url VARCHAR(500) NULL AFTER storage_key");
       try {
         await pool.query("ALTER TABLE company_profile_assets MODIFY COLUMN data MEDIUMBLOB NULL");
       } catch {}
@@ -108,6 +109,12 @@ export async function initializeDatabaseSchema() {
       await addCol("transactions", "po_number VARCHAR(100)");
       await addCol("transactions", "po_date DATE");
       await addCol("transactions", "terms TEXT");
+      await addCol("transactions", "image_url LONGTEXT NULL");
+      await addCol("transactions", "image_id VARCHAR(64) NULL");
+      await addCol("transactions", "image_name VARCHAR(255) NULL");
+      await addCol("transactions", "document_url LONGTEXT NULL");
+      await addCol("transactions", "document_id VARCHAR(64) NULL");
+      await addCol("transactions", "document_name VARCHAR(255) NULL");
 
       await addCol("company_profiles", "trade_name VARCHAR(255)");
       await addCol("company_profiles", "business_type VARCHAR(255)");
@@ -359,13 +366,21 @@ export async function initializeDatabaseSchema() {
       po_date DATE,
       notes TEXT,
       terms TEXT,
+      image_url LONGTEXT NULL,
+      image_id VARCHAR(64) NULL,
+      image_name VARCHAR(255) NULL,
+      document_url LONGTEXT NULL,
+      document_id VARCHAR(64) NULL,
+      document_name VARCHAR(255) NULL,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_txns_biz_type (business_id, transaction_type),
       INDEX idx_txns_party (business_id, party_id),
       INDEX idx_txns_date (business_id, transaction_date DESC),
       INDEX idx_txns_doc (business_id, document_number),
-      INDEX idx_txns_status (business_id, payment_status)
+      INDEX idx_txns_status (business_id, payment_status),
+      INDEX idx_txns_image (business_id, image_id),
+      INDEX idx_txns_doc_id (business_id, document_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
     // 10. Transaction Line Items Table (Normalized Child Table - Pure Rows & Columns for Invoice Items)
@@ -762,6 +777,7 @@ export async function initializeDatabaseSchema() {
       stored_filename VARCHAR(255) NOT NULL,
       storage_driver VARCHAR(16) NOT NULL DEFAULT 'local',
       storage_key VARCHAR(500) NOT NULL,
+      public_url VARCHAR(500) NULL,
       mime_type VARCHAR(100) NOT NULL,
       size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
       sha256_hash VARCHAR(64) NOT NULL,
@@ -851,6 +867,22 @@ export async function initializeDatabaseSchema() {
     await migrateItemImages({ businessId: "demo-business" });
   } catch (itemMigErr) {
     console.warn("[MySQL Schema] Notice during item image filesystem migration:", itemMigErr.message);
+  }
+
+  // Safe idempotent migration of Invoice Attachments to filesystem storage (Phase 5)
+  try {
+    const { migrateInvoiceAttachments } = await import("../services/storage/invoiceAttachmentMigration.js");
+    await migrateInvoiceAttachments({ businessId: "demo-business" });
+  } catch (invMigErr) {
+    console.warn("[MySQL Schema] Notice during invoice attachment filesystem migration:", invMigErr.message);
+  }
+
+  // Safe idempotent migration of Settings images to filesystem storage (Phase 6)
+  try {
+    const { migrateSettingsImages } = await import("../services/storage/settingsImageMigration.js");
+    await migrateSettingsImages({ businessId: "demo-business" });
+  } catch (setMigErr) {
+    console.warn("[MySQL Schema] Notice during settings image filesystem migration:", setMigErr.message);
   }
 
   console.log("[MySQL Schema] All 30 production tables verified successfully (ZERO JSON columns, pure rows & columns).");
