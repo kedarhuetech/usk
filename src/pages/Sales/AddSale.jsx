@@ -532,6 +532,11 @@ function extractEditForm(editDoc, fallback = {}) {
     fallback.reverseCharge
   );
 
+  const txnField1 = cleanStr(editDoc.txnField1 || editDoc.form?.txnField1 || vehicleNumber || fallback.txnField1 || "");
+  const txnField2 = cleanStr(editDoc.txnField2 || editDoc.form?.txnField2 || driverName || fallback.txnField2 || "");
+  const txnField3 = cleanStr(editDoc.txnField3 || editDoc.form?.txnField3 || editDoc.lrNumber || editDoc.form?.lrNumber || fallback.txnField3 || "");
+  const dateField = cleanStr(editDoc.dateField || editDoc.form?.dateField || editDoc.deliveryDate || editDoc.form?.deliveryDate || fallback.dateField || "");
+
   return {
     ...fallback,
     ...(editDoc.form || {}),
@@ -549,11 +554,15 @@ function extractEditForm(editDoc, fallback = {}) {
     paymentTerms,
     dueDate,
     ewayBillNo,
-    vehicleNumber,
-    driverName,
+    vehicleNumber: vehicleNumber || txnField1,
+    driverName: driverName || txnField2,
     poNumber,
     poDate,
     reverseCharge,
+    txnField1,
+    txnField2,
+    txnField3,
+    dateField,
     description,
     terms,
     partyBalance: editDoc.partyBalance || editDoc.form?.partyBalance || fallback.partyBalance || "",
@@ -3092,9 +3101,15 @@ function AddSale({ mode = "sale", localOnly = false }) {
       description: form.description || "",
       terms: form.terms || "",
       termsTitle: form.termsTitle || "",
-      vehicleNumber: form.vehicleNumber || "",
-      vehicleNo: form.vehicleNumber || "",
-      driverName: form.driverName || "",
+      vehicleNumber: form.vehicleNumber || form.txnField1 || "",
+      vehicleNo: form.vehicleNumber || form.txnField1 || "",
+      driverName: form.driverName || form.txnField2 || "",
+      lrNumber: form.lrNumber || form.txnField3 || "",
+      deliveryDate: form.deliveryDate || form.dateField || "",
+      txnField1: form.txnField1 || form.vehicleNumber || "",
+      txnField2: form.txnField2 || form.driverName || "",
+      txnField3: form.txnField3 || form.lrNumber || "",
+      dateField: form.dateField || form.deliveryDate || "",
       ewayBillNo: form.ewayBillNo || "",
       eWayBillNo: form.ewayBillNo || "",
       poNumber: form.poNumber || "",

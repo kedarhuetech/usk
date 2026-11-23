@@ -20,6 +20,7 @@ import {
 } from "react-icons/fi";
 import { useAppPasscode } from "../../components/Passcode/passcodeContext.js";
 import { validatePasscodeForm } from "../../services/appPasscodeValidation.js";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { addCustomUnit, getUnits } from "../../services/unitsStorage.js";
 import {
   applyScreenZoom,
@@ -1101,7 +1102,10 @@ function GeneralTab({
 
 
 function TransactionTab({ settings, update, showToast }) {
-  const firmName = settings.firms?.[0]?.name || settings.companyName || "My Business";
+  const profile = getCompanyProfile();
+  const firmName = profile?.companyName || profile?.businessName || settings.companyName || settings.firms?.[0]?.name || "My Business";
+  const firmPhone = profile?.phoneNumber || profile?.phone || settings.phoneNumberPrint || "";
+  const firmGstin = profile?.gstin || "";
   // Modal states
   const [termsModal, setTermsModal] = useState(false);
   const [termsTitle, setTermsTitle] = useState(settings.termsTitle || "Standard Terms");
@@ -1769,16 +1773,12 @@ function TransactionTab({ settings, update, showToast }) {
             <div className="flex flex-1 overflow-hidden">
               {/* LEFT COLUMN: Controls & Checkboxes (with scrollbar) */}
               <div className="w-80 sm:w-88 md:w-96 shrink-0 border-r border-slate-200 p-5 overflow-y-auto space-y-5 bg-white text-xs">
-                {/* Select Firm */}
+                {/* Business / Company Name */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select Firm</label>
-                  <select
-                    value={settings.selectedPrefixFirm || "firm-1"}
-                    onChange={(e) => update("selectedPrefixFirm", e.target.value)}
-                    className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                  >
-                    <option value="firm-1">{firmName}</option>
-                  </select>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Business / Company</label>
+                  <div className="flex h-9 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-800">
+                    {firmName}
+                  </div>
                 </div>
 
                 {/* Firm additional fields */}
@@ -2043,7 +2043,8 @@ function TransactionTab({ settings, update, showToast }) {
                   {/* Company Header */}
                   <div className="text-center space-y-0.5">
                     <h4 className="text-base font-bold text-slate-900">{firmName}</h4>
-                    <p className="text-[11px] text-slate-500">Phone no: 8369501991</p>
+                    {firmPhone && <p className="text-[11px] text-slate-500">Phone no: {firmPhone}</p>}
+                    {firmGstin && <p className="text-[11px] text-slate-500">GSTIN: {firmGstin}</p>}
                     {/* Dynamic Firm Additional Fields */}
                     {["firmField1", "firmField2"].map((k) => {
                       const f = settings.additionalFieldsSetup?.[k];

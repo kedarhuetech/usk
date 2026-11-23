@@ -11,9 +11,9 @@ export const AUTO_BACKUP_HISTORY_KEY = "ledgerly:autoBackupSnapshots.v1";
 const defaultCompany = () => {
   try {
     const profile = getCompanyProfile();
-    return profile?.companyName || "Sai Kirana Stores";
+    return profile?.companyName || profile?.businessName || "My Business";
   } catch {
-    return "Sai Kirana Stores";
+    return "My Business";
   }
 };
 
@@ -169,7 +169,7 @@ export const DEFAULT_SETTINGS = {
   makeRegularPrinterDefault: true,
   printRepeatHeader: true,
   printCompanyName: true,
-  companyNamePrint: "sai kirana stores",
+  companyNamePrint: defaultCompany(),
   printCompanyLogo: true,
   companyLogo: "",
   printAddress: true,
@@ -177,7 +177,7 @@ export const DEFAULT_SETTINGS = {
   printEmail: true,
   emailPrint: "",
   printPhoneNumber: true,
-  phoneNumberPrint: "8369501991",
+  phoneNumberPrint: "",
   printGstinOnSale: true,
   printerType: "Regular",
   paperSize: "A4",
@@ -296,7 +296,7 @@ export const DEFAULT_SETTINGS = {
   txnMsgAutoCancelledInvoice: true,
 
   // Transaction Message Custom Signatures & Headers
-  txnMsgSignature: "sai kirana",
+  txnMsgSignature: defaultCompany(),
   txnMsgTemplates: {
     sales: "Thanks for your purchase with us!! Purchase Details:",
     purchase: "Purchase order confirmed with us. Details:",
@@ -388,7 +388,7 @@ export function getAppSettings() {
 
     // Auto-heal in browser: Any stray "$" or "USD" currency symbol or baseCurrency in localStorage
     // is permanently cleaned up and restored to standard Indian Rupee (₹ / INR).
-    const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
+    const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
     if (!isNodeTest) {
       let needsHeal = false;
       if (settings.currencySymbol === "$" || settings.currencySymbol === "USD") {
@@ -417,6 +417,24 @@ export function getAppSettings() {
         } catch {}
       }
     }
+
+    // Always sync active company profile name & phone into settings so changes in company profile reflect immediately
+    try {
+      const liveProfile = getCompanyProfile();
+      const liveName = (liveProfile?.companyName || liveProfile?.businessName || "").trim();
+      if (liveName && liveName.toLowerCase() !== "sai kirana stores") {
+        settings.companyName = liveName;
+        settings.companyNamePrint = liveName;
+        if (Array.isArray(settings.firms) && settings.firms.length > 0) {
+          settings.firms[0].name = liveName;
+        }
+      }
+      const livePhone = (liveProfile?.phoneNumber || liveProfile?.phone || "").trim();
+      if (livePhone && livePhone !== "8369501991") {
+        settings.phoneNumberPrint = livePhone;
+        settings.companyPhone = livePhone;
+      }
+    } catch {}
 
     return settings;
   } catch (error) {
@@ -481,8 +499,8 @@ export function applyScreenZoom(zoomString) {
 
 export function formatCurrency(value, currencyCode = null) {
   const settings = getAppSettings();
-  const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
-  let sym = "₹";
+  const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
+  let sym;
   if (settings.multiCurrencyEnabled && settings.baseCurrency?.symbol) {
     sym = settings.baseCurrency.symbol;
   } else if (settings.currencySymbol && settings.currencySymbol !== "$" && settings.currencySymbol !== "USD") {

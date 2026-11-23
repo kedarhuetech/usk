@@ -204,6 +204,16 @@ function normalizeInvoiceData(raw) {
     terms,
     termsTitle,
     isRcm,
+    txnField1: form.txnField1 || raw.txnField1 || raw.vehicleNumber || form.vehicleNumber || "",
+    txnField2: form.txnField2 || raw.txnField2 || raw.driverName || form.driverName || "",
+    txnField3: form.txnField3 || raw.txnField3 || raw.lrNumber || form.lrNumber || "",
+    dateField: form.dateField || raw.dateField || form.deliveryDate || raw.deliveryDate || "",
+    vehicleNumber: form.vehicleNumber || raw.vehicleNumber || form.txnField1 || raw.txnField1 || "",
+    driverName: form.driverName || raw.driverName || form.txnField2 || raw.txnField2 || "",
+    lrNumber: form.lrNumber || raw.lrNumber || form.txnField3 || raw.txnField3 || "",
+    deliveryDate: form.deliveryDate || raw.deliveryDate || form.dateField || raw.dateField || "",
+    poNumber: form.poNumber || raw.poNumber || "",
+    poDate: form.poDate || raw.poDate || "",
     rows: rows.length > 0 ? rows : [{ id: "empty", item: "Sample Item", hsn: "1001", qty: 1, unit: "PCS", price: finalTotal || 0, discount: 0, tax: 0, cess: 0, amount: finalTotal || 0 }],
     totals: {
       qty: totalQty || 1,
@@ -325,6 +335,15 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {appSettings.printGstinOnSale !== false && companyGstin && (
             <p className="text-slate-600 text-[11px] font-semibold mt-0.5">GSTIN : {companyGstin}</p>
           )}
+          {["firmField1", "firmField2"].map((k) => {
+            const f = appSettings?.additionalFieldsSetup?.[k];
+            if (!f?.enabled || f.showInPrint === false || !f.name) return null;
+            return (
+              <p key={k} className="text-slate-600 text-[11px] font-medium mt-0.5">
+                {f.name} : {f.value || ""}
+              </p>
+            );
+          })}
         </div>
       </div>
 
@@ -353,6 +372,17 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {appSettings.enablePlaceOfSupply !== false && (
             <p className="text-slate-600 text-[11px]">Place of supply: {data.stateOfSupply}</p>
           )}
+          {["txnField1", "txnField2", "txnField3", "dateField"].map((k) => {
+            const f = appSettings?.additionalFieldsSetup?.[k];
+            if (!f?.enabled || f.showInPrint === false) return null;
+            const val = data[k] || (k === "txnField1" ? data.vehicleNumber : k === "txnField2" ? data.driverName : k === "txnField3" ? data.lrNumber : data.deliveryDate);
+            if (!val && !f.value) return null;
+            return (
+              <p key={k} className="text-slate-600 text-[11px]">
+                {f.name || "Field"}: {val || f.value}
+              </p>
+            );
+          })}
         </div>
       </div>
 
