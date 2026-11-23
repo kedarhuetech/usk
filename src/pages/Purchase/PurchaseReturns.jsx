@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiCalendar,
   FiChevronDown,
@@ -8,6 +8,7 @@ import {
   FiPlus,
   FiPrinter,
   FiSearch,
+  FiSettings,
   FiX,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
@@ -112,6 +113,7 @@ const rowAmount = (row) => {
 };
 
 export default function PurchaseReturns() {
+  const navigate = useNavigate();
   const location = useLocation();
   const [records, setRecords] = useState(readReturns);
   const [editor, setEditor] = useState(null);
@@ -740,10 +742,21 @@ export default function PurchaseReturns() {
             </span>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setEditor(null)}
-                className="text-gray-600 hover:text-black p-1 text-lg"
+                type="button"
+                title="Settings"
+                aria-label="Settings"
+                onClick={() => navigate("/settings?tab=transaction")}
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-300 hover:text-slate-800 transition cursor-pointer"
               >
-                <FiX />
+                <FiSettings className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditor(null)}
+                aria-label="Close"
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-300 hover:text-slate-800 transition cursor-pointer"
+              >
+                <FiX className="h-5 w-5" />
               </button>
             </div>
           </div>

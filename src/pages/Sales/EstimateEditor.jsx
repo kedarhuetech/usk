@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FiCamera, FiChevronDown, FiFileText, FiGrid, FiList, FiPlus, FiSave, FiSettings, FiX } from "react-icons/fi";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
@@ -42,6 +43,7 @@ function lineTotals(row) {
 }
 
 export default function EstimateEditor({ estimate, onClose, onSave, documentType = "Estimate/Quotation" }) {
+  const navigate = useNavigate();
   const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
   const parties = useMemo(() => getParties(), []);
   const items = useMemo(() => getInventoryItems().filter(isItemActive), []);
@@ -120,7 +122,7 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
   };
 
   return <div className="fixed inset-0 z-40 flex min-h-0 flex-col bg-[#f3f3f3] text-slate-800">
-    <div className="flex h-12 shrink-0 items-center gap-2 bg-slate-200 px-4"><div className="flex h-full min-w-56 items-center justify-between rounded-t-lg bg-white px-4 text-sm"><span>{documentType} #{refNo}</span><button type="button" aria-label="Close estimate tab" onClick={onClose}><FiX /></button></div><button type="button" onClick={() => { setCustomer(""); setPhone(""); setRefNo(String(Date.now()).slice(-6)); setDate(new Date().toISOString().slice(0, 10)); setRows([makeRow(), makeRow()]); setToast(""); }} aria-label={`New ${documentType.toLowerCase()}`} className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus /></button><div className="ml-auto flex items-center gap-5 pr-1 text-slate-500"><FiGrid className="h-5 w-5" /><FiSettings className="h-5 w-5" /><button type="button" onClick={onClose} aria-label={`Close ${documentType.toLowerCase()}`}><FiX className="h-5 w-5" /></button></div></div>
+    <div className="flex h-12 shrink-0 items-center gap-2 bg-slate-200 px-4"><div className="flex h-full min-w-56 items-center justify-between rounded-t-lg bg-white px-4 text-sm"><span>{documentType} #{refNo}</span><button type="button" aria-label="Close estimate tab" onClick={onClose}><FiX /></button></div><button type="button" onClick={() => { setCustomer(""); setPhone(""); setRefNo(String(Date.now()).slice(-6)); setDate(new Date().toISOString().slice(0, 10)); setRows([makeRow(), makeRow()]); setToast(""); }} aria-label={`New ${documentType.toLowerCase()}`} className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus /></button><div className="ml-auto flex items-center gap-3 pr-1 text-slate-500"><button type="button" title="Settings" aria-label="Settings" onClick={() => navigate("/settings?tab=transaction")} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-300 hover:text-slate-900 transition cursor-pointer"><FiSettings className="h-5 w-5" /></button><button type="button" onClick={onClose} aria-label={`Close ${documentType.toLowerCase()}`} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-300 hover:text-slate-900 transition cursor-pointer"><FiX className="h-5 w-5" /></button></div></div>
     <header className="flex h-[74px] shrink-0 items-center border-b border-slate-300 bg-white px-7"><h1 className="text-xl font-bold">{documentType}</h1></header>
     <div className="min-h-0 flex-1 overflow-auto">
       <section className="grid min-h-[345px] grid-cols-1 gap-6 px-6 py-7 lg:grid-cols-[minmax(340px,1fr)_minmax(360px,1fr)]">

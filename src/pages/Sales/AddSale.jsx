@@ -760,11 +760,11 @@ function TransactionHeader({ title, saleType, setSaleType, showSaleType, onSetti
       </div>
       <div className="flex items-center gap-2 text-slate-500">
         {onSettings && (
-          <button type="button" onClick={onSettings} className="rounded-full p-2 hover:bg-slate-100">
+          <button type="button" onClick={onSettings} title="Settings" aria-label="Settings" className="rounded-full p-2 hover:bg-slate-100 cursor-pointer">
             <FiSettings className="h-4 w-4" />
           </button>
         )}
-        <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-slate-100" aria-label="Close sale">
+        <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-slate-100 cursor-pointer" aria-label="Close sale">
           <FiX className="h-4 w-4" />
         </button>
       </div>
@@ -2404,7 +2404,7 @@ function SettingsDrawer({ appSettings, onUpdateSettings, additionalCharges, setA
               onClose();
               navigate("/settings?tab=transaction");
             }}
-            className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600 hover:underline"
+            className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600 hover:underline cursor-pointer"
           >
             <FiSettings /> More Settings
           </button>
@@ -3555,7 +3555,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
   return (
     <div className="min-h-full bg-slate-100">
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
-      <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={!isPurchase ? () => setSettingsOpen(true) : undefined} onClose={() => closeTab(activeTab)} />
+      <TransactionHeader title={editInvoice ? (isPurchase ? "Edit Purchase" : "Edit Sale") : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
       <CustomerDetails appSettings={appSettings} saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
       <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} appSettings={appSettings} isPurchase={isPurchase} />
 
