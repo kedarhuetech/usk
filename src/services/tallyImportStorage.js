@@ -1,5 +1,10 @@
 // Saves Tally masters through the same local adapters used by the rest of the app.
-import { saveBusinessItem, saveBusinessParty } from "./businessRecords.js";
+import {
+  saveBusinessItem,
+  saveBusinessParty,
+  loadBusinessItems,
+  loadBusinessParties,
+} from "./businessRecords.js";
 import { getInventoryItems } from "./itemsStorage.js";
 import { getParties } from "./partiesStorage.js";
 import { getTallyImportPayload, markStoredDuplicates } from "./tallyImportValidation.js";
@@ -25,9 +30,17 @@ export async function getImportedRecords() {
 
 // Checks duplicates in the active repository and optionally starts local fallback.
 export async function checkDuplicates(records, { allowFallback = true } = {}) {
-  let existing;
-  existing = { items: getInventoryItems(), parties: getParties() };
-  return { records: markStoredDuplicates(records, existing.parties, existing.items), mode: LOCAL_MODE };
+  let existingItems = getInventoryItems();
+  let existingParties = getParties();
+  try {
+    const [liveItems, liveParties] = await Promise.all([
+      loadBusinessItems(),
+      loadBusinessParties(),
+    ]);
+    if (Array.isArray(liveItems) && liveItems.length > 0) existingItems = liveItems;
+    if (Array.isArray(liveParties) && liveParties.length > 0) existingParties = liveParties;
+  } catch {}
+  return { records: markStoredDuplicates(records, existingParties, existingItems), mode: "database" };
 }
 
 // Prepares rows for review without saving any records.
