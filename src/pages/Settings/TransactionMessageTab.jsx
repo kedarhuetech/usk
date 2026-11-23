@@ -3,32 +3,26 @@
 import { useEffect, useState } from "react";
 import {
   FiCheck,
-  FiChevronDown,
-  FiChevronRight,
-  FiInfo,
-  FiLoader,
   FiPaperclip,
   FiRefreshCw,
   FiSend,
-  FiStar,
   FiX,
-  FiZap,
 } from "react-icons/fi";
 import {
   TRANSACTION_TYPES_CONFIG,
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { toast as toastNotification } from "../../components/Common/Toast.jsx";
 
 export default function TransactionMessageTab({ settings, update }) {
   const [selectedTxnType, setSelectedTxnType] = useState("sales");
   const [lastSyncedText, setLastSyncedText] = useState("now");
   const [testModalOpen, setTestModalOpen] = useState(false);
-  const [testPhone, setTestPhone] = useState("");
+  const [testPhone, setTestPhone] = useState("8128634899");
   const [testSending, setTestSending] = useState(false);
   const [testStatus, setTestStatus] = useState("");
-  const [creditsModalOpen, setCreditsModalOpen] = useState(false);
   const [metaStatus, setMetaStatus] = useState({
     connected: false,
     loading: true,
@@ -37,7 +31,6 @@ export default function TransactionMessageTab({ settings, update }) {
     approvedCount: 0,
     pendingCount: 0,
   });
-  const [requestingApproval, setRequestingApproval] = useState(false);
 
   const loadMetaConnection = () => {
     fetch("/api/whatsapp-business/connection")
@@ -83,31 +76,9 @@ export default function TransactionMessageTab({ settings, update }) {
     setTimeout(() => setLastSyncedText("now"), 3000);
   };
 
-  const handleRequestTemplateApproval = async () => {
-    setRequestingApproval(true);
-    try {
-      const response = await fetch("/api/whatsapp-business/templates/request-all", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const res = await response.json().catch(() => ({}));
-      if (response.ok && res.success) {
-        toastNotification.success(res.message || "All transaction templates submitted to Meta for approval!", {
-          duration: 7000,
-        });
-        loadMetaConnection();
-      } else {
-        toastNotification.error(res.message || "Could not submit template approval request.");
-      }
-    } catch (err) {
-      toastNotification.error(err.message || "Failed to submit template request.");
-    } finally {
-      setRequestingApproval(false);
-    }
-  };
-
   const handleSendTestMessage = async () => {
-    if (!testPhone.trim()) {
+    const cleanNumber = String(testPhone || "").replace(/[^0-9]/g, "");
+    if (!cleanNumber || cleanNumber.length < 7) {
       setTestStatus("Please enter a valid phone number.");
       return;
     }
@@ -120,15 +91,18 @@ export default function TransactionMessageTab({ settings, update }) {
         amount: txnConfig.sampleAmount,
         balance: txnConfig.sampleBalance,
         settings,
+        customer: "Kedar",
+        customerPhone: cleanNumber,
+        companyName: previewSignature,
       });
       const res = await sendMetaWhatsAppMessage({
-        phone: testPhone,
+        phone: cleanNumber,
         message: sampleMsg,
         type: selectedTxnType,
       });
       if (res.success) {
-        setTestStatus(`✓ Test message delivered to ${testPhone} via WhatsApp!`);
-        toastNotification.success(`✓ WhatsApp message delivered successfully!`);
+        setTestStatus(`✓ Test message delivered to ${cleanNumber} via Meta WhatsApp!`);
+        toastNotification.success(`✓ WhatsApp message delivered successfully to ${cleanNumber}!`);
         setTimeout(() => {
           setTestModalOpen(false);
           setTestStatus("");
@@ -151,8 +125,10 @@ export default function TransactionMessageTab({ settings, update }) {
     }
   };
 
-  // Compile live preview message
-  const previewSignature = settings.txnMsgSignature || "sai kirana";
+  // Compile live preview message with dynamic company profile signature
+  const companyProfile = getCompanyProfile();
+  const dynamicSignature = companyProfile?.companyName || companyProfile?.businessName || "My Business";
+  const previewSignature = settings.txnMsgSignature || dynamicSignature;
   const includeBalance = settings.txnMsgIncludePartyBalance ?? false;
   const includeWebLink = settings.txnMsgIncludeWebInvoiceLink ?? true;
   const includePayLink = settings.txnMsgIncludePaymentLink ?? false;
@@ -187,8 +163,13 @@ export default function TransactionMessageTab({ settings, update }) {
                       <p className="text-xs font-bold text-slate-900">WhatsApp</p>
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Active
+                        {metaStatus.connected ? "Meta API Connected" : "Active"}
                       </span>
+                      {metaStatus.approvedCount > 0 && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          {metaStatus.approvedCount} Templates
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       Sends invoices, receipts, and order updates directly to customer WhatsApp phones automatically or on click.
@@ -295,19 +276,9 @@ export default function TransactionMessageTab({ settings, update }) {
               </label>
             </div>
 
-            {/* Credits & Sync Status Row */}
-            <div className="flex items-center gap-4 pt-1">
-              <button
-                type="button"
-                onClick={() => setCreditsModalOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 border border-amber-200 hover:bg-amber-100 transition cursor-pointer shadow-2xs"
-              >
-                <FiStar className="h-3.5 w-3.5 text-amber-500 fill-amber-400" />
-                <span>{settings.txnMsgCredits ?? 100} CREDITS</span>
-                <FiChevronRight className="h-3.5 w-3.5 text-amber-600" />
-              </button>
-
-              <div className="flex items-center gap-1 text-xs text-slate-400">
+            {/* Sync Status Row */}
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <span>Last synced: {lastSyncedText}</span>
                 <button
                   type="button"
@@ -578,9 +549,9 @@ export default function TransactionMessageTab({ settings, update }) {
               <div className="relative">
                 <input
                   type="text"
-                  value={settings.txnMsgSignature ?? "sai kirana"}
+                  value={settings.txnMsgSignature ?? dynamicSignature}
                   onChange={(e) => update("txnMsgSignature", e.target.value)}
-                  placeholder="Business signature (e.g. sai kirana)"
+                  placeholder={`Business signature (e.g. ${dynamicSignature})`}
                   className="h-9 w-full rounded-md border-2 border-dashed border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
                 />
                 <span className="absolute -top-2 left-2 bg-white px-1 text-[9px] font-bold text-slate-400">
@@ -674,23 +645,37 @@ export default function TransactionMessageTab({ settings, update }) {
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
                   Recipient WhatsApp Number:
                 </label>
-                <input
-                  type="text"
-                  value={testPhone}
-                  onChange={(e) => setTestPhone(e.target.value)}
-                  placeholder="e.g. 9823012345"
-                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                  autoFocus
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                    placeholder="e.g. 8128634899"
+                    className="h-10 flex-1 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setTestPhone("8128634899")}
+                    className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100 transition whitespace-nowrap cursor-pointer"
+                    title="Use authorized Meta test recipient"
+                  >
+                    Kedar (8128634899)
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-50/80 border border-emerald-200/80 rounded-md p-2">
+                  <FiCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                  <span>Meta Sandbox Authorized Recipient: <strong>Kedar (+91 8128634899)</strong></span>
+                </div>
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Sends current message preview directly to recipient's phone number on WhatsApp.
+                  Sends current message preview directly to recipient's phone number via Meta WhatsApp Cloud API.
                 </p>
               </div>
 
               {testStatus && (
                 <p
                   className={`text-xs font-semibold ${
-                    testStatus.includes("success") ? "text-emerald-600" : "text-rose-600"
+                    testStatus.includes("success") || testStatus.includes("delivered") ? "text-emerald-600" : "text-rose-600"
                   }`}
                 >
                   {testStatus}
@@ -713,53 +698,6 @@ export default function TransactionMessageTab({ settings, update }) {
                 className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 active:scale-98 transition cursor-pointer"
               >
                 {testSending ? "Sending…" : "Send Test"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ============================================================ */}
-      {/* MODAL: Credits Info */}
-      {/* ============================================================ */}
-      {creditsModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setCreditsModalOpen(false);
-          }}
-        >
-          <div
-            className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl p-5 space-y-4"
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <FiStar className="h-5 w-5 text-amber-500 fill-amber-400" />
-                <h3 className="text-sm font-bold text-slate-800">WhatsApp Messaging Credits</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setCreditsModalOpen(false)}
-                className="grid h-6 w-6 place-items-center rounded-full bg-slate-100 text-slate-400 hover:bg-slate-200 transition cursor-pointer"
-              >
-                <FiX className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-center">
-              <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider">Available Balance</span>
-              <p className="mt-1 text-3xl font-extrabold text-amber-900">{settings.txnMsgCredits ?? 100} <span className="text-sm font-semibold text-amber-700">Credits</span></p>
-              <p className="text-xs text-amber-700 mt-0.5">1 Credit = 1 Automated WhatsApp Transaction Message</p>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setCreditsModalOpen(false)}
-                className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition cursor-pointer"
-              >
-                Close
               </button>
             </div>
           </div>
