@@ -580,17 +580,33 @@ router.post("/send", async (req, res) => {
   try {
     let result = null;
 
-    // 1. If a template is explicitly requested (by name or id)
-    if (templateName) {
+    // 1. Resolve template: explicitly requested or mapped from transaction type
+    const typeToTemplateMap = {
+      sales: "sale_invoice_alert",
+      purchase: "purchase_bill_alert",
+      salesReturn: "sale_invoice_alert",
+      purchaseReturn: "purchase_bill_alert",
+      paymentIn: "payment_receipt_alert",
+      paymentOut: "payment_receipt_alert",
+      saleOrder: "order_booking_alert",
+      purchaseOrder: "purchase_bill_alert",
+      estimate: "estimate_quotation_alert",
+      proformaInvoice: "sale_invoice_alert",
+      deliveryChallan: "delivery_challan_alert",
+      cancelledInvoice: "sale_invoice_alert",
+    };
+    const effectiveTemplateName = templateName || (req.body?.type ? typeToTemplateMap[req.body.type] : null);
+
+    if (effectiveTemplateName) {
       const templates = connection.assets?.templates || [];
-      const template = templates.find((t) => t.name === templateName || t.id === templateName);
+      const template = templates.find((t) => t.name === effectiveTemplateName || t.id === effectiveTemplateName);
 
       if (!template) {
         // When the template is absent: automatically send a request to Meta to create and approve it!
         const wabaId = connection.selection?.wabaId || connection.assets?.wabas?.[0]?.id || config.testMode?.wabaId;
-        const matchingPredefined = PREDEFINED_TEMPLATES[templateName] || Object.values(PREDEFINED_TEMPLATES).find((t) => t.name === templateName);
+        const matchingPredefined = PREDEFINED_TEMPLATES[effectiveTemplateName] || Object.values(PREDEFINED_TEMPLATES).find((t) => t.name === effectiveTemplateName);
         const templateDef = matchingPredefined || {
-          name: templateName,
+          name: effectiveTemplateName,
           category: "UTILITY",
           language: "en",
           components: [
@@ -621,7 +637,7 @@ router.post("/send", async (req, res) => {
           templateRequested: Boolean(approvalResult?.success),
           templateStatus: approvalResult?.status || "PENDING",
           error: { category: "TEMPLATE_PENDING_APPROVAL" },
-          message: approvalResult?.message || `Template "${templateName}" was absent, so an approval request has been automatically sent to Meta (Status: ${approvalResult?.status || "PENDING"}). Once Meta approves it, messages will be delivered directly.`,
+          message: approvalResult?.message || `Template "${effectiveTemplateName}" was absent, so an approval request has been automatically sent to Meta (Status: ${approvalResult?.status || "PENDING"}). Once Meta approves it, messages will be delivered directly.`,
         });
       }
 
@@ -629,8 +645,43 @@ router.post("/send", async (req, res) => {
         return res.status(400).json({
           success: false,
           error: { category: "TEMPLATE_NOT_APPROVED" },
-          message: `Template "${template.name || templateName}" is ${template.status}. Messages cannot be delivered using unapproved templates.`,
+          message: `Template "${template.name || effectiveTemplateName}" is ${template.status}. Messages cannot be delivered using unapproved templates.`,
         });
+      }
+
+      // Automatically construct required variables from message/request if not explicitly passed
+      let effectiveVariables = variables;
+      if (!effectiveVariables || Object.keys(effectiveVariables).length === 0) {
+        const text = String(message || "");
+        const custMatch = text.match(/Customer:\s*([^\n(]+)/i);
+        const customerName = req.body?.customer || (custMatch ? custMatch[1].trim() : "Valued Customer");
+
+        const numMatch = text.match(/(?:Invoice|Bill|Receipt|Order|Quotation|Challan|Note)[^:]*:\s*([^\n]+)/i);
+        const docNumber = req.body?.number || (numMatch ? numMatch[1].trim() : "INV-792");
+
+        const amtMatch = text.match(/(?:Invoice Amount|Total Amount|Amount Paid|Bill Amount|Amount Received|Total Order Amount|Quotation Amount)[^:]*:\s*([^\n]+)/i);
+        const amount = req.body?.amount ? String(req.body.amount) : (amtMatch ? amtMatch[1].trim() : "792.00");
+
+        const balMatch = text.match(/(?:Balance|Balance Due|Outstanding Balance)[^:]*:\s*([^\n]+)/i);
+        const balance = req.body?.balance !== undefined ? String(req.body.balance) : (balMatch ? balMatch[1].trim() : "0.00");
+
+        const lines = text.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+        const lastLine = lines.length ? lines[lines.length - 1] : "";
+        const companyName = req.body?.companyName || (lastLine && !lastLine.includes("http") && !lastLine.includes("Balance") ? lastLine : "patil and mane pvt ltd");
+
+        if (effectiveTemplateName === "sale_invoice_alert" || effectiveTemplateName === "purchase_bill_alert") {
+          effectiveVariables = { body: [customerName, docNumber, amount, balance, companyName] };
+        } else if (effectiveTemplateName === "payment_receipt_alert") {
+          effectiveVariables = { body: [customerName, docNumber, amount, "Online / Cash", companyName] };
+        } else if (effectiveTemplateName === "order_booking_alert" || effectiveTemplateName === "estimate_quotation_alert") {
+          effectiveVariables = { body: [customerName, docNumber, amount, companyName] };
+        } else if (effectiveTemplateName === "delivery_challan_alert") {
+          effectiveVariables = { body: [customerName, docNumber, "Dispatched Items", companyName] };
+        } else if (effectiveTemplateName === "hello_world") {
+          effectiveVariables = {};
+        } else {
+          effectiveVariables = { body: [customerName, docNumber, amount, companyName] };
+        }
       }
 
       result = await sendWhatsAppTemplateMessage({
@@ -638,7 +689,7 @@ router.post("/send", async (req, res) => {
         phoneNumberId,
         template,
         recipient: formattedPhone,
-        variables: variables || {},
+        variables: effectiveVariables,
       });
     }
 
