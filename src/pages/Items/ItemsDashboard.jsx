@@ -884,9 +884,20 @@ function ItemsDashboard() {
                     setSelectedId(item.id);
                     setMobileItemView("details");
                   }}
-                  className="min-w-0 py-2 text-left cursor-pointer"
+                  className="flex min-w-0 items-center gap-2.5 py-2 text-left cursor-pointer"
                 >
-                  <span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span><span className="block truncate text-xs text-slate-400">{item.itemCode || ""}{enableItemCategory && item.category && <span className="ml-2 font-medium text-slate-500">[{item.category}]</span>}</span>
+                  {(item.imageUrl || item.image) && (
+                    <img
+                      src={item.imageUrl || item.image}
+                      alt={item.itemName}
+                      className="h-9 w-9 shrink-0 rounded-md border border-slate-200 object-cover"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-slate-800">{item.itemName}{item.isActive === false && <span className="ml-2 text-[10px] font-normal text-slate-400">Inactive</span>}</span>
+                    <span className="block truncate text-xs text-slate-400">{item.itemCode || ""}{enableItemCategory && item.category && <span className="ml-2 font-medium text-slate-500">[{item.category}]</span>}</span>
+                  </div>
                 </button>
                 <span className={`whitespace-nowrap text-sm font-medium ${activeTab === "product" && quantity(item) < 0 ? "text-rose-600" : "text-emerald-600"}`}>{activeTab === "product" ? `${quantity(item)}${item.unit ? ` ${item.unit}` : ""}` : item.unit || "-"}</span>
                 <button type="button" aria-label={`Actions for ${item.itemName}`} onClick={() => setRowMenu((current) => current === item.id ? "" : item.id)} className="grid h-8 w-6 place-items-center rounded text-slate-400 hover:bg-white hover:text-slate-700"><FiMoreVertical /></button>
@@ -1029,14 +1040,24 @@ function ItemsDashboard() {
             <Card className="shrink-0 p-4 shadow-sm sm:p-5">
               {selectedItem ? <>
                 <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <h1 className="truncate text-lg font-semibold uppercase text-slate-900">{selectedItem.itemName}</h1>
-                    {selectedItem.isActive === false ? (
-                      <span className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600">Inactive</span>
-                    ) : (
-                      <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-600">Active</span>
+                  <div className="flex min-w-0 items-center gap-3">
+                    {(selectedItem.imageUrl || selectedItem.image) && (
+                      <img
+                        src={selectedItem.imageUrl || selectedItem.image}
+                        alt={selectedItem.itemName}
+                        className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 object-cover shadow-xs"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
                     )}
-                    <button type="button" aria-label="Edit item" title="Edit item" onClick={() => setItemModal({ mode: "edit", initialItem: selectedItem })} className="rounded p-1 text-slate-600 hover:bg-slate-100"><FiArrowUpRight /></button>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h1 className="truncate text-lg font-semibold uppercase text-slate-900">{selectedItem.itemName}</h1>
+                      {selectedItem.isActive === false ? (
+                        <span className="rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600">Inactive</span>
+                      ) : (
+                        <span className="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-600">Active</span>
+                      )}
+                      <button type="button" aria-label="Edit item" title="Edit item" onClick={() => setItemModal({ mode: "edit", initialItem: selectedItem })} className="rounded p-1 text-slate-600 hover:bg-slate-100"><FiArrowUpRight /></button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <button

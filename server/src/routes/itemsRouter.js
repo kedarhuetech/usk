@@ -8,9 +8,191 @@
  */
 
 import { Router } from "express";
+import multer from "multer";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { storageService } from "../services/storage/storageService.js";
+import { getFileMetadataById, deleteFileMetadata } from "../db/businessFilesRepository.js";
 
 const router = Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, done) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    if (allowed.includes(file.mimetype)) {
+      done(null, true);
+    } else {
+      done(new Error("Only JPG, PNG, WEBP, and GIF images are accepted."));
+    }
+  },
+});
+
+/**
+ * Safely persists a Base64 data URL into filesystem storage and returns the imageId and imageUrl.
+ */
+async function persistBase64ItemImage(val, businessId, itemId) {
+  if (!val || typeof val !== "string" || !val.startsWith("data:image/")) {
+    return null;
+  }
+  try {
+    const matches = val.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return null;
+    const mimeType = matches[1];
+    const buffer = Buffer.from(matches[2], "base64");
+    if (buffer.length > 10 * 1024 * 1024) return null;
+    const ext = mimeType.split("/")[1] || "png";
+    const filename = `item-${itemId || Date.now()}-${Date.now()}.${ext}`;
+
+    const fileResult = await storageService.saveFileAndMetadata({
+      businessId,
+      category: "items",
+      fileBuffer: buffer,
+      originalFilename: filename,
+      mimeType,
+    });
+
+    return {
+      imageId: fileResult.id,
+      imageUrl: `/api/items/images/${fileResult.id}`,
+    };
+  } catch (err) {
+    console.error("Failed to persist Base64 item image:", err.message);
+    return null;
+  }
+}
+
+/**
+ * POST /api/items/images
+ * Uploads an item image directly to private filesystem storage with metadata in business_files.
+ */
+router.post(
+  "/images",
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ success: false, message: "Image must be 10 MB or smaller." });
+        }
+        return res.status(400).json({ success: false, message: err.message || "File upload error." });
+      }
+      next();
+    });
+  },
+  async (req, res) => {
+    try {
+      const businessId = businessIdFromRequest(req);
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: "A JPG, PNG, WEBP, or GIF image is required." });
+      }
+      const originalFilename = (req.file.originalname || "").slice(0, 255);
+      const mimeType = req.file.mimetype || "application/octet-stream";
+      const sizeBytes = req.file.size;
+      const fileBuffer = req.file.buffer;
+
+      const fileResult = await storageService.saveFileAndMetadata({
+        businessId,
+        category: "items",
+        fileBuffer,
+        originalFilename,
+        mimeType,
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          id: fileResult.id,
+          imageId: fileResult.id,
+          url: `/api/items/images/${fileResult.id}`,
+          imageUrl: `/api/items/images/${fileResult.id}`,
+          name: originalFilename,
+          mimeType: fileResult.mimeType || mimeType,
+          size: fileResult.sizeBytes || sizeBytes,
+        },
+      });
+    } catch (error) {
+      return res.status(error.status || 500).json({
+        success: false,
+        message: error.message || "Failed to upload item image.",
+      });
+    }
+  }
+);
+
+/**
+ * GET /api/items/images/:id
+ * Streams item image binary from private filesystem storage.
+ */
+router.get("/images/:id", async (req, res) => {
+  try {
+    const rawBusinessId = req.query.businessId || req.get("x-business-id");
+    const businessId = rawBusinessId && rawBusinessId !== "local-development" ? rawBusinessId : null;
+
+    let file = null;
+    if (businessId) {
+      file = await getFileMetadataById(req.params.id, businessId);
+    } else {
+      file = await getFileMetadataById(req.params.id, null, { allowAnyBusiness: true });
+    }
+
+    if (!file) {
+      return res.status(404).json({ success: false, message: "Image not found." });
+    }
+
+    const exists = await storageService.fileExists(file.storage_key);
+    if (!exists) {
+      return res.status(404).json({ success: false, message: "Physical image file not found." });
+    }
+
+    res.type(file.mime_type || "application/octet-stream");
+    if (file.size_bytes) {
+      res.set("Content-Length", String(file.size_bytes));
+    }
+    res.set("Cache-Control", "private, max-age=86400");
+    const stream = storageService.createReadStream(file.storage_key);
+    return stream.pipe(res);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to load image." });
+  }
+});
+
+/**
+ * DELETE /api/items/images/:id
+ * Deletes an item image if not referenced by other items.
+ */
+router.delete("/images/:id", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const fileId = req.params.id;
+
+    const file = await getFileMetadataById(fileId, businessId);
+    if (!file) {
+      return res.status(404).json({ success: false, message: "Image not found." });
+    }
+
+    // Check if any item in inventory_items is currently using this image_id
+    const [referencingItems] = await pool.query(
+      `SELECT COUNT(*) AS count FROM inventory_items WHERE business_id = ? AND image_id = ?`,
+      [businessId, fileId]
+    );
+    const refCount = referencingItems[0]?.count || 0;
+    if (refCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Cannot delete image because it is referenced by ${refCount} item(s).`,
+      });
+    }
+
+    await storageService.deleteFile(file.storage_key, businessId).catch((err) => {
+      console.warn(`[ItemsRouter] Failed to delete physical file ${file.storage_key}:`, err.message);
+    });
+    await deleteFileMetadata(fileId, businessId);
+
+    return res.json({ success: true, message: "Image deleted successfully." });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message || "Failed to delete image." });
+  }
+});
 
 /**
  * GET /api/items
@@ -73,7 +255,8 @@ router.get("/", async (req, res) => {
     let querySql = `SELECT id, business_id, name, item_code, barcode, category, hsn_code, unit,
               item_type, sale_price, purchase_price, tax_rate, cess_rate,
               opening_stock, current_stock, min_stock, is_batch_tracked,
-              is_serial_tracked, description, is_active, created_at, updated_at
+              is_serial_tracked, description, is_active, image_url, image_id,
+              created_at, updated_at
        FROM inventory_items
        WHERE ${whereClause}
        ORDER BY name ASC`;
@@ -145,6 +328,9 @@ router.get("/", async (req, res) => {
       isBatchTracked: Boolean(row.is_batch_tracked),
       isSerialTracked: Boolean(row.is_serial_tracked),
       description: row.description || "",
+      imageUrl: row.image_url || "",
+      image: row.image_url || "",
+      imageId: row.image_id || null,
       batches: batchesMap.get(row.id) || [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -234,6 +420,9 @@ router.get("/:id", async (req, res) => {
         isSerialTracked: Boolean(row.is_serial_tracked),
         isActive: row.is_active !== 0,
         description: row.description || "",
+        imageUrl: row.image_url || "",
+        image: row.image_url || "",
+        imageId: row.image_id || null,
         batches,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -281,14 +470,54 @@ const saveItemHandler = async (req, res) => {
     const description = body.description || null;
     const isActive = body.isActive !== undefined ? (body.isActive ? 1 : 0) : (body.is_active !== undefined ? (body.is_active ? 1 : 0) : 1);
 
+    // Image handling & Base64 auto-persistence
+    let imageId = body.imageId || body.image_id || null;
+    let imageUrl = body.imageUrl || body.image_url || body.image || null;
+
+    if (typeof imageUrl === "string" && imageUrl.startsWith("data:image/")) {
+      const persisted = await persistBase64ItemImage(imageUrl, businessId, id);
+      if (persisted) {
+        imageId = persisted.imageId;
+        imageUrl = persisted.imageUrl;
+      }
+    } else if (typeof body.image === "string" && body.image.startsWith("data:image/")) {
+      const persisted = await persistBase64ItemImage(body.image, businessId, id);
+      if (persisted) {
+        imageId = persisted.imageId;
+        imageUrl = persisted.imageUrl;
+      }
+    }
+
+    if (imageId && (!imageUrl || imageUrl.startsWith("data:image/"))) {
+      imageUrl = `/api/items/images/${imageId}`;
+    }
+
+    // Check for previous image cleanup if this is an update and image changed or was removed
+    const [existingItemRows] = await conn.query(
+      `SELECT image_id, image_url FROM inventory_items WHERE business_id = ? AND id = ?`,
+      [businessId, id]
+    );
+    const existingImageId = existingItemRows[0]?.image_id || null;
+
+    let oldImageToCleanup = null;
+    if (existingImageId && existingImageId !== imageId) {
+      const [otherShares] = await conn.query(
+        `SELECT COUNT(*) AS count FROM inventory_items WHERE business_id = ? AND image_id = ? AND id != ?`,
+        [businessId, existingImageId, id]
+      );
+      if ((otherShares[0]?.count || 0) === 0) {
+        oldImageToCleanup = existingImageId;
+      }
+    }
+
     // 1. Upsert Item Header (Pure columns)
     await conn.query(
       `INSERT INTO inventory_items (
         id, business_id, name, item_code, barcode, category, hsn_code, unit,
         item_type, sale_price, purchase_price, tax_rate, cess_rate,
         opening_stock, current_stock, min_stock, is_batch_tracked,
-        is_serial_tracked, description, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        is_serial_tracked, description, is_active, image_url, image_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         item_code = VALUES(item_code),
@@ -307,12 +536,14 @@ const saveItemHandler = async (req, res) => {
         is_serial_tracked = VALUES(is_serial_tracked),
         description = VALUES(description),
         is_active = VALUES(is_active),
+        image_url = VALUES(image_url),
+        image_id = VALUES(image_id),
         updated_at = CURRENT_TIMESTAMP`,
       [
         id, businessId, name, itemCode, barcode, category, hsnCode, unit,
         itemType, salePrice, purchasePrice, taxRate, cessRate,
         openingStock, currentStock, minStock, isBatchTracked,
-        isSerialTracked, description, isActive
+        isSerialTracked, description, isActive, imageUrl, imageId
       ]
     );
 
@@ -349,6 +580,18 @@ const saveItemHandler = async (req, res) => {
 
     await conn.commit();
 
+    if (oldImageToCleanup) {
+      try {
+        const oldFile = await getFileMetadataById(oldImageToCleanup, businessId);
+        if (oldFile) {
+          await storageService.deleteFile(oldFile.storage_key, businessId).catch(() => {});
+          await deleteFileMetadata(oldImageToCleanup, businessId).catch(() => {});
+        }
+      } catch (cleanupErr) {
+        console.warn(`[ItemsRouter] Failed to cleanup replaced item image ${oldImageToCleanup}:`, cleanupErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       message: "Item saved successfully in pure relational rows and columns.",
@@ -369,6 +612,9 @@ const saveItemHandler = async (req, res) => {
         currentStock,
         minStock,
         isBatchTracked: Boolean(isBatchTracked),
+        imageUrl: imageUrl || "",
+        image: imageUrl || "",
+        imageId: imageId || null,
       },
     });
   } catch (err) {
@@ -397,7 +643,7 @@ router.delete("/:id", async (req, res) => {
 
     // 1. Verify item exists and belongs to this business
     const [existing] = await conn.query(
-      `SELECT id, name, is_active FROM inventory_items WHERE business_id = ? AND id = ?`,
+      `SELECT id, name, is_active, image_id FROM inventory_items WHERE business_id = ? AND id = ?`,
       [businessId, itemId]
     );
     if (!existing || existing.length === 0) {
@@ -408,6 +654,7 @@ router.delete("/:id", async (req, res) => {
     }
 
     const itemName = existing[0].name;
+    const itemImageId = existing[0].image_id;
 
     // 2. Check for historical transaction and inventory references
     const [txRows] = await conn.query(
@@ -478,6 +725,25 @@ router.delete("/:id", async (req, res) => {
     await conn.query(`DELETE FROM inventory_items WHERE business_id = ? AND id = ?`, [businessId, itemId]);
 
     await conn.commit();
+
+    if (itemImageId) {
+      try {
+        const [shares] = await pool.query(
+          `SELECT COUNT(*) AS count FROM inventory_items WHERE business_id = ? AND image_id = ?`,
+          [businessId, itemImageId]
+        );
+        if ((shares[0]?.count || 0) === 0) {
+          const fileMeta = await getFileMetadataById(itemImageId, businessId);
+          if (fileMeta) {
+            await storageService.deleteFile(fileMeta.storage_key, businessId).catch(() => {});
+            await deleteFileMetadata(itemImageId, businessId).catch(() => {});
+          }
+        }
+      } catch (cleanupErr) {
+        console.warn(`[ItemsRouter] Failed to cleanup deleted item image ${itemImageId}:`, cleanupErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       action: "deleted",

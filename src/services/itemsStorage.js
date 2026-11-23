@@ -161,6 +161,7 @@ export function normalizeInventoryItem(itemForm = {}) {
   const id = itemForm.id || `item-${crypto.randomUUID()}`;
   const unit = itemForm.unit || itemForm.baseUnit || "";
   const imageUrl = itemForm.imageUrl || itemForm.image || "";
+  const imageId = itemForm.imageId || itemForm.image_id || null;
   const itemCode = itemForm.itemCode || itemForm.serviceCode || itemForm.code || "";
   const barcode = itemForm.barcode || itemForm.barCode || itemForm.itemBarcode || itemCode || "";
   const subCategory = itemForm.subCategory || itemForm.sub_category || "";
@@ -241,6 +242,7 @@ export function normalizeInventoryItem(itemForm = {}) {
     batches,
     image: imageUrl,
     imageUrl,
+    imageId,
     updatedAt: new Date().toISOString(),
     createdAt: itemForm.createdAt || new Date().toISOString(),
   };

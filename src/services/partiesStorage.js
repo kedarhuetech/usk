@@ -17,9 +17,29 @@ const linkedPartySources = [
 // In-memory cache for live database session
 let memoryParties = [];
 
+export function deduplicatePartyList(list) {
+  if (!Array.isArray(list)) return [];
+  const seenIds = new Set();
+  const seenNames = new Set();
+  const result = [];
+
+  for (const party of list) {
+    if (!party) continue;
+    const id = String(party.id || "").trim();
+    const name = String(party.partyName || party.name || "").trim().toLowerCase();
+    if (id && seenIds.has(id)) continue;
+    if (name && seenNames.has(name)) continue;
+
+    if (id) seenIds.add(id);
+    if (name) seenNames.add(name);
+    result.push(party);
+  }
+  return result;
+}
+
 export function setMemoryParties(list) {
   if (Array.isArray(list)) {
-    memoryParties = list.map((party) => {
+    const normalized = list.map((party) => {
       const isInactive = party?.status === "inactive" || party?.isActive === false;
       return {
         ...party,
@@ -27,6 +47,7 @@ export function setMemoryParties(list) {
         isActive: !isInactive,
       };
     });
+    memoryParties = deduplicatePartyList(normalized);
   } else {
     memoryParties = [];
   }
@@ -39,14 +60,14 @@ function readParties() {
   try {
     const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
     if (Array.isArray(value) && value.length > 0) {
-      if (isDatabaseMode()) memoryParties = value;
-      return value;
+      const deduplicated = deduplicatePartyList(value);
+      if (isDatabaseMode()) memoryParties = deduplicated;
+      return deduplicated;
     }
     return [];
   } catch {
     return [];
   }
-  return memoryParties;
 }
 
 function readList(key) {
@@ -82,19 +103,43 @@ export async function fetchPartiesFromDb() {
 // Saves party.
 export function saveParty(party, options = {}) {
   const isInactive = party?.status === "inactive" || party?.isActive === false;
+  const partyName = String(party?.partyName || party?.name || "").trim();
+  const currentList = readParties();
+
+  // Find existing by ID or case-insensitive party name
+  const existingIndex = currentList.findIndex(
+    (entry) =>
+      (party.id && String(entry.id) === String(party.id)) ||
+      (partyName && String(entry.partyName || entry.name || "").trim().toLowerCase() === partyName.toLowerCase())
+  );
+
+  const existingEntry = existingIndex >= 0 ? currentList[existingIndex] : null;
+  const id = party.id || existingEntry?.id || crypto.randomUUID();
+
   const saved = {
+    ...(existingEntry || {}),
     ...party,
+    id,
+    partyName: partyName || existingEntry?.partyName || "",
+    name: partyName || existingEntry?.name || "",
     status: isInactive ? "inactive" : "active",
     isActive: !isInactive,
-    id: party.id || crypto.randomUUID(),
     updatedAt: new Date().toISOString(),
   };
-  const next = [saved, ...readParties().filter((entry) => String(entry.id) !== String(saved.id))];
-  memoryParties = next;
+
+  const next = [
+    saved,
+    ...currentList.filter(
+      (entry) =>
+        String(entry.id) !== String(saved.id) &&
+        String(entry.partyName || entry.name || "").trim().toLowerCase() !== partyName.toLowerCase()
+    ),
+  ];
+  memoryParties = deduplicatePartyList(next);
   if (typeof window !== "undefined" && window.localStorage) {
-    window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
+    window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
   }
-  setMemoryParties(next);
+  setMemoryParties(memoryParties);
   if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.save(saved).catch((err) => console.warn("[MySQL] Background party sync notice:", err.message));
   }

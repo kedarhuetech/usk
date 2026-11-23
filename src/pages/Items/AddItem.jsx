@@ -13,6 +13,7 @@ import { saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryItems } from "../../services/itemsStorage.js";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
+import { itemsApi } from "../../services/apiClient.js";
 
 // Renders the select field interface.
 function SelectField({ label, value, options, onChange, className = "" }) {
@@ -880,6 +881,9 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   ));
   const [activeTab, setActiveTab] = useState("pricing");
   const [image, setImage] = useState(() => initialItem?.imageUrl || initialItem?.image || "");
+  const [imageId, setImageId] = useState(() => initialItem?.imageId || initialItem?.image_id || null);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [categoryModal, setCategoryModal] = useState(false);
   const [subCategoryModal, setSubCategoryModal] = useState(false);
   const [unitModal, setUnitModal] = useState(false);
@@ -895,6 +899,8 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     if (initialItem) {
       setForm(createEditableItemForm(initialItem, appSettings.defaultItemUnit));
       setImage(initialItem.imageUrl || initialItem.image || "");
+      setImageId(initialItem.imageId || initialItem.image_id || null);
+      setPendingFile(null);
       setWholesaleVisible(hasWholesale(initialItem));
       setWholesale(createEditableWholesale(initialItem));
       setBatchRows(createEditableBatchRows(initialItem));
@@ -914,13 +920,24 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     if (nextType === "service") setActiveTab("pricing");
   };
 
-  // Handles image.
+  // Handles image selection and preview
   const handleImage = (file) => {
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => setImage(reader.result || "");
-    reader.readAsDataURL(file);
+    if (file.size > 10 * 1024 * 1024) {
+      setSaveStatus("Image must be 10 MB or smaller.");
+      return;
+    }
+
+    setPendingFile(file);
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      setImage(objectUrl);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => setImage(reader.result || "");
+      reader.readAsDataURL(file);
+    }
   };
 
   // Saves item.
@@ -944,6 +961,28 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     const subCategory = enableItemCategory ? form.subCategory : (initialItem?.subCategory || form.subCategory || "");
     const barcode = enableBarcodeScanning ? (form.barcode || form.itemCode) : (initialItem?.barcode || form.barcode || form.itemCode || "");
 
+    // Handle image upload if a new file was chosen
+    let finalImageUrl = image;
+    let finalImageId = imageId;
+
+    if (pendingFile) {
+      setUploadingImage(true);
+      setSaveStatus("Uploading item image...");
+      try {
+        const uploadRes = await itemsApi.uploadImage(pendingFile);
+        finalImageUrl = uploadRes?.url || uploadRes?.imageUrl || "";
+        finalImageId = uploadRes?.id || uploadRes?.imageId || null;
+      } catch (uploadErr) {
+        setUploadingImage(false);
+        setSaveStatus(`Image upload failed: ${uploadErr.message || "Could not upload image."}`);
+        return;
+      }
+      setUploadingImage(false);
+    } else if (!image) {
+      finalImageUrl = "";
+      finalImageId = null;
+    }
+
     const itemPayload = {
       ...form,
       id: initialItem?.id || form.id,
@@ -958,8 +997,9 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
       serviceName: form.type === "service" ? form.itemName : "",
       serviceCode: form.type === "service" ? form.itemCode : "",
       sac: form.type === "service" ? form.hsn : "",
-      image,
-      imageUrl: image,
+      image: finalImageUrl,
+      imageUrl: finalImageUrl,
+      imageId: finalImageId,
       wholesale: (wholesaleVisible && wholesale.price) ? { ...wholesale, minimumQty: Number(wholesale.minimumQty) > 0 ? wholesale.minimumQty : "1" } : null,
       wholesalePrice: (wholesaleVisible && wholesale.price) ? wholesale.price : "",
       wholesaleTaxMode: (wholesaleVisible && wholesale.price) ? wholesale.taxMode : "",
@@ -993,6 +1033,8 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
     if (resetAfterSave && !isEditMode) {
       setForm(itemDefaults);
       setImage("");
+      setImageId(null);
+      setPendingFile(null);
       setWholesaleVisible(false);
       setBatchRows([createBatchRow()]);
       setActiveTab("pricing");
@@ -1161,17 +1203,54 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
             </div>
 
             <div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => handleImage(event.target.files?.[0])} />
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(event) => handleImage(event.target.files?.[0])}
+              />
               {image ? (
                 <div className="rounded-lg border border-slate-200 p-3">
-                  <img src={image} alt="Item preview" className="h-28 w-full rounded-md object-cover" />
+                  <div className="relative">
+                    <img src={image} alt="Item preview" className="h-28 w-full rounded-md object-cover" />
+                    {uploadingImage && (
+                      <div className="absolute inset-0 flex items-center justify-center rounded-md bg-white/70 font-semibold text-xs text-blue-600">
+                        Uploading...
+                      </div>
+                    )}
+                  </div>
                   <div className="mt-3 flex gap-3">
-                    <button type="button" onClick={() => fileRef.current?.click()} className="text-sm font-semibold text-blue-600">Replace</button>
-                    <button type="button" onClick={() => setImage("")} className="text-sm font-semibold text-rose-600">Remove</button>
+                    <button
+                      type="button"
+                      disabled={uploadingImage}
+                      onClick={() => fileRef.current?.click()}
+                      className="text-sm font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50"
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      disabled={uploadingImage}
+                      onClick={() => {
+                        setImage("");
+                        setImageId(null);
+                        setPendingFile(null);
+                        if (fileRef.current) fileRef.current.value = "";
+                      }}
+                      className="text-sm font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
               ) : (
-                <button type="button" onClick={() => fileRef.current?.click()} className="flex h-24 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50/40 text-sm font-semibold text-blue-600 hover:bg-blue-50">
+                <button
+                  type="button"
+                  disabled={uploadingImage}
+                  onClick={() => fileRef.current?.click()}
+                  className="flex h-24 w-full items-center justify-center gap-2 rounded-lg border border-dashed border-blue-300 bg-blue-50/40 text-sm font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                >
                   <FiCamera className="h-5 w-5" /> Add Item Image
                 </button>
               )}

@@ -3,11 +3,12 @@ import { test } from "node:test";
 import { getSaleInvoices, saveSaleInvoice, normalizeInvoice, deleteSaleInvoice } from "./salesStorage.js";
 import { saveBusinessSaleInvoice, loadSalesInvoices } from "./businessRecords.js";
 import { transactionMatchesParty } from "./partyBalances.js";
-import { transactionStorageKeys } from "./transactionRepository.js";
+import { transactionStorageKeys, clearMemoryCollections } from "./transactionRepository.js";
 import { businessDataChangedEvent } from "./businessDataChanged.js";
 import { setStorageMode } from "./dataStorageConfig.js";
 
 function setupMockEnvironment(initialStorage = {}) {
+  clearMemoryCollections();
   const store = new Map(Object.entries(initialStorage));
   const sessionStore = new Map();
   const eventListeners = new Map();

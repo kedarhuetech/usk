@@ -2,7 +2,7 @@ import { apiRequest } from "./apiClient.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem, deleteInventoryItem, writeItems, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { getSaleInvoices, saveSaleInvoice, deleteSaleInvoice, normalizeInvoice, saleInvoicesStorageKey } from "./salesStorage.js";
 import { batchMovementStorageKey } from "./batchInventoryService.js";
-import { getParties, saveParty, deleteParty, partiesStorageKey } from "./partiesStorage.js";
+import { getParties, saveParty, deleteParty, partiesStorageKey, deduplicatePartyList } from "./partiesStorage.js";
 import { getPurchaseBills, savePurchaseBill, deletePurchaseBill, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { loadLocalDashboardSummary } from "./dashboardSummary.js";
@@ -100,7 +100,7 @@ export async function loadBusinessParties() {
     try {
       const dbParties = await partiesDb.listAll();
       if (Array.isArray(dbParties)) {
-        return dbParties.map((party) => {
+        const normalized = dbParties.map((party) => {
           const isInactive = party?.status === "inactive" || party?.isActive === false;
           return {
             ...party,
@@ -108,12 +108,14 @@ export async function loadBusinessParties() {
             isActive: !isInactive,
           };
         });
+        const deduplicated = deduplicatePartyList(normalized);
+        return deduplicated;
       }
     } catch (e) {
       console.warn("[MySQL] Falling back to local parties:", e.message);
     }
   }
-  return getParties();
+  return deduplicatePartyList(getParties());
 }
 
 // Loads business summary directly from MySQL backend /api/dashboard
@@ -145,7 +147,16 @@ export async function loadBusinessSummary() {
 
 // Saves business party directly to MySQL database with awaited persistence
 export async function saveBusinessParty(value) {
-  const party = withId(value);
+  let party = value;
+  if (!party.id) {
+    const existing = getParties().find(
+      (p) => String(p.partyName || p.name || "").trim().toLowerCase() === String(party.partyName || party.name || "").trim().toLowerCase()
+    );
+    if (existing?.id) {
+      party = { ...party, id: existing.id };
+    }
+  }
+  party = withId(party);
   if (isDatabaseMode()) {
     try {
       const remote = await partiesDb.save(party);

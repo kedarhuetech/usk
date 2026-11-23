@@ -90,6 +90,17 @@ export const businessGrowthApi = {
   },
 };
 
+export const itemsApi = {
+  uploadImage: (file) => {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest("/items/images", { method: "POST", body });
+  },
+  deleteImage: (imageId) => {
+    return apiRequest(`/items/images/${encodeURIComponent(imageId)}`, { method: "DELETE" });
+  },
+};
+
 // Provides the existing API operations for company business records.
 export const businessDataApi = {
   // Reuses the existing API for item, party, and transaction records.

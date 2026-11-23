@@ -231,7 +231,14 @@ function AdditionalFieldsTab({ form, setAdditionalField, customFieldSettings = [
 }
 
 // Renders the add party modal interface.
-export default function AddPartyModal({ onClose, onSave, initialParty = null, appSettings = {}, embedded = false }) {
+export default function AddPartyModal({
+  onClose,
+  onSave,
+  initialParty = null,
+  appSettings = {},
+  embedded = false,
+  parties: externalParties = null,
+}) {
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [showShipping, setShowShipping] = useState(Boolean(initialParty?.shippingAddress));
   const [form, setForm] = useState(() => ({
@@ -248,27 +255,40 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
 
   const isEditMode = Boolean(initialParty?.id);
 
+  const allParties = useMemo(() => {
+    if (Array.isArray(externalParties) && externalParties.length > 0) return externalParties;
+    return getParties() || [];
+  }, [externalParties]);
+
+  const duplicateNameParty = useMemo(() => {
+    const trimmed = (form.partyName || "").trim().toLowerCase();
+    if (!trimmed) return null;
+    return allParties.find(
+      (p) =>
+        String(p.id || "") !== String(initialParty?.id || "") &&
+        String(p.partyName || p.name || "").trim().toLowerCase() === trimmed
+    );
+  }, [form.partyName, initialParty?.id, allParties]);
+
   const duplicateGstinParty = useMemo(() => {
     const trimmed = (form.gstin || "").trim().toUpperCase();
     if (!trimmed || trimmed.length < 5) return null;
-    const all = getParties();
-    return all.find(
+    return allParties.find(
       (p) =>
         String(p.id || "") !== String(initialParty?.id || "") &&
         (p.gstin || "").trim().toUpperCase() === trimmed
     );
-  }, [form.gstin, initialParty?.id]);
+  }, [form.gstin, initialParty?.id, allParties]);
 
   const duplicatePhoneParty = useMemo(() => {
     const rawDigits = (form.phone || "").replace(/\D/g, "");
     if (!rawDigits || rawDigits.length < 10) return null;
-    const all = getParties();
-    return all.find(
+    return allParties.find(
       (p) =>
         String(p.id || "") !== String(initialParty?.id || "") &&
         (p.phone || p.phoneNumber || "").replace(/\D/g, "") === rawDigits
     );
-  }, [form.phone, initialParty?.id]);
+  }, [form.phone, initialParty?.id, allParties]);
 
   const setField = (field, value) => setForm((current) => ({ ...current, [field]: value }));
 
@@ -301,8 +321,13 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
   };
 
   const save = async (resetAfterSave = false) => {
-    if (!form.partyName.trim()) {
+    const trimmedName = form.partyName.trim();
+    if (!trimmedName) {
       setError("Party name is required.");
+      return;
+    }
+    if (duplicateNameParty) {
+      setError(`A party with the name "${duplicateNameParty.partyName || duplicateNameParty.name}" already exists. Please choose a different party name.`);
       return;
     }
     const rawDigits = (form.phone || "").replace(/\D/g, "");
@@ -328,8 +353,8 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
       const isInactive = isPartyInactive(form);
       const partyData = {
         ...form,
-        partyName: form.partyName.trim(),
-        name: form.partyName.trim(),
+        partyName: trimmedName,
+        name: trimmedName,
         phone: form.phone?.trim() || "",
         phoneNumber: form.phone?.trim() || "",
         status: isInactive ? "inactive" : "active",
@@ -383,7 +408,22 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className={`grid gap-4 md:grid-cols-2 ${(appSettings.enablePartyGrouping ?? true) ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
-          <Input label="Party Name *" value={form.partyName} onChange={(event) => setField("partyName", event.target.value)} placeholder="Party Name" />
+          <div>
+            <Input
+              label="Party Name *"
+              value={form.partyName}
+              onChange={(event) => {
+                setField("partyName", event.target.value);
+                if (error) setError("");
+              }}
+              placeholder="Party Name"
+            />
+            {duplicateNameParty && (
+              <p className="mt-1 text-xs font-semibold text-rose-600 bg-rose-50 rounded px-2 py-1 border border-rose-200">
+                A party named "{duplicateNameParty.partyName || duplicateNameParty.name}" already exists.
+              </p>
+            )}
+          </div>
           <div>
             <Input label="GSTIN" value={form.gstin} onChange={(event) => setField("gstin", event.target.value)} placeholder="GSTIN" />
             {duplicateGstinParty && (
@@ -436,8 +476,22 @@ export default function AddPartyModal({ onClose, onSave, initialParty = null, ap
 
       <footer className="flex justify-end gap-4 border-t border-slate-200 bg-white px-6 py-4">
         {error && <p className="mr-auto self-center text-sm font-semibold text-red-600">{error}</p>}
-        {!isEditMode && <Button disabled={saving} onClick={() => save(true)} className="border border-blue-600 bg-white text-blue-600 hover:bg-blue-50">Save & New</Button>}
-        <Button disabled={saving} onClick={() => save(false)} className="bg-blue-600 text-white shadow-sm hover:bg-blue-700">{saving ? "Saving…" : "Save"}</Button>
+        {!isEditMode && (
+          <Button
+            disabled={saving || Boolean(duplicateNameParty)}
+            onClick={() => save(true)}
+            className="border border-blue-600 bg-white text-blue-600 hover:bg-blue-50"
+          >
+            Save & New
+          </Button>
+        )}
+        <Button
+          disabled={saving || Boolean(duplicateNameParty)}
+          onClick={() => save(false)}
+          className="bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+        >
+          {saving ? "Saving…" : "Save"}
+        </Button>
       </footer>
     </section>
   );
