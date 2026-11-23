@@ -103,6 +103,14 @@ export function getEffectiveCompanyInfo(settings = null) {
 
   const themeColor = appSettings.themeColor || "#881337";
 
+  const bankDetails = {
+    bankName: profile.bankName || profile.bankDetails?.bankName || appSettings.bankAccount?.bankName || "",
+    accountNumber: profile.accountNumber || profile.bankDetails?.accountNumber || appSettings.bankAccount?.accountNumber || "",
+    ifscCode: profile.ifscCode || profile.bankDetails?.ifscCode || appSettings.bankAccount?.ifscCode || "",
+    branchName: profile.branchName || profile.bankDetails?.branchName || appSettings.bankAccount?.branchName || "",
+    upiId: profile.upiId || profile.bankDetails?.upiId || appSettings.bankAccount?.upiId || appSettings.upiId || "",
+  };
+
   // Resolve currency symbol for print & PDF documents:
   // Defaults strictly to Indian Rupee (₹).
   const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
@@ -123,6 +131,8 @@ export function getEffectiveCompanyInfo(settings = null) {
     signature,
     themeColor,
     currencySymbol,
+    bankDetails,
+    upiId: bankDetails.upiId,
     appSettings,
   };
 }
@@ -191,8 +201,8 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   }
 
   // Issue #22: Standard dynamic UPI QR URI format
-  const bankDetails = opts.bankDetails || company.appSettings?.bankAccount || null;
-  const upiId = opts.upiId || bankDetails?.upiId || company.appSettings?.upiId || company.upiId || "";
+  const bankDetails = opts.bankDetails || company.bankDetails || company.appSettings?.bankAccount || null;
+  const upiId = opts.upiId || bankDetails?.upiId || company.upiId || company.appSettings?.upiId || "";
   const standardUpiUri = upiId
     ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company.name || "Business")}&am=${grandTotal}&cu=INR`
     : "";
