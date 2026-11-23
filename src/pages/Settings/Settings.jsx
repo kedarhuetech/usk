@@ -4,29 +4,21 @@ import {
   FiBell,
   FiBook,
   FiCheck,
-  FiChevronDown,
-  FiChevronLeft,
-  FiChevronRight,
   FiDownload,
   FiFileText,
   FiInfo,
-  FiLock,
   FiMessageSquare,
   FiPackage,
   FiPercent,
-  FiPlus,
   FiPrinter,
   FiRefreshCw,
   FiSearch,
-  FiShield,
   FiSliders,
-  FiTrash2,
   FiUpload,
   FiUsers,
   FiX,
 } from "react-icons/fi";
 import { useAppPasscode } from "../../components/Passcode/passcodeContext.js";
-import { APP_PASSCODE_STORAGE_LABEL } from "../../services/appPasscodeRepository.js";
 import { validatePasscodeForm } from "../../services/appPasscodeValidation.js";
 import { addCustomUnit, getUnits } from "../../services/unitsStorage.js";
 import {
@@ -74,7 +66,7 @@ const settingsTabFromSearch = (search) => {
 function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState(() => settingsTabFromSearch(location.search));
+  const activeTab = settingsTabFromSearch(location.search);
   const [settings, setSettings] = useState(getAppSettings);
   const [toast, setToast] = useState("");
   const [confirmModal, setConfirmModal] = useState({
@@ -100,7 +92,7 @@ function Settings() {
   const [auditFilter, setAuditFilter] = useState("");
 
   // Passcode context
-  const { enabled: passcodeEnabled, setup: setupPasscode, change: changePasscode, disable: disablePasscode, lock: lockApp } = useAppPasscode();
+  const { setup: setupPasscode, change: changePasscode, disable: disablePasscode } = useAppPasscode();
   const [passcodeMode, setPasscodeMode] = useState("");
   const [passcodeError, setPasscodeError] = useState("");
   const [passcodeSaving, setPasscodeSaving] = useState(false);
@@ -113,10 +105,6 @@ function Settings() {
       applyScreenZoom(settings.screenZoom);
     }
   }, [settings.screenZoom]);
-
-  useEffect(() => {
-    setActiveTab(settingsTabFromSearch(location.search));
-  }, [location.search]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -307,7 +295,7 @@ function Settings() {
             />
           )}
 
-          {activeTab === "transaction" && <TransactionTab settings={settings} update={update} />}
+          {activeTab === "transaction" && <TransactionTab settings={settings} update={update} showToast={showToast} />}
           {activeTab === "print" && <PrintTab settings={settings} update={update} />}
           {activeTab === "taxes" && <TaxesTab settings={settings} update={update} />}
           {activeTab === "messages" && <TransactionMessageTab settings={settings} update={update} />}
@@ -723,8 +711,8 @@ function GeneralTab({
   onApplyZoom,
   onBackupNow,
   onRestoreFile,
-  onOpenFirmModal,
-  onOpenGodownModal,
+  _onOpenFirmModal,
+  _onOpenGodownModal,
   onOpenBackupHistory,
   onOpenAuditTrail,
   backupCount = 0,
@@ -1112,7 +1100,8 @@ function GeneralTab({
 
 
 
-function TransactionTab({ settings, update, updateMultiple }) {
+function TransactionTab({ settings, update, showToast }) {
+  const firmName = settings.firms?.[0]?.name || settings.companyName || "My Business";
   // Modal states
   const [termsModal, setTermsModal] = useState(false);
   const [termsTitle, setTermsTitle] = useState(settings.termsTitle || "Standard Terms");
@@ -2290,19 +2279,21 @@ function TransactionTab({ settings, update, updateMultiple }) {
           MODAL: Additional Charges (Matches USK Desktop Layout)
           ======================================================== */}
       {additionalChargesModal && (() => {
-        const setup = settings.additionalChargesSetup || {
-          enabled: true,
-          charges: [
-            { id: "charge1", selected: false, name: "Shipping", enableTax: true, sac: "", taxRate: "NONE" },
-            { id: "charge2", selected: false, name: "Packaging", enableTax: false, sac: "", taxRate: "NONE" },
-            { id: "charge3", selected: false, name: "Adjustment", enableTax: false, sac: "", taxRate: "NONE" },
-          ],
+        const rawSetup = settings.additionalChargesSetup || {};
+        const defaultCharges = [
+          { id: "charge1", selected: false, name: "Shipping", enableTax: true, sac: "", taxRate: "NONE" },
+          { id: "charge2", selected: false, name: "Packaging", enableTax: false, sac: "", taxRate: "NONE" },
+          { id: "charge3", selected: false, name: "Adjustment", enableTax: false, sac: "", taxRate: "NONE" },
+        ];
+        const setup = {
+          enabled: rawSetup.enabled ?? true,
+          charges: Array.isArray(rawSetup.charges) && rawSetup.charges.length > 0 ? rawSetup.charges : defaultCharges,
         };
 
         const updateCharge = (index, field, val) => {
-          const updatedCharges = [...setup.charges];
-          updatedCharges[index] = { ...updatedCharges[index], [field]: val };
-          const updatedSetup = { ...setup, charges: updatedCharges };
+          const currentCharges = Array.isArray(setup.charges) ? [...setup.charges] : [...defaultCharges];
+          currentCharges[index] = { ...currentCharges[index], [field]: val };
+          const updatedSetup = { ...setup, charges: currentCharges };
           update("additionalChargesSetup", updatedSetup);
         };
 
@@ -2312,10 +2303,12 @@ function TransactionTab({ settings, update, updateMultiple }) {
         };
 
         const handleSaveDetails = () => {
-          const activeCharges = setup.charges.filter((c) => c.selected);
+          const activeCharges = (setup.charges || []).filter((c) => c.selected);
           update("additionalCharges", activeCharges);
           setAdditionalChargesModal(false);
-          showToast("Additional charges saved successfully");
+          if (typeof showToast === "function") {
+            showToast("Additional charges saved successfully");
+          }
         };
 
         return (
@@ -2359,7 +2352,7 @@ function TransactionTab({ settings, update, updateMultiple }) {
 
               {/* 3 Additional Charge Rows */}
               <div className={`space-y-6 ${!setup.enabled ? "opacity-50 pointer-events-none" : ""}`}>
-                {setup.charges.map((charge, idx) => (
+                {(setup.charges || []).map((charge, idx) => (
                   <div key={charge.id} className="flex items-start gap-3">
                     {/* Left Selection Checkbox */}
                     <div className="pt-7">
