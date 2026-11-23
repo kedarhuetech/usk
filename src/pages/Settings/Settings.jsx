@@ -185,11 +185,15 @@ function Settings() {
   };
 
   // Backup & Restore
-  const handleBackupNow = () => {
-    const dateFormatted = exportBackupData();
-    if (dateFormatted) {
-      update("lastBackupDate", dateFormatted);
-      showToast("Backup exported successfully!");
+  const handleBackupNow = async () => {
+    try {
+      const dateFormatted = await exportBackupData();
+      if (dateFormatted) {
+        update("lastBackupDate", dateFormatted);
+        showToast("Backup exported successfully!");
+      }
+    } catch (err) {
+      toastNotification.error("Failed to export backup: " + err.message);
     }
   };
 
@@ -284,16 +288,6 @@ function Settings() {
               updateMultiple={updateMultiple}
               selectedZoom={selectedZoom}
               onApplyZoom={handleApplyZoom}
-              passcodeEnabled={passcodeEnabled}
-              onTogglePasscode={() => {
-                setPasscodeError("");
-                setPasscodeMode(passcodeEnabled ? "disable" : "setup");
-              }}
-              onChangePasscode={() => {
-                setPasscodeError("");
-                setPasscodeMode("change");
-              }}
-              onLockApp={lockApp}
               onBackupNow={handleBackupNow}
               onRestoreFile={handleRestoreFile}
               onOpenFirmModal={() => {
@@ -727,10 +721,6 @@ function GeneralTab({
   updateMultiple,
   selectedZoom,
   onApplyZoom,
-  passcodeEnabled,
-  onTogglePasscode,
-  onChangePasscode,
-  onLockApp,
   onBackupNow,
   onRestoreFile,
   onOpenFirmModal,
@@ -748,46 +738,6 @@ function GeneralTab({
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Application</h3>
 
           <div className="mt-4 space-y-4">
-            {/* Enable Passcode */}
-            <div>
-              <label className="flex cursor-pointer items-center justify-between text-xs font-semibold text-slate-700">
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={passcodeEnabled}
-                    onChange={onTogglePasscode}
-                    className="h-4 w-4 rounded accent-blue-600"
-                  />
-                  Enable Passcode
-                  <InfoTooltip text="Secure this workspace with a 4-digit passcode lock." />
-                </span>
-                {passcodeEnabled && (
-                  <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                    Active
-                  </span>
-                )}
-              </label>
-              {passcodeEnabled && (
-                <div className="ml-6 mt-2 flex items-center gap-3 text-xs">
-                  <button
-                    type="button"
-                    onClick={onChangePasscode}
-                    className="font-semibold text-blue-600 hover:underline"
-                  >
-                    Change Passcode
-                  </button>
-                  <span className="text-slate-300">•</span>
-                  <button
-                    type="button"
-                    onClick={onLockApp}
-                    className="inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-slate-900"
-                  >
-                    <FiLock className="h-3 w-3" /> Lock Now
-                  </button>
-                </div>
-              )}
-            </div>
-
             {/* Business Currency */}
             <div className="flex items-center justify-between pt-1">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">

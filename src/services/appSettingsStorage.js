@@ -610,18 +610,42 @@ export function restoreSnapshot(snapshotId) {
   return true;
 }
 
-export function exportBackupData() {
+export async function exportBackupData() {
   if (typeof window === "undefined" || !window.localStorage) return;
   // Also create a local snapshot
   createAutoBackupSnapshot("Manual Export Backup");
 
-  const backup = {};
+  const backup = {
+    format: "usk-unified-backup",
+    version: 2,
+    createdAt: new Date().toISOString(),
+    localStorage: {},
+    mysqlDump: null,
+  };
+
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
     if (key && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
-      backup[key] = window.localStorage.getItem(key);
+      const val = window.localStorage.getItem(key);
+      backup.localStorage[key] = val;
+      backup[key] = val;
     }
   }
+
+  // Also include MySQL database tables if backend is active
+  try {
+    const res = await fetch("/api/backup/export");
+    if (res.ok) {
+      const dbDump = await res.json();
+      backup.mysqlDump = dbDump;
+      if (dbDump.tables) {
+        backup.tables = dbDump.tables;
+      }
+    }
+  } catch (err) {
+    console.warn("[Backup Notice] Could not export MySQL dump directly:", err.message);
+  }
+
   const dateStr = new Date().toISOString().replace(/[:.]/g, "-");
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -639,15 +663,33 @@ export function exportBackupData() {
 export async function restoreBackupData(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target.result);
         if (typeof data !== "object" || data === null) throw new Error("Invalid backup format");
-        Object.entries(data).forEach(([key, val]) => {
-          if (typeof val === "string") {
+
+        // 1. Restore MySQL database tables if present in backup file
+        const mysqlTables = data.mysqlDump?.tables || data.tables;
+        if (mysqlTables && typeof mysqlTables === "object") {
+          try {
+            await fetch("/api/backup/restore", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tables: mysqlTables }),
+            });
+          } catch (mysqlErr) {
+            console.warn("[Restore Notice] Server MySQL restore notice:", mysqlErr.message);
+          }
+        }
+
+        // 2. Restore localStorage keys
+        const localSource = data.localStorage && typeof data.localStorage === "object" ? data.localStorage : data;
+        Object.entries(localSource).forEach(([key, val]) => {
+          if (typeof val === "string" && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
             window.localStorage.setItem(key, val);
           }
         });
+
         recordAuditTrail({
           action: "Backup Restored from File",
           entity: "Backup",
