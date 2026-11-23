@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getParties, saveParty } from "../../services/partiesStorage.js";
+import { getParties, saveParty, deduplicatePartyList, setMemoryParties } from "../../services/partiesStorage.js";
 import { parseVCard, parseContactsCsv } from "../../services/contactImportParser.js";
 
 // Mock localStorage if in Node environment
@@ -64,6 +64,7 @@ Sneha Kulkarni,,,,,,,,,,,,,,,,,,,,,,,,,,,* myContacts,Personal,sneha.k@yahoo.co.
 
 test("Importing parties from parsed contacts creates parties in storage", () => {
   window.localStorage.clear();
+  setMemoryParties([]);
 
   const selectedContacts = [
     { id: "c1", name: "Rajesh Traders (Pune)", phone: "9823412345", email: "rajesh.traders@gmail.com", address: "Market Yard, Pune" },
@@ -94,4 +95,40 @@ test("Importing parties from parsed contacts creates parties in storage", () => 
   const pooja = allParties.find((p) => p.partyName === "Pooja Sharma & Co.");
   assert.ok(pooja, "Pooja Sharma must be saved");
   assert.equal(pooja.phone, "9876543210");
+});
+
+test("saveParty updates existing party instead of creating duplicates when partyName matches", () => {
+  window.localStorage.clear();
+  setMemoryParties([]);
+
+  saveParty({
+    partyName: "Pooja Sharma & Co.",
+    phone: "9876543210",
+    email: "pooja.sharma@yahoo.com",
+  });
+
+  // Attempting to save duplicate name
+  saveParty({
+    partyName: "Pooja Sharma & Co.",
+    phone: "9876543210",
+    email: "pooja.updated@yahoo.com",
+  });
+
+  const parties = getParties();
+  assert.equal(parties.length, 1, "Should not duplicate party with same name");
+  assert.equal(parties[0].partyName, "Pooja Sharma & Co.");
+  assert.equal(parties[0].email, "pooja.updated@yahoo.com");
+});
+
+test("deduplicatePartyList eliminates entries with identical names or ids", () => {
+  const duplicates = [
+    { id: "1", partyName: "Alpha Ltd" },
+    { id: "2", partyName: "alpha ltd" },
+    { id: "3", partyName: "Beta LLC" },
+    { id: "1", partyName: "Gamma Inc" },
+  ];
+  const unique = deduplicatePartyList(duplicates);
+  assert.equal(unique.length, 2);
+  assert.equal(unique[0].partyName, "Alpha Ltd");
+  assert.equal(unique[1].partyName, "Beta LLC");
 });
