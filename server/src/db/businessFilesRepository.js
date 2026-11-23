@@ -39,6 +39,7 @@ export async function saveFileMetadata(metadata, connection = null) {
   const storedFilename = String(metadata.storedFilename || `${id}.bin`).slice(0, 255);
   const storageDriver = metadata.storageDriver || "local";
   const storageKey = String(metadata.storageKey || "").slice(0, 500);
+  const publicUrl = metadata.publicUrl ? String(metadata.publicUrl).slice(0, 500) : (metadata.cloudinaryUrl ? String(metadata.cloudinaryUrl).slice(0, 500) : null);
   const mimeType = String(metadata.mimeType || "application/octet-stream").slice(0, 100);
   const sizeBytes = Number(metadata.sizeBytes || 0);
   const sha256Hash = String(metadata.sha256Hash || "").slice(0, 64);
@@ -46,8 +47,8 @@ export async function saveFileMetadata(metadata, connection = null) {
   await conn.execute(
     `INSERT INTO business_files (
       id, business_id, module, category, original_filename, stored_filename,
-      storage_driver, storage_key, mime_type, size_bytes, sha256_hash
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      storage_driver, storage_key, public_url, mime_type, size_bytes, sha256_hash
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       module = VALUES(module),
       category = VALUES(category),
@@ -55,6 +56,7 @@ export async function saveFileMetadata(metadata, connection = null) {
       stored_filename = VALUES(stored_filename),
       storage_driver = VALUES(storage_driver),
       storage_key = VALUES(storage_key),
+      public_url = VALUES(public_url),
       mime_type = VALUES(mime_type),
       size_bytes = VALUES(size_bytes),
       sha256_hash = VALUES(sha256_hash),
@@ -69,6 +71,7 @@ export async function saveFileMetadata(metadata, connection = null) {
       storedFilename,
       storageDriver,
       storageKey,
+      publicUrl,
       mimeType,
       sizeBytes,
       sha256Hash,
@@ -84,6 +87,7 @@ export async function saveFileMetadata(metadata, connection = null) {
     storedFilename,
     storageDriver,
     storageKey,
+    publicUrl,
     mimeType,
     sizeBytes,
     sha256Hash,

@@ -73,8 +73,8 @@ router.post("/migrate-local-data", async (req, res) => {
 
       // Check if already in MySQL under this business or globally by ID
       const [existing] = await conn.query(
-        `SELECT id, business_id, party_name FROM parties WHERE id = ? OR (business_id = ? AND party_name = ? AND (phone = ? OR phone IS NULL)) LIMIT 1`,
-        [id, businessId, partyName, phone]
+        `SELECT id, business_id, party_name FROM parties WHERE id = ? OR (business_id = ? AND LOWER(TRIM(party_name)) = LOWER(TRIM(?))) LIMIT 1`,
+        [id, businessId, partyName]
       );
 
       if (existing.length > 0) {

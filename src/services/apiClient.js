@@ -101,6 +101,17 @@ export const itemsApi = {
   },
 };
 
+export const transactionsApi = {
+  uploadAttachment: (file) => {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest("/transactions/attachments", { method: "POST", body });
+  },
+  deleteAttachment: (fileId) => {
+    return apiRequest(`/transactions/attachments/${encodeURIComponent(fileId)}`, { method: "DELETE" });
+  },
+};
+
 // Provides the existing API operations for company business records.
 export const businessDataApi = {
   // Reuses the existing API for item, party, and transaction records.

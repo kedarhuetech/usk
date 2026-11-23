@@ -214,7 +214,8 @@ const savePartyHandler = async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const partyName = (body.partyName || body.name || body.party_name || "").trim();
+    const rawPartyName = (body.partyName || body.name || body.party_name || "").trim();
+    const partyName = rawPartyName.replace(/\s+/g, " ");
     if (!partyName) {
       return res.status(400).json({ success: false, message: "Party name is required." });
     }
@@ -229,8 +230,8 @@ const savePartyHandler = async (req, res) => {
 
     if (existingByName.length > 0) {
       const existing = existingByName[0];
-      // If a different party ID was supplied, reject the duplicate name
-      if (targetId && String(targetId) !== String(existing.id)) {
+      // If creating a new party or updating with a different ID, reject duplicate name
+      if (!targetId || String(targetId) !== String(existing.id)) {
         return res.status(400).json({
           success: false,
           message: `A party named "${existing.party_name}" already exists. Please choose a different party name.`,
@@ -239,7 +240,7 @@ const savePartyHandler = async (req, res) => {
       }
     }
 
-    const id = targetId || (existingByName.length > 0 ? existingByName[0].id : `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
+    const id = targetId || `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     const phone = body.phone || body.mobile || null;
     const email = body.email || null;

@@ -132,3 +132,41 @@ test("deduplicatePartyList eliminates entries with identical names or ids", () =
   assert.equal(unique[0].partyName, "Alpha Ltd");
   assert.equal(unique[1].partyName, "Beta LLC");
 });
+
+test("deduplicatePartyList handles party_name raw column and irregular spacing", () => {
+  const rawList = [
+    { id: "p1", party_name: "Pooja Sharma & Co." },
+    { id: "p2", party_name: "  Pooja   Sharma & Co.  " },
+    { id: "p3", name: "pooja sharma & co." },
+    { id: "p4", partyName: "Omkar Provision Stores" },
+    { id: "p5", party_name: "omkar provision stores" },
+  ];
+  const unique = deduplicatePartyList(rawList);
+  assert.equal(unique.length, 2, "Must deduplicate down to 2 distinct parties");
+  assert.equal(unique[0].partyName, "Pooja Sharma & Co.");
+  assert.equal(unique[1].partyName, "Omkar Provision Stores");
+});
+
+test("saveParty reuses canonical ID when updating party by name with whitespace variance", () => {
+  window.localStorage.clear();
+  setMemoryParties([]);
+
+  const original = saveParty({
+    id: "canonical-id-123",
+    partyName: "Pooja Sharma & Co.",
+    phone: "9876543210",
+  });
+  assert.equal(original.id, "canonical-id-123");
+
+  // Attempt to save with new random UUID and extra whitespace
+  const updated = saveParty({
+    id: "random-new-uuid-456",
+    partyName: "  Pooja   Sharma & Co.  ",
+    phone: "9876543210",
+    email: "pooja.new@gmail.com",
+  });
+
+  assert.equal(updated.id, "canonical-id-123", "Must retain original canonical ID instead of creating new duplicate ID");
+  assert.equal(getParties().length, 1);
+  assert.equal(getParties()[0].email, "pooja.new@gmail.com");
+});

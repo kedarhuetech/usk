@@ -135,10 +135,24 @@ export function detectMagicBytes(buffer) {
     return { mimeType: "application/pdf", ext: ".pdf" };
   }
 
-  // 6. SVG: Text starting with <?xml or <svg (within first 1024 bytes)
+  // 6. ZIP / Compressed Archives: 'PK\x03\x04' (50 4B 03 04)
+  if (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
+    return { mimeType: "application/zip", ext: ".zip" };
+  }
+
+  // 7. SVG: Text starting with <?xml or <svg (within first 1024 bytes)
   const headerSample = buffer.subarray(0, Math.min(buffer.length, 1024)).toString("utf8").trim().toLowerCase();
   if (headerSample.startsWith("<svg") || (headerSample.startsWith("<?xml") && headerSample.includes("<svg"))) {
     return { mimeType: "image/svg+xml", ext: ".svg" };
+  }
+
+  // 8. JSON: Valid text starting with '{' or '[' (within first 128 bytes)
+  const jsonSample = buffer.subarray(0, Math.min(buffer.length, 128)).toString("utf8").trim();
+  if (jsonSample.startsWith("{") || jsonSample.startsWith("[")) {
+    try {
+      JSON.parse(buffer.toString("utf8"));
+      return { mimeType: "application/json", ext: ".json" };
+    } catch {}
   }
 
   return null;
@@ -162,8 +176,18 @@ export function validateFileContent(buffer, declaredMimeType = "", maxSizeBytes 
     throw new Error(`File size limit exceeded: Maximum allowed size is ${maxSizeBytes} bytes, received ${buffer.length} bytes.`);
   }
 
+  const cleanDeclared = String(declaredMimeType || "").trim().toLowerCase();
   const detected = detectMagicBytes(buffer);
+
   if (!detected) {
+    if (cleanDeclared === "application/octet-stream" || cleanDeclared === "binary/octet-stream") {
+      return {
+        valid: true,
+        mimeType: "application/octet-stream",
+        ext: ".bin",
+        sizeBytes: buffer.length,
+      };
+    }
     throw new Error("Unsupported or unrecognized file format. Only JPG, PNG, WEBP, GIF, SVG, and PDF are supported.");
   }
 
@@ -172,7 +196,6 @@ export function validateFileContent(buffer, declaredMimeType = "", maxSizeBytes 
   }
 
   // If a declared MIME type was provided, verify consistency (allowing generic fallbacks)
-  const cleanDeclared = String(declaredMimeType || "").trim().toLowerCase();
   if (
     cleanDeclared &&
     cleanDeclared !== "application/octet-stream" &&

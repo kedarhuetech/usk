@@ -21,6 +21,7 @@ export const STORAGE_CATEGORIES = Object.freeze({
   COMPANY_PROFILE: "company-profile",
   ITEMS: "items",
   TRANSACTIONS: "transactions",
+  INVOICE_ATTACHMENTS: "invoice-attachments",
   DOCUMENTS: "documents",
   RECEIPTS: "receipts",
 });
@@ -33,6 +34,10 @@ export const ALLOWED_FILE_TYPES = Object.freeze({
   "image/gif": [".gif"],
   "image/svg+xml": [".svg"],
   "application/pdf": [".pdf"],
+  "application/json": [".json", ".usvbackup"],
+  "application/zip": [".zip", ".usvbackup", ".vyb"],
+  "application/octet-stream": [".bin", ".usvbackup", ".dat"],
+  "text/plain": [".txt", ".csv", ".log"],
 });
 
 // Default size limits
@@ -42,10 +47,22 @@ export const DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export const DEFAULT_BUSINESS_ID = process.env.DEMO_BUSINESS_ID || "demo-business";
 
 /**
- * Returns the active storage driver name ('local', 's3', etc.)
+ * Returns the active storage driver name ('cloudinary' | 'local')
+ * Prefers 'cloudinary' when Cloudinary credentials are fully configured,
+ * while allowing explicit override via STORAGE_DRIVER.
  */
 export function getStorageDriverName() {
-  return String(process.env.STORAGE_DRIVER || "local").trim().toLowerCase();
+  if (process.env.STORAGE_DRIVER) {
+    return String(process.env.STORAGE_DRIVER).trim().toLowerCase();
+  }
+  if (
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET
+  ) {
+    return "cloudinary";
+  }
+  return "local";
 }
 
 /**
