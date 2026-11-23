@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiCamera,
   FiChevronDown,
+  FiChevronLeft,
   FiChevronRight,
   FiFile,
   FiGrid,
@@ -51,7 +52,7 @@ import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from ".
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
 import { readTransactionValue, writeTransactionValue, transactionStorageKeys, fulfillSaleOrder, fulfillPurchaseOrder } from "../../services/transactionRepository.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
-import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
+import { getAppSettings, saveAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
@@ -464,6 +465,78 @@ function extractEditForm(editDoc, fallback = {}) {
     ""
   );
 
+  const paymentTerms = cleanStr(
+    editDoc.paymentTerms ||
+    editDoc.payment_terms ||
+    editDoc.form?.paymentTerms ||
+    fallback.paymentTerms ||
+    "Due on Receipt"
+  );
+
+  const rawDueDate =
+    editDoc.dueDate ||
+    editDoc.due_date ||
+    editDoc.form?.dueDate ||
+    fallback.dueDate ||
+    null;
+  const dueDate = rawDueDate ? (typeof rawDueDate === "string" ? rawDueDate.slice(0, 10) : String(rawDueDate)) : null;
+
+  const ewayBillNo = cleanStr(
+    editDoc.ewayBillNo ||
+    editDoc.eWayBillNo ||
+    editDoc.eway_bill_no ||
+    editDoc.form?.ewayBillNo ||
+    fallback.ewayBillNo ||
+    ""
+  );
+
+  const vehicleNumber = cleanStr(
+    editDoc.vehicleNumber ||
+    editDoc.vehicleNo ||
+    editDoc.vehicle_no ||
+    editDoc.form?.vehicleNumber ||
+    fallback.vehicleNumber ||
+    ""
+  );
+
+  const driverName = cleanStr(
+    editDoc.driverName ||
+    editDoc.driver_name ||
+    editDoc.form?.driverName ||
+    fallback.driverName ||
+    ""
+  );
+
+  const poNumber = cleanStr(
+    editDoc.poNumber ||
+    editDoc.po_number ||
+    editDoc.customerPoNumber ||
+    editDoc.form?.poNumber ||
+    fallback.poNumber ||
+    ""
+  );
+
+  const rawPoDate =
+    editDoc.poDate ||
+    editDoc.po_date ||
+    editDoc.customerPoDate ||
+    editDoc.form?.poDate ||
+    fallback.poDate ||
+    "";
+  const poDate = rawPoDate ? (typeof rawPoDate === "string" ? rawPoDate.slice(0, 10) : String(rawPoDate)) : "";
+
+  const reverseCharge = Boolean(
+    editDoc.reverseCharge ||
+    editDoc.reverse_charge ||
+    editDoc.form?.reverseCharge ||
+    fallback.reverseCharge
+  );
+
+  const txnField1 = cleanStr(editDoc.txnField1 || editDoc.form?.txnField1 || vehicleNumber || fallback.txnField1 || "");
+  const txnField2 = cleanStr(editDoc.txnField2 || editDoc.form?.txnField2 || driverName || fallback.txnField2 || "");
+  const txnField3 = cleanStr(editDoc.txnField3 || editDoc.form?.txnField3 || editDoc.lrNumber || editDoc.form?.lrNumber || fallback.txnField3 || "");
+  const dateField = cleanStr(editDoc.dateField || editDoc.form?.dateField || editDoc.deliveryDate || editDoc.form?.deliveryDate || fallback.dateField || "");
+
   return {
     ...fallback,
     ...(editDoc.form || {}),
@@ -478,11 +551,23 @@ function extractEditForm(editDoc, fallback = {}) {
     invoiceDate,
     stateOfSupply,
     paymentType,
+    paymentTerms,
+    dueDate,
+    ewayBillNo,
+    vehicleNumber: vehicleNumber || txnField1,
+    driverName: driverName || txnField2,
+    poNumber,
+    poDate,
+    reverseCharge,
+    txnField1,
+    txnField2,
+    txnField3,
+    dateField,
     description,
     terms,
     partyBalance: editDoc.partyBalance || editDoc.form?.partyBalance || fallback.partyBalance || "",
     showTerms: Boolean(terms),
-    termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
+    termsTitle: editDoc.termsTitle || editDoc.terms_title || editDoc.form?.termsTitle || fallback.termsTitle || "",
     showDescription: Boolean(description),
   };
 }
@@ -684,11 +769,11 @@ function TransactionHeader({ title, saleType, setSaleType, showSaleType, onSetti
       </div>
       <div className="flex items-center gap-2 text-slate-500">
         {onSettings && (
-          <button type="button" onClick={onSettings} className="rounded-full p-2 hover:bg-slate-100">
+          <button type="button" onClick={onSettings} title="Settings" aria-label="Settings" className="rounded-full p-2 hover:bg-slate-100 cursor-pointer">
             <FiSettings className="h-4 w-4" />
           </button>
         )}
-        <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-slate-100" aria-label="Close sale">
+        <button type="button" onClick={onClose} className="rounded-full p-2 hover:bg-slate-100 cursor-pointer" aria-label="Close sale">
           <FiX className="h-4 w-4" />
         </button>
       </div>
@@ -757,7 +842,7 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
             </div>
           )}
         </div>
-        {appSettings?.enableShippingAddress !== false && (
+        {appSettings?.billingType !== "Lite Sale" && appSettings?.enableShippingAddress !== false && (
           <div>
             <TextArea value={form.shippingAddress} onChange={(event) => setField("shippingAddress", event.target.value)} placeholder="Shipping Address" className="h-20 w-full sm:h-24 lg:h-20" />
             {form.shippingAddress && (
@@ -772,13 +857,21 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
 
       <div className="grid gap-2.5 sm:grid-cols-[124px_1fr] xl:self-start">
         <span className="pt-2 text-[13px] text-slate-500">{config.numberLabel}</span>
-        <TextInput
-          disabled={appSettings.enableInvoiceBillNo === false}
-          error={errors.invoiceNumber}
-          value={form.invoiceNumber}
-          onChange={(event) => setField("invoiceNumber", event.target.value)}
-          placeholder={appSettings.enableInvoiceBillNo === false ? "Auto-numbered" : "Invoice No."}
-        />
+        <div className="flex w-full">
+          {(appSettings.salePrefixEnabled || (appSettings.salePrefix && appSettings.salePrefix !== "None")) && (
+            <span className="inline-flex items-center rounded-l-md border border-r-0 border-slate-300 bg-slate-100 px-2.5 text-xs font-bold text-slate-700 select-none">
+              {appSettings.salePrefixText || (appSettings.salePrefix !== "None" ? appSettings.salePrefix : "INV-")}
+            </span>
+          )}
+          <TextInput
+            disabled={appSettings.enableInvoiceBillNo === false}
+            error={errors.invoiceNumber}
+            value={form.invoiceNumber}
+            onChange={(event) => setField("invoiceNumber", event.target.value)}
+            placeholder={appSettings.enableInvoiceBillNo === false ? "Auto-numbered" : "Invoice No."}
+            className={`w-full ${(appSettings.salePrefixEnabled || (appSettings.salePrefix && appSettings.salePrefix !== "None")) ? "rounded-l-none" : ""}`}
+          />
+        </div>
         <span className="pt-2 text-[13px] text-slate-500">
           {config.dateLabel}
           {appSettings.addTimeOnTransactions && (
@@ -789,6 +882,38 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
         </span>
         <DatePicker value={form.invoiceDate} onChange={(value) => setField("invoiceDate", value)} />
 
+        {appSettings.dueDatesAndPaymentTerms && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">Payment Terms</span>
+            <SelectInput
+              value={form.paymentTerms || "Due on Receipt"}
+              onChange={(value) => {
+                setField("paymentTerms", value);
+                let days = 0;
+                if (value === "Net 7") days = 7;
+                else if (value === "Net 15") days = 15;
+                else if (value === "Net 30") days = 30;
+                else if (value === "Net 45") days = 45;
+                else if (value === "Net 60") days = 60;
+                if (value !== "Custom") {
+                  const invDate = form.invoiceDate ? new Date(form.invoiceDate) : new Date();
+                  invDate.setDate(invDate.getDate() + days);
+                  setField("dueDate", invDate.toISOString().slice(0, 10));
+                }
+              }}
+              options={["Due on Receipt", "Net 7", "Net 15", "Net 30", "Net 45", "Net 60", "Custom"]}
+            />
+            <span className="pt-2 text-[13px] text-slate-500">Due Date</span>
+            <DatePicker
+              value={form.dueDate || form.invoiceDate || currentLocalDate()}
+              onChange={(value) => {
+                setField("dueDate", value);
+                setField("paymentTerms", "Custom");
+              }}
+            />
+          </>
+        )}
+
         {appSettings.billingType !== "Lite Sale" && appSettings.enablePlaceOfSupply !== false && (
           <>
             <span className="pt-2 text-[13px] text-slate-500">State of Supply</span>
@@ -796,7 +921,7 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           </>
         )}
 
-        {appSettings.reverseCharge && (
+        {appSettings.billingType !== "Lite Sale" && appSettings.reverseCharge && (
           <>
             <span className="pt-2 text-[13px] text-slate-500">Reverse Charge</span>
             <label className="flex items-center gap-2 pt-2 cursor-pointer">
@@ -817,14 +942,14 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           </div>
         )}
 
-        {appSettings.enableEwayBillNo && (
+        {appSettings.billingType !== "Lite Sale" && appSettings.enableEwayBillNo && (
           <>
             <span className="pt-2 text-[13px] text-slate-500">E-way Bill No.</span>
             <TextInput value={form.ewayBillNo || ""} onChange={(e) => setField("ewayBillNo", e.target.value)} placeholder="12-digit E-way No." />
           </>
         )}
 
-        {appSettings.customerPoDetails && (
+        {appSettings.billingType !== "Lite Sale" && appSettings.customerPoDetails && (
           <>
             <span className="pt-2 text-[13px] text-slate-500">PO Number</span>
             <TextInput value={form.poNumber || ""} onChange={(e) => setField("poNumber", e.target.value)} placeholder="Customer PO Ref" />
@@ -1076,6 +1201,14 @@ function CellInput({ error, className = "", ...props }) {
 
 // Renders the invoice table interface.
 function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {}, isPurchase = false }) {
+  const customTaxNames = useMemo(
+    () => (appSettings.taxRatesList || []).map((t) => t.name).filter(Boolean),
+    [appSettings.taxRatesList]
+  );
+  const effectiveSaleTaxOptions = useMemo(
+    () => [...new Set([...saleTaxOptions, ...customTaxNames])],
+    [customTaxNames]
+  );
   const [serialModalRow, setSerialModalRow] = useState(null);
   const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
@@ -1145,11 +1278,21 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
   return (
     <section className="overflow-x-auto overflow-y-visible border-y border-slate-200 bg-white">
       {enableBarcodeScanning && (
-        <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs">
-          <span className="font-bold uppercase tracking-wider text-slate-500">Scan Barcode:</span>
+        <div className={`flex items-center gap-2 border-b border-slate-200 px-4 py-2 text-xs ${appSettings.enableQuickEntry ? "bg-blue-50 border-blue-200" : "bg-slate-50"}`}>
+          <span className="font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+            {appSettings.enableQuickEntry ? (
+              <span className="rounded bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white tracking-normal shadow-sm">
+                ⚡ Quick Entry Active
+              </span>
+            ) : (
+              "Scan Barcode:"
+            )}
+          </span>
           <input
+            id="quick-entry-barcode-input"
+            autoFocus={Boolean(appSettings.enableQuickEntry)}
             type="text"
-            placeholder="Scan or enter barcode / item code..."
+            placeholder={appSettings.enableQuickEntry ? "Scan barcode or enter item code and press Enter..." : "Scan or enter barcode / item code..."}
             onKeyDown={(e) => {
               if (e.key === "Enter" && e.target.value.trim()) {
                 const val = e.target.value.trim().toLowerCase();
@@ -1160,28 +1303,44 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                     (it.name.toLowerCase() === val))
                 );
                 if (found) {
-                  const emptyIdx = rows.findIndex((r) => !r.item.trim());
-                  if (emptyIdx >= 0) {
-                    applyItem(rows[emptyIdx].id, found);
+                  const existingRow = appSettings.enableQuickEntry
+                    ? rows.find((r) => r.item.trim().toLowerCase() === found.name.toLowerCase())
+                    : null;
+                  if (existingRow) {
+                    setRows((curr) =>
+                      curr.map((r) =>
+                        r.id === existingRow.id
+                          ? { ...r, qty: String(toNumber(r.qty) + 1) }
+                          : r
+                      )
+                    );
                   } else {
-                    const newRow = createRow();
-                    setRows((curr) => [...curr, newRow]);
-                    setTimeout(() => applyItem(newRow.id, found), 0);
+                    const emptyIdx = rows.findIndex((r) => !r.item.trim());
+                    if (emptyIdx >= 0) {
+                      applyItem(rows[emptyIdx].id, found);
+                    } else {
+                      const newRow = createRow();
+                      setRows((curr) => [...curr, newRow]);
+                      setTimeout(() => applyItem(newRow.id, found), 0);
+                    }
                   }
                   e.target.value = "";
                 }
               }
             }}
-            className="h-7 w-72 rounded border border-slate-300 bg-white px-2.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100"
+            className={`h-7 w-80 rounded border px-2.5 text-xs outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-100 ${appSettings.enableQuickEntry ? "border-blue-400 bg-white shadow-sm" : "border-slate-300 bg-white"}`}
           />
+          {appSettings.enableQuickEntry && (
+            <span className="text-[11px] text-blue-700 font-medium">Auto-increments quantity or adds row on Enter</span>
+          )}
         </div>
       )}
-      <table className="w-full min-w-[1080px] border-collapse text-[13px] xl:min-w-0">
+      <table className="w-full min-w-[700px] border-collapse text-[13px] xl:min-w-0">
         <thead>
           <tr className="bg-white text-left text-xs font-bold uppercase text-slate-700">
-            <th rowSpan="2" className="sticky left-0 z-20 w-10 border-r border-slate-200 bg-white px-2 py-1.5 text-center shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">#</th>
-            <th rowSpan="2" className="w-[25%] min-w-[200px] border-r border-slate-200 px-2 py-1.5">Item</th>
-            {appSettings.enableHsnSacCode !== false && (
+            <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="sticky left-0 z-20 w-10 border-r border-slate-200 bg-white px-2 py-1.5 text-center shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">#</th>
+            <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-[30%] min-w-[200px] border-r border-slate-200 px-2 py-1.5">Item</th>
+            {appSettings.billingType !== "Lite Sale" && appSettings.enableHsnSacCode !== false && (
               <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5 text-center">HSN/SAC</th>
             )}
             {enableBatchTracking && (
@@ -1193,31 +1352,35 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
             {enableSerialTracking && (
               <th rowSpan="2" className="w-28 border-r border-slate-200 px-2 py-1.5 text-center">Serial/IMEI</th>
             )}
-            <th rowSpan="2" className="w-16 border-r border-slate-200 px-2 py-1.5">Qty</th>
-            <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5">Unit</th>
-            <th className="w-36 border-r border-slate-200 px-2 py-1.5 text-center">Price/Unit</th>
-            <th colSpan="2" className="w-40 border-r border-slate-200 px-2 py-1.5 text-center">Discount</th>
-            {appSettings.enableGst !== false && (
+            <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-16 border-r border-slate-200 px-2 py-1.5">Qty</th>
+            <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-24 border-r border-slate-200 px-2 py-1.5">Unit</th>
+            <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : undefined} className="w-36 border-r border-slate-200 px-2 py-1.5 text-center">Price/Unit</th>
+            {appSettings.billingType !== "Lite Sale" && (
+              <th colSpan="2" className="w-40 border-r border-slate-200 px-2 py-1.5 text-center">Discount</th>
+            )}
+            {appSettings.billingType !== "Lite Sale" && appSettings.enableGst !== false && (
               <th colSpan={appSettings.additionalCessOnItem ? 3 : 2} className="w-44 border-r border-slate-200 px-2 py-1.5 text-center">Tax</th>
             )}
-            <th rowSpan="2" className="w-24 px-2 py-1.5">Amount</th>
+            <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-24 px-2 py-1.5 text-right">Amount</th>
           </tr>
-          <tr className="bg-white text-xs font-medium text-slate-600">
-            <th className="border-r border-t border-slate-200 px-2 py-1">
-              <span className="sr-only">Price tax mode</span>
-            </th>
-            <th className="w-16 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
-            <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">Amount</th>
-            {appSettings.enableGst !== false && (
-              <>
-                <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
-                    {appSettings.additionalCessOnItem && (
-                  <th className="w-20 border-r border-t border-slate-200 px-2 py-1.5 text-center">Cess %</th>
-                )}
-              </>
-            )}
-            <th className="w-20 border-r border-t border-slate-200 px-2 py-1.5 text-center">Amount</th>
-          </tr>
+          {appSettings.billingType !== "Lite Sale" && (
+            <tr className="bg-white text-xs font-medium text-slate-600">
+              <th className="border-r border-t border-slate-200 px-2 py-1">
+                <span className="sr-only">Price tax mode</span>
+              </th>
+              <th className="w-16 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
+              <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">Amount</th>
+              {appSettings.enableGst !== false && (
+                <>
+                  <th className="w-24 border-r border-t border-slate-200 px-2 py-1.5 text-center">%</th>
+                  {appSettings.additionalCessOnItem && (
+                    <th className="w-20 border-r border-t border-slate-200 px-2 py-1.5 text-center">Cess %</th>
+                  )}
+                </>
+              )}
+              <th className="w-20 border-r border-t border-slate-200 px-2 py-1.5 text-center">Amount</th>
+            </tr>
+          )}
         </thead>
         <tbody>
           {rows.map((row, index) => {
@@ -1237,7 +1400,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 <td className="border-r border-slate-200 p-1">
                   <ItemPicker value={row.item} items={items} onChange={(value) => updateRow(row.id, "item", value)} onSelect={(item) => applyItem(row.id, item)} onAddItem={() => onAddItem(row.id)} appSettings={appSettings} />
                 </td>
-                {appSettings.enableHsnSacCode !== false && (
+                {appSettings.billingType !== "Lite Sale" && appSettings.enableHsnSacCode !== false && (
                   <td className="border-r border-slate-200 p-1">
                     <HsnAutocomplete
                       compact
@@ -1251,7 +1414,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                           updateRow(row.id, "item", selected.description);
                         }
                         if (selected.gst_rate !== null && selected.gst_rate !== undefined) {
-                          const matchedTax = matchGstRateToOption(selected.gst_rate, saleTaxOptions);
+                          const matchedTax = matchGstRateToOption(selected.gst_rate, effectiveSaleTaxOptions);
                           if (matchedTax) updateRow(row.id, "taxRate", matchedTax);
                         }
                         if (selected.cess_rate !== null && selected.cess_rate !== undefined && selected.cess_rate > 0) {
@@ -1383,23 +1546,29 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 <td className="border-r border-slate-200 p-1"><UnitSelector value={row.unit} onChange={(value) => updateRow(row.id, "unit", value)} className="[&_button]:h-8 [&_button]:px-2 [&_button]:text-[13px]" /></td>
                 <td className="border-r border-slate-200 p-1">
                   <div className="grid gap-1">
-                    <SelectInput value={row.priceMode} onChange={(value) => updateRow(row.id, "priceMode", value)} options={priceModes} className="h-8 text-xs" />
+                    {appSettings.billingType !== "Lite Sale" && (
+                      <SelectInput value={row.priceMode} onChange={(value) => updateRow(row.id, "priceMode", value)} options={priceModes} className="h-8 text-xs" />
+                    )}
                     <CellInput inputMode="decimal" error={rowErrors.price} value={row.price} onChange={(event) => updateRow(row.id, "price", event.target.value)} />
                   </div>
                 </td>
-                <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.discountPercent} value={row.discountPercent} onChange={(event) => updateRow(row.id, "discountPercent", event.target.value)} /></td>
-                <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.discountAmount} value={row.discountAmount} onChange={(event) => updateRow(row.id, "discountAmount", event.target.value)} /></td>
-                {appSettings.enableGst !== false && (
+                {appSettings.billingType !== "Lite Sale" && (
                   <>
-                    <td className="border-r border-slate-200 p-1"><SelectInput value={row.taxRate} onChange={(value) => updateRow(row.id, "taxRate", value)} options={saleTaxOptions} className="border-transparent bg-transparent focus:bg-white" /></td>
-                        {appSettings.additionalCessOnItem && (
+                    <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.discountPercent} value={row.discountPercent} onChange={(event) => updateRow(row.id, "discountPercent", event.target.value)} /></td>
+                    <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.discountAmount} value={row.discountAmount} onChange={(event) => updateRow(row.id, "discountAmount", event.target.value)} /></td>
+                  </>
+                )}
+                {appSettings.billingType !== "Lite Sale" && appSettings.enableGst !== false && (
+                  <>
+                    <td className="border-r border-slate-200 p-1"><SelectInput value={row.taxRate} onChange={(value) => updateRow(row.id, "taxRate", value)} options={effectiveSaleTaxOptions} className="border-transparent bg-transparent focus:bg-white" /></td>
+                    {appSettings.additionalCessOnItem && (
                       <td className="border-r border-slate-200 p-1">
                         <CellInput inputMode="decimal" value={row.cessPercent || ""} onChange={(event) => updateRow(row.id, "cessPercent", event.target.value)} placeholder="0%" />
                       </td>
                     )}
+                    <td className="border-r border-slate-200 px-2 py-1.5 text-right text-slate-700">{calculated.tax.toFixed(2)}</td>
                   </>
                 )}
-                <td className="border-r border-slate-200 px-2 py-1.5 text-right text-slate-700">{calculated.tax.toFixed(2)}</td>
                 <td className="px-2 py-1.5 text-right font-semibold text-slate-700">{calculated.amount.toFixed(2)}</td>
               </tr>
             );
@@ -1411,7 +1580,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 Add Row
               </button>
             </td>
-            {appSettings.enableHsnSacCode !== false && <td className="border-r border-slate-200" />}
+            {appSettings.billingType !== "Lite Sale" && appSettings.enableHsnSacCode !== false && <td className="border-r border-slate-200" />}
             {enableBatchTracking && (
               <>
                 <td className="border-r border-slate-200" />
@@ -1422,10 +1591,13 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
             <td className="border-r border-slate-200 px-2 text-right">{totals.qty}</td>
             <td className="border-r border-slate-200" />
             <td className="border-r border-slate-200 text-right">Total</td>
-            <td className="border-r border-slate-200" />
-            <td className="border-r border-slate-200 px-2 text-right">{totals.discount.toFixed(2)}</td>
-            <td className="border-r border-slate-200" />
-            {appSettings.enableGst !== false && (
+            {appSettings.billingType !== "Lite Sale" && (
+              <>
+                <td className="border-r border-slate-200" />
+                <td className="border-r border-slate-200 px-2 text-right">{totals.discount.toFixed(2)}</td>
+              </>
+            )}
+            {appSettings.billingType !== "Lite Sale" && appSettings.enableGst !== false && (
               <>
                 <td className="border-r border-slate-200 px-2 text-right">{totals.tax.toFixed(2)}</td>
                 {appSettings.additionalCessOnItem && (
@@ -1564,9 +1736,40 @@ function TermsModal({ onClose, onSave }) {
 
 // Renders the add ons interface.
 function AddOns({ form, setField, files, setFiles, templates, setTemplates, showPayment }) {
+  const navigate = useNavigate();
   const imageRef = useRef(null);
   const documentRef = useRef(null);
   const [termsModal, setTermsModal] = useState(false);
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFiles((current) => ({
+          ...current,
+          image: reader.result,
+          imageName: file.name,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDocumentUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFiles((current) => ({
+          ...current,
+          document: reader.result,
+          documentName: file.name,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
     <section className="grid gap-4 bg-slate-50 px-4 py-4 xl:grid-cols-[minmax(300px,480px)_minmax(240px,300px)_1fr]">
@@ -1576,8 +1779,22 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
             <FiList className="h-5 w-5" /> Add Terms & Conditions
           </button>
         ) : (
-          <Card className="p-4">
-            <h3 className="mb-3 text-base font-bold text-slate-700">Terms & Conditions</h3>
+          <Card className="p-4 relative">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-700">Terms & Conditions</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setField("showTerms", false);
+                  setField("terms", "");
+                  setField("termsTitle", "");
+                }}
+                className="text-xs text-slate-400 hover:text-rose-600"
+                title="Remove Terms"
+              >
+                ✕ Remove
+              </button>
+            </div>
             <TermsTitlePicker
               value={form.termsTitle}
               templates={templates}
@@ -1607,16 +1824,60 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
             <FiFile /> Add Description
           </button>
         ) : (
-          <TextArea value={form.description} onChange={(event) => setField("description", event.target.value)} placeholder="Description" className="h-24 w-full" />
+          <div className="relative">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-500 font-semibold">
+              <span>Description / Notes</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setField("showDescription", false);
+                  setField("description", "");
+                }}
+                className="hover:text-rose-600 font-normal"
+                title="Remove Description"
+              >
+                ✕ Remove
+              </button>
+            </div>
+            <TextArea value={form.description} onChange={(event) => setField("description", event.target.value)} placeholder="Description / Notes" className="h-24 w-full" />
+          </div>
         )}
-        <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={(event) => setFiles((current) => ({ ...current, image: event.target.files?.[0]?.name || "" }))} />
-        <button type="button" onClick={() => imageRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
-          <FiCamera /> {files.image || "Add Image"}
-        </button>
-        <input ref={documentRef} type="file" className="hidden" onChange={(event) => setFiles((current) => ({ ...current, document: event.target.files?.[0]?.name || "" }))} />
-        <button type="button" onClick={() => documentRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
-          <FiFile /> {files.document || "Add Document"}
-        </button>
+
+        <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        {files.image ? (
+          <div className="flex h-12 w-full items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[13px] font-medium text-emerald-800">
+            <span className="truncate max-w-[200px] flex items-center gap-2">
+              <FiCamera className="text-emerald-600 shrink-0" />
+              {files.imageName || (typeof files.image === "string" && files.image.startsWith("data:") ? "Image Attached" : files.image)}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => imageRef.current?.click()} className="text-xs text-blue-600 hover:underline">Change</button>
+              <button type="button" onClick={() => setFiles((c) => ({ ...c, image: "", imageName: "" }))} className="text-xs text-rose-600 hover:underline">✕</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => imageRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
+            <FiCamera /> Add Image
+          </button>
+        )}
+
+        <input ref={documentRef} type="file" className="hidden" onChange={handleDocumentUpload} />
+        {files.document ? (
+          <div className="flex h-12 w-full items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[13px] font-medium text-emerald-800">
+            <span className="truncate max-w-[200px] flex items-center gap-2">
+              <FiFile className="text-emerald-600 shrink-0" />
+              {files.documentName || (typeof files.document === "string" && files.document.startsWith("data:") ? "Document Attached" : files.document)}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => documentRef.current?.click()} className="text-xs text-blue-600 hover:underline">Change</button>
+              <button type="button" onClick={() => setFiles((c) => ({ ...c, document: "", documentName: "" }))} className="text-xs text-rose-600 hover:underline">✕</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => documentRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
+            <FiFile /> Add Document
+          </button>
+        )}
       </div>
 
       {termsModal && (
@@ -1635,12 +1896,38 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
 }
 
 // Renders the totals panel interface.
-function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, appSettings = {}, rowCount = 0, error = "" }) {
+function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, appSettings = {}, rowCount = 0, error = "", additionalCharges = {}, setAdditionalCharges }) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-end gap-3">
+        {(appSettings.additionalChargesEnabled || Number(additionalCharges?.shipping || 0) > 0) && (
+          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">Shipping / Freight:</span>
+            <input
+              type="number"
+              min="0"
+              value={additionalCharges?.shipping ?? ""}
+              onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, shipping: Math.max(0, Number(e.target.value) || 0) }))}
+              placeholder="0.00"
+              className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+            />
+          </div>
+        )}
+        {(appSettings.additionalChargesEnabled || Number(additionalCharges?.packaging || 0) > 0) && (
+          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">Packaging Charges:</span>
+            <input
+              type="number"
+              min="0"
+              value={additionalCharges?.packaging ?? ""}
+              onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, packaging: Math.max(0, Number(e.target.value) || 0) }))}
+              placeholder="0.00"
+              className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+            />
+          </div>
+        )}
         <label className="flex items-center gap-2 text-[13px] text-slate-500">
           <input type="checkbox" checked={roundOff} onChange={(event) => setRoundOff(event.target.checked)} className="h-4 w-4 accent-blue-600" />
           Round Off
@@ -1711,44 +1998,433 @@ function ShareMenu({ actions = shareActions, onAction }) {
   );
 }
 
-// Renders the settings drawer interface.
-function SettingsDrawer({ settings, setSettings, billingType, setBillingType, onClose }) {
+// Renders the settings drawer interface with full live reactivity and sub-settings panels
+function SettingsDrawer({ appSettings, onUpdateSettings, additionalCharges, setAdditionalCharges, onClose }) {
   const navigate = useNavigate();
+  const [activeView, setActiveView] = useState("main"); // "main" | "addFields" | "additionalCharges" | "printSettings"
+
   useEffect(() => {
-    // Handles key down.
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        if (activeView !== "main") setActiveView("main");
+        else onClose();
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, activeView]);
+
+  const prefixEnabled = Boolean(appSettings.salePrefixEnabled || (appSettings.salePrefix && appSettings.salePrefix !== "None"));
+  const prefixText = appSettings.salePrefixText || (appSettings.salePrefix && appSettings.salePrefix !== "None" ? appSettings.salePrefix : "INV-");
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/55" onClick={onClose}>
-      <aside className="h-full w-full max-w-sm bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-950">Settings</h2>
+      <aside className="h-full w-full max-w-sm bg-white shadow-2xl flex flex-col" onClick={(event) => event.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 shrink-0 bg-white">
+          {activeView === "main" ? (
+            <h2 className="text-lg font-bold text-slate-950">Settings</h2>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveView("main")}
+              className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800"
+            >
+              <FiChevronLeft className="h-4 w-4" /> Back to Settings
+            </button>
+          )}
           <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100"><FiX className="h-5 w-5" /></button>
         </header>
-        <div className="space-y-0.5 p-5">
-          {saleSettings.map((setting) => (
-            <div key={setting.id} className="flex min-h-11 items-center justify-between gap-3 text-[13px] text-slate-800">
-              <span>{setting.label}</span>
-              {setting.type === "link" ? <FiChevronRight className="h-4 w-4 text-slate-400" /> : <input type="checkbox" checked={settings[setting.id]} onChange={(event) => setSettings((current) => ({ ...current, [setting.id]: event.target.checked }))} className="h-4 w-4 accent-blue-600" />}
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {activeView === "main" && (
+            <div className="space-y-1">
+              {/* 1. Sale Prefix */}
+              <div className="rounded-lg p-2.5 hover:bg-slate-50 transition-colors">
+                <div className="flex items-center justify-between gap-3 text-[13px] text-slate-800">
+                  <span className="font-medium">Sale Prefix</span>
+                  <input
+                    type="checkbox"
+                    checked={prefixEnabled}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      onUpdateSettings({
+                        salePrefixEnabled: enabled,
+                        salePrefix: enabled ? prefixText : "None",
+                      });
+                    }}
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </div>
+                {prefixEnabled && (
+                  <div className="mt-2.5 flex items-center gap-2 pl-1">
+                    <span className="text-xs text-slate-500">Prefix text:</span>
+                    <input
+                      type="text"
+                      value={prefixText}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        onUpdateSettings({
+                          salePrefixEnabled: true,
+                          salePrefixText: val,
+                          salePrefix: val || "INV-",
+                        });
+                      }}
+                      placeholder="INV-"
+                      className="h-7 w-28 rounded border border-slate-300 bg-white px-2 text-xs font-bold text-slate-800 uppercase outline-none focus:border-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* 2. Transaction Message */}
+              <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg p-2.5 text-[13px] text-slate-800 hover:bg-slate-50 transition-colors">
+                <div>
+                  <span className="font-medium">Transaction Message</span>
+                  <p className="text-[11px] text-slate-400">Auto-prompt WhatsApp summary on save</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={appSettings.txnMsgAutoSales ?? true}
+                  onChange={(e) => onUpdateSettings({ txnMsgAutoSales: e.target.checked, txnMsgSendToParty: e.target.checked })}
+                  className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* 3. Add fields to invoice */}
+              <button
+                type="button"
+                onClick={() => setActiveView("addFields")}
+                className="flex w-full min-h-11 items-center justify-between gap-3 rounded-lg p-2.5 text-left text-[13px] text-slate-800 hover:bg-slate-50 transition-colors"
+              >
+                <div>
+                  <span className="font-medium">Add fields to invoice</span>
+                  <p className="text-[11px] text-slate-400">PO Ref, Vehicle No, Driver Name, E-way</p>
+                </div>
+                <FiChevronRight className="h-4 w-4 text-slate-400" />
+              </button>
+
+              {/* 4. Quick Entry */}
+              <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg p-2.5 text-[13px] text-slate-800 hover:bg-slate-50 transition-colors">
+                <div>
+                  <span className="font-medium">Quick Entry</span>
+                  <p className="text-[11px] text-slate-400">Auto-add items & scanner fast mode</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(appSettings.enableQuickEntry)}
+                  onChange={(e) => onUpdateSettings({ enableQuickEntry: e.target.checked })}
+                  className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* 5. Due dates & payment terms */}
+              <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg p-2.5 text-[13px] text-slate-800 hover:bg-slate-50 transition-colors">
+                <div>
+                  <span className="font-medium">Due dates & payment terms</span>
+                  <p className="text-[11px] text-slate-400">Credit period (Net 15, Net 30, etc.)</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(appSettings.dueDatesAndPaymentTerms)}
+                  onChange={(e) => onUpdateSettings({ dueDatesAndPaymentTerms: e.target.checked })}
+                  className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* 6. Additional charges */}
+              <button
+                type="button"
+                onClick={() => setActiveView("additionalCharges")}
+                className="flex w-full min-h-11 items-center justify-between gap-3 rounded-lg p-2.5 text-left text-[13px] text-slate-800 hover:bg-slate-50 transition-colors"
+              >
+                <div>
+                  <span className="font-medium">Additional charges</span>
+                  <p className="text-[11px] text-slate-400">Shipping, Packaging & other fees</p>
+                </div>
+                <FiChevronRight className="h-4 w-4 text-slate-400" />
+              </button>
+
+              {/* 7. Print Settings */}
+              <button
+                type="button"
+                onClick={() => setActiveView("printSettings")}
+                className="flex w-full min-h-11 items-center justify-between gap-3 rounded-lg p-2.5 text-left text-[13px] text-slate-800 hover:bg-slate-50 transition-colors"
+              >
+                <div>
+                  <span className="font-medium">Print Settings</span>
+                  <p className="text-[11px] text-slate-400">Paper size, theme color, logo & terms</p>
+                </div>
+                <FiChevronRight className="h-4 w-4 text-slate-400" />
+              </button>
+
+              {/* 8. Billing Type */}
+              <div className="border-t border-slate-100 pt-3 mt-2 px-2.5">
+                <p className="mb-2 text-sm font-semibold text-slate-800">Billing Type</p>
+                {["Lite Sale", "Full Sale"].map((type) => (
+                  <label key={type} className="mb-2 flex items-center gap-2.5 text-[13px] text-slate-800 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="billingType"
+                      checked={(appSettings.billingType || "Full Sale") === type}
+                      onChange={() => onUpdateSettings({ billingType: type })}
+                      className="h-4 w-4 accent-blue-600 cursor-pointer"
+                    />
+                    <div>
+                      <span className="font-medium">{type}</span>
+                      <p className="text-[11px] text-slate-400">
+                        {type === "Lite Sale" ? "Fast counter sale (essential columns only)" : "Complete GST tax invoice with full details"}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
-          ))}
-          <div className="pt-3">
-            <p className="mb-2 text-sm font-medium text-slate-800">Billing Type</p>
-            {["Lite Sale", "Full Sale"].map((type) => (
-              <label key={type} className="mb-2 flex items-center gap-2.5 text-[13px] text-slate-800">
-                <input type="radio" checked={billingType === type} onChange={() => setBillingType(type)} className="h-4 w-4 accent-blue-600" />
-                {type}
+          )}
+
+          {/* Sub-view: Add fields to invoice */}
+          {activeView === "addFields" && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-900">Custom Invoice Fields</h3>
+              <p className="text-xs text-slate-500">Toggle custom metadata fields to display on the invoice header.</p>
+              
+              <div className="space-y-3 pt-2">
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                  <div>
+                    <span className="text-[13px] font-semibold text-slate-800 block">Customer PO Details</span>
+                    <span className="text-[11px] text-slate-500">PO Number and PO Date</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(appSettings.customerPoDetails)}
+                    onChange={(e) => onUpdateSettings({ customerPoDetails: e.target.checked })}
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                  <div>
+                    <span className="text-[13px] font-semibold text-slate-800 block">Vehicle Number</span>
+                    <span className="text-[11px] text-slate-500">Transport vehicle registration number</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(appSettings.additionalFieldsSetup?.txnField1?.enabled)}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        additionalFieldsSetup: {
+                          ...appSettings.additionalFieldsSetup,
+                          txnField1: {
+                            ...appSettings.additionalFieldsSetup?.txnField1,
+                            enabled: e.target.checked,
+                            name: "Vehicle No",
+                          },
+                        },
+                      })
+                    }
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                  <div>
+                    <span className="text-[13px] font-semibold text-slate-800 block">Driver Name</span>
+                    <span className="text-[11px] text-slate-500">Delivery driver / courier handler name</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(appSettings.additionalFieldsSetup?.txnField2?.enabled)}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        additionalFieldsSetup: {
+                          ...appSettings.additionalFieldsSetup,
+                          txnField2: {
+                            ...appSettings.additionalFieldsSetup?.txnField2,
+                            enabled: e.target.checked,
+                            name: "Driver Name",
+                          },
+                        },
+                      })
+                    }
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                  <div>
+                    <span className="text-[13px] font-semibold text-slate-800 block">E-way Bill No.</span>
+                    <span className="text-[11px] text-slate-500">Government 12-digit E-way bill number</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(appSettings.enableEwayBillNo)}
+                    onChange={(e) => onUpdateSettings({ enableEwayBillNo: e.target.checked })}
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-view: Additional charges */}
+          {activeView === "additionalCharges" && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-900">Additional Charges</h3>
+              <p className="text-xs text-slate-500">Enable and configure extra shipping or packaging fees added to invoice total.</p>
+
+              <label className="flex items-center justify-between gap-3 rounded-lg bg-blue-50 p-3 border border-blue-200 cursor-pointer">
+                <div>
+                  <span className="text-[13px] font-bold text-blue-900 block">Enable Additional Charges</span>
+                  <span className="text-[11px] text-blue-700">Display additional charge lines in bill totals</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(appSettings.additionalChargesEnabled)}
+                  onChange={(e) => onUpdateSettings({ additionalChargesEnabled: e.target.checked })}
+                  className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                />
               </label>
-            ))}
-          </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700">Shipping / Freight (₹)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={additionalCharges?.shipping || ""}
+                      onChange={(e) => setAdditionalCharges((prev) => ({ ...prev, shipping: Math.max(0, Number(e.target.value) || 0) }))}
+                      placeholder="0.00"
+                      className="h-8 w-28 rounded border border-slate-300 px-2 text-right text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700">Packaging Charges (₹)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={additionalCharges?.packaging || ""}
+                      onChange={(e) => setAdditionalCharges((prev) => ({ ...prev, packaging: Math.max(0, Number(e.target.value) || 0) }))}
+                      placeholder="0.00"
+                      className="h-8 w-28 rounded border border-slate-300 px-2 text-right text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-700">Other / Insurance (₹)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={additionalCharges?.other || ""}
+                      onChange={(e) => setAdditionalCharges((prev) => ({ ...prev, other: Math.max(0, Number(e.target.value) || 0) }))}
+                      placeholder="0.00"
+                      className="h-8 w-28 rounded border border-slate-300 px-2 text-right text-xs outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Sub-view: Print Settings */}
+          {activeView === "printSettings" && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-900">Print Preferences</h3>
+              <p className="text-xs text-slate-500">Configure paper size, colors, and headers for printed invoices.</p>
+
+              <div className="space-y-3 pt-2">
+                <div>
+                  <span className="mb-1 block text-xs font-semibold text-slate-700">Paper Size</span>
+                  <select
+                    value={appSettings.printPaperSize || "A4"}
+                    onChange={(e) => onUpdateSettings({ printPaperSize: e.target.value })}
+                    className="h-9 w-full rounded border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+                  >
+                    <option value="A4">A4 (Standard Sheet)</option>
+                    <option value="A5">A5 (Half Page)</option>
+                    <option value="Thermal">Thermal (3-inch / 80mm)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <span className="mb-1.5 block text-xs font-semibold text-slate-700">Theme Color</span>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: "Navy Blue", color: "#1e3a8a" },
+                      { name: "Emerald", color: "#047857" },
+                      { name: "Indigo", color: "#4338ca" },
+                      { name: "Burgundy", color: "#881337" },
+                      { name: "Rose Red", color: "#b91c1c" },
+                      { name: "Slate", color: "#334155" },
+                    ].map((palette) => (
+                      <button
+                        key={palette.color}
+                        type="button"
+                        onClick={() => onUpdateSettings({ themeColor: palette.color })}
+                        style={{ backgroundColor: palette.color }}
+                        title={palette.name}
+                        className={`h-7 w-7 rounded-full border-2 transition-transform ${appSettings.themeColor === palette.color ? "border-slate-900 scale-110 shadow-md ring-2 ring-blue-400" : "border-white"}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                  <div>
+                    <span className="text-[13px] font-semibold text-slate-800 block">Show Company Logo</span>
+                    <span className="text-[11px] text-slate-500">Print business logo in invoice header</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={appSettings.printCompanyLogo ?? true}
+                    onChange={(e) => onUpdateSettings({ printCompanyLogo: e.target.checked })}
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50 cursor-pointer">
+                  <div>
+                    <span className="text-[13px] font-semibold text-slate-800 block">Terms & Conditions</span>
+                    <span className="text-[11px] text-slate-500">Print return policy and terms at footer</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={appSettings.enableTermsAndConditions ?? true}
+                    onChange={(e) => onUpdateSettings({ enableTermsAndConditions: e.target.checked })}
+                    className="h-4 w-4 accent-blue-600 rounded cursor-pointer"
+                  />
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate("/settings?tab=print");
+                  }}
+                  className="mt-2 block w-full rounded-md border border-slate-200 bg-slate-50 py-2 text-center text-xs font-semibold text-blue-600 hover:bg-blue-50"
+                >
+                  Open Full Print Settings →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        <footer className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
-          <button type="button" onClick={() => { onClose(); navigate("/settings?tab=transaction"); }} className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600 hover:underline"><FiSettings /> More Settings</button>
+
+        <footer className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              navigate("/settings?tab=transaction");
+            }}
+            className="flex w-full items-center justify-center gap-2 text-[13px] font-bold text-blue-600 hover:underline cursor-pointer"
+          >
+            <FiSettings /> More Settings
+          </button>
         </footer>
       </aside>
     </div>
@@ -2031,9 +2707,25 @@ function AddSale({ mode = "sale", localOnly = false }) {
     const raw = editInvoice?.totals?.received ?? editInvoice?.receivedAmount ?? editInvoice?.paidAmount ?? editInvoice?.paid;
     return raw != null && raw !== "" ? String(raw) : "";
   });
+  const [additionalCharges, setAdditionalCharges] = useState(() => {
+    if (editInvoice?.additionalCharges) return editInvoice.additionalCharges;
+    return {
+      shipping: Number(editInvoice?.shippingCharges ?? editInvoice?.shipping_charges ?? 0),
+      packaging: Number(editInvoice?.packagingCharges ?? editInvoice?.packaging_charges ?? 0),
+      other: Number(editInvoice?.otherCharges ?? editInvoice?.other_charges ?? 0),
+    };
+  });
   const [billingType, setBillingType] = useState("Full Sale");
   const [transactionId, setTransactionId] = useState(() => editInvoice?.id || editInvoice?.invoiceId || crypto.randomUUID());
-  const [files, setFiles] = useState(() => editInvoice?.files || { image: "", document: "" });
+  const [files, setFiles] = useState(() => {
+    if (editInvoice?.files) return editInvoice.files;
+    return {
+      image: editInvoice?.image || editInvoice?.image_url || "",
+      document: editInvoice?.document || editInvoice?.document_url || "",
+      imageName: editInvoice?.imageName || editInvoice?.image_name || "",
+      documentName: editInvoice?.documentName || editInvoice?.document_name || "",
+    };
+  });
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
   const [termsTemplates, setTermsTemplates] = useState(defaultTerms);
@@ -2102,6 +2794,21 @@ function AddSale({ mode = "sale", localOnly = false }) {
         if (rawRound != null && Number(rawRound) !== 0) {
           setRoundOffValue(String(rawRound));
         }
+        if (fullDoc.files || fullDoc.image || fullDoc.document || fullDoc.image_url || fullDoc.document_url) {
+          setFiles(fullDoc.files || {
+            image: fullDoc.image || fullDoc.image_url || "",
+            document: fullDoc.document || fullDoc.document_url || "",
+            imageName: fullDoc.imageName || fullDoc.image_name || "",
+            documentName: fullDoc.documentName || fullDoc.document_name || "",
+          });
+        }
+        if (fullDoc.additionalCharges || fullDoc.shippingCharges != null || fullDoc.shipping_charges != null) {
+          setAdditionalCharges(fullDoc.additionalCharges || {
+            shipping: Number(fullDoc.shippingCharges ?? fullDoc.shipping_charges ?? 0),
+            packaging: Number(fullDoc.packagingCharges ?? fullDoc.packaging_charges ?? 0),
+            other: Number(fullDoc.otherCharges ?? fullDoc.other_charges ?? 0),
+          });
+        }
       })
       .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
 
@@ -2168,7 +2875,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
     };
   }, []);
 
-  const totals = useMemo(() => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0), [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled]);
+  const totals = useMemo(
+    () => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0, additionalCharges),
+    [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled, additionalCharges]
+  );
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
 
   // Sets field.
@@ -2364,7 +3074,11 @@ function AddSale({ mode = "sale", localOnly = false }) {
       };
     });
 
-    const docNumber = form.invoiceNumber || "1";
+    const prefix = (appSettings.salePrefixEnabled || (appSettings.salePrefix && appSettings.salePrefix !== "None"))
+      ? (appSettings.salePrefixText || (appSettings.salePrefix !== "None" ? appSettings.salePrefix : "INV-"))
+      : "";
+    const rawNumber = form.invoiceNumber || "1";
+    const docNumber = prefix && !rawNumber.startsWith(prefix) ? `${prefix}${rawNumber}` : rawNumber;
     const docDate = form.invoiceDate || currentLocalDate();
     const totalAmount = totals.finalTotal || totals.grandTotal || 0;
     const paidAmount = receivedEnabled
@@ -2390,6 +3104,36 @@ function AddSale({ mode = "sale", localOnly = false }) {
       transactionDate: docDate,
       date: docDate,
       dueDate: form.dueDate || null,
+      paymentTerms: form.paymentTerms || "Due on Receipt",
+      notes: form.description || "",
+      description: form.description || "",
+      terms: form.terms || "",
+      termsTitle: form.termsTitle || "",
+      vehicleNumber: form.vehicleNumber || form.txnField1 || "",
+      vehicleNo: form.vehicleNumber || form.txnField1 || "",
+      driverName: form.driverName || form.txnField2 || "",
+      lrNumber: form.lrNumber || form.txnField3 || "",
+      deliveryDate: form.deliveryDate || form.dateField || "",
+      txnField1: form.txnField1 || form.vehicleNumber || "",
+      txnField2: form.txnField2 || form.driverName || "",
+      txnField3: form.txnField3 || form.lrNumber || "",
+      dateField: form.dateField || form.deliveryDate || "",
+      ewayBillNo: form.ewayBillNo || "",
+      eWayBillNo: form.ewayBillNo || "",
+      poNumber: form.poNumber || "",
+      poDate: form.poDate || "",
+      stateOfSupply: form.stateOfSupply || "None",
+      reverseCharge: Boolean(form.reverseCharge),
+      additionalCharges,
+      shippingCharges: Number(additionalCharges?.shipping || 0),
+      packagingCharges: Number(additionalCharges?.packaging || 0),
+      otherCharges: Number(additionalCharges?.other || 0),
+      image: files?.image || "",
+      document: files?.document || "",
+      imageName: files?.imageName || "",
+      documentName: files?.documentName || "",
+      imageUrl: files?.image || "",
+      documentUrl: files?.document || "",
       billingAddress: form.billingAddress || resolvedParty?.billingAddress || resolvedParty?.address || "",
       shippingAddress: form.shippingAddress || form.billingAddress || "",
       paymentMode,
@@ -2405,6 +3149,21 @@ function AddSale({ mode = "sale", localOnly = false }) {
         partyName: finalPartyName,
         invoiceNumber: docNumber,
         invoiceDate: docDate,
+        paymentTerms: form.paymentTerms || "Due on Receipt",
+        dueDate: form.dueDate || null,
+        terms: form.terms || "",
+        termsTitle: form.termsTitle || "",
+        description: form.description || "",
+        notes: form.description || "",
+        showTerms: Boolean(form.terms),
+        showDescription: Boolean(form.description),
+        vehicleNumber: form.vehicleNumber || "",
+        driverName: form.driverName || "",
+        ewayBillNo: form.ewayBillNo || "",
+        poNumber: form.poNumber || "",
+        poDate: form.poDate || "",
+        stateOfSupply: form.stateOfSupply || "None",
+        reverseCharge: Boolean(form.reverseCharge),
       },
       rows: mappedRows,
       items: mappedRows,
@@ -2740,10 +3499,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (!validate()) return;
       let invoice;
       try {
-        invoice = localOnlyPurchase ? savePurchaseBillLocally(buildInvoice()) : await saveBusinessPurchaseBill(buildInvoice());
+        invoice = isPurchase ? await saveBusinessPurchaseBill(buildInvoice()) : await saveBusinessSaleInvoice(buildInvoice());
         finalizeOrderConversions(invoice);
       } catch (error) {
-        setToast(error.message || "Could not save purchase bill to MySQL.");
+        setToast(error.message || `Could not save ${isPurchase ? "purchase bill" : "sale"} to MySQL.`);
         return;
       }
       const barcodeItems = invoice.rows
@@ -2773,12 +3532,9 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (!validate()) return;
       try {
         const invoice = buildInvoice();
-        let savedInvoice;
-        if (isPurchase) {
-          if (localOnlyPurchase) savedInvoice = savePurchaseBillLocally(invoice);
-          else savedInvoice = await saveBusinessPurchaseBill(invoice);
-        }
-        else savedInvoice = await saveBusinessSaleInvoice(invoice);
+        const savedInvoice = isPurchase
+          ? await saveBusinessPurchaseBill(invoice)
+          : await saveBusinessSaleInvoice(invoice);
         finalizeOrderConversions(savedInvoice);
         resetSale();
       } catch (error) {
@@ -2799,34 +3555,45 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
   };
 
-  // Saves item from modal.
+  // Saves item from modal directly to MySQL database
   const saveItemFromModal = async (itemForm) => {
-    if (quotationConversion || localOnlyPurchase) {
-      const savedInventoryItem = saveInventoryItem(itemForm);
+    try {
+      const savedInventoryItem = await saveBusinessItem(itemForm);
       const newItem = saleItemFromInventory(savedInventoryItem);
       setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
       setRows((current) => current.map((row) => (row.id === addItemRowId ? syncDiscount({ ...row, item: newItem.name, unit: newItem.unit || row.unit, price: newItem.price || row.price, priceMode: newItem.priceMode || row.priceMode, taxRate: newItem.taxRate || row.taxRate, sourceItemId: newItem.id || "" }) : row)));
       setAddItemRowId(null);
-      return;
+    } catch (err) {
+      setToast(err.message || "Could not save item to MySQL.");
     }
-    const savedInventoryItem = await saveBusinessItem(itemForm);
-    const newItem = saleItemFromInventory(savedInventoryItem);
-    setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
-    setRows((current) => current.map((row) => (row.id === addItemRowId ? syncDiscount({ ...row, item: newItem.name, unit: newItem.unit || row.unit, price: newItem.price || row.price, priceMode: newItem.priceMode || row.priceMode, taxRate: newItem.taxRate || row.taxRate, sourceItemId: newItem.id || "" }) : row)));
-    setAddItemRowId(null);
   };
 
   return (
     <div className="min-h-full bg-slate-100">
       <TransactionTabs tabs={tabs} activeTab={activeTab} setActiveTab={setActiveTab} addTab={addTab} closeTab={closeTab} />
-      <TransactionHeader title={editInvoice ? "Edit Sale" : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={!isPurchase ? () => setSettingsOpen(true) : undefined} onClose={() => closeTab(activeTab)} />
+      <TransactionHeader title={editInvoice ? (isPurchase ? "Edit Purchase" : "Edit Sale") : config.title} saleType={saleType} setSaleType={setSaleType} showSaleType={!isPurchase} onSettings={() => setSettingsOpen(true)} onClose={() => closeTab(activeTab)} />
       <CustomerDetails appSettings={appSettings} saleType={saleType} form={form} errors={errors} setField={setField} config={config} parties={parties} onAddParty={() => navigate("/parties/party-details")} />
       <InvoiceTable rows={rows} setRows={setRows} items={items} errors={errors} onAddItem={(rowId) => setAddItemRowId(rowId)} appSettings={appSettings} isPurchase={isPurchase} />
 
       <div className="grid gap-3 bg-slate-50 xl:grid-cols-[minmax(0,1fr)_380px]">
         <AddOns form={form} setField={setField} files={files} setFiles={setFiles} templates={termsTemplates} setTemplates={setTermsTemplates} showPayment={hasValidInvoiceItem} />
         <div className="px-4 py-4">
-          <TotalsPanel totals={totals} roundOff={roundOff} setRoundOff={setRoundOff} roundOffValue={roundOffValue} setRoundOffValue={setRoundOffValue} receivedEnabled={receivedEnabled} setReceivedEnabled={setReceivedEnabled} receivedAmount={receivedAmount} setReceivedAmount={setReceivedAmount} appSettings={appSettings} rowCount={rows.filter((r) => r.item.trim()).length} error={errors?.received || ""} />
+          <TotalsPanel
+            totals={totals}
+            roundOff={roundOff}
+            setRoundOff={setRoundOff}
+            roundOffValue={roundOffValue}
+            setRoundOffValue={setRoundOffValue}
+            receivedEnabled={receivedEnabled}
+            setReceivedEnabled={setReceivedEnabled}
+            receivedAmount={receivedAmount}
+            setReceivedAmount={setReceivedAmount}
+            appSettings={appSettings}
+            rowCount={rows.filter((r) => r.item.trim()).length}
+            error={errors?.received || ""}
+            additionalCharges={additionalCharges}
+            setAdditionalCharges={setAdditionalCharges}
+          />
           {toast && <p className="mt-2 text-right text-[13px] font-medium text-emerald-600">{toast}</p>}
         </div>
       </div>
@@ -2855,7 +3622,13 @@ function AddSale({ mode = "sale", localOnly = false }) {
       {businessMode && <BusinessModal mode={businessMode} business={business} setBusiness={setBusiness} onClose={() => setBusinessMode("")} />}
 
       {settingsOpen && (
-        <SettingsDrawer settings={settings} setSettings={setSettings} billingType={billingType} setBillingType={setBillingType} onClose={() => setSettingsOpen(false)} />
+        <SettingsDrawer
+          appSettings={appSettings}
+          onUpdateSettings={(updates) => saveAppSettings(updates)}
+          additionalCharges={additionalCharges}
+          setAdditionalCharges={setAdditionalCharges}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
     </div>
   );

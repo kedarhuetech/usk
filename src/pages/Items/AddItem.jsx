@@ -1,5 +1,6 @@
 // Implements the add item page.
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FiCamera, FiChevronDown, FiPlus, FiSearch, FiSettings, FiTrash2, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
@@ -346,8 +347,15 @@ function getBatchTotal(rows) {
 }
 
 // Creates editable item form.
-function createEditableItemForm(initialItem, defaultUnit = "PCS") {
-  if (!initialItem) return { ...itemDefaults, unit: defaultUnit || itemDefaults.unit, baseUnit: defaultUnit || itemDefaults.baseUnit };
+function createEditableItemForm(initialItem, defaultUnit = "PCS", defaultTaxRate = "") {
+  if (!initialItem) {
+    return {
+      ...itemDefaults,
+      unit: defaultUnit || itemDefaults.unit,
+      baseUnit: defaultUnit || itemDefaults.baseUnit,
+      taxRate: defaultTaxRate || itemDefaults.taxRate,
+    };
+  }
 
   const openingQuantity = hasValue(initialItem.openingQuantity) ? initialItem.openingQuantity : initialItem.stock || "";
 
@@ -373,7 +381,7 @@ function createEditableItemForm(initialItem, defaultUnit = "PCS") {
     purchaseTaxMode: initialItem.purchaseTaxMode || itemDefaults.purchaseTaxMode,
     discount: initialItem.discount || "",
     discountType: initialItem.discountType || itemDefaults.discountType,
-    taxRate: initialItem.taxRate || itemDefaults.taxRate,
+    taxRate: initialItem.taxRate || defaultTaxRate || itemDefaults.taxRate,
     openingQuantity,
     atPrice: initialItem.atPrice || "",
     asOfDate: initialItem.asOfDate || itemDefaults.asOfDate,
@@ -863,6 +871,7 @@ function StockTab({ form, setField, onBatch, onSerial, enableBatchTracking, enab
 
 // Renders the add item interface.
 function AddItem({ embedded = false, mode = "create", initialItem = null, onClose, onSave }) {
+  const navigate = useNavigate();
   const appSettings = useAppSettings();
   const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
   const enableItemCategory = appSettings.enableItemCategory ?? true;
@@ -873,7 +882,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
 
   const fileRef = useRef(null);
-  const [form, setForm] = useState(() => createEditableItemForm(initialItem, appSettings.defaultItemUnit));
+  const [form, setForm] = useState(() => createEditableItemForm(initialItem, appSettings.defaultItemUnit, appSettings.defaultTaxRate));
   const [categories, setCategories] = useState(() => (
     initialItem?.category && !defaultCategories.includes(initialItem.category)
       ? [...defaultCategories, initialItem.category]
@@ -1077,8 +1086,19 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
             )}
           </div>
           <div className="flex items-center gap-5 text-slate-500">
-            <FiSettings className="h-5 w-5" />
-            <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-slate-100">
+            <button
+              type="button"
+              title="Item Settings"
+              aria-label="Item Settings"
+              onClick={() => {
+                if (onClose) onClose();
+                navigate("/settings?tab=item");
+              }}
+              className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
+            >
+              <FiSettings className="h-5 w-5" />
+            </button>
+            <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-slate-100 cursor-pointer" aria-label="Close">
               <FiX className="h-6 w-6" />
             </button>
           </div>

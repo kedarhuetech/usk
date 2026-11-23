@@ -5,7 +5,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { units, taxModes, taxOptions, discountTypes } from "../../constants/itemsData";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { saveBusinessItem } from "../../services/businessRecords";
+import { saveBusinessItem, loadBusinessItems } from "../../services/businessRecords";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 import { businessDataApi } from "../../services/apiClient.js";
@@ -74,6 +74,9 @@ function UpdateItemsInBulk() {
   useEffect(() => {
     setItems(getInventoryItems());
     setLoading(false);
+    loadBusinessItems().then((dbItems) => {
+      if (Array.isArray(dbItems) && dbItems.length > 0) setItems(dbItems);
+    }).catch(() => {});
   }, []);
 
   const categories = useMemo(() => ["All categories", ...new Set(items.map((item) => item.category).filter(Boolean))], [items]);

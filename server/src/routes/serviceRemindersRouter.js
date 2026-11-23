@@ -73,7 +73,7 @@ router.get("/", async (req, res) => {
         const chunk = reminderIds.slice(i, i + 500);
         const placeholders = chunk.map(() => "?").join(",");
         const [histRows] = await pool.query(
-          `SELECT id, reminder_id, channel, recipient, message_text, status, sent_at
+          `SELECT id, reminder_id, channel, recipient, message_text, due_date, status, sent_at
            FROM service_reminder_history
            WHERE business_id = ? AND reminder_id IN (${placeholders})
            ORDER BY sent_at DESC`,
@@ -90,6 +90,7 @@ router.get("/", async (req, res) => {
             recipient: h.recipient,
             messageText: h.message_text,
             message: h.message_text,
+            dueDate: formatSqlDate(h.due_date),
             status: h.status,
             sentAt: h.sent_at,
             at: h.sent_at,
@@ -208,15 +209,16 @@ const saveReminderHandler = async (req, res) => {
         const histId = item.id || `hist_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
         const channel = item.channel || "whatsapp";
         const recipient = item.recipient || customerPhone || "";
-        const messageText = item.message || item.text || "";
+        const messageText = item.message || item.text || item.messageText || "";
+        const hDueDate = formatSqlDate(item.dueDate || item.due_date || serviceDueDate);
         const hStatus = item.status || "Sent";
         const sentAt = item.sentAt || item.at || item.timestamp || new Date();
 
         await conn.query(
           `INSERT IGNORE INTO service_reminder_history (
-            id, reminder_id, business_id, channel, recipient, message_text, status, sent_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [histId, id, businessId, channel, recipient, messageText, hStatus, new Date(sentAt)]
+            id, reminder_id, business_id, channel, recipient, message_text, due_date, status, sent_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [histId, id, businessId, channel, recipient, messageText, hDueDate, hStatus, new Date(sentAt)]
         );
       }
     }

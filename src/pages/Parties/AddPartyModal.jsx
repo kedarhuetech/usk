@@ -1,6 +1,7 @@
 // Official Add Party Modal component from Parties section
 import { useMemo, useState } from "react";
-import { FiPlus, FiX } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
+import { FiPlus, FiSettings, FiX } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
@@ -239,6 +240,7 @@ export default function AddPartyModal({
   embedded = false,
   parties: externalParties = null,
 }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(tabs[0]);
   const [showShipping, setShowShipping] = useState(Boolean(initialParty?.shippingAddress));
   const [form, setForm] = useState(() => ({
@@ -399,8 +401,20 @@ export default function AddPartyModal({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-4 text-slate-500">
-          <button type="button" onClick={onClose} className="rounded-md p-1 hover:bg-slate-100 cursor-pointer">
+        <div className="flex items-center gap-3 text-slate-500">
+          <button
+            type="button"
+            title="Party Settings"
+            aria-label="Party Settings"
+            onClick={() => {
+              if (onClose) onClose();
+              navigate("/settings?tab=party");
+            }}
+            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
+          >
+            <FiSettings className="h-5 w-5" />
+          </button>
+          <button type="button" onClick={onClose} aria-label="Close" className="rounded-md p-1 hover:bg-slate-100 cursor-pointer">
             <FiX className="h-6 w-6" />
           </button>
         </div>

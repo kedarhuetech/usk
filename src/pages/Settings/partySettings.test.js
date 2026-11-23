@@ -6,6 +6,7 @@ import {
   saveAppSettings,
 } from "../../services/appSettingsStorage.js";
 import { getParties, saveParty } from "../../services/partiesStorage.js";
+import { buildUnifiedDocumentHtml } from "../../services/unifiedPrintService.js";
 
 // Mock localStorage if in Node environment
 if (typeof window === "undefined" || !window.localStorage) {
@@ -92,5 +93,56 @@ test("Party storage supports group, status, shippingAddress, and custom fields",
   const fetched = parties.find((p) => p.id === newParty.id);
   assert.ok(fetched);
   assert.equal(fetched.status, "inactive");
+});
+
+test("printShippingAddress controls shipping address appearance in document print", () => {
+  // 1. With printShippingAddress enabled
+  saveAppSettings({ printShippingAddress: true });
+  const htmlWithShipping = buildUnifiedDocumentHtml({
+    title: "Sale Invoice",
+    documentNumber: "INV-101",
+    date: "2026-11-23",
+    partyName: "Test Party",
+    partyBillingAddress: "Billing Address 123",
+    partyShippingAddress: "Shipping Address 456",
+    rows: [{ index: 1, item: "Item A", qty: 2, price: 100, amount: 200 }],
+    totals: { total: 200 },
+  });
+  assert.ok(htmlWithShipping.includes("Shipping Address 456"), "Shipping address should appear in print when enabled");
+
+  // 2. With printShippingAddress disabled
+  saveAppSettings({ printShippingAddress: false });
+  const htmlWithoutShipping = buildUnifiedDocumentHtml({
+    title: "Sale Invoice",
+    documentNumber: "INV-102",
+    date: "2026-11-23",
+    partyName: "Test Party",
+    partyBillingAddress: "Billing Address 123",
+    partyShippingAddress: "Shipping Address 456",
+    rows: [{ index: 1, item: "Item A", qty: 2, price: 100, amount: 200 }],
+    totals: { total: 200 },
+  });
+  assert.ok(!htmlWithoutShipping.includes("Shipping Address 456"), "Shipping address should NOT appear in print when disabled");
+
+  // Restore default
+  saveAppSettings({ printShippingAddress: true });
+});
+
+test("Custom party fields configuration update and toggle showInPrint", () => {
+  const customConfig = [
+    { id: "field-1", enabled: true, name: "MRP", showInPrint: true, type: "text" },
+    { id: "field-2", enabled: true, name: "Region", showInPrint: false, type: "text" },
+    { id: "field-3", enabled: false, name: "", showInPrint: false, type: "text" },
+    { id: "field-4", enabled: true, name: "Delivery Date", showInPrint: true, type: "date" },
+  ];
+
+  saveAppSettings({ partyCustomFields: customConfig });
+  const settings = getAppSettings();
+
+  assert.equal(settings.partyCustomFields[0].name, "MRP");
+  assert.equal(settings.partyCustomFields[1].name, "Region");
+  assert.equal(settings.partyCustomFields[1].enabled, true);
+  assert.equal(settings.partyCustomFields[1].showInPrint, false);
+  assert.equal(settings.partyCustomFields[3].type, "date");
 });
 

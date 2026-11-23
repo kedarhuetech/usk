@@ -1164,9 +1164,10 @@ export default function PointOfSale() {
           </div>
           <button
             type="button"
-            title="Settings"
+            title="POS Settings & System Data"
+            aria-label="POS Settings"
             onClick={() => setModal({ type: "settings" })}
-            className="rounded p-1 text-slate-600 hover:bg-slate-100 transition"
+            className="rounded p-1 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
           >
             <FiSettings size={15} />
           </button>
@@ -2848,6 +2849,16 @@ export default function PointOfSale() {
                 </div>
 
                 <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModal(null);
+                      navigate("/settings");
+                    }}
+                    className="w-full rounded-lg bg-blue-50 border border-blue-200 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    <FiSettings /> Open All Application Settings (/settings) →
+                  </button>
                   <button
                     type="button"
                     onClick={() => {

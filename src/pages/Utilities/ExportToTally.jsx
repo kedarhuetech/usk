@@ -5,6 +5,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
+import { transactionsDb } from "../../services/databaseRepository.js";
 
 const transactionTypes = [
   { value: "sale", label: "Sale", load: getSaleInvoices },
@@ -124,15 +125,38 @@ function ExportToTally() {
 
   useEffect(() => {
     let active = true;
-    Promise.all(transactionTypes.map(async ({ value, load }) => (
-      load().map((record) => normalizeRecord(record, value))
-    ))).then((groups) => {
-      if (active) setRecords(groups.flat());
-    }).catch((error) => {
-      if (active) setStatus({ type: "error", message: `Local transactions could not be read: ${error.message || "local storage error"}` });
-    }).finally(() => {
-      if (active) setLoading(false);
-    });
+    (async () => {
+      try {
+        const localGroups = await Promise.all(
+          transactionTypes.map(async ({ value, load }) =>
+            load().map((record) => normalizeRecord(record, value))
+          )
+        );
+        let allRecords = localGroups.flat();
+        try {
+          const remoteTx = await transactionsDb.listAll();
+          if (Array.isArray(remoteTx) && remoteTx.length > 0) {
+            const existingIds = new Set(allRecords.map((r) => String(r.id || r.invoiceNumber || r.billNumber)));
+            const normalizedRemote = remoteTx.map((tx) => {
+              const mappedType = tx.transactionType === "sale" ? "sale" : tx.transactionType === "purchase" ? "purchase" : tx.transactionType === "salesReturn" ? "credit_note" : tx.transactionType === "purchaseReturn" ? "debit_note" : "sale";
+              return normalizeRecord(tx, mappedType);
+            });
+            for (const r of normalizedRemote) {
+              const id = String(r.id || r.invoiceNumber || r.billNumber);
+              if (!existingIds.has(id)) {
+                existingIds.add(id);
+                allRecords.push(r);
+              }
+            }
+          }
+        } catch {}
+        if (active) setRecords(allRecords);
+      } catch (error) {
+        if (active) setStatus({ type: "error", message: `Transactions could not be read: ${error.message || "storage error"}` });
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
     return () => { active = false; };
   }, []);
 

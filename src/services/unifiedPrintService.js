@@ -67,9 +67,8 @@ export function getEffectiveCompanyInfo(settings = null) {
       profile.businessName ||
       profile.companyName ||
       appSettings.companyName ||
-      "Sai Kirana Stores"
+      "My Business"
     ).trim();
-    if (name.toLowerCase() === "my company") name = "Sai Kirana Stores";
   }
 
   const phone =
@@ -104,6 +103,14 @@ export function getEffectiveCompanyInfo(settings = null) {
 
   const themeColor = appSettings.themeColor || "#881337";
 
+  const bankDetails = {
+    bankName: profile.bankName || profile.bankDetails?.bankName || appSettings.bankAccount?.bankName || "",
+    accountNumber: profile.accountNumber || profile.bankDetails?.accountNumber || appSettings.bankAccount?.accountNumber || "",
+    ifscCode: profile.ifscCode || profile.bankDetails?.ifscCode || appSettings.bankAccount?.ifscCode || "",
+    branchName: profile.branchName || profile.bankDetails?.branchName || appSettings.bankAccount?.branchName || "",
+    upiId: profile.upiId || profile.bankDetails?.upiId || appSettings.bankAccount?.upiId || appSettings.upiId || "",
+  };
+
   // Resolve currency symbol for print & PDF documents:
   // Defaults strictly to Indian Rupee (₹).
   const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
@@ -124,6 +131,8 @@ export function getEffectiveCompanyInfo(settings = null) {
     signature,
     themeColor,
     currencySymbol,
+    bankDetails,
+    upiId: bankDetails.upiId,
     appSettings,
   };
 }
@@ -192,8 +201,8 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   }
 
   // Issue #22: Standard dynamic UPI QR URI format
-  const bankDetails = opts.bankDetails || company.appSettings?.bankAccount || null;
-  const upiId = opts.upiId || bankDetails?.upiId || company.appSettings?.upiId || company.upiId || "";
+  const bankDetails = opts.bankDetails || company.bankDetails || company.appSettings?.bankAccount || null;
+  const upiId = opts.upiId || bankDetails?.upiId || company.upiId || company.appSettings?.upiId || "";
   const standardUpiUri = upiId
     ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company.name || "Business")}&am=${grandTotal}&cu=INR`
     : "";
@@ -349,6 +358,15 @@ export function buildUnifiedDocumentHtml(opts = {}) {
                 )}</p>`
               : ""
           }
+          ${
+            ["firmField1", "firmField2"]
+              .map((k) => {
+                const f = company.appSettings?.additionalFieldsSetup?.[k];
+                if (!f?.enabled || f.showInPrint === false || !f.name) return "";
+                return `<p style="margin:2px 0 0;font-size:11px;color:#334155;"><b>${escapeHtml(f.name)}:</b> ${escapeHtml(f.value || "")}</p>`;
+              })
+              .join("")
+          }
         </div>
       </div>
 
@@ -362,7 +380,18 @@ export function buildUnifiedDocumentHtml(opts = {}) {
           ${date ? `<p style="margin:2px 0;"><b>Date:</b> ${escapeHtml(date)}</p>` : ""}
           ${dueDate ? `<p style="margin:2px 0;"><b>Due Date:</b> ${escapeHtml(dueDate)}</p>` : ""}
           ${status ? `<p style="margin:2px 0;"><b>Status:</b> <span style="font-weight:700;color:${themeColor};">${escapeHtml(status)}</span></p>` : ""}
-          ${metadataRows.map((m) => `<p style="margin:2px 0;"><b>${escapeHtml(m.label)}:</b> ${escapeHtml(m.value)}</p>`).join("")}
+          ${[
+            ...metadataRows,
+            ...["txnField1", "txnField2", "txnField3", "dateField"]
+              .map((k) => {
+                const f = company.appSettings?.additionalFieldsSetup?.[k];
+                if (!f?.enabled || f.showInPrint === false) return null;
+                const docVal = opts[k] || opts.doc?.[k] || opts.invoice?.[k] || opts.doc?.form?.[k] || opts.invoice?.form?.[k];
+                if (!docVal && !f.value) return null;
+                return { label: f.name || "Field", value: docVal || f.value };
+              })
+              .filter(Boolean),
+          ].map((m) => `<p style="margin:2px 0;"><b>${escapeHtml(m.label)}:</b> ${escapeHtml(m.value)}</p>`).join("")}
         </div>
       </div>
     </div>
@@ -542,7 +571,7 @@ export function buildUnifiedDocumentHtml(opts = {}) {
             : `<div style="height:40px;"></div>`
         }
         <div style="border-top:1px solid #475569;padding-top:4px;font-size:11px;font-weight:700;color:#334155;">
-          For ${escapeHtml(company.name || "Sai Kirana Stores")}
+          For ${escapeHtml(company.name || "My Business")}
         </div>
         <div style="font-size:10px;color:#64748b;">Authorized Signatory</div>
       </div>
@@ -659,7 +688,7 @@ export function buildUnifiedStatementHtml({
       <div style="display:flex;align-items:center;gap:12px;">
         ${company.logo ? `<img src="${company.logo}" alt="Logo" style="max-height:56px;max-width:120px;object-fit:contain;"/>` : ""}
         <div>
-          <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${escapeHtml(company.name || "Sai Kirana Stores")}</h1>
+          <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${escapeHtml(company.name || "My Business")}</h1>
           ${company.phone ? `<p style="margin:2px 0;font-size:12px;color:#475569;">Ph: ${escapeHtml(company.phone)}</p>` : ""}
           ${company.address ? `<p style="margin:2px 0;font-size:11px;color:#64748b;">${escapeHtml(company.address)}</p>` : ""}
           ${company.gstin ? `<p style="margin:2px 0;font-size:11px;font-weight:700;">GSTIN: ${escapeHtml(company.gstin)}</p>` : ""}

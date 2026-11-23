@@ -13,6 +13,7 @@
     "import:cbic": "node -e \"import('./src/services/hsnService.js').then(s => s.importCbicFilesOnly().then(() => process.exit(0)))\""
   },
   "dependencies": {
+    "cloudinary": "^2.11.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",

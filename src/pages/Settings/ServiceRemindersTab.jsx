@@ -45,6 +45,8 @@ import {
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { getParties } from "../../services/partiesStorage.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
+import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
+import { serviceRemindersDb } from "../../services/databaseRepository.js";
 
 export default function ServiceRemindersTab({ settings: parentSettings, update: parentUpdate }) {
   const [settings, setSettings] = useState(() => getReminderSettings());
@@ -106,9 +108,19 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
       setRecords(getReminderRecords());
     };
     window.addEventListener(SERVICE_REMINDERS_CHANGED_EVENT, reload);
+    window.addEventListener(businessDataChangedEvent, reload);
     window.addEventListener("storage", reload);
+
+    // Actively hydrate fresh records directly from MySQL on mount
+    serviceRemindersDb.listAll().then((list) => {
+      if (Array.isArray(list) && list.length > 0) {
+        setRecords(getReminderRecords());
+      }
+    }).catch(() => {});
+
     return () => {
       window.removeEventListener(SERVICE_REMINDERS_CHANGED_EVENT, reload);
+      window.removeEventListener(businessDataChangedEvent, reload);
       window.removeEventListener("storage", reload);
     };
   }, []);
