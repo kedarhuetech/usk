@@ -466,8 +466,8 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
   };
 
   const sentCount = useMemo(() => {
-    return records.filter((r) => r.lastNotifiedAt || (r.notificationHistory && r.notificationHistory.length > 0)).length;
-  }, [records]);
+    return processed.all.filter((r) => r.status === "Reminded" || r.alreadyNotifiedForThisDueDate || r.lastNotifiedAt || (r.notificationHistory && r.notificationHistory.length > 0)).length;
+  }, [processed.all]);
 
   const filteredList = useMemo(() => {
     if (filter === "dueSoon") return processed.dueSoon;
@@ -476,10 +476,10 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     if (filter === "upcoming") return processed.upcoming;
     if (filter === "completed") return processed.completed;
     if (filter === "sentHistory") {
-      return records.filter((r) => r.lastNotifiedAt || (r.notificationHistory && r.notificationHistory.length > 0));
+      return processed.all.filter((r) => r.status === "Reminded" || r.alreadyNotifiedForThisDueDate || r.lastNotifiedAt || (r.notificationHistory && r.notificationHistory.length > 0));
     }
     return processed.all.filter((r) => r.status !== "Completed" && r.status !== "Cancelled");
-  }, [processed, records, filter]);
+  }, [processed, filter]);
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -688,14 +688,16 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
 
                 {filteredList.map((record) => {
                   const statusTone =
-                    record.status === "Due Today"
+                    record.status === "Reminded"
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                      : record.status === "Due Today"
                       ? "bg-rose-100 text-rose-800 border-rose-200"
                       : record.status === "Due Soon"
                       ? "bg-amber-100 text-amber-800 border-amber-200"
                       : record.status === "Overdue"
                       ? "bg-purple-100 text-purple-800 border-purple-200"
                       : record.status === "Completed"
-                      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                      ? "bg-blue-100 text-blue-800 border-blue-200"
                       : "bg-slate-100 text-slate-700 border-slate-200";
 
                   return (

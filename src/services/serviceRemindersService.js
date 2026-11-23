@@ -77,21 +77,6 @@ export function evaluateReminderStatus(record, settings = getReminderSettings(),
   const reminderDate = calculateReminderDate(dueDate, daysBefore);
   const daysUntilDue = getCalendarDayDifference(today, dueDate);
 
-  let status = record.status || "Pending";
-  if (status !== "Completed" && status !== "Cancelled") {
-    if (daysUntilDue === null) {
-      status = "Pending";
-    } else if (daysUntilDue < 0) {
-      status = "Overdue";
-    } else if (daysUntilDue === 0) {
-      status = "Due Today";
-    } else if (daysUntilDue <= daysBefore) {
-      status = "Due Soon";
-    } else {
-      status = "Upcoming";
-    }
-  }
-
   const phone = String(record.customerPhone || "").replace(/[^0-9]/g, "");
   const email = String(record.customerEmail || "").trim();
   const hasValidPhone = phone.length >= 7;
@@ -120,6 +105,23 @@ export function evaluateReminderStatus(record, settings = getReminderSettings(),
     hasDeliveredHistory ||
     (record.lastNotifiedAt && (cleanLastNotifiedDueDate === dueDate || !cleanLastNotifiedDueDate))
   );
+
+  let status = record.status || "Pending";
+  if (status !== "Completed" && status !== "Cancelled") {
+    if (alreadyNotifiedForThisDueDate) {
+      status = "Reminded";
+    } else if (daysUntilDue === null) {
+      status = "Pending";
+    } else if (daysUntilDue < 0) {
+      status = "Overdue";
+    } else if (daysUntilDue === 0) {
+      status = "Due Today";
+    } else if (daysUntilDue <= daysBefore) {
+      status = "Due Soon";
+    } else {
+      status = "Upcoming";
+    }
+  }
 
   const isDateReached = Boolean(reminderDate && today >= reminderDate);
   const isEligibleForNotification =
@@ -153,10 +155,11 @@ export function processServiceReminders({
 } = {}) {
   const evaluated = records.map((r) => evaluateReminderStatus(r, settings, today));
 
-  const dueSoon = evaluated.filter((r) => r.status === "Due Soon");
-  const dueToday = evaluated.filter((r) => r.status === "Due Today");
-  const overdue = evaluated.filter((r) => r.status === "Overdue");
-  const upcoming = evaluated.filter((r) => r.status === "Upcoming");
+  const reminded = evaluated.filter((r) => r.status === "Reminded" || r.alreadyNotifiedForThisDueDate);
+  const dueSoon = evaluated.filter((r) => r.status === "Due Soon" && !r.alreadyNotifiedForThisDueDate);
+  const dueToday = evaluated.filter((r) => r.status === "Due Today" && !r.alreadyNotifiedForThisDueDate);
+  const overdue = evaluated.filter((r) => r.status === "Overdue" && !r.alreadyNotifiedForThisDueDate);
+  const upcoming = evaluated.filter((r) => r.status === "Upcoming" && !r.alreadyNotifiedForThisDueDate);
   const completed = evaluated.filter((r) => r.status === "Completed");
   const cancelled = evaluated.filter((r) => r.status === "Cancelled");
 
@@ -170,6 +173,7 @@ export function processServiceReminders({
     dueToday: dueToday.length,
     overdue: overdue.length,
     upcoming: upcoming.length,
+    reminded: reminded.length,
     completed: completed.length,
     cancelled: cancelled.length,
     activeAlerts: activeAlerts.length,
@@ -182,6 +186,7 @@ export function processServiceReminders({
     dueToday,
     overdue,
     upcoming,
+    reminded,
     completed,
     cancelled,
     activeAlerts,
@@ -292,6 +297,7 @@ export function recordReminderNotification(recordId, channel = "in_app", details
 
   const updated = {
     ...target,
+    status: "Reminded",
     lastNotifiedAt: now,
     lastNotifiedDueDate: cleanDueDate,
     lastNotifiedMessage: details.message || target.lastNotifiedMessage || "",
