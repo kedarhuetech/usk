@@ -465,6 +465,73 @@ function extractEditForm(editDoc, fallback = {}) {
     ""
   );
 
+  const paymentTerms = cleanStr(
+    editDoc.paymentTerms ||
+    editDoc.payment_terms ||
+    editDoc.form?.paymentTerms ||
+    fallback.paymentTerms ||
+    "Due on Receipt"
+  );
+
+  const rawDueDate =
+    editDoc.dueDate ||
+    editDoc.due_date ||
+    editDoc.form?.dueDate ||
+    fallback.dueDate ||
+    null;
+  const dueDate = rawDueDate ? (typeof rawDueDate === "string" ? rawDueDate.slice(0, 10) : String(rawDueDate)) : null;
+
+  const ewayBillNo = cleanStr(
+    editDoc.ewayBillNo ||
+    editDoc.eWayBillNo ||
+    editDoc.eway_bill_no ||
+    editDoc.form?.ewayBillNo ||
+    fallback.ewayBillNo ||
+    ""
+  );
+
+  const vehicleNumber = cleanStr(
+    editDoc.vehicleNumber ||
+    editDoc.vehicleNo ||
+    editDoc.vehicle_no ||
+    editDoc.form?.vehicleNumber ||
+    fallback.vehicleNumber ||
+    ""
+  );
+
+  const driverName = cleanStr(
+    editDoc.driverName ||
+    editDoc.driver_name ||
+    editDoc.form?.driverName ||
+    fallback.driverName ||
+    ""
+  );
+
+  const poNumber = cleanStr(
+    editDoc.poNumber ||
+    editDoc.po_number ||
+    editDoc.customerPoNumber ||
+    editDoc.form?.poNumber ||
+    fallback.poNumber ||
+    ""
+  );
+
+  const rawPoDate =
+    editDoc.poDate ||
+    editDoc.po_date ||
+    editDoc.customerPoDate ||
+    editDoc.form?.poDate ||
+    fallback.poDate ||
+    "";
+  const poDate = rawPoDate ? (typeof rawPoDate === "string" ? rawPoDate.slice(0, 10) : String(rawPoDate)) : "";
+
+  const reverseCharge = Boolean(
+    editDoc.reverseCharge ||
+    editDoc.reverse_charge ||
+    editDoc.form?.reverseCharge ||
+    fallback.reverseCharge
+  );
+
   return {
     ...fallback,
     ...(editDoc.form || {}),
@@ -479,11 +546,19 @@ function extractEditForm(editDoc, fallback = {}) {
     invoiceDate,
     stateOfSupply,
     paymentType,
+    paymentTerms,
+    dueDate,
+    ewayBillNo,
+    vehicleNumber,
+    driverName,
+    poNumber,
+    poDate,
+    reverseCharge,
     description,
     terms,
     partyBalance: editDoc.partyBalance || editDoc.form?.partyBalance || fallback.partyBalance || "",
     showTerms: Boolean(terms),
-    termsTitle: editDoc.termsTitle || editDoc.form?.termsTitle || fallback.termsTitle || "",
+    termsTitle: editDoc.termsTitle || editDoc.terms_title || editDoc.form?.termsTitle || fallback.termsTitle || "",
     showDescription: Boolean(description),
   };
 }
@@ -1644,9 +1719,40 @@ function TermsModal({ onClose, onSave }) {
 
 // Renders the add ons interface.
 function AddOns({ form, setField, files, setFiles, templates, setTemplates, showPayment }) {
+  const navigate = useNavigate();
   const imageRef = useRef(null);
   const documentRef = useRef(null);
   const [termsModal, setTermsModal] = useState(false);
+
+  const handleImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFiles((current) => ({
+          ...current,
+          image: reader.result,
+          imageName: file.name,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDocumentUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setFiles((current) => ({
+          ...current,
+          document: reader.result,
+          documentName: file.name,
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   return (
     <section className="grid gap-4 bg-slate-50 px-4 py-4 xl:grid-cols-[minmax(300px,480px)_minmax(240px,300px)_1fr]">
@@ -1656,8 +1762,22 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
             <FiList className="h-5 w-5" /> Add Terms & Conditions
           </button>
         ) : (
-          <Card className="p-4">
-            <h3 className="mb-3 text-base font-bold text-slate-700">Terms & Conditions</h3>
+          <Card className="p-4 relative">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-700">Terms & Conditions</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setField("showTerms", false);
+                  setField("terms", "");
+                  setField("termsTitle", "");
+                }}
+                className="text-xs text-slate-400 hover:text-rose-600"
+                title="Remove Terms"
+              >
+                ✕ Remove
+              </button>
+            </div>
             <TermsTitlePicker
               value={form.termsTitle}
               templates={templates}
@@ -1687,16 +1807,60 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
             <FiFile /> Add Description
           </button>
         ) : (
-          <TextArea value={form.description} onChange={(event) => setField("description", event.target.value)} placeholder="Description" className="h-24 w-full" />
+          <div className="relative">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-500 font-semibold">
+              <span>Description / Notes</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setField("showDescription", false);
+                  setField("description", "");
+                }}
+                className="hover:text-rose-600 font-normal"
+                title="Remove Description"
+              >
+                ✕ Remove
+              </button>
+            </div>
+            <TextArea value={form.description} onChange={(event) => setField("description", event.target.value)} placeholder="Description / Notes" className="h-24 w-full" />
+          </div>
         )}
-        <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={(event) => setFiles((current) => ({ ...current, image: event.target.files?.[0]?.name || "" }))} />
-        <button type="button" onClick={() => imageRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
-          <FiCamera /> {files.image || "Add Image"}
-        </button>
-        <input ref={documentRef} type="file" className="hidden" onChange={(event) => setFiles((current) => ({ ...current, document: event.target.files?.[0]?.name || "" }))} />
-        <button type="button" onClick={() => documentRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
-          <FiFile /> {files.document || "Add Document"}
-        </button>
+
+        <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+        {files.image ? (
+          <div className="flex h-12 w-full items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[13px] font-medium text-emerald-800">
+            <span className="truncate max-w-[200px] flex items-center gap-2">
+              <FiCamera className="text-emerald-600 shrink-0" />
+              {files.imageName || (typeof files.image === "string" && files.image.startsWith("data:") ? "Image Attached" : files.image)}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => imageRef.current?.click()} className="text-xs text-blue-600 hover:underline">Change</button>
+              <button type="button" onClick={() => setFiles((c) => ({ ...c, image: "", imageName: "" }))} className="text-xs text-rose-600 hover:underline">✕</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => imageRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
+            <FiCamera /> Add Image
+          </button>
+        )}
+
+        <input ref={documentRef} type="file" className="hidden" onChange={handleDocumentUpload} />
+        {files.document ? (
+          <div className="flex h-12 w-full items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-3 text-[13px] font-medium text-emerald-800">
+            <span className="truncate max-w-[200px] flex items-center gap-2">
+              <FiFile className="text-emerald-600 shrink-0" />
+              {files.documentName || (typeof files.document === "string" && files.document.startsWith("data:") ? "Document Attached" : files.document)}
+            </span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => documentRef.current?.click()} className="text-xs text-blue-600 hover:underline">Change</button>
+              <button type="button" onClick={() => setFiles((c) => ({ ...c, document: "", documentName: "" }))} className="text-xs text-rose-600 hover:underline">✕</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => documentRef.current?.click()} className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md border border-slate-200 bg-white text-[13px] font-bold uppercase text-slate-400 hover:border-blue-200 hover:text-blue-600">
+            <FiFile /> Add Document
+          </button>
+        )}
       </div>
 
       {termsModal && (
@@ -2526,10 +2690,25 @@ function AddSale({ mode = "sale", localOnly = false }) {
     const raw = editInvoice?.totals?.received ?? editInvoice?.receivedAmount ?? editInvoice?.paidAmount ?? editInvoice?.paid;
     return raw != null && raw !== "" ? String(raw) : "";
   });
-  const [additionalCharges, setAdditionalCharges] = useState(() => editInvoice?.additionalCharges || { shipping: 0, packaging: 0, other: 0 });
+  const [additionalCharges, setAdditionalCharges] = useState(() => {
+    if (editInvoice?.additionalCharges) return editInvoice.additionalCharges;
+    return {
+      shipping: Number(editInvoice?.shippingCharges ?? editInvoice?.shipping_charges ?? 0),
+      packaging: Number(editInvoice?.packagingCharges ?? editInvoice?.packaging_charges ?? 0),
+      other: Number(editInvoice?.otherCharges ?? editInvoice?.other_charges ?? 0),
+    };
+  });
   const [billingType, setBillingType] = useState("Full Sale");
   const [transactionId, setTransactionId] = useState(() => editInvoice?.id || editInvoice?.invoiceId || crypto.randomUUID());
-  const [files, setFiles] = useState(() => editInvoice?.files || { image: "", document: "" });
+  const [files, setFiles] = useState(() => {
+    if (editInvoice?.files) return editInvoice.files;
+    return {
+      image: editInvoice?.image || editInvoice?.image_url || "",
+      document: editInvoice?.document || editInvoice?.document_url || "",
+      imageName: editInvoice?.imageName || editInvoice?.image_name || "",
+      documentName: editInvoice?.documentName || editInvoice?.document_name || "",
+    };
+  });
   const [toast, setToast] = useState("");
   const [errors, setErrors] = useState({ rows: {} });
   const [termsTemplates, setTermsTemplates] = useState(defaultTerms);
@@ -2597,6 +2776,21 @@ function AddSale({ mode = "sale", localOnly = false }) {
         const rawRound = fullDoc.roundOff ?? fullDoc.round_off ?? fullDoc.totals?.roundOffAmount;
         if (rawRound != null && Number(rawRound) !== 0) {
           setRoundOffValue(String(rawRound));
+        }
+        if (fullDoc.files || fullDoc.image || fullDoc.document || fullDoc.image_url || fullDoc.document_url) {
+          setFiles(fullDoc.files || {
+            image: fullDoc.image || fullDoc.image_url || "",
+            document: fullDoc.document || fullDoc.document_url || "",
+            imageName: fullDoc.imageName || fullDoc.image_name || "",
+            documentName: fullDoc.documentName || fullDoc.document_name || "",
+          });
+        }
+        if (fullDoc.additionalCharges || fullDoc.shippingCharges != null || fullDoc.shipping_charges != null) {
+          setAdditionalCharges(fullDoc.additionalCharges || {
+            shipping: Number(fullDoc.shippingCharges ?? fullDoc.shipping_charges ?? 0),
+            packaging: Number(fullDoc.packagingCharges ?? fullDoc.packaging_charges ?? 0),
+            other: Number(fullDoc.otherCharges ?? fullDoc.other_charges ?? 0),
+          });
         }
       })
       .catch((err) => console.warn("Could not load full transaction details from MySQL:", err.message));
@@ -2894,10 +3088,29 @@ function AddSale({ mode = "sale", localOnly = false }) {
       date: docDate,
       dueDate: form.dueDate || null,
       paymentTerms: form.paymentTerms || "Due on Receipt",
+      notes: form.description || "",
+      description: form.description || "",
+      terms: form.terms || "",
+      termsTitle: form.termsTitle || "",
+      vehicleNumber: form.vehicleNumber || "",
+      vehicleNo: form.vehicleNumber || "",
+      driverName: form.driverName || "",
+      ewayBillNo: form.ewayBillNo || "",
+      eWayBillNo: form.ewayBillNo || "",
+      poNumber: form.poNumber || "",
+      poDate: form.poDate || "",
+      stateOfSupply: form.stateOfSupply || "None",
+      reverseCharge: Boolean(form.reverseCharge),
       additionalCharges,
       shippingCharges: Number(additionalCharges?.shipping || 0),
       packagingCharges: Number(additionalCharges?.packaging || 0),
       otherCharges: Number(additionalCharges?.other || 0),
+      image: files?.image || "",
+      document: files?.document || "",
+      imageName: files?.imageName || "",
+      documentName: files?.documentName || "",
+      imageUrl: files?.image || "",
+      documentUrl: files?.document || "",
       billingAddress: form.billingAddress || resolvedParty?.billingAddress || resolvedParty?.address || "",
       shippingAddress: form.shippingAddress || form.billingAddress || "",
       paymentMode,
@@ -2913,6 +3126,21 @@ function AddSale({ mode = "sale", localOnly = false }) {
         partyName: finalPartyName,
         invoiceNumber: docNumber,
         invoiceDate: docDate,
+        paymentTerms: form.paymentTerms || "Due on Receipt",
+        dueDate: form.dueDate || null,
+        terms: form.terms || "",
+        termsTitle: form.termsTitle || "",
+        description: form.description || "",
+        notes: form.description || "",
+        showTerms: Boolean(form.terms),
+        showDescription: Boolean(form.description),
+        vehicleNumber: form.vehicleNumber || "",
+        driverName: form.driverName || "",
+        ewayBillNo: form.ewayBillNo || "",
+        poNumber: form.poNumber || "",
+        poDate: form.poDate || "",
+        stateOfSupply: form.stateOfSupply || "None",
+        reverseCharge: Boolean(form.reverseCharge),
       },
       rows: mappedRows,
       items: mappedRows,

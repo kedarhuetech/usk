@@ -105,10 +105,12 @@ test("Transactions & Normalized Line Items (Pure Rows and Columns)", async () =>
   const testPartyId = `test_party_tx_${Date.now()}`;
 
   // 1. Create party
+  const partyName = `Transaction Customer ${Date.now()}`;
   await pool.query(
     `INSERT INTO parties (id, business_id, party_name, current_balance)
-     VALUES (?, 'demo-business', 'Transaction Customer', 0.00)`,
-    [testPartyId]
+     VALUES (?, 'demo-business', ?, 0.00)
+     ON DUPLICATE KEY UPDATE current_balance = VALUES(current_balance)`,
+    [testPartyId, partyName]
   );
 
   // 2. Insert transaction header
@@ -116,8 +118,8 @@ test("Transactions & Normalized Line Items (Pure Rows and Columns)", async () =>
     `INSERT INTO transactions (
       id, business_id, transaction_type, document_number, transaction_date,
       party_id, party_name, total_amount, paid_amount, balance_amount, payment_status
-    ) VALUES (?, 'demo-business', 'sale', 'INV-9901', '2026-11-14', ?, 'Transaction Customer', 1200.00, 200.00, 1000.00, 'Pending')`,
-    [testTxnId, testPartyId]
+    ) VALUES (?, 'demo-business', 'sale', 'INV-9901', '2026-11-14', ?, ?, 1200.00, 200.00, 1000.00, 'Pending')`,
+    [testTxnId, testPartyId, partyName]
   );
 
   // 3. Insert normalized item row into transaction_items

@@ -166,6 +166,30 @@ export function normalizeInvoice(invoice = {}) {
     return s === "null" || s === "undefined" ? "" : s;
   };
 
+  const terms = cleanStr(invoice.terms || invoice.form?.terms || "");
+  const termsTitle = cleanStr(invoice.termsTitle || invoice.terms_title || invoice.form?.termsTitle || "");
+  const notes = cleanStr(invoice.notes || invoice.description || invoice.form?.description || "");
+  const paymentTerms = cleanStr(invoice.paymentTerms || invoice.payment_terms || invoice.form?.paymentTerms || "Due on Receipt");
+  const dueDate = invoice.dueDate || invoice.due_date || invoice.form?.dueDate || null;
+  const vehicleNumber = cleanStr(invoice.vehicleNumber || invoice.vehicleNo || invoice.vehicle_no || invoice.form?.vehicleNumber || "");
+  const driverName = cleanStr(invoice.driverName || invoice.driver_name || invoice.form?.driverName || "");
+  const ewayBillNo = cleanStr(invoice.ewayBillNo || invoice.eWayBillNo || invoice.e_way_bill_no || invoice.form?.ewayBillNo || "");
+  const poNumber = cleanStr(invoice.poNumber || invoice.po_number || invoice.form?.poNumber || "");
+  const poDate = cleanStr(invoice.poDate || invoice.po_date || invoice.form?.poDate || "");
+  const stateOfSupply = cleanStr(invoice.stateOfSupply || invoice.state_of_supply || invoice.form?.stateOfSupply || "None");
+  const reverseCharge = Boolean(invoice.reverseCharge || invoice.reverse_charge || invoice.form?.reverseCharge);
+  const additionalCharges = invoice.additionalCharges || {
+    shipping: Number(invoice.shippingCharges ?? invoice.shipping_charges ?? 0),
+    packaging: Number(invoice.packagingCharges ?? invoice.packaging_charges ?? 0),
+    other: Number(invoice.otherCharges ?? invoice.other_charges ?? 0),
+  };
+  const files = invoice.files || {
+    image: invoice.image || invoice.image_url || "",
+    document: invoice.document || invoice.document_url || "",
+    imageName: invoice.imageName || invoice.image_name || "",
+    documentName: invoice.documentName || invoice.document_name || "",
+  };
+
   const form = {
     customer: partyName,
     partyId,
@@ -176,6 +200,21 @@ export function normalizeInvoice(invoice = {}) {
     billingAddress: cleanStr(invoice.billingAddress || invoice.billing_address || invoice.form?.billingAddress || ""),
     shippingAddress: cleanStr(invoice.shippingAddress || invoice.shipping_address || invoice.form?.shippingAddress || invoice.billingAddress || invoice.billing_address || ""),
     paymentType: paymentMode,
+    paymentTerms,
+    dueDate,
+    terms,
+    termsTitle,
+    showTerms: Boolean(terms),
+    notes,
+    description: notes,
+    showDescription: Boolean(notes),
+    vehicleNumber,
+    driverName,
+    ewayBillNo,
+    poNumber,
+    poDate,
+    stateOfSupply,
+    reverseCharge,
     ...(invoice.form || {}),
   };
   if (!form.customer && partyName) form.customer = partyName;
@@ -209,6 +248,30 @@ export function normalizeInvoice(invoice = {}) {
     invoiceDate,
     transactionDate: invoiceDate,
     date: invoiceDate,
+    dueDate,
+    paymentTerms,
+    terms,
+    termsTitle,
+    notes,
+    description: notes,
+    vehicleNumber,
+    vehicleNo: vehicleNumber,
+    driverName,
+    ewayBillNo,
+    eWayBillNo: ewayBillNo,
+    poNumber,
+    poDate,
+    stateOfSupply,
+    reverseCharge,
+    additionalCharges,
+    shippingCharges: Number(additionalCharges.shipping || 0),
+    packagingCharges: Number(additionalCharges.packaging || 0),
+    otherCharges: Number(additionalCharges.other || 0),
+    files,
+    image: files.image,
+    document: files.document,
+    imageName: files.imageName,
+    documentName: files.documentName,
     totalAmount,
     total: totalAmount,
     paidAmount,

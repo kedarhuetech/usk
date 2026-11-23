@@ -472,8 +472,38 @@ export const transactionsDb = {
       roundOffValue: transaction.roundOffValue ?? "",
       paymentMode: transaction.paymentMode || transaction.paymentType || transaction.form?.paymentType || (transaction.saleType === "cash" ? "Cash" : "Credit"),
       paymentType: transaction.paymentType || transaction.paymentMode || "Cash",
-      notes: transaction.notes || transaction.description || null,
-      description: transaction.description || transaction.notes || null,
+      notes: transaction.notes || transaction.description || transaction.form?.description || null,
+      description: transaction.description || transaction.notes || transaction.form?.description || null,
+      terms: transaction.terms || transaction.form?.terms || null,
+      termsTitle: transaction.termsTitle || transaction.terms_title || transaction.form?.termsTitle || null,
+      driverName: transaction.driverName || transaction.driver_name || transaction.form?.driverName || null,
+      stateOfSupply: transaction.stateOfSupply || transaction.state_of_supply || transaction.form?.stateOfSupply || null,
+      reverseCharge: Boolean(transaction.reverseCharge || transaction.reverse_charge || transaction.form?.reverseCharge),
+      paymentTerms: transaction.paymentTerms || transaction.payment_terms || transaction.form?.paymentTerms || null,
+      shippingCharges: Number(transaction.shippingCharges ?? transaction.shipping_charges ?? transaction.additionalCharges?.shipping ?? 0),
+      packagingCharges: Number(transaction.packagingCharges ?? transaction.packaging_charges ?? transaction.additionalCharges?.packaging ?? 0),
+      otherCharges: Number(transaction.otherCharges ?? transaction.other_charges ?? transaction.additionalCharges?.other ?? 0),
+      additionalCharges: transaction.additionalCharges || {
+        shipping: Number(transaction.shippingCharges ?? transaction.shipping_charges ?? 0),
+        packaging: Number(transaction.packagingCharges ?? transaction.packaging_charges ?? 0),
+        other: Number(transaction.otherCharges ?? transaction.other_charges ?? 0),
+      },
+      image: transaction.image || transaction.files?.image || null,
+      document: transaction.document || transaction.files?.document || null,
+      imageName: transaction.imageName || transaction.files?.imageName || null,
+      documentName: transaction.documentName || transaction.files?.documentName || null,
+      files: transaction.files || {
+        image: transaction.image || "",
+        document: transaction.document || "",
+        imageName: transaction.imageName || "",
+        documentName: transaction.documentName || "",
+      },
+      poNumber: transaction.poNumber || transaction.po_number || transaction.form?.poNumber || transaction.linkedInvoiceId || null,
+      poDate: transaction.poDate || transaction.po_date || transaction.form?.poDate || null,
+      vehicleNo: transaction.vehicleNo || transaction.vehicleNumber || transaction.form?.vehicleNumber || null,
+      vehicleNumber: transaction.vehicleNumber || transaction.vehicleNo || transaction.form?.vehicleNumber || null,
+      eWayBillNo: transaction.eWayBillNo || transaction.ewayBillNo || transaction.form?.ewayBillNo || null,
+      ewayBillNo: transaction.ewayBillNo || transaction.eWayBillNo || transaction.form?.ewayBillNo || null,
       linkedInvoiceId: transaction.linkedInvoiceId || transaction.poNumber || null,
       payments: rawPayments,
       items,
@@ -505,6 +535,30 @@ export const transactionsDb = {
       }));
       const party = doc.partyName || doc.customerName || doc.party || doc.customer || doc.form?.customer || "Cash Sale";
       const phone = doc.partyPhone || doc.phone || doc.mobile || doc.form?.phone || "";
+      const terms = doc.terms || doc.form?.terms || "";
+      const termsTitle = doc.termsTitle || doc.terms_title || doc.form?.termsTitle || "";
+      const notes = doc.notes || doc.description || doc.form?.description || "";
+      const paymentTerms = doc.paymentTerms || doc.payment_terms || doc.form?.paymentTerms || "Due on Receipt";
+      const dueDate = doc.dueDate || doc.due_date || doc.form?.dueDate || null;
+      const vehicleNumber = doc.vehicleNumber || doc.vehicleNo || doc.vehicle_no || doc.form?.vehicleNumber || "";
+      const driverName = doc.driverName || doc.driver_name || doc.form?.driverName || "";
+      const ewayBillNo = doc.ewayBillNo || doc.eWayBillNo || doc.e_way_bill_no || doc.form?.ewayBillNo || "";
+      const poNumber = doc.poNumber || doc.po_number || doc.form?.poNumber || "";
+      const poDate = doc.poDate || doc.po_date || doc.form?.poDate || "";
+      const stateOfSupply = doc.stateOfSupply || doc.state_of_supply || doc.form?.stateOfSupply || "None";
+      const reverseCharge = Boolean(doc.reverseCharge || doc.reverse_charge || doc.form?.reverseCharge);
+      const additionalCharges = doc.additionalCharges || {
+        shipping: Number(doc.shippingCharges ?? doc.shipping_charges ?? 0),
+        packaging: Number(doc.packagingCharges ?? doc.packaging_charges ?? 0),
+        other: Number(doc.otherCharges ?? doc.other_charges ?? 0),
+      };
+      const files = doc.files || {
+        image: doc.image || doc.image_url || "",
+        document: doc.document || doc.document_url || "",
+        imageName: doc.imageName || doc.image_name || "",
+        documentName: doc.documentName || doc.document_name || "",
+      };
+
       const form = {
         customer: party,
         phone,
@@ -513,6 +567,21 @@ export const transactionsDb = {
         invoiceNumber: String(doc.documentNumber || doc.invoiceNumber || doc.form?.invoiceNumber || "1"),
         invoiceDate: doc.transactionDate || doc.invoiceDate || doc.form?.invoiceDate || "",
         paymentType: doc.paymentMode || doc.paymentType || doc.form?.paymentType || "Cash",
+        paymentTerms,
+        dueDate,
+        terms,
+        termsTitle,
+        showTerms: Boolean(terms),
+        notes,
+        description: notes,
+        showDescription: Boolean(notes),
+        vehicleNumber,
+        driverName,
+        ewayBillNo,
+        poNumber,
+        poDate,
+        stateOfSupply,
+        reverseCharge,
         ...(doc.form || {}),
         customer: party || doc.form?.customer || "Cash Sale",
         phone: phone || doc.form?.phone || "",
@@ -527,6 +596,30 @@ export const transactionsDb = {
         items: rawItems,
         rows,
         form,
+        terms,
+        termsTitle,
+        notes,
+        description: notes,
+        paymentTerms,
+        dueDate,
+        vehicleNumber,
+        vehicleNo: vehicleNumber,
+        driverName,
+        ewayBillNo,
+        eWayBillNo: ewayBillNo,
+        poNumber,
+        poDate,
+        stateOfSupply,
+        reverseCharge,
+        additionalCharges,
+        shippingCharges: Number(additionalCharges.shipping || 0),
+        packagingCharges: Number(additionalCharges.packaging || 0),
+        otherCharges: Number(additionalCharges.other || 0),
+        files,
+        image: files.image,
+        document: files.document,
+        imageName: files.imageName,
+        documentName: files.documentName,
       };
     } catch (err) {
       console.warn(`[MySQL] Failed to fetch transaction ${id}:`, err.message);

@@ -99,6 +99,18 @@ export async function initializeDatabaseSchema() {
       await addCol("transactions", "po_number VARCHAR(100)");
       await addCol("transactions", "po_date DATE");
       await addCol("transactions", "terms TEXT");
+      await addCol("transactions", "terms_title VARCHAR(255)");
+      await addCol("transactions", "driver_name VARCHAR(100)");
+      await addCol("transactions", "state_of_supply VARCHAR(100)");
+      await addCol("transactions", "reverse_charge TINYINT(1) DEFAULT 0");
+      await addCol("transactions", "payment_terms VARCHAR(100)");
+      await addCol("transactions", "shipping_charges DECIMAL(12,2) DEFAULT 0.00");
+      await addCol("transactions", "packaging_charges DECIMAL(12,2) DEFAULT 0.00");
+      await addCol("transactions", "other_charges DECIMAL(12,2) DEFAULT 0.00");
+      await addCol("transactions", "image_url LONGTEXT");
+      await addCol("transactions", "document_url LONGTEXT");
+      await addCol("transactions", "image_name VARCHAR(255)");
+      await addCol("transactions", "document_name VARCHAR(255)");
 
       await addCol("company_profiles", "trade_name VARCHAR(255)");
       await addCol("company_profiles", "business_type VARCHAR(255)");
@@ -347,6 +359,18 @@ export async function initializeDatabaseSchema() {
       po_date DATE,
       notes TEXT,
       terms TEXT,
+      terms_title VARCHAR(255),
+      driver_name VARCHAR(100),
+      state_of_supply VARCHAR(100),
+      reverse_charge TINYINT(1) DEFAULT 0,
+      payment_terms VARCHAR(100),
+      shipping_charges DECIMAL(12,2) DEFAULT 0.00,
+      packaging_charges DECIMAL(12,2) DEFAULT 0.00,
+      other_charges DECIMAL(12,2) DEFAULT 0.00,
+      image_url LONGTEXT,
+      document_url LONGTEXT,
+      image_name VARCHAR(255),
+      document_name VARCHAR(255),
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_txns_biz_type (business_id, transaction_type),
