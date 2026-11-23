@@ -1,5 +1,5 @@
 // Implements the modal for importing parties from Phone or Gmail contacts.
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   FiX,
   FiSearch,
@@ -74,7 +74,7 @@ function getInitials(name = "") {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-export default function ImportPartiesModal({ isOpen, onClose, onImportParties }) {
+export default function ImportPartiesModal({ isOpen, onClose, onImportParties, existingParties = [] }) {
   const [step, setStep] = useState("input"); // "input" | "contacts"
   const [contacts, setContacts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -83,6 +83,29 @@ export default function ImportPartiesModal({ isOpen, onClose, onImportParties })
   const [sourceLabel, setSourceLabel] = useState("Google");
 
   const fileInputRef = useRef(null);
+
+  // Normalized lookups for existing parties to prevent duplicate selection
+  const existingNameSet = useMemo(() => {
+    return new Set(
+      (existingParties || [])
+        .map((p) => String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " "))
+        .filter(Boolean)
+    );
+  }, [existingParties]);
+
+  const existingPhoneSet = useMemo(() => {
+    return new Set(
+      (existingParties || [])
+        .map((p) => String(p.phone || p.mobile || "").replace(/\D/g, ""))
+        .filter((ph) => ph.length >= 10)
+    );
+  }, [existingParties]);
+
+  const isContactAlreadyAdded = (contact) => {
+    const normName = String(contact.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const cleanPhone = String(contact.phone || "").replace(/\D/g, "");
+    return (normName && existingNameSet.has(normName)) || (cleanPhone.length >= 10 && existingPhoneSet.has(cleanPhone));
+  };
 
   // Check if browser natively supports Web Contact Picker API
   const hasNativeContactPicker = typeof navigator !== "undefined" && "contacts" in navigator && "ContactsManager" in window;
@@ -258,12 +281,24 @@ export default function ImportPartiesModal({ isOpen, onClose, onImportParties })
 
   // Selection toggles
   const toggleContact = (id) => {
-    setContacts((current) => current.map((c) => (c.id === id ? { ...c, selected: !c.selected } : c)));
+    setContacts((current) =>
+      current.map((c) => {
+        if (c.id !== id) return c;
+        if (isContactAlreadyAdded(c)) return c; // cannot select duplicate
+        return { ...c, selected: !c.selected };
+      })
+    );
   };
 
   const toggleAll = () => {
-    const allSelected = contacts.every((c) => c.selected);
-    setContacts((current) => current.map((c) => ({ ...c, selected: !allSelected })));
+    const selectable = contacts.filter((c) => !isContactAlreadyAdded(c));
+    const allSelected = selectable.length > 0 && selectable.every((c) => c.selected);
+    setContacts((current) =>
+      current.map((c) => {
+        if (isContactAlreadyAdded(c)) return { ...c, selected: false };
+        return { ...c, selected: !allSelected };
+      })
+    );
   };
 
   const filteredContacts = contacts.filter((c) => {
@@ -276,10 +311,10 @@ export default function ImportPartiesModal({ isOpen, onClose, onImportParties })
     );
   });
 
-  const selectedCount = contacts.filter((c) => c.selected).length;
+  const selectedCount = contacts.filter((c) => c.selected && !isContactAlreadyAdded(c)).length;
 
   const handleConfirmImport = () => {
-    const selected = contacts.filter((c) => c.selected);
+    const selected = contacts.filter((c) => c.selected && !isContactAlreadyAdded(c));
     if (!selected.length) {
       setError("Please select at least one contact to import.");
       return;
@@ -505,26 +540,33 @@ export default function ImportPartiesModal({ isOpen, onClose, onImportParties })
             <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-[220px] max-h-[360px]">
               {filteredContacts.map((contact, index) => {
                 const colorClass = AVATAR_COLORS[index % AVATAR_COLORS.length];
+                const alreadyAdded = isContactAlreadyAdded(contact);
                 return (
                   <div
                     key={contact.id}
-                    onClick={() => toggleContact(contact.id)}
-                    className={`flex items-center justify-between gap-3 rounded-xl border p-3 cursor-pointer transition ${
-                      contact.selected
-                        ? "border-emerald-300 bg-emerald-50/50 shadow-2xs"
-                        : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/50"
+                    onClick={() => {
+                      if (!alreadyAdded) toggleContact(contact.id);
+                    }}
+                    className={`flex items-center justify-between gap-3 rounded-xl border p-3 transition ${
+                      alreadyAdded
+                        ? "border-slate-100 bg-slate-50/70 opacity-60 cursor-not-allowed"
+                        : contact.selected
+                        ? "border-emerald-300 bg-emerald-50/50 shadow-2xs cursor-pointer"
+                        : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/50 cursor-pointer"
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       {/* Checkbox */}
                       <div
                         className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition ${
-                          contact.selected
+                          alreadyAdded
+                            ? "border-slate-200 bg-slate-100 text-slate-300"
+                            : contact.selected
                             ? "border-emerald-600 bg-emerald-600 text-white"
                             : "border-slate-300 bg-white"
                         }`}
                       >
-                        {contact.selected && <FiCheck className="h-3.5 w-3.5 stroke-[3]" />}
+                        {!alreadyAdded && contact.selected && <FiCheck className="h-3.5 w-3.5 stroke-[3]" />}
                       </div>
 
                       {/* Initials Avatar */}
@@ -535,7 +577,7 @@ export default function ImportPartiesModal({ isOpen, onClose, onImportParties })
                       </div>
 
                       {/* Info */}
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-slate-800">
                           {contact.name}
                         </p>
@@ -555,6 +597,12 @@ export default function ImportPartiesModal({ isOpen, onClose, onImportParties })
                         </div>
                       </div>
                     </div>
+
+                    {alreadyAdded && (
+                      <span className="shrink-0 rounded-full bg-slate-200/80 text-slate-600 px-2 py-0.5 text-[10px] font-bold">
+                        Already Added
+                      </span>
+                    )}
                   </div>
                 );
               })}

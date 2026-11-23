@@ -263,12 +263,12 @@ export default function AddPartyModal({
   }, [externalParties]);
 
   const duplicateNameParty = useMemo(() => {
-    const trimmed = (form.partyName || "").trim().toLowerCase();
+    const trimmed = (form.partyName || "").trim().toLowerCase().replace(/\s+/g, " ");
     if (!trimmed) return null;
     return allParties.find(
       (p) =>
         String(p.id || "") !== String(initialParty?.id || "") &&
-        String(p.partyName || p.name || "").trim().toLowerCase() === trimmed
+        String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " ") === trimmed
     );
   }, [form.partyName, initialParty?.id, allParties]);
 
