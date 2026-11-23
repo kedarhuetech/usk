@@ -84,5 +84,9 @@ export function clearAuditTrailLogs() {
   if (typeof window === "undefined" || !window.localStorage) return;
   window.localStorage.setItem(AUDIT_TRAIL_KEY, JSON.stringify([]));
   window.dispatchEvent(new CustomEvent(AUDIT_TRAIL_UPDATED_EVENT));
+
+  if (isDatabaseMode()) {
+    auditTrailDb.clear().catch((err) => console.warn("[AuditTrail] Clear sync notice:", err.message));
+  }
 }
 

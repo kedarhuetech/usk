@@ -1024,6 +1024,12 @@ export const auditTrailDb = {
   async log(action) {
     return apiRequest("/audit-trail", { method: "POST", body: JSON.stringify(action) });
   },
+  async purge(days = 30) {
+    return apiRequest(`/audit-trail/purge?days=${days}`, { method: "POST" });
+  },
+  async clear() {
+    return apiRequest("/audit-trail", { method: "DELETE" });
+  },
 };
 
 export const reportsDb = {

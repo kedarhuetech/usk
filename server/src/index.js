@@ -38,6 +38,8 @@ import purchaseJobWorksRoutes from "./routes/purchaseJobWorksRouter.js";
 import balanceSheetRoutes from "./routes/balanceSheetRouter.js";
 import expenseCategoriesRoutes from "./routes/expenseCategoriesRouter.js";
 import expenseItemsRoutes from "./routes/expenseItemsRouter.js";
+import maintenanceRoutes from "./routes/maintenanceRouter.js";
+import { runDatabaseMaintenance } from "./services/dbMaintenanceService.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
 import { initializeDatabaseSchema } from "./db/initSchema.js";
@@ -92,6 +94,8 @@ app.use("/api/purchase-job-works", purchaseJobWorksRoutes);
 app.use("/api/balance-sheet", balanceSheetRoutes);
 app.use("/api/expense-categories", expenseCategoriesRoutes);
 app.use("/api/expense-items", expenseItemsRoutes);
+app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/database/maintenance", maintenanceRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {
@@ -113,6 +117,23 @@ const server = app.listen(PORT, "0.0.0.0", async () => {
   try {
     await initializeDatabaseSchema();
     await seedDefaultHsnCodes();
+
+    // Background automated database maintenance (15s after startup, then every 24h)
+    setTimeout(async () => {
+      try {
+        await runDatabaseMaintenance({ businessId: "all" });
+      } catch (maintErr) {
+        console.warn("[Maintenance] Startup routine notice:", maintErr.message);
+      }
+    }, 15000);
+
+    setInterval(async () => {
+      try {
+        await runDatabaseMaintenance({ businessId: "all" });
+      } catch (maintErr) {
+        console.warn("[Maintenance] Daily routine notice:", maintErr.message);
+      }
+    }, 24 * 60 * 60 * 1000);
     // syncTransactionsFromGrowth() backfill disabled on startup to prevent redundant synchronization
   } catch (err) {
     console.warn("Startup initialization warning:", err.message);
