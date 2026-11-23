@@ -555,39 +555,50 @@ export default function SaleReturns() {
 
   const openNew = () => setEditor({ mode: "new", value: newReturn(displayedRecordType, records) });
 
-  const save = (value) => {
-    const result = saveSaleReturn(value);
-    setRecords((current) => value.id ? current.map((record) => record.id === result.id ? result : record) : [result, ...current]);
+  const save = async (value) => {
+    const returnNumber = String(value.number || value.returnNumber || "1");
+    const totalAmount = Number(value.total || 0);
+    const returnId = value.id || crypto.randomUUID();
 
-    // Persist to MySQL database transactions table
-    transactionsDb.save({
-      id: result.id,
-      transactionType: "credit_note",
-      type: "credit_note",
-      documentNumber: String(result.number || result.returnNumber || "1"),
-      transactionDate: result.date || new Date().toISOString().slice(0, 10),
-      partyId: result.partyId || null,
-      partyName: result.party || result.customerName || "Cash Sale",
-      partyPhone: result.phone || result.customerPhone || null,
-      subtotal: Number(result.total || 0),
-      totalAmount: Number(result.total || 0),
-      paidAmount: Number(result.received || 0),
-      balanceAmount: Number(result.customerCreditAmount ?? result.balance ?? (result.total - (result.received || 0))),
-      paymentMode: result.paymentType || "Cash",
-      status: result.status || "Credit Available",
-      items: (result.rows || []).map((r) => ({
-        itemId: r.itemId || r.sourceItemId || null,
-        itemName: r.item || r.name || "Item",
-        quantity: Number(r.qty || 1),
-        unitPrice: Number(r.price || r.rate || 0),
-        totalAmount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
-      })),
-      notes: result.notes || result.description || `Credit Note for Invoice ${result.invoiceNumber || ""}`,
-      description: result.description || result.notes || "",
-      terms: result.terms || "",
-      linkedInvoiceId: result.invoiceNumber || result.invoiceId || null,
-      poNumber: result.invoiceNumber || result.invoiceId || null,
-    }).catch((e) => console.warn("[CreditNote MySQL Save Notice]", e.message));
+    // Persist to MySQL database transactions table FIRST
+    try {
+      await transactionsDb.save({
+        id: returnId,
+        transactionType: "credit_note",
+        type: "credit_note",
+        documentNumber: returnNumber,
+        transactionDate: value.date || new Date().toISOString().slice(0, 10),
+        partyId: value.partyId || null,
+        partyName: value.party || value.customerName || "Cash Sale",
+        partyPhone: value.phone || value.customerPhone || null,
+        subtotal: totalAmount,
+        totalAmount,
+        paidAmount: Number(value.received || 0),
+        balanceAmount: Number(value.customerCreditAmount ?? value.balance ?? (totalAmount - Number(value.received || 0))),
+        paymentMode: value.paymentType || "Cash",
+        status: value.status || "Credit Available",
+        items: (value.rows || []).map((r) => ({
+          itemId: r.itemId || r.sourceItemId || null,
+          itemName: r.item || r.name || "Item",
+          quantity: Number(r.qty || 1),
+          unitPrice: Number(r.price || r.rate || 0),
+          totalAmount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
+        })),
+        notes: value.notes || value.description || `Credit Note for Invoice ${value.invoiceNumber || ""}`,
+        description: value.description || value.notes || "",
+        terms: value.terms || "",
+        linkedInvoiceId: value.invoiceNumber || value.invoiceId || null,
+        poNumber: value.invoiceNumber || value.invoiceId || null,
+      });
+    } catch (e) {
+      console.error("[CreditNote MySQL Save Error]", e?.message);
+      toast.error(e.message || "Failed to save credit note to MySQL database.");
+      return;
+    }
+
+    const result = saveSaleReturn({ ...value, id: returnId });
+    setRecords((current) => value.id ? current.map((record) => record.id === result.id ? result : record) : [result, ...current]);
+    toast.success("Credit note saved successfully.");
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -624,14 +635,15 @@ export default function SaleReturns() {
         message: `Cancel ${record.type} ${record.number}? Linked stock and balance effects will be reversed.`,
         confirmText: "Cancel Return",
         confirmColor: "red",
-        onConfirm: () => {
+        onConfirm: async () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
           try {
+            await transactionsDb.remove(record.id);
             const next = cancelSaleReturn(record.id);
             setRecords((current) => current.map((entry) => entry.id === next.id ? next : entry));
-            transactionsDb.remove(record.id).catch(() => {});
             toast.success(`${record.type} ${record.number} cancelled`);
           } catch (error) {
+            console.error("[CreditNote MySQL Cancel Error]", error?.message);
             toast.error(`Could not cancel ${record.type}: ${error.message}`);
           }
         },

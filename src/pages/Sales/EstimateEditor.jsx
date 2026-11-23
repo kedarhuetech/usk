@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiCamera, FiChevronDown, FiFileText, FiGrid, FiList, FiPlus, FiSave, FiSettings, FiX } from "react-icons/fi";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
+import { saveBusinessParty } from "../../services/businessRecords";
 
 const STATES = ["Select", "Andhra Pradesh", "Delhi", "Gujarat", "Karnataka", "Maharashtra", "Tamil Nadu", "Telangana", "Uttar Pradesh", "West Bengal"];
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -95,7 +96,7 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
     updateRow(row.id, "item", name);
     if (item) setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, item: name, unit: item.unit || entry.unit, price: item.salePrice || item.price || entry.price, taxRate: String(item.taxRate || item.gstRate || "NONE") } : entry));
   };
-  const save = () => {
+  const save = async () => {
     const amount = Number(adjusted.toFixed(2));
     if (!customer.trim()) { setToast("Choose or enter a customer name."); return; }
     if (!rows.some((row) => row.item.trim() && Number(row.qty) > 0)) { setToast("Add at least one item and quantity."); return; }
@@ -117,8 +118,14 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
     }
 
     const existingParty = parties.find((party) => (party.partyName || party.name || "").trim().toLowerCase() === customer.trim().toLowerCase());
-    if (!existingParty) saveParty({ partyName: customer.trim(), phone: phone.trim(), billingAddress, openingBalance: "0", openingBalanceType: "to-receive" });
-    onSave({ ...(estimate || {}), customer: customer.trim(), phone, billingAddress, number: refNo.trim(), date, state, rows, amount, roundOffEnabled: roundOff, roundOffValue, terms, description, status: estimate?.status || "Open", firm: estimate?.firm || "My Company", user: estimate?.user || "You" });
+    if (!existingParty) {
+      try {
+        await saveBusinessParty({ partyName: customer.trim(), phone: phone.trim(), billingAddress, openingBalance: "0", openingBalanceType: "to-receive" });
+      } catch (err) {
+        console.warn("[EstimateEditor] Party create notice:", err?.message);
+      }
+    }
+    await onSave({ ...(estimate || {}), customer: customer.trim(), phone, billingAddress, number: refNo.trim(), date, state, rows, amount, roundOffEnabled: roundOff, roundOffValue, terms, description, status: estimate?.status || "Open", firm: estimate?.firm || "My Company", user: estimate?.user || "You" });
   };
 
   return <div className="fixed inset-0 z-40 flex min-h-0 flex-col bg-[#f3f3f3] text-slate-800">

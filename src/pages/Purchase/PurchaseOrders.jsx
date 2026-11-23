@@ -4,7 +4,8 @@ import { FiCalendar, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiX } from "rea
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
+import { saveBusinessParty } from "../../services/businessRecords";
 import { getPurchaseOrders, savePurchaseOrders, getOrderFulfillmentSummary } from "../../services/transactionRepository.js";
 import { transactionsDb, purchaseOrdersDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
@@ -295,13 +296,17 @@ export default function PurchaseOrders() {
     }
 
     const existingParty = parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.supplier.trim().toLowerCase());
-    if (!existingParty) saveParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
+    if (!existingParty) {
+      try {
+        await saveBusinessParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
+      } catch (partyErr) {
+        console.warn("[PurchaseOrders] Auto-create supplier notice:", partyErr?.message);
+      }
+    }
     const orderId = value.id || `purchase-order-${Date.now()}`;
     const saved = { ...value, id: orderId, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
-    saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
-    setEditor(null);
 
-    // Persist to MySQL backend with clear failure distinction
+    // Persist to MySQL backend FIRST with strict fail-fast validation
     try {
       await transactionsDb.save({
         ...saved,
@@ -338,11 +343,15 @@ export default function PurchaseOrders() {
         rows: saved.rows,
         items: saved.rows,
       });
-      toast.success(editor.mode === "edit" ? "Purchase order updated in database." : "Purchase order saved to database.");
     } catch (err) {
-      console.warn("[PurchaseOrders] Remote database save failed:", err?.message);
-      toast.warning("Saved locally. MySQL sync pending (server unreachable).");
+      console.error("[PurchaseOrders] Remote database save failed:", err?.message);
+      toast.error(err?.message || "Failed to save purchase order to MySQL database.");
+      return;
     }
+
+    saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
+    setEditor(null);
+    toast.success(editor.mode === "edit" ? "Purchase order updated in database." : "Purchase order saved to database.");
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -374,13 +383,13 @@ export default function PurchaseOrders() {
         confirmColor: "red",
         onConfirm: async () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-          saveList(orders.filter((entry) => entry.id !== order.id));
           try {
             await transactionsDb.remove(order.id);
-            toast.success(`Purchase order ${order.number} deleted from database.`);
+            saveList(orders.filter((entry) => entry.id !== order.id));
+            toast.success(`Purchase order ${order.number} deleted.`);
           } catch (err) {
-            console.warn("[PurchaseOrders] Remote delete failed:", err?.message);
-            toast.warning(`Deleted locally. MySQL removal pending.`);
+            console.error("[PurchaseOrders] Remote delete failed:", err?.message);
+            toast.error(err?.message || `Could not delete purchase order ${order.number}.`);
           }
         },
       });

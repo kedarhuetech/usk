@@ -3499,10 +3499,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (!validate()) return;
       let invoice;
       try {
-        invoice = localOnlyPurchase ? savePurchaseBillLocally(buildInvoice()) : await saveBusinessPurchaseBill(buildInvoice());
+        invoice = isPurchase ? await saveBusinessPurchaseBill(buildInvoice()) : await saveBusinessSaleInvoice(buildInvoice());
         finalizeOrderConversions(invoice);
       } catch (error) {
-        setToast(error.message || "Could not save purchase bill to MySQL.");
+        setToast(error.message || `Could not save ${isPurchase ? "purchase bill" : "sale"} to MySQL.`);
         return;
       }
       const barcodeItems = invoice.rows
@@ -3532,12 +3532,9 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (!validate()) return;
       try {
         const invoice = buildInvoice();
-        let savedInvoice;
-        if (isPurchase) {
-          if (localOnlyPurchase) savedInvoice = savePurchaseBillLocally(invoice);
-          else savedInvoice = await saveBusinessPurchaseBill(invoice);
-        }
-        else savedInvoice = await saveBusinessSaleInvoice(invoice);
+        const savedInvoice = isPurchase
+          ? await saveBusinessPurchaseBill(invoice)
+          : await saveBusinessSaleInvoice(invoice);
         finalizeOrderConversions(savedInvoice);
         resetSale();
       } catch (error) {
@@ -3558,21 +3555,17 @@ function AddSale({ mode = "sale", localOnly = false }) {
     }
   };
 
-  // Saves item from modal.
+  // Saves item from modal directly to MySQL database
   const saveItemFromModal = async (itemForm) => {
-    if (quotationConversion || localOnlyPurchase) {
-      const savedInventoryItem = saveInventoryItem(itemForm);
+    try {
+      const savedInventoryItem = await saveBusinessItem(itemForm);
       const newItem = saleItemFromInventory(savedInventoryItem);
       setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
       setRows((current) => current.map((row) => (row.id === addItemRowId ? syncDiscount({ ...row, item: newItem.name, unit: newItem.unit || row.unit, price: newItem.price || row.price, priceMode: newItem.priceMode || row.priceMode, taxRate: newItem.taxRate || row.taxRate, sourceItemId: newItem.id || "" }) : row)));
       setAddItemRowId(null);
-      return;
+    } catch (err) {
+      setToast(err.message || "Could not save item to MySQL.");
     }
-    const savedInventoryItem = await saveBusinessItem(itemForm);
-    const newItem = saleItemFromInventory(savedInventoryItem);
-    setItems((current) => [...current.filter((item) => item.id !== newItem.id), newItem]);
-    setRows((current) => current.map((row) => (row.id === addItemRowId ? syncDiscount({ ...row, item: newItem.name, unit: newItem.unit || row.unit, price: newItem.price || row.price, priceMode: newItem.priceMode || row.priceMode, taxRate: newItem.taxRate || row.taxRate, sourceItemId: newItem.id || "" }) : row)));
-    setAddItemRowId(null);
   };
 
   return (
