@@ -48,7 +48,6 @@ export const saleSettings = [
   { id: "transactionMessage", label: "Transaction Message", type: "checkbox", enabled: true },
   { id: "addFields", label: "Add fields to invoice", type: "link" },
   { id: "quickEntry", label: "Quick Entry", type: "checkbox", enabled: false },
-  { id: "linkPayment", label: "Link payment to invoices", type: "checkbox", enabled: false },
   { id: "dueDates", label: "Due dates & payment terms", type: "checkbox", enabled: false },
   { id: "additionalCharges", label: "Additional charges", type: "link" },
   { id: "printSettings", label: "Print Settings", type: "link" },

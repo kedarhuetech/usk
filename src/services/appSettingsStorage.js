@@ -120,6 +120,7 @@ export const DEFAULT_SETTINGS = {
     vehicleNumber: "",
     dateOfSupply: "",
   },
+  additionalChargesEnabled: false,
   additionalCharges: [
     { id: "shipping", label: "Shipping / Freight", amount: 0, enabled: false },
     { id: "packaging", label: "Packaging Charges", amount: 0, enabled: false },
@@ -134,6 +135,8 @@ export const DEFAULT_SETTINGS = {
   // Transaction -> Transaction Prefixes
   selectedPrefixFirm: "firm-1",
   salePrefix: "None",
+  salePrefixEnabled: false,
+  salePrefixText: "INV-",
   creditNotePrefix: "None",
   saleOrderPrefix: "None",
   purchaseOrderPrefix: "None",
@@ -158,6 +161,7 @@ export const DEFAULT_SETTINGS = {
   billingType: "Full Sale", // "Lite Sale" or "Full Sale"
 
   // Print (Matching USK Desktop)
+  printPaperSize: "A4",
   printActiveTab: "regular",
   printSubTab: "layout",
   selectedTheme: "GST Theme 5",
