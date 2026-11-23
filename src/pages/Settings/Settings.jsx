@@ -21,7 +21,7 @@ import {
 import { useAppPasscode } from "../../components/Passcode/passcodeContext.js";
 import { validatePasscodeForm } from "../../services/appPasscodeValidation.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
-import { addCustomUnit, getUnits } from "../../services/unitsStorage.js";
+import ItemTab from "./ItemTab";
 import {
   applyScreenZoom,
   resetAppSettings,
@@ -2511,107 +2511,8 @@ function TransactionTab({ settings, update, showToast }) {
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
-// ITEM TAB
+// ITEM TAB (Delegated to ItemTab.jsx)
 // -------------------------------------------------------------
-function ItemTab({ settings, update }) {
-  const [units, setUnits] = useState(getUnits);
-  const [newUnit, setNewUnit] = useState("");
-
-  const saveUnit = () => {
-    const value = newUnit.trim();
-    if (!value) return;
-    const updated = addCustomUnit(value);
-    setUnits(updated);
-    setNewUnit("");
-  };
-
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Inventory & Item Properties</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableBarcodeScanning ?? true}
-              onChange={(e) => update("enableBarcodeScanning", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Barcode Scanning Support
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableItemCategory ?? true}
-              onChange={(e) => update("enableItemCategory", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable Item Categories & Sub-Categories
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.stopSaleOnNegativeStock ?? false} onChange={(e) => update("stopSaleOnNegativeStock", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Stock Maintenance <span className="font-normal text-slate-500">(block sales exceeding available stock)</span>
-          </label>
-
-          <div className="rounded-md border border-slate-200 p-3">
-            <label className="block text-xs font-semibold text-slate-700">Items Unit</label>
-            <p className="mt-1 text-xs text-slate-500">Shared unit list used by item forms and transaction unit selectors.</p>
-            <div className="mt-2 flex gap-2">
-              <input value={newUnit} onChange={(event) => setNewUnit(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); saveUnit(); } }} placeholder="Add unit (for example, Carton)" className="h-9 min-w-0 flex-1 rounded border border-slate-300 px-2 text-xs" />
-              <button type="button" onClick={saveUnit} disabled={!newUnit.trim()} className="rounded bg-blue-600 px-3 text-xs font-semibold text-white disabled:opacity-50">Add Unit</button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">Available: {units.join(", ")}</p>
-          </div>
-
-          <label className="flex items-center gap-3 text-xs font-semibold text-slate-700">
-            <span>Default Unit</span>
-            <select value={settings.defaultItemUnit || "PCS"} onChange={(event) => update("defaultItemUnit", event.target.value)} className="h-9 min-w-32 rounded border border-slate-300 bg-white px-2 text-xs">
-              {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-            </select>
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.enableItemDescription ?? true} onChange={(e) => update("enableItemDescription", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Item Description
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.enableGst ?? true} onChange={(e) => update("enableGst", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Item-wise Tax
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.enableItemDiscount ?? true} onChange={(e) => update("enableItemDiscount", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Item-wise Discount
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.enableBatchTracking)}
-              onChange={(e) => update("enableBatchTracking", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Batch Tracking (Batch No, Expiry & Manufacturing Dates)
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.enableSerialTracking)}
-              onChange={(e) => update("enableSerialTracking", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Serial / IMEI Tracking
-          </label>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 
 // -------------------------------------------------------------

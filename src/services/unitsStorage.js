@@ -1,5 +1,5 @@
 // Provides the units storage application service.
-import { units as defaultUnits } from "../constants/itemsData";
+import { units as defaultUnits } from "../constants/itemsData.js";
 import { unitsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 
