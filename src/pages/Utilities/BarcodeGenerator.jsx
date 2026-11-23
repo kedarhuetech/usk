@@ -1,5 +1,5 @@
 // Implements the barcode generator page.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FiAlertCircle,
   FiDownload,
@@ -10,6 +10,7 @@ import {
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { loadBusinessItems } from "../../services/businessRecords.js";
 import { getBarcodeBars } from "../../utils/barcode";
 import { useAppSettings } from "../../hooks/useAppSettings";
 
@@ -87,7 +88,7 @@ function BarcodeLabel({ form, barcode }) {
 function BarcodeGenerator() {
   const { enableBarcodeScanning } = useAppSettings();
 
-  const [inventory] = useState(() => {
+  const [inventory, setInventory] = useState(() => {
     const items = getInventoryItems().filter(
       (item) => item.type !== "service"
     );
@@ -107,6 +108,23 @@ function BarcodeGenerator() {
       return true;
     });
   });
+
+  useEffect(() => {
+    loadBusinessItems().then((dbItems) => {
+      if (Array.isArray(dbItems) && dbItems.length > 0) {
+        const seen = new Set();
+        const filtered = dbItems.filter((item) => item.type !== "service").filter((item) => {
+          const name = (item.itemName || "").trim().toLowerCase();
+          const code = (item.itemCode || "").trim().toLowerCase();
+          const key = !code && name === "new item" ? `id:${item.id}` : `${name}|${code}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setInventory(filtered);
+      }
+    }).catch(() => {});
+  }, []);
 
   const [form, setForm] = useState(initialForm);
   const [generated, setGenerated] = useState(null);

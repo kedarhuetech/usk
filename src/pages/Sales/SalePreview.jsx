@@ -1,15 +1,13 @@
 // Implements the sale preview page with multiple themes and color selection.
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import {
-  FiCheck,
   FiDownload,
   FiMail,
   FiMessageCircle,
   FiPrinter,
-  FiX,
 } from "react-icons/fi";
 import Button from "../../components/Common/Button";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
@@ -28,7 +26,7 @@ import {
 } from "../../services/transactionMessageService.js";
 
 // Color palette for accent colors.
-export const colorOptions = [
+const colorOptions = [
   { name: "Magenta", bg: "bg-[#881337]", text: "text-[#881337]", border: "border-[#881337]", hex: "#881337", bgLight: "bg-rose-50", textLight: "text-[#881337]", borderLight: "border-rose-200" },
   { name: "Indigo", bg: "bg-indigo-600", text: "text-indigo-600", border: "border-indigo-600", hex: "#4f46e5", bgLight: "bg-indigo-50", textLight: "text-indigo-700", borderLight: "border-indigo-200" },
   { name: "Sky", bg: "bg-sky-600", text: "text-sky-600", border: "border-sky-600", hex: "#0284c7", bgLight: "bg-sky-50", textLight: "text-sky-700", borderLight: "border-sky-200" },
@@ -40,7 +38,7 @@ export const colorOptions = [
   { name: "Purple", bg: "bg-purple-600", text: "text-purple-600", border: "border-purple-600", hex: "#9333ea", bgLight: "bg-purple-50", textLight: "text-purple-700", borderLight: "border-purple-200" },
 ];
 
-export const themeList = [
+const themeList = [
   "GST Theme 1",
   "GST Theme 2",
   "GST Theme 3",
@@ -90,7 +88,7 @@ function readStoredInvoice() {
 }
 
 // Converts number to Indian currency words.
-export function numberToWords(num) {
+function numberToWords(num) {
   const n = Number(num);
   if (!Number.isFinite(n) || n === 0) return "Zero Rupees Only";
 
@@ -204,6 +202,16 @@ function normalizeInvoiceData(raw) {
     terms,
     termsTitle,
     isRcm,
+    txnField1: form.txnField1 || raw.txnField1 || raw.vehicleNumber || form.vehicleNumber || "",
+    txnField2: form.txnField2 || raw.txnField2 || raw.driverName || form.driverName || "",
+    txnField3: form.txnField3 || raw.txnField3 || raw.lrNumber || form.lrNumber || "",
+    dateField: form.dateField || raw.dateField || form.deliveryDate || raw.deliveryDate || "",
+    vehicleNumber: form.vehicleNumber || raw.vehicleNumber || form.txnField1 || raw.txnField1 || "",
+    driverName: form.driverName || raw.driverName || form.txnField2 || raw.txnField2 || "",
+    lrNumber: form.lrNumber || raw.lrNumber || form.txnField3 || raw.txnField3 || "",
+    deliveryDate: form.deliveryDate || raw.deliveryDate || form.dateField || raw.dateField || "",
+    poNumber: form.poNumber || raw.poNumber || "",
+    poDate: form.poDate || raw.poDate || "",
     rows: rows.length > 0 ? rows : [{ id: "empty", item: "Sample Item", hsn: "1001", qty: 1, unit: "PCS", price: finalTotal || 0, discount: 0, tax: 0, cess: 0, amount: finalTotal || 0 }],
     totals: {
       qty: totalQty || 1,
@@ -222,9 +230,19 @@ function normalizeInvoiceData(raw) {
 
 // ─────────────────── REUSABLE BLOCKS ───────────────────
 
-export function BankDetailsBlock({ color, appSettings = {} }) {
+export function BankDetailsBlock({ color, appSettings = {}, bankDetails = {} }) {
   if (appSettings.printBankDetails === false) return null;
   const hex = color?.hex || appSettings.themeColor || "#881337";
+  const bankName = bankDetails?.bankName || "";
+  const accountNumber = bankDetails?.accountNumber || "";
+  const ifscCode = bankDetails?.ifscCode || "";
+  const branchName = bankDetails?.branchName || "";
+  const upiId = bankDetails?.upiId || "";
+
+  if (!bankName && !accountNumber && !ifscCode && !upiId) {
+    return null;
+  }
+
   return (
     <div className="border border-slate-200 rounded p-2.5 space-y-1 bg-white">
       <p className="font-bold text-xs" style={{ color: hex }}>Bank Details</p>
@@ -234,9 +252,11 @@ export function BankDetailsBlock({ color, appSettings = {} }) {
           <span className="text-[6px] font-bold text-emerald-700 mt-0.5">UPI PAY</span>
         </div>
         <div className="text-[11px] text-slate-600 space-y-0.5">
-          <p><span className="font-semibold text-slate-700">Bank:</span> HDFC Bank</p>
-          <p><span className="font-semibold text-slate-700">A/c No:</span> 50200012345678</p>
-          <p><span className="font-semibold text-slate-700">IFSC:</span> HDFC0001234</p>
+          {bankName && <p><span className="font-semibold text-slate-700">Bank:</span> {bankName}</p>}
+          {accountNumber && <p><span className="font-semibold text-slate-700">A/c No:</span> {accountNumber}</p>}
+          {ifscCode && <p><span className="font-semibold text-slate-700">IFSC:</span> {ifscCode}</p>}
+          {branchName && <p><span className="font-semibold text-slate-700">Branch:</span> {branchName}</p>}
+          {upiId && <p><span className="font-semibold text-slate-700">UPI:</span> {upiId}</p>}
         </div>
       </div>
     </div>
@@ -264,7 +284,7 @@ export function SignatureBlock({ companyName, signature, color, appSettings = {}
 // ─────────────────── THEME RENDERERS ───────────────────
 
 // 1. GST Theme 5 - USK Signature Magenta Layout (Default)
-export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#881337";
   const docTitle = appSettings.compositeScheme
     ? "Bill of Supply"
@@ -325,6 +345,15 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {appSettings.printGstinOnSale !== false && companyGstin && (
             <p className="text-slate-600 text-[11px] font-semibold mt-0.5">GSTIN : {companyGstin}</p>
           )}
+          {["firmField1", "firmField2"].map((k) => {
+            const f = appSettings?.additionalFieldsSetup?.[k];
+            if (!f?.enabled || f.showInPrint === false || !f.name) return null;
+            return (
+              <p key={k} className="text-slate-600 text-[11px] font-medium mt-0.5">
+                {f.name} : {f.value || ""}
+              </p>
+            );
+          })}
         </div>
       </div>
 
@@ -353,6 +382,17 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {appSettings.enablePlaceOfSupply !== false && (
             <p className="text-slate-600 text-[11px]">Place of supply: {data.stateOfSupply}</p>
           )}
+          {["txnField1", "txnField2", "txnField3", "dateField"].map((k) => {
+            const f = appSettings?.additionalFieldsSetup?.[k];
+            if (!f?.enabled || f.showInPrint === false) return null;
+            const val = data[k] || (k === "txnField1" ? data.vehicleNumber : k === "txnField2" ? data.driverName : k === "txnField3" ? data.lrNumber : data.deliveryDate);
+            if (!val && !f.value) return null;
+            return (
+              <p key={k} className="text-slate-600 text-[11px]">
+                {f.name || "Field"}: {val || f.value}
+              </p>
+            );
+          })}
         </div>
       </div>
 
@@ -483,7 +523,7 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
         showBank ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 md:grid-cols-2"
       }`}>
         {/* Bank details completely omitted if printBankDetails is false */}
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
 
         {showTerms && (
           <div className="border border-slate-200 rounded p-2.5 bg-white">
@@ -503,7 +543,7 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
 }
 
 // 2. GST Theme 1 - Classic Bordered Grid Layout
-export function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#1d4ed8";
   const docTitle = appSettings.compositeScheme ? "BILL OF SUPPLY" : appSettings.transactionNames?.saleInvoice || "Tax Invoice";
   const showBank = appSettings.printBankDetails !== false;
@@ -569,7 +609,7 @@ export function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddr
       </div>
 
       <div className={`mt-4 grid gap-3 border-t border-slate-200 pt-3 ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
         <div className="flex justify-end">
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
@@ -579,7 +619,7 @@ export function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddr
 }
 
 // 3. GST Theme 2 - Modern Split Header Layout
-export function GSTTheme2({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function GSTTheme2({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#0284c7";
   const docTitle = appSettings.compositeScheme ? "Bill of Supply" : appSettings.transactionNames?.saleInvoice || "Tax Invoice";
   const showBank = appSettings.printBankDetails !== false;
@@ -645,7 +685,7 @@ export function GSTTheme2({ companyName, companyPhone, companyGstin, companyAddr
       </div>
 
       <div className={`mt-5 grid gap-3 pt-3 border-t border-slate-200 ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
         <div className="flex justify-end">
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
@@ -655,7 +695,7 @@ export function GSTTheme2({ companyName, companyPhone, companyGstin, companyAddr
 }
 
 // 4. GST Theme 3 - Elegant Double-Framed Theme
-export function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#0f766e";
   const docTitle = appSettings.compositeScheme ? "BILL OF SUPPLY" : appSettings.transactionNames?.saleInvoice || "Tax Invoice";
   const showBank = appSettings.printBankDetails !== false;
@@ -703,7 +743,7 @@ export function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddr
       </div>
 
       <div className={`mt-5 grid gap-3 pt-3 border-t border-slate-200 font-sans ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
         <div className="flex justify-end">
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
@@ -713,7 +753,7 @@ export function GSTTheme3({ companyName, companyPhone, companyGstin, companyAddr
 }
 
 // 5. GST Theme 4 - Corporate Minimalist Theme
-export function GSTTheme4({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function GSTTheme4({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#334155";
   const docTitle = appSettings.compositeScheme ? "Bill of Supply" : "Invoice";
   const showBank = appSettings.printBankDetails !== false;
@@ -772,7 +812,7 @@ export function GSTTheme4({ companyName, companyPhone, companyGstin, companyAddr
       </div>
 
       <div className={`mt-6 grid gap-3 pt-4 border-t border-slate-200 ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
         <div className="flex justify-end">
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
@@ -782,7 +822,7 @@ export function GSTTheme4({ companyName, companyPhone, companyGstin, companyAddr
 }
 
 // 6. GST Theme 6 - Premium Bold Header Accent
-export function GSTTheme6({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function GSTTheme6({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const hex = color?.hex || appSettings.themeColor || "#7e22ce";
   const docTitle = appSettings.compositeScheme ? "Bill of Supply" : appSettings.transactionNames?.saleInvoice || "Tax Invoice";
   const showBank = appSettings.printBankDetails !== false;
@@ -849,7 +889,7 @@ export function GSTTheme6({ companyName, companyPhone, companyGstin, companyAddr
         </div>
 
         <div className={`mt-5 grid gap-3 pt-3 border-t border-slate-200 ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-          {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+          {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
           <div className="flex justify-end">
             <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
           </div>
@@ -860,7 +900,7 @@ export function GSTTheme6({ companyName, companyPhone, companyGstin, companyAddr
 }
 
 // 7. Bill of Supply (Non-GST / Composition Scheme)
-export function BillOfSupplyTheme({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function BillOfSupplyTheme({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const showBank = appSettings.printBankDetails !== false;
 
   return (
@@ -922,7 +962,7 @@ export function BillOfSupplyTheme({ companyName, companyPhone, companyGstin, com
       </table>
 
       <div className={`mt-5 grid gap-3 pt-3 border-t border-slate-200 ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
         <div className="flex justify-end">
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
@@ -932,7 +972,7 @@ export function BillOfSupplyTheme({ companyName, companyPhone, companyGstin, com
 }
 
 // 8. Classic Simple - Monochrome Ledger
-export function ClassicSimpleTheme({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, data, color, appSettings = {} }) {
+export function ClassicSimpleTheme({ companyName, companyPhone, companyGstin, companyAddress, companyLogo, companySignature, bankDetails = {}, data, color, appSettings = {} }) {
   const showBank = appSettings.printBankDetails !== false;
 
   return (
@@ -976,7 +1016,7 @@ export function ClassicSimpleTheme({ companyName, companyPhone, companyGstin, co
       </table>
 
       <div className={`mt-5 grid gap-3 pt-3 border-t border-black font-sans ${showBank ? "grid-cols-2" : "grid-cols-1"}`}>
-        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} />}
+        {showBank && <BankDetailsBlock color={color} appSettings={appSettings} bankDetails={bankDetails} />}
         <div className="flex justify-end">
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         </div>
@@ -1117,19 +1157,6 @@ function SalePreview() {
     }
   };
 
-  const uploadInvoiceImage = async (blob, invoiceNumber) => {
-    if (!blob) return "";
-    try {
-      const file = new File([blob], `Invoice-${invoiceNumber}.png`, { type: "image/png" });
-      const asset = await businessGrowthApi.upload(file, "sale-invoice-image", String(invoiceNumber));
-      if (asset?.url) {
-        return `${window.location.origin}${asset.url}?businessId=demo-business`;
-      }
-    } catch (err) {
-      console.warn("Could not upload invoice image asset:", err.message);
-    }
-    return "";
-  };
 
   const handleShareWhatsApp = async () => {
     if (!normalized) return;
@@ -1162,10 +1189,10 @@ function SalePreview() {
       date: normalized.invoiceDateFormatted,
       items: normalized.rows,
       bankDetails: {
-        bankName: appSettings.printBankDetails !== false ? (profile.bankName || "HDFC Bank") : "",
-        accountNumber: appSettings.printBankDetails !== false ? (profile.accountNumber || "50200012345678") : "",
-        ifscCode: appSettings.printBankDetails !== false ? (profile.ifscCode || "HDFC0001234") : "",
-        upiId: profile.upiId || "",
+        bankName: appSettings.printBankDetails !== false ? (bankDetails.bankName || "") : "",
+        accountNumber: appSettings.printBankDetails !== false ? (bankDetails.accountNumber || "") : "",
+        ifscCode: appSettings.printBankDetails !== false ? (bankDetails.ifscCode || "") : "",
+        upiId: bankDetails.upiId || "",
       },
       companyName: effectiveCompany,
       companyPhone: companyPhone,
@@ -1225,10 +1252,10 @@ function SalePreview() {
       date: normalized.invoiceDateFormatted,
       items: normalized.rows,
       bankDetails: {
-        bankName: appSettings.printBankDetails !== false ? (profile.bankName || "HDFC Bank") : "",
-        accountNumber: appSettings.printBankDetails !== false ? (profile.accountNumber || "50200012345678") : "",
-        ifscCode: appSettings.printBankDetails !== false ? (profile.ifscCode || "HDFC0001234") : "",
-        upiId: profile.upiId || "",
+        bankName: appSettings.printBankDetails !== false ? (bankDetails.bankName || "") : "",
+        accountNumber: appSettings.printBankDetails !== false ? (bankDetails.accountNumber || "") : "",
+        ifscCode: appSettings.printBankDetails !== false ? (bankDetails.ifscCode || "") : "",
+        upiId: bankDetails.upiId || "",
       },
       companyName: effectiveCompany,
       companyPhone: companyPhone,
@@ -1241,7 +1268,7 @@ function SalePreview() {
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(targetEmail)}&su=${subject}&body=${body}`;
     const win = window.open(gmailUrl, "_blank");
     if (!win) {
-      window.location.href = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
+      window.open(`mailto:${targetEmail}?subject=${subject}&body=${body}`, "_self");
     }
 
     setIsGeneratingImage(false);
@@ -1345,6 +1372,14 @@ function SalePreview() {
   const companyAddress = savedBusiness?.address || profile.businessAddress || normalized.business?.address;
   const companySignature = profile.signature || savedBusiness?.signatureUrl || "";
 
+  const bankDetails = {
+    bankName: profile.bankName || profile.bankDetails?.bankName || appSettings.bankAccount?.bankName || "",
+    accountNumber: profile.accountNumber || profile.bankDetails?.accountNumber || appSettings.bankAccount?.accountNumber || "",
+    ifscCode: profile.ifscCode || profile.bankDetails?.ifscCode || appSettings.bankAccount?.ifscCode || "",
+    branchName: profile.branchName || profile.bankDetails?.branchName || appSettings.bankAccount?.branchName || "",
+    upiId: profile.upiId || profile.bankDetails?.upiId || appSettings.bankAccount?.upiId || appSettings.upiId || "",
+  };
+
   const currentColor = colorOptions[selectedColorIndex];
   const ThemeComponent = themeComponents[selectedTheme] || GSTTheme5;
 
@@ -1394,6 +1429,7 @@ function SalePreview() {
               companyAddress={appSettings.printAddress !== false ? (appSettings.addressPrint || companyAddress) : ""}
               companyLogo={appSettings.printCompanyLogo !== false ? companyLogo : ""}
               companySignature={companySignature}
+              bankDetails={bankDetails}
               data={normalized}
               color={currentColor}
               appSettings={appSettings}

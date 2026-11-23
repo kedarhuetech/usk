@@ -11,9 +11,9 @@ export const AUTO_BACKUP_HISTORY_KEY = "ledgerly:autoBackupSnapshots.v1";
 const defaultCompany = () => {
   try {
     const profile = getCompanyProfile();
-    return profile?.companyName || "Sai Kirana Stores";
+    return profile?.companyName || profile?.businessName || "My Business";
   } catch {
-    return "Sai Kirana Stores";
+    return "My Business";
   }
 };
 
@@ -120,6 +120,7 @@ export const DEFAULT_SETTINGS = {
     vehicleNumber: "",
     dateOfSupply: "",
   },
+  additionalChargesEnabled: false,
   additionalCharges: [
     { id: "shipping", label: "Shipping / Freight", amount: 0, enabled: false },
     { id: "packaging", label: "Packaging Charges", amount: 0, enabled: false },
@@ -134,6 +135,8 @@ export const DEFAULT_SETTINGS = {
   // Transaction -> Transaction Prefixes
   selectedPrefixFirm: "firm-1",
   salePrefix: "None",
+  salePrefixEnabled: false,
+  salePrefixText: "INV-",
   creditNotePrefix: "None",
   saleOrderPrefix: "None",
   purchaseOrderPrefix: "None",
@@ -158,6 +161,7 @@ export const DEFAULT_SETTINGS = {
   billingType: "Full Sale", // "Lite Sale" or "Full Sale"
 
   // Print (Matching USK Desktop)
+  printPaperSize: "A4",
   printActiveTab: "regular",
   printSubTab: "layout",
   selectedTheme: "GST Theme 5",
@@ -165,7 +169,7 @@ export const DEFAULT_SETTINGS = {
   makeRegularPrinterDefault: true,
   printRepeatHeader: true,
   printCompanyName: true,
-  companyNamePrint: "sai kirana stores",
+  companyNamePrint: defaultCompany(),
   printCompanyLogo: true,
   companyLogo: "",
   printAddress: true,
@@ -173,7 +177,7 @@ export const DEFAULT_SETTINGS = {
   printEmail: true,
   emailPrint: "",
   printPhoneNumber: true,
-  phoneNumberPrint: "8369501991",
+  phoneNumberPrint: "",
   printGstinOnSale: true,
   printerType: "Regular",
   paperSize: "A4",
@@ -240,8 +244,8 @@ export const DEFAULT_SETTINGS = {
   reverseCharge: true,
   reverseChargeApplicable: true,
   enablePlaceOfSupply: true,
-  compositeScheme: true,
-  compositeSchemeType: "Manufacturer 1.0%",
+  compositeScheme: false,
+  compositeSchemeType: "Trader 1.0%",
   enableTcs: false,
   enableTds: false,
   tcsRate: 0.1,
@@ -292,7 +296,7 @@ export const DEFAULT_SETTINGS = {
   txnMsgAutoCancelledInvoice: true,
 
   // Transaction Message Custom Signatures & Headers
-  txnMsgSignature: "sai kirana",
+  txnMsgSignature: defaultCompany(),
   txnMsgTemplates: {
     sales: "Thanks for your purchase with us!! Purchase Details:",
     purchase: "Purchase order confirmed with us. Details:",
@@ -384,7 +388,7 @@ export function getAppSettings() {
 
     // Auto-heal in browser: Any stray "$" or "USD" currency symbol or baseCurrency in localStorage
     // is permanently cleaned up and restored to standard Indian Rupee (₹ / INR).
-    const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
+    const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
     if (!isNodeTest) {
       let needsHeal = false;
       if (settings.currencySymbol === "$" || settings.currencySymbol === "USD") {
@@ -413,6 +417,24 @@ export function getAppSettings() {
         } catch {}
       }
     }
+
+    // Always sync active company profile name & phone into settings so changes in company profile reflect immediately
+    try {
+      const liveProfile = getCompanyProfile();
+      const liveName = (liveProfile?.companyName || liveProfile?.businessName || "").trim();
+      if (liveName && liveName.toLowerCase() !== "sai kirana stores") {
+        settings.companyName = liveName;
+        settings.companyNamePrint = liveName;
+        if (Array.isArray(settings.firms) && settings.firms.length > 0) {
+          settings.firms[0].name = liveName;
+        }
+      }
+      const livePhone = (liveProfile?.phoneNumber || liveProfile?.phone || "").trim();
+      if (livePhone && livePhone !== "8369501991") {
+        settings.phoneNumberPrint = livePhone;
+        settings.companyPhone = livePhone;
+      }
+    } catch {}
 
     return settings;
   } catch (error) {
@@ -477,8 +499,8 @@ export function applyScreenZoom(zoomString) {
 
 export function formatCurrency(value, currencyCode = null) {
   const settings = getAppSettings();
-  const isNodeTest = typeof process !== "undefined" && Boolean(process.env?.NODE_TEST_CONTEXT || process.env?.NODE_ENV === "test");
-  let sym = "₹";
+  const isNodeTest = typeof globalThis !== "undefined" && Boolean(globalThis.process?.env?.NODE_TEST_CONTEXT || globalThis.process?.env?.NODE_ENV === "test");
+  let sym;
   if (settings.multiCurrencyEnabled && settings.baseCurrency?.symbol) {
     sym = settings.baseCurrency.symbol;
   } else if (settings.currencySymbol && settings.currencySymbol !== "$" && settings.currencySymbol !== "USD") {
@@ -606,18 +628,42 @@ export function restoreSnapshot(snapshotId) {
   return true;
 }
 
-export function exportBackupData() {
+export async function exportBackupData() {
   if (typeof window === "undefined" || !window.localStorage) return;
   // Also create a local snapshot
   createAutoBackupSnapshot("Manual Export Backup");
 
-  const backup = {};
+  const backup = {
+    format: "usk-unified-backup",
+    version: 2,
+    createdAt: new Date().toISOString(),
+    localStorage: {},
+    mysqlDump: null,
+  };
+
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
     if (key && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
-      backup[key] = window.localStorage.getItem(key);
+      const val = window.localStorage.getItem(key);
+      backup.localStorage[key] = val;
+      backup[key] = val;
     }
   }
+
+  // Also include MySQL database tables if backend is active
+  try {
+    const res = await fetch("/api/backup/export");
+    if (res.ok) {
+      const dbDump = await res.json();
+      backup.mysqlDump = dbDump;
+      if (dbDump.tables) {
+        backup.tables = dbDump.tables;
+      }
+    }
+  } catch (err) {
+    console.warn("[Backup Notice] Could not export MySQL dump directly:", err.message);
+  }
+
   const dateStr = new Date().toISOString().replace(/[:.]/g, "-");
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -635,15 +681,33 @@ export function exportBackupData() {
 export async function restoreBackupData(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target.result);
         if (typeof data !== "object" || data === null) throw new Error("Invalid backup format");
-        Object.entries(data).forEach(([key, val]) => {
-          if (typeof val === "string") {
+
+        // 1. Restore MySQL database tables if present in backup file
+        const mysqlTables = data.mysqlDump?.tables || data.tables;
+        if (mysqlTables && typeof mysqlTables === "object") {
+          try {
+            await fetch("/api/backup/restore", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ tables: mysqlTables }),
+            });
+          } catch (mysqlErr) {
+            console.warn("[Restore Notice] Server MySQL restore notice:", mysqlErr.message);
+          }
+        }
+
+        // 2. Restore localStorage keys
+        const localSource = data.localStorage && typeof data.localStorage === "object" ? data.localStorage : data;
+        Object.entries(localSource).forEach(([key, val]) => {
+          if (typeof val === "string" && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
             window.localStorage.setItem(key, val);
           }
         });
+
         recordAuditTrail({
           action: "Backup Restored from File",
           entity: "Backup",

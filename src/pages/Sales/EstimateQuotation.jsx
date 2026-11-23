@@ -178,6 +178,12 @@ export default function EstimateQuotation() {
         transactionDate: saved.date,
         partyName: saved.customer,
         totalAmount: Number(saved.amount || 0),
+        terms: saved.terms || "",
+        notes: saved.description || "",
+        description: saved.description || "",
+        billingAddress: saved.billingAddress || "",
+        shippingAddress: saved.shippingAddress || saved.billingAddress || "",
+        stateOfSupply: saved.state || "",
         items: (saved.rows || []).map((r) => ({
           itemName: r.item,
           description: r.description,

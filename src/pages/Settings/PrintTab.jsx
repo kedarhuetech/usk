@@ -7,8 +7,9 @@ import {
   FiInfo,
   FiX,
 } from "react-icons/fi";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 
-export const PRINT_THEMES = [
+const PRINT_THEMES = [
   { id: "theme-1", name: "GST Theme 1", desc: "Classic Bordered Grid" },
   { id: "theme-2", name: "GST Theme 2", desc: "Modern Card Header" },
   { id: "theme-3", name: "GST Theme 3", desc: "Elegant Framed Border" },
@@ -19,7 +20,7 @@ export const PRINT_THEMES = [
   { id: "theme-classic", name: "Classic Simple", desc: "Monochrome Ledger" },
 ];
 
-export const THEME_COLORS = [
+const THEME_COLORS = [
   { id: "magenta", name: "Magenta", hex: "#881337" },
   { id: "maroon", name: "Maroon", hex: "#9f1239" },
   { id: "royal-blue", name: "Royal Blue", hex: "#1d4ed8" },
@@ -43,6 +44,13 @@ function InfoTooltip({ text }) {
 }
 
 export default function PrintTab({ settings, update }) {
+  const profile = getCompanyProfile();
+  const defaultCompanyName = profile?.companyName || profile?.businessName || settings.companyName || "My Business";
+  const defaultPhone = profile?.phoneNumber || profile?.phone || settings.companyPhone || "";
+  const defaultAddress = profile?.businessAddress || profile?.address || "";
+  const defaultEmail = profile?.emailId || profile?.email || "";
+  const defaultGstin = profile?.gstin || "";
+
   const [activePrinterTab, setActivePrinterTab] = useState(settings.printActiveTab || "regular");
   const [activeSubTab, setActiveSubTab] = useState(settings.printSubTab || "layout");
   const [carouselIndex, setCarouselIndex] = useState(2);
@@ -376,7 +384,7 @@ export default function PrintTab({ settings, update }) {
                   </label>
                   <input
                     type="text"
-                    value={settings.companyNamePrint ?? "sai kirana stores"}
+                    value={settings.companyNamePrint ?? defaultCompanyName}
                     onChange={(e) => update("companyNamePrint", e.target.value)}
                     disabled={settings.printCompanyName === false}
                     className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
@@ -421,7 +429,7 @@ export default function PrintTab({ settings, update }) {
                   <input
                     type="text"
                     placeholder="Enter business address"
-                    value={settings.addressPrint ?? ""}
+                    value={settings.addressPrint ?? defaultAddress}
                     onChange={(e) => update("addressPrint", e.target.value)}
                     disabled={settings.printAddress === false}
                     className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
@@ -445,7 +453,7 @@ export default function PrintTab({ settings, update }) {
                   <input
                     type="email"
                     placeholder="Enter business email"
-                    value={settings.emailPrint ?? ""}
+                    value={settings.emailPrint ?? defaultEmail}
                     onChange={(e) => update("emailPrint", e.target.value)}
                     disabled={settings.printEmail === false}
                     className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
@@ -468,7 +476,7 @@ export default function PrintTab({ settings, update }) {
                   </label>
                   <input
                     type="text"
-                    value={settings.phoneNumberPrint ?? "8369501991"}
+                    value={settings.phoneNumberPrint ?? defaultPhone}
                     onChange={(e) => update("phoneNumberPrint", e.target.value)}
                     disabled={settings.printPhoneNumber === false}
                     className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
@@ -905,21 +913,21 @@ export default function PrintTab({ settings, update }) {
                 {/* Paper Tear / Header */}
                 <div className="border-b border-dashed border-slate-400 pb-2 text-center">
                   <div className="font-bold text-xs uppercase tracking-wide">
-                    {settings.companyNamePrint || settings.companyName || "Sai Kirana Stores"}
+                    {settings.companyNamePrint || defaultCompanyName}
                   </div>
                   {settings.printAddress && (
                     <div className="text-[9px] text-slate-600">
-                      {settings.companyAddress || "Koramangala, Bangalore, KA"}
+                      {settings.addressPrint || defaultAddress || "Koramangala, Bangalore, KA"}
                     </div>
                   )}
                   {settings.printPhoneNumber && (
                     <div className="text-[9px] text-slate-600">
-                      Ph: {settings.phoneNumberPrint || settings.companyPhone || "8369501991"}
+                      Ph: {settings.phoneNumberPrint || defaultPhone}
                     </div>
                   )}
                   {settings.printGstinOnSale && (
                     <div className="text-[8.5px] font-semibold text-slate-700">
-                      GSTIN: {settings.companyGstin || "29AABCU9603R1ZM"}
+                      GSTIN: {defaultGstin || "27AAACH7409R1Z1"}
                     </div>
                   )}
                   <div className="mt-1.5 inline-block border-y border-slate-400 py-0.5 text-[9.5px] font-bold tracking-wider">
@@ -997,7 +1005,7 @@ export default function PrintTab({ settings, update }) {
 
                 <div className="pt-1 text-center text-[8.5px] text-slate-600 space-y-0.5">
                   <p className="font-bold">THANK YOU! VISIT AGAIN</p>
-                  <p className="text-[7.5px] text-slate-400">*** {settings.companyNamePrint || settings.companyName || "Sai Kirana Stores"} ***</p>
+                  <p className="text-[7.5px] text-slate-400">*** {settings.companyNamePrint || defaultCompanyName} ***</p>
                 </div>
               </div>
             </div>
@@ -1145,11 +1153,12 @@ export default function PrintTab({ settings, update }) {
 // DYNAMIC LIVE THEME RENDERER (Supports all 8 themes)
 // -------------------------------------------------------------
 function LiveThemeRenderer({ themeName, themeColor, settings }) {
-  const companyName = settings.companyNamePrint || "sai kirana stores";
-  const phone = settings.phoneNumberPrint || "8369501991";
-  const address = settings.addressPrint || "Plot No. 1, Shop No. 8, Koramangala, Bangalore - 560034";
-  const email = settings.emailPrint || "contact@saikirana.com";
-  const gstin = "29AABCU9603R1ZM";
+  const profile = getCompanyProfile();
+  const companyName = settings.companyNamePrint || profile?.companyName || profile?.businessName || settings.companyName || "My Business";
+  const phone = settings.phoneNumberPrint || profile?.phoneNumber || profile?.phone || settings.companyPhone || "";
+  const address = settings.addressPrint || profile?.businessAddress || profile?.address || "Plot No. 1, Industrial Area, Bangalore - 560034";
+  const email = settings.emailPrint || profile?.emailId || profile?.email || "contact@mybusiness.com";
+  const gstin = profile?.gstin || "27AAACH7409R1Z1";
   const docTitle = settings.transactionNames?.saleInvoice || "Tax Invoice";
 
   const companyFontSize =

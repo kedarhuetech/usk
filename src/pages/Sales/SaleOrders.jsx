@@ -4,7 +4,8 @@ import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiSearch, 
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
+import { saveBusinessParty } from "../../services/businessRecords";
 import { businessDataApi } from "../../services/apiClient";
 import { getAppSettings } from "../../services/appSettingsStorage";
 import { getSaleOrders, saveSaleOrders, getOrderFulfillmentSummary } from "../../services/transactionRepository.js";
@@ -454,12 +455,57 @@ export default function SaleOrders() {
     const subtotal = value.rows.reduce((sum, row) => sum + rowAmount(row), 0);
     const amount = value.roundOff ? Math.round(subtotal) + (Number(value.roundOffValue) || 0) : subtotal;
     if (!parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.customer.trim().toLowerCase())) {
-      saveParty({ partyName: value.customer.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-receive" });
+      try {
+        await saveBusinessParty({ partyName: value.customer.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-receive" });
+      } catch (partyErr) {
+        console.warn("[SaleOrders] Auto-create party notice:", partyErr?.message);
+      }
     }
     const orderId = value.id || `sale-order-${Date.now()}`;
     const saved = { ...value, id: orderId, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
-    persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]);
-    setEditor(null);
+
+    // Persist to MySQL backend FIRST with strict fail-fast validation
+    try {
+      await transactionsDb.save({
+        ...saved,
+        transactionType: "sale_order",
+        type: "sale_order",
+        documentNumber: String(saved.number || "").trim(),
+        number: String(saved.number || "").trim(),
+        transactionDate: saved.date || localDate(),
+        date: saved.date || localDate(),
+        dueDate: saved.dueDate || saved.date || localDate(),
+        partyId: saved.partyId || null,
+        partyName: saved.customer,
+        customer: saved.customer,
+        customerName: saved.customer,
+        phone: saved.phone || "",
+        partyPhone: saved.phone || "",
+        billingAddress: saved.billingAddress || null,
+        shippingAddress: saved.shippingAddress || null,
+        subtotal,
+        totalAmount: amount,
+        total: amount,
+        amount,
+        paidAmount: 0,
+        receivedAmount: 0,
+        balanceAmount: amount,
+        status: saved.status || "Open",
+        paymentMode: "Credit",
+        paymentType: "Credit",
+        notes: saved.description || "",
+        description: saved.description || "",
+        terms: saved.terms || "",
+        roundOff: saved.roundOff,
+        roundOffValue: saved.roundOffValue,
+        rows: saved.rows,
+        items: saved.rows,
+      });
+    } catch (err) {
+      console.error("[SaleOrders] Database save failed:", err?.message);
+      toast.error(err?.message || "Failed to save sale order to MySQL database.");
+      return;
+    }
 
     // Update the source quotation or proforma status if converted
     if (value.convertedFromQuotationId) {
@@ -500,48 +546,9 @@ export default function SaleOrders() {
       window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
     }
 
-    // Persist to MySQL backend with clear failure distinction
-    try {
-      await transactionsDb.save({
-        ...saved,
-        transactionType: "sale_order",
-        type: "sale_order",
-        documentNumber: String(saved.number || "").trim(),
-        number: String(saved.number || "").trim(),
-        transactionDate: saved.date || localDate(),
-        date: saved.date || localDate(),
-        dueDate: saved.dueDate || saved.date || localDate(),
-        partyId: saved.partyId || null,
-        partyName: saved.customer,
-        customer: saved.customer,
-        customerName: saved.customer,
-        phone: saved.phone || "",
-        partyPhone: saved.phone || "",
-        billingAddress: saved.billingAddress || null,
-        shippingAddress: saved.shippingAddress || null,
-        subtotal,
-        totalAmount: amount,
-        total: amount,
-        amount,
-        paidAmount: 0,
-        receivedAmount: 0,
-        balanceAmount: amount,
-        status: saved.status || "Open",
-        paymentMode: "Credit",
-        paymentType: "Credit",
-        notes: saved.description || "",
-        description: saved.description || "",
-        terms: saved.terms || "",
-        roundOff: saved.roundOff,
-        roundOffValue: saved.roundOffValue,
-        rows: saved.rows,
-        items: saved.rows,
-      });
-      toast.success(editor.mode === "edit" ? "Sale order updated in database." : "Sale order saved to database.");
-    } catch (err) {
-      console.warn("[SaleOrders] Remote database save failed:", err?.message);
-      toast.warning("Saved locally. MySQL sync pending (server unreachable).");
-    }
+    persist(editor.mode === "edit" ? orders.map((order) => order.id === saved.id ? saved : order) : [saved, ...orders]);
+    setEditor(null);
+    toast.success(editor.mode === "edit" ? "Sale order updated in database." : "Sale order saved to database.");
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -619,13 +626,13 @@ export default function SaleOrders() {
         confirmColor: "red",
         onConfirm: async () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-          persist(orders.filter((entry) => entry.id !== order.id));
           try {
             await transactionsDb.remove(order.id);
-            toast.success(`Sale order ${order.number} deleted from database.`);
+            persist(orders.filter((entry) => entry.id !== order.id));
+            toast.success(`Sale order ${order.number} deleted.`);
           } catch (err) {
-            console.warn("[SaleOrders] Remote delete failed:", err?.message);
-            toast.warning(`Deleted locally. MySQL removal pending.`);
+            console.error("[SaleOrders] Remote delete failed:", err?.message);
+            toast.error(err?.message || `Could not delete sale order ${order.number}.`);
           }
         },
       });

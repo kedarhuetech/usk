@@ -4,31 +4,24 @@ import {
   FiBell,
   FiBook,
   FiCheck,
-  FiChevronDown,
-  FiChevronLeft,
-  FiChevronRight,
   FiDownload,
   FiFileText,
   FiInfo,
-  FiLock,
   FiMessageSquare,
   FiPackage,
   FiPercent,
-  FiPlus,
   FiPrinter,
   FiRefreshCw,
   FiSearch,
-  FiShield,
   FiSliders,
-  FiTrash2,
   FiUpload,
   FiUsers,
   FiX,
 } from "react-icons/fi";
 import { useAppPasscode } from "../../components/Passcode/passcodeContext.js";
-import { APP_PASSCODE_STORAGE_LABEL } from "../../services/appPasscodeRepository.js";
 import { validatePasscodeForm } from "../../services/appPasscodeValidation.js";
-import { addCustomUnit, getUnits } from "../../services/unitsStorage.js";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
+import ItemTab from "./ItemTab";
 import {
   applyScreenZoom,
   resetAppSettings,
@@ -74,7 +67,7 @@ const settingsTabFromSearch = (search) => {
 function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeTab, setActiveTab] = useState(() => settingsTabFromSearch(location.search));
+  const activeTab = settingsTabFromSearch(location.search);
   const [settings, setSettings] = useState(getAppSettings);
   const [toast, setToast] = useState("");
   const [confirmModal, setConfirmModal] = useState({
@@ -100,7 +93,7 @@ function Settings() {
   const [auditFilter, setAuditFilter] = useState("");
 
   // Passcode context
-  const { enabled: passcodeEnabled, setup: setupPasscode, change: changePasscode, disable: disablePasscode, lock: lockApp } = useAppPasscode();
+  const { setup: setupPasscode, change: changePasscode, disable: disablePasscode } = useAppPasscode();
   const [passcodeMode, setPasscodeMode] = useState("");
   const [passcodeError, setPasscodeError] = useState("");
   const [passcodeSaving, setPasscodeSaving] = useState(false);
@@ -113,10 +106,6 @@ function Settings() {
       applyScreenZoom(settings.screenZoom);
     }
   }, [settings.screenZoom]);
-
-  useEffect(() => {
-    setActiveTab(settingsTabFromSearch(location.search));
-  }, [location.search]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -185,11 +174,15 @@ function Settings() {
   };
 
   // Backup & Restore
-  const handleBackupNow = () => {
-    const dateFormatted = exportBackupData();
-    if (dateFormatted) {
-      update("lastBackupDate", dateFormatted);
-      showToast("Backup exported successfully!");
+  const handleBackupNow = async () => {
+    try {
+      const dateFormatted = await exportBackupData();
+      if (dateFormatted) {
+        update("lastBackupDate", dateFormatted);
+        showToast("Backup exported successfully!");
+      }
+    } catch (err) {
+      toastNotification.error("Failed to export backup: " + err.message);
     }
   };
 
@@ -284,16 +277,6 @@ function Settings() {
               updateMultiple={updateMultiple}
               selectedZoom={selectedZoom}
               onApplyZoom={handleApplyZoom}
-              passcodeEnabled={passcodeEnabled}
-              onTogglePasscode={() => {
-                setPasscodeError("");
-                setPasscodeMode(passcodeEnabled ? "disable" : "setup");
-              }}
-              onChangePasscode={() => {
-                setPasscodeError("");
-                setPasscodeMode("change");
-              }}
-              onLockApp={lockApp}
               onBackupNow={handleBackupNow}
               onRestoreFile={handleRestoreFile}
               onOpenFirmModal={() => {
@@ -313,7 +296,7 @@ function Settings() {
             />
           )}
 
-          {activeTab === "transaction" && <TransactionTab settings={settings} update={update} />}
+          {activeTab === "transaction" && <TransactionTab settings={settings} update={update} showToast={showToast} />}
           {activeTab === "print" && <PrintTab settings={settings} update={update} />}
           {activeTab === "taxes" && <TaxesTab settings={settings} update={update} />}
           {activeTab === "messages" && <TransactionMessageTab settings={settings} update={update} />}
@@ -727,14 +710,10 @@ function GeneralTab({
   updateMultiple,
   selectedZoom,
   onApplyZoom,
-  passcodeEnabled,
-  onTogglePasscode,
-  onChangePasscode,
-  onLockApp,
   onBackupNow,
   onRestoreFile,
-  onOpenFirmModal,
-  onOpenGodownModal,
+  _onOpenFirmModal,
+  _onOpenGodownModal,
   onOpenBackupHistory,
   onOpenAuditTrail,
   backupCount = 0,
@@ -748,46 +727,6 @@ function GeneralTab({
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Application</h3>
 
           <div className="mt-4 space-y-4">
-            {/* Enable Passcode */}
-            <div>
-              <label className="flex cursor-pointer items-center justify-between text-xs font-semibold text-slate-700">
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={passcodeEnabled}
-                    onChange={onTogglePasscode}
-                    className="h-4 w-4 rounded accent-blue-600"
-                  />
-                  Enable Passcode
-                  <InfoTooltip text="Secure this workspace with a 4-digit passcode lock." />
-                </span>
-                {passcodeEnabled && (
-                  <span className="rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
-                    Active
-                  </span>
-                )}
-              </label>
-              {passcodeEnabled && (
-                <div className="ml-6 mt-2 flex items-center gap-3 text-xs">
-                  <button
-                    type="button"
-                    onClick={onChangePasscode}
-                    className="font-semibold text-blue-600 hover:underline"
-                  >
-                    Change Passcode
-                  </button>
-                  <span className="text-slate-300">•</span>
-                  <button
-                    type="button"
-                    onClick={onLockApp}
-                    className="inline-flex items-center gap-1 font-semibold text-slate-600 hover:text-slate-900"
-                  >
-                    <FiLock className="h-3 w-3" /> Lock Now
-                  </button>
-                </div>
-              )}
-            </div>
-
             {/* Business Currency */}
             <div className="flex items-center justify-between pt-1">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
@@ -1162,7 +1101,11 @@ function GeneralTab({
 
 
 
-function TransactionTab({ settings, update, updateMultiple }) {
+function TransactionTab({ settings, update, showToast }) {
+  const profile = getCompanyProfile();
+  const firmName = profile?.companyName || profile?.businessName || settings.companyName || settings.firms?.[0]?.name || "My Business";
+  const firmPhone = profile?.phoneNumber || profile?.phone || settings.phoneNumberPrint || "";
+  const firmGstin = profile?.gstin || "";
   // Modal states
   const [termsModal, setTermsModal] = useState(false);
   const [termsTitle, setTermsTitle] = useState(settings.termsTitle || "Standard Terms");
@@ -1830,16 +1773,12 @@ function TransactionTab({ settings, update, updateMultiple }) {
             <div className="flex flex-1 overflow-hidden">
               {/* LEFT COLUMN: Controls & Checkboxes (with scrollbar) */}
               <div className="w-80 sm:w-88 md:w-96 shrink-0 border-r border-slate-200 p-5 overflow-y-auto space-y-5 bg-white text-xs">
-                {/* Select Firm */}
+                {/* Business / Company Name */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select Firm</label>
-                  <select
-                    value={settings.selectedPrefixFirm || "firm-1"}
-                    onChange={(e) => update("selectedPrefixFirm", e.target.value)}
-                    className="h-9 w-full rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500"
-                  >
-                    <option value="firm-1">{firmName}</option>
-                  </select>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Business / Company</label>
+                  <div className="flex h-9 w-full items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-800">
+                    {firmName}
+                  </div>
                 </div>
 
                 {/* Firm additional fields */}
@@ -2104,7 +2043,8 @@ function TransactionTab({ settings, update, updateMultiple }) {
                   {/* Company Header */}
                   <div className="text-center space-y-0.5">
                     <h4 className="text-base font-bold text-slate-900">{firmName}</h4>
-                    <p className="text-[11px] text-slate-500">Phone no: 8369501991</p>
+                    {firmPhone && <p className="text-[11px] text-slate-500">Phone no: {firmPhone}</p>}
+                    {firmGstin && <p className="text-[11px] text-slate-500">GSTIN: {firmGstin}</p>}
                     {/* Dynamic Firm Additional Fields */}
                     {["firmField1", "firmField2"].map((k) => {
                       const f = settings.additionalFieldsSetup?.[k];
@@ -2340,19 +2280,21 @@ function TransactionTab({ settings, update, updateMultiple }) {
           MODAL: Additional Charges (Matches USK Desktop Layout)
           ======================================================== */}
       {additionalChargesModal && (() => {
-        const setup = settings.additionalChargesSetup || {
-          enabled: true,
-          charges: [
-            { id: "charge1", selected: false, name: "Shipping", enableTax: true, sac: "", taxRate: "NONE" },
-            { id: "charge2", selected: false, name: "Packaging", enableTax: false, sac: "", taxRate: "NONE" },
-            { id: "charge3", selected: false, name: "Adjustment", enableTax: false, sac: "", taxRate: "NONE" },
-          ],
+        const rawSetup = settings.additionalChargesSetup || {};
+        const defaultCharges = [
+          { id: "charge1", selected: false, name: "Shipping", enableTax: true, sac: "", taxRate: "NONE" },
+          { id: "charge2", selected: false, name: "Packaging", enableTax: false, sac: "", taxRate: "NONE" },
+          { id: "charge3", selected: false, name: "Adjustment", enableTax: false, sac: "", taxRate: "NONE" },
+        ];
+        const setup = {
+          enabled: rawSetup.enabled ?? true,
+          charges: Array.isArray(rawSetup.charges) && rawSetup.charges.length > 0 ? rawSetup.charges : defaultCharges,
         };
 
         const updateCharge = (index, field, val) => {
-          const updatedCharges = [...setup.charges];
-          updatedCharges[index] = { ...updatedCharges[index], [field]: val };
-          const updatedSetup = { ...setup, charges: updatedCharges };
+          const currentCharges = Array.isArray(setup.charges) ? [...setup.charges] : [...defaultCharges];
+          currentCharges[index] = { ...currentCharges[index], [field]: val };
+          const updatedSetup = { ...setup, charges: currentCharges };
           update("additionalChargesSetup", updatedSetup);
         };
 
@@ -2362,10 +2304,12 @@ function TransactionTab({ settings, update, updateMultiple }) {
         };
 
         const handleSaveDetails = () => {
-          const activeCharges = setup.charges.filter((c) => c.selected);
+          const activeCharges = (setup.charges || []).filter((c) => c.selected);
           update("additionalCharges", activeCharges);
           setAdditionalChargesModal(false);
-          showToast("Additional charges saved successfully");
+          if (typeof showToast === "function") {
+            showToast("Additional charges saved successfully");
+          }
         };
 
         return (
@@ -2409,7 +2353,7 @@ function TransactionTab({ settings, update, updateMultiple }) {
 
               {/* 3 Additional Charge Rows */}
               <div className={`space-y-6 ${!setup.enabled ? "opacity-50 pointer-events-none" : ""}`}>
-                {setup.charges.map((charge, idx) => (
+                {(setup.charges || []).map((charge, idx) => (
                   <div key={charge.id} className="flex items-start gap-3">
                     {/* Left Selection Checkbox */}
                     <div className="pt-7">
@@ -2567,107 +2511,8 @@ function TransactionTab({ settings, update, updateMultiple }) {
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
-// ITEM TAB
+// ITEM TAB (Delegated to ItemTab.jsx)
 // -------------------------------------------------------------
-function ItemTab({ settings, update }) {
-  const [units, setUnits] = useState(getUnits);
-  const [newUnit, setNewUnit] = useState("");
-
-  const saveUnit = () => {
-    const value = newUnit.trim();
-    if (!value) return;
-    const updated = addCustomUnit(value);
-    setUnits(updated);
-    setNewUnit("");
-  };
-
-  return (
-    <div className="max-w-4xl space-y-5">
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Inventory & Item Properties</h3>
-
-        <div className="mt-4 space-y-3">
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableBarcodeScanning ?? true}
-              onChange={(e) => update("enableBarcodeScanning", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Barcode Scanning Support
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={settings.enableItemCategory ?? true}
-              onChange={(e) => update("enableItemCategory", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Enable Item Categories & Sub-Categories
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.stopSaleOnNegativeStock ?? false} onChange={(e) => update("stopSaleOnNegativeStock", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Stock Maintenance <span className="font-normal text-slate-500">(block sales exceeding available stock)</span>
-          </label>
-
-          <div className="rounded-md border border-slate-200 p-3">
-            <label className="block text-xs font-semibold text-slate-700">Items Unit</label>
-            <p className="mt-1 text-xs text-slate-500">Shared unit list used by item forms and transaction unit selectors.</p>
-            <div className="mt-2 flex gap-2">
-              <input value={newUnit} onChange={(event) => setNewUnit(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); saveUnit(); } }} placeholder="Add unit (for example, Carton)" className="h-9 min-w-0 flex-1 rounded border border-slate-300 px-2 text-xs" />
-              <button type="button" onClick={saveUnit} disabled={!newUnit.trim()} className="rounded bg-blue-600 px-3 text-xs font-semibold text-white disabled:opacity-50">Add Unit</button>
-            </div>
-            <p className="mt-2 text-xs text-slate-500">Available: {units.join(", ")}</p>
-          </div>
-
-          <label className="flex items-center gap-3 text-xs font-semibold text-slate-700">
-            <span>Default Unit</span>
-            <select value={settings.defaultItemUnit || "PCS"} onChange={(event) => update("defaultItemUnit", event.target.value)} className="h-9 min-w-32 rounded border border-slate-300 bg-white px-2 text-xs">
-              {units.map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-            </select>
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.enableItemDescription ?? true} onChange={(e) => update("enableItemDescription", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Item Description
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.enableGst ?? true} onChange={(e) => update("enableGst", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Item-wise Tax
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input type="checkbox" checked={settings.enableItemDiscount ?? true} onChange={(e) => update("enableItemDiscount", e.target.checked)} className="h-4 w-4 rounded accent-blue-600" />
-            Item-wise Discount
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.enableBatchTracking)}
-              onChange={(e) => update("enableBatchTracking", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Batch Tracking (Batch No, Expiry & Manufacturing Dates)
-          </label>
-
-          <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.enableSerialTracking)}
-              onChange={(e) => update("enableSerialTracking", e.target.checked)}
-              className="h-4 w-4 rounded accent-blue-600"
-            />
-            Serial / IMEI Tracking
-          </label>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 
 // -------------------------------------------------------------

@@ -112,7 +112,7 @@ export function evaluateReminderStatus(record, settings = getReminderSettings(),
     if (hDueDate && dueDate) {
       return hDueDate === dueDate;
     }
-    return true;
+    return Boolean(cleanLastNotifiedDueDate && dueDate && cleanLastNotifiedDueDate === dueDate);
   });
 
   const alreadyNotifiedForThisDueDate = Boolean(
@@ -219,7 +219,9 @@ export function buildWhatsAppReminder(record, companyName = "Sai Kirana Stores")
     };
   }
 
-  const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+  let cleanPhone = rawPhone;
+  if (rawPhone.length === 10) cleanPhone = `91${rawPhone}`;
+  else if (rawPhone.length === 11 && rawPhone.startsWith("0")) cleanPhone = `91${rawPhone.slice(1)}`;
   const message = formatReminderMessage(record, companyName);
   const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
@@ -274,7 +276,9 @@ export function recordReminderNotification(recordId, channel = "in_app", details
 
   const cleanDueDate = normalizeDateOnly(target.serviceDueDate);
   const now = new Date().toISOString();
+  const histId = details.id || details.messageId || `hist_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
   const historyEntry = {
+    id: histId,
     channel,
     at: now,
     timestamp: now,
@@ -336,7 +340,9 @@ export async function sendServiceReminderViaMeta(record, companyName = "Sai Kira
     };
   }
 
-  const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone;
+  let cleanPhone = rawPhone;
+  if (rawPhone.length === 10) cleanPhone = `91${rawPhone}`;
+  else if (rawPhone.length === 11 && rawPhone.startsWith("0")) cleanPhone = `91${rawPhone.slice(1)}`;
   const message = formatReminderMessage(record, companyName);
 
   try {

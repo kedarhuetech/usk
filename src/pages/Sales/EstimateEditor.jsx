@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { FiCamera, FiChevronDown, FiFileText, FiGrid, FiList, FiPlus, FiSave, FiSettings, FiX } from "react-icons/fi";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
+import { saveBusinessParty } from "../../services/businessRecords";
 
 const STATES = ["Select", "Andhra Pradesh", "Delhi", "Gujarat", "Karnataka", "Maharashtra", "Tamil Nadu", "Telangana", "Uttar Pradesh", "West Bengal"];
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -42,6 +44,7 @@ function lineTotals(row) {
 }
 
 export default function EstimateEditor({ estimate, onClose, onSave, documentType = "Estimate/Quotation" }) {
+  const navigate = useNavigate();
   const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
   const parties = useMemo(() => getParties(), []);
   const items = useMemo(() => getInventoryItems().filter(isItemActive), []);
@@ -93,7 +96,7 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
     updateRow(row.id, "item", name);
     if (item) setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, item: name, unit: item.unit || entry.unit, price: item.salePrice || item.price || entry.price, taxRate: String(item.taxRate || item.gstRate || "NONE") } : entry));
   };
-  const save = () => {
+  const save = async () => {
     const amount = Number(adjusted.toFixed(2));
     if (!customer.trim()) { setToast("Choose or enter a customer name."); return; }
     if (!rows.some((row) => row.item.trim() && Number(row.qty) > 0)) { setToast("Add at least one item and quantity."); return; }
@@ -115,12 +118,18 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
     }
 
     const existingParty = parties.find((party) => (party.partyName || party.name || "").trim().toLowerCase() === customer.trim().toLowerCase());
-    if (!existingParty) saveParty({ partyName: customer.trim(), phone: phone.trim(), billingAddress, openingBalance: "0", openingBalanceType: "to-receive" });
-    onSave({ ...(estimate || {}), customer: customer.trim(), phone, billingAddress, number: refNo.trim(), date, state, rows, amount, roundOffEnabled: roundOff, roundOffValue, terms, description, status: estimate?.status || "Open", firm: estimate?.firm || "My Company", user: estimate?.user || "You" });
+    if (!existingParty) {
+      try {
+        await saveBusinessParty({ partyName: customer.trim(), phone: phone.trim(), billingAddress, openingBalance: "0", openingBalanceType: "to-receive" });
+      } catch (err) {
+        console.warn("[EstimateEditor] Party create notice:", err?.message);
+      }
+    }
+    await onSave({ ...(estimate || {}), customer: customer.trim(), phone, billingAddress, number: refNo.trim(), date, state, rows, amount, roundOffEnabled: roundOff, roundOffValue, terms, description, status: estimate?.status || "Open", firm: estimate?.firm || "My Company", user: estimate?.user || "You" });
   };
 
   return <div className="fixed inset-0 z-40 flex min-h-0 flex-col bg-[#f3f3f3] text-slate-800">
-    <div className="flex h-12 shrink-0 items-center gap-2 bg-slate-200 px-4"><div className="flex h-full min-w-56 items-center justify-between rounded-t-lg bg-white px-4 text-sm"><span>{documentType} #{refNo}</span><button type="button" aria-label="Close estimate tab" onClick={onClose}><FiX /></button></div><button type="button" onClick={() => { setCustomer(""); setPhone(""); setRefNo(String(Date.now()).slice(-6)); setDate(new Date().toISOString().slice(0, 10)); setRows([makeRow(), makeRow()]); setToast(""); }} aria-label={`New ${documentType.toLowerCase()}`} className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus /></button><div className="ml-auto flex items-center gap-5 pr-1 text-slate-500"><FiGrid className="h-5 w-5" /><FiSettings className="h-5 w-5" /><button type="button" onClick={onClose} aria-label={`Close ${documentType.toLowerCase()}`}><FiX className="h-5 w-5" /></button></div></div>
+    <div className="flex h-12 shrink-0 items-center gap-2 bg-slate-200 px-4"><div className="flex h-full min-w-56 items-center justify-between rounded-t-lg bg-white px-4 text-sm"><span>{documentType} #{refNo}</span><button type="button" aria-label="Close estimate tab" onClick={onClose}><FiX /></button></div><button type="button" onClick={() => { setCustomer(""); setPhone(""); setRefNo(String(Date.now()).slice(-6)); setDate(new Date().toISOString().slice(0, 10)); setRows([makeRow(), makeRow()]); setToast(""); }} aria-label={`New ${documentType.toLowerCase()}`} className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus /></button><div className="ml-auto flex items-center gap-3 pr-1 text-slate-500"><button type="button" title="Settings" aria-label="Settings" onClick={() => navigate("/settings?tab=transaction")} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-300 hover:text-slate-900 transition cursor-pointer"><FiSettings className="h-5 w-5" /></button><button type="button" onClick={onClose} aria-label={`Close ${documentType.toLowerCase()}`} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-300 hover:text-slate-900 transition cursor-pointer"><FiX className="h-5 w-5" /></button></div></div>
     <header className="flex h-[74px] shrink-0 items-center border-b border-slate-300 bg-white px-7"><h1 className="text-xl font-bold">{documentType}</h1></header>
     <div className="min-h-0 flex-1 overflow-auto">
       <section className="grid min-h-[345px] grid-cols-1 gap-6 px-6 py-7 lg:grid-cols-[minmax(340px,1fr)_minmax(360px,1fr)]">

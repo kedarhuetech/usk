@@ -7,6 +7,7 @@ import {
   FiPackage,
   FiRefreshCw,
   FiSearch,
+  FiSettings,
   FiShoppingCart,
   FiUser,
   FiUsers,
@@ -521,6 +522,16 @@ export default function Topbar({ onRefresh }) {
             className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A1E27] border border-[#2B313F] text-slate-300 hover:text-[#FF5A1F] transition md:hidden cursor-pointer shadow-xs shrink-0"
           >
             <FiSearch className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/settings")}
+            title="Settings"
+            aria-label="Settings"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#161921] border border-[#2B313F] text-slate-300 hover:text-[#FF5A1F] hover:border-[#FF5A1F] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs shrink-0"
+          >
+            <FiSettings className="h-4 w-4" />
           </button>
 
           <button

@@ -229,7 +229,6 @@ export default function PaymentOut() {
     const paymentId = entry.id || `payment-out-${Date.now()}`;
     const paymentType = [...new Set(entry.payments.map((payment) => payment.type))].join(", ");
     const saved = { ...entry, id: paymentId, amount, received: amount, paymentType, status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || defaultFirm, user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated payment" : "Created payment", at: now }] };
-    persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
 
     try {
       await transactionsDb.save({
@@ -265,9 +264,12 @@ export default function PaymentOut() {
         } catch {}
       }
     } catch (err) {
-      console.warn("[PaymentOut MySQL Save Notice]", err?.message);
-      toast.error(`Saved locally, but backend sync failed: ${err.message}`);
+      console.error("[PaymentOut MySQL Save Error]", err?.message);
+      toast.error(err.message || "Failed to save Payment-Out voucher to MySQL database.");
+      return;
     }
+
+    persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -321,13 +323,13 @@ export default function PaymentOut() {
       confirmColor: "red",
       onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        persist(records.filter((record) => record.id !== entry.id));
         try {
           await transactionsDb.remove(entry.id);
+          persist(records.filter((record) => record.id !== entry.id));
           toast.success(`Payment ${entry.number} deleted.`);
         } catch (err) {
-          console.warn("[PaymentOut MySQL Delete Notice]", err?.message);
-          toast.error(`Deleted locally, but backend delete failed: ${err.message}`);
+          console.error("[PaymentOut MySQL Delete Error]", err?.message);
+          toast.error(err.message || `Failed to delete Payment-Out voucher from database.`);
         }
       },
     });

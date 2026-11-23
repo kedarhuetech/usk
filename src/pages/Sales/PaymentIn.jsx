@@ -227,7 +227,6 @@ export default function PaymentIn() {
     const paymentId = entry.id || `payment-in-${Date.now()}`;
     const paymentType = [...new Set(entry.payments.map((payment) => payment.type))].join(", ");
     const saved = { ...entry, id: paymentId, amount, received: amount, paymentType, status: entry.linkedInvoiceId ? "Used" : "Unused", firm: entry.firm || "My Company", user: entry.user || "You", createdAt: entry.createdAt || now, updatedAt: now, history: [...(entry.history || []), { action: editor.mode === "edit" ? "Updated receipt" : "Created receipt", at: now }] };
-    persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
 
     try {
       await transactionsDb.save({
@@ -262,9 +261,12 @@ export default function PaymentIn() {
         } catch {}
       }
     } catch (err) {
-      console.warn("[PaymentIn MySQL Save Notice]", err?.message);
-      toast.error(`Saved locally, but backend sync failed: ${err.message}`);
+      console.error("[PaymentIn MySQL Save Error]", err?.message);
+      toast.error(err.message || "Failed to save Payment-In receipt to database.");
+      return;
     }
+
+    persist(editor.mode === "edit" ? records.map((record) => record.id === saved.id ? saved : record) : [saved, ...records]);
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -322,15 +324,15 @@ export default function PaymentIn() {
       confirmColor: "red",
       onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        persist(records.filter((record) => record.id !== entry.id));
         try {
           await transactionsDb.remove(entry.id);
+          persist(records.filter((record) => record.id !== entry.id));
           notifyBusinessDataChanged();
           toast.success(`Receipt ${entry.number} deleted.`);
         } catch (err) {
-          console.warn("[PaymentIn MySQL Delete Notice]", err?.message);
+          console.error("[PaymentIn MySQL Delete Error]", err?.message);
           notifyBusinessDataChanged();
-          toast.error(`Deleted locally, but backend delete failed: ${err.message}`);
+          toast.error(err.message || `Failed to delete Payment-In receipt from database.`);
         }
       },
     });

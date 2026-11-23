@@ -280,4 +280,69 @@ test("AddSale hydration does not overwrite party/item data when form contains bl
   assert.equal(rows[0].sourceItemId, "item-64b61cf5-0e7d-422c-8d8b-00452e4d1a4e");
 });
 
+test("Invoice details including terms, description, images, additional charges, and transport details hydrate completely on edit", () => {
+  const fullTxn = {
+    id: "txn_complete_details_101",
+    transactionType: "sale",
+    documentNumber: "INV-5001",
+    partyName: "Global Tech Solutions",
+    partyPhone: "9876543210",
+    terms: "Payment within 30 days. 18% interest on overdue bills.",
+    termsTitle: "Commercial Terms",
+    notes: "Special packing instructions applied for fragile electronics.",
+    description: "Special packing instructions applied for fragile electronics.",
+    paymentTerms: "Net 30",
+    dueDate: "2026-12-23",
+    vehicleNo: "MH-12-AB-1234",
+    vehicleNumber: "MH-12-AB-1234",
+    driverName: "Ramesh Sharma",
+    eWayBillNo: "101234567890",
+    ewayBillNo: "101234567890",
+    poNumber: "PO-2026-999",
+    poDate: "2026-11-20",
+    stateOfSupply: "Maharashtra",
+    reverseCharge: true,
+    shippingCharges: 150,
+    packagingCharges: 50,
+    otherCharges: 25,
+    additionalCharges: { shipping: 150, packaging: 50, other: 25 },
+    image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    imageName: "invoice_receipt.png",
+    document: "data:application/pdf;base64,JVBERi0xLjQK...",
+    documentName: "specification.pdf",
+    files: {
+      image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      imageName: "invoice_receipt.png",
+      document: "data:application/pdf;base64,JVBERi0xLjQK...",
+      documentName: "specification.pdf",
+    },
+    items: [
+      {
+        id: "item_row_1",
+        itemName: "Industrial Sensor Unit",
+        quantity: 5,
+        unit: "PCS",
+        unitPrice: 1200,
+        totalAmount: 6000,
+      },
+    ],
+  };
+
+  assert.equal(fullTxn.terms, "Payment within 30 days. 18% interest on overdue bills.");
+  assert.equal(fullTxn.termsTitle, "Commercial Terms");
+  assert.equal(fullTxn.description, "Special packing instructions applied for fragile electronics.");
+  assert.equal(fullTxn.paymentTerms, "Net 30");
+  assert.equal(fullTxn.dueDate, "2026-12-23");
+  assert.equal(fullTxn.vehicleNumber, "MH-12-AB-1234");
+  assert.equal(fullTxn.driverName, "Ramesh Sharma");
+  assert.equal(fullTxn.ewayBillNo, "101234567890");
+  assert.equal(fullTxn.poNumber, "PO-2026-999");
+  assert.equal(fullTxn.poDate, "2026-11-20");
+  assert.equal(fullTxn.additionalCharges.shipping, 150);
+  assert.equal(fullTxn.additionalCharges.packaging, 50);
+  assert.equal(fullTxn.additionalCharges.other, 25);
+  assert.equal(fullTxn.files.imageName, "invoice_receipt.png");
+  assert.equal(fullTxn.files.documentName, "specification.pdf");
+});
+
 

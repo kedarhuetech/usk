@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiCalendar,
   FiChevronDown,
@@ -8,6 +8,7 @@ import {
   FiPlus,
   FiPrinter,
   FiSearch,
+  FiSettings,
   FiX,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
@@ -76,6 +77,11 @@ function normalizePurchaseReturn(item) {
     balance: Number(item.balance ?? item.balanceAmount ?? 0),
     type: item.type === "Purchase Return" ? "Purchase Return" : "Debit Note",
     status: item.status || "Debit",
+    description: item.description || item.notes || "",
+    notes: item.notes || item.description || "",
+    terms: item.terms || "",
+    billNumber: item.billNumber || item.poNumber || item.linkedInvoiceId || "",
+    phone: item.phone || item.partyPhone || "",
     rows: (item.rows || item.items || []).map((r) => ({
       id: r.id || crypto.randomUUID(),
       item: r.item || r.itemName || r.name || "",
@@ -107,6 +113,7 @@ const rowAmount = (row) => {
 };
 
 export default function PurchaseReturns() {
+  const navigate = useNavigate();
   const location = useLocation();
   const [records, setRecords] = useState(readReturns);
   const [editor, setEditor] = useState(null);
@@ -315,6 +322,11 @@ export default function PurchaseReturns() {
         totalAmount: Number(saved.total || 0),
         paidAmount: Number(saved.received || 0),
         balanceAmount: Number(saved.balance || 0),
+        notes: saved.description || saved.notes || (saved.billNumber ? `Debit Note for Bill ${saved.billNumber}` : ""),
+        description: saved.description || saved.notes || "",
+        terms: saved.terms || "",
+        linkedInvoiceId: saved.billNumber || saved.billId || null,
+        poNumber: saved.billNumber || saved.billId || null,
         items: (saved.rows || []).map((r) => ({
           itemName: r.item,
           quantity: Number(r.qty || 1),
@@ -730,10 +742,21 @@ export default function PurchaseReturns() {
             </span>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setEditor(null)}
-                className="text-gray-600 hover:text-black p-1 text-lg"
+                type="button"
+                title="Settings"
+                aria-label="Settings"
+                onClick={() => navigate("/settings?tab=transaction")}
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-300 hover:text-slate-800 transition cursor-pointer"
               >
-                <FiX />
+                <FiSettings className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditor(null)}
+                aria-label="Close"
+                className="rounded-md p-1.5 text-slate-500 hover:bg-slate-300 hover:text-slate-800 transition cursor-pointer"
+              >
+                <FiX className="h-5 w-5" />
               </button>
             </div>
           </div>

@@ -4,7 +4,8 @@ import { FiCalendar, FiFilter, FiMoreVertical, FiPlus, FiSearch, FiX } from "rea
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
+import { saveBusinessParty } from "../../services/businessRecords";
 import { getPurchaseOrders, savePurchaseOrders, getOrderFulfillmentSummary } from "../../services/transactionRepository.js";
 import { transactionsDb, purchaseOrdersDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
@@ -295,13 +296,17 @@ export default function PurchaseOrders() {
     }
 
     const existingParty = parties.some((party) => (party.partyName || "").trim().toLowerCase() === value.supplier.trim().toLowerCase());
-    if (!existingParty) saveParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
+    if (!existingParty) {
+      try {
+        await saveBusinessParty({ partyName: value.supplier.trim(), phone: value.phone.trim(), openingBalance: "0", openingBalanceType: "to-pay" });
+      } catch (partyErr) {
+        console.warn("[PurchaseOrders] Auto-create supplier notice:", partyErr?.message);
+      }
+    }
     const orderId = value.id || `purchase-order-${Date.now()}`;
     const saved = { ...value, id: orderId, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
-    saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
-    setEditor(null);
 
-    // Persist to MySQL backend with clear failure distinction
+    // Persist to MySQL backend FIRST with strict fail-fast validation
     try {
       await transactionsDb.save({
         ...saved,
@@ -338,11 +343,15 @@ export default function PurchaseOrders() {
         rows: saved.rows,
         items: saved.rows,
       });
-      toast.success(editor.mode === "edit" ? "Purchase order updated in database." : "Purchase order saved to database.");
     } catch (err) {
-      console.warn("[PurchaseOrders] Remote database save failed:", err?.message);
-      toast.warning("Saved locally. MySQL sync pending (server unreachable).");
+      console.error("[PurchaseOrders] Remote database save failed:", err?.message);
+      toast.error(err?.message || "Failed to save purchase order to MySQL database.");
+      return;
     }
+
+    saveList(editor.mode === "edit" ? orders.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...orders]);
+    setEditor(null);
+    toast.success(editor.mode === "edit" ? "Purchase order updated in database." : "Purchase order saved to database.");
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
     try {
@@ -374,13 +383,13 @@ export default function PurchaseOrders() {
         confirmColor: "red",
         onConfirm: async () => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-          saveList(orders.filter((entry) => entry.id !== order.id));
           try {
             await transactionsDb.remove(order.id);
-            toast.success(`Purchase order ${order.number} deleted from database.`);
+            saveList(orders.filter((entry) => entry.id !== order.id));
+            toast.success(`Purchase order ${order.number} deleted.`);
           } catch (err) {
-            console.warn("[PurchaseOrders] Remote delete failed:", err?.message);
-            toast.warning(`Deleted locally. MySQL removal pending.`);
+            console.error("[PurchaseOrders] Remote delete failed:", err?.message);
+            toast.error(err?.message || `Could not delete purchase order ${order.number}.`);
           }
         },
       });
@@ -484,7 +493,7 @@ export default function PurchaseOrders() {
         })}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"><div className="mb-6 grid h-60 w-80 place-items-center rounded-full bg-blue-50 text-8xl text-blue-500">🛒</div><p className="text-lg text-slate-500">Make &amp; share purchase orders with your parties &amp; convert them to purchase bill instantly.</p><Button onClick={beginNew} className="mt-7 bg-amber-500 px-6 py-3 text-base text-white shadow">Add Your First Purchase Order</Button></div>}
     </Card>
 
-    {editor && <div className="fixed inset-0 z-[100] flex flex-col bg-white"><div className="flex h-12 shrink-0 items-center gap-3 bg-slate-200 px-5"><span className="rounded-t-lg bg-white px-5 py-3">Purchase Order #{editor.value.number}</span><button onClick={beginNew} title="New purchase order" className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus/></button><button onClick={() => setEditor(null)} title="Close" className="ml-auto text-xl text-slate-500"><FiX/></button></div><header className="flex h-[74px] shrink-0 items-center border-b px-7"><h1 className="text-xl font-bold">Purchase Order</h1></header>
+    {editor && <div className="fixed inset-0 z-[100] flex flex-col bg-white"><div className="flex h-12 shrink-0 items-center gap-3 bg-slate-200 px-5"><span className="rounded-t-lg bg-white px-5 py-3">Purchase Order #{editor.value.number}</span><button onClick={beginNew} title="New purchase order" className="grid h-8 w-8 place-items-center rounded-full bg-blue-600 text-white"><FiPlus/></button><div className="ml-auto flex items-center gap-4 text-xl text-slate-500"><button type="button" title="Settings" aria-label="Settings" onClick={() => navigate("/settings?tab=transaction")} className="p-1 hover:text-slate-700 transition cursor-pointer">⚙</button><button onClick={() => setEditor(null)} title="Close" aria-label="Close" className="text-xl text-slate-500 hover:text-slate-700 transition cursor-pointer"><FiX/></button></div></div><header className="flex h-[74px] shrink-0 items-center border-b px-7"><h1 className="text-xl font-bold">Purchase Order</h1></header>
       <div className="min-h-0 flex-1 overflow-auto bg-[#f3f3f3]"><section className="grid min-h-[345px] gap-8 px-7 py-8 lg:grid-cols-[1fr_420px]"><div className="grid content-start gap-5 sm:grid-cols-[minmax(280px,1fr)_225px]"><div><label className="block text-sm text-slate-500">Supplier *</label><input list="purchase-order-parties" value={editor.value.supplier} onChange={(event) => { const party = parties.find((entry) => entry.partyName === event.target.value); change("supplier", event.target.value); if (party) change("phone", party.phone || ""); }} placeholder="Search by Name/Phone *" className="mt-1 h-14 w-full rounded-md border bg-white px-4"/><datalist id="purchase-order-parties">{parties.map((party) => <option key={party.id} value={party.partyName}>{party.phone}</option>)}</datalist><input value={editor.value.phone} onChange={(event) => change("phone", event.target.value)} placeholder="Phone No." className="mt-3 h-12 w-full rounded-md border bg-white px-4"/></div><div className="space-y-3">{[["Order No.", "number", "text"], ["Order Date", "date", "date"], ["Due Date", "dueDate", "date"]].map(([label, key, type]) => <label key={key} className="flex items-center justify-between gap-4 text-slate-500">{label}<input type={type} value={editor.value[key]} onChange={(event) => change(key, event.target.value)} className="w-44 border-b bg-transparent p-2 text-slate-800"/></label>)}<label className="flex items-center justify-between gap-4 text-slate-500">State of supply<select value={editor.value.state} onChange={(event) => change("state", event.target.value)} className="w-44 bg-transparent p-2 text-slate-800"><option>Select</option>{["Andhra Pradesh", "Delhi", "Gujarat", "Karnataka", "Maharashtra", "Tamil Nadu", "Telangana"].map((state) => <option key={state}>{state}</option>)}</select></label></div></div></section>
       <div className="overflow-x-auto bg-white"><table className="w-full min-w-[1350px] border-collapse text-sm"><thead><tr className="h-14 bg-white text-center font-semibold">{["#", "ITEM", "DESCRIPTION", "SIZE", "QTY", "UNIT", "PRICE/UNIT", "DISCOUNT %", "DISCOUNT AMOUNT", "TAX %", "TAX AMOUNT", "ADD CESS", "AMOUNT"].map((label) => <th key={label} className="border border-slate-300 px-2">{label}</th>)}</tr></thead><tbody>{editor.value.rows.map((row, index) => <tr key={row.id} className="h-14 odd:bg-slate-100 even:bg-slate-50"><td className="border px-3 text-center">{index + 1}</td><td className="relative border"><input value={row.item} onFocus={() => setItemRow(row.id)} onChange={(event) => { changeRow(row.id, "item", event.target.value); setItemRow(row.id); }} className="h-full w-full bg-transparent px-3" placeholder="Select item"/>{itemRow === row.id && <div className="absolute left-0 top-full z-40 max-h-56 w-72 overflow-auto rounded-md border bg-white p-1 shadow-xl">{inventory.filter((item) => String(item.itemName || item.name || "").toLowerCase().includes(row.item.toLowerCase())).map((item) => <button key={item.id || item.itemCode || item.itemName} onMouseDown={(event) => event.preventDefault()} onClick={() => { const itemName = item.itemName || item.name || ""; changeRow(row.id, "item", itemName); changeRow(row.id, "itemId", item.id || ""); changeRow(row.id, "sourceItemId", item.id || ""); changeRow(row.id, "unit", item.unit || item.baseUnit || "NONE"); changeRow(row.id, "price", item.purchasePrice || item.price || ""); if (!row.qty) changeRow(row.id, "qty", "1"); setItemRow(""); }} className="block w-full px-3 py-2 text-left hover:bg-blue-50">{item.itemName || item.name}</button>)}</div>}</td>{[["description", "text"], ["size", "text"], ["qty", "number"], ["unit", "text"], ["price", "number"], ["discount", "number"]].map(([key, type]) => <td key={key} className="border"><input type={type} value={row[key]} onChange={(event) => changeRow(row.id, key, event.target.value)} className="h-full w-full bg-transparent px-2 text-center"/></td>)}<td className="border px-2 text-right">{money((Number(row.qty) || 0) * (Number(row.price) || 0) * (Number(row.discount) || 0) / 100)}</td><td className="border"><select value={row.tax} onChange={(event) => changeRow(row.id, "tax", event.target.value)} className="h-full w-full bg-transparent"><option value="NONE">Select</option>{[5, 12, 18, 28].map((rate) => <option key={rate} value={rate}>{rate}%</option>)}</select></td><td className="border px-2 text-right">{money(lineTotal(row) - (Number(row.qty) || 0) * (Number(row.price) || 0) * (1 - (Number(row.discount) || 0) / 100))}</td><td className="border"><input type="number" value={row.cess} onChange={(event) => changeRow(row.id, "cess", event.target.value)} className="h-full w-full px-2"/></td><td className="border px-2 text-right">{money(lineTotal(row))}</td></tr>)}</tbody><tfoot><tr className="h-14 font-semibold"><td className="border px-2"><button onClick={() => change("rows", [...editor.value.rows, freshRow()])} className="rounded border border-blue-400 px-3 py-2 text-blue-600">ADD ROW</button></td><td colSpan="3" className="border px-3 text-right">TOTAL</td><td className="border text-center">{editor.value.rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}</td><td colSpan="7" className="border"/><td className="border px-3 text-right">{money(subtotal)}</td></tr></tfoot></table></div>
       <section className="grid min-h-72 gap-6 px-7 py-8 lg:grid-cols-[1fr_1fr_1fr]"><div><button onClick={() => change("terms", editor.value.terms ? "" : "Payment due as agreed.")} className="mb-2 rounded-md border bg-white px-5 py-3 text-slate-500">☷ ADD TERMS &amp; CONDITIONS</button><textarea value={editor.value.terms} onChange={(event) => change("terms", event.target.value)} placeholder="Terms and conditions" className="h-20 w-full rounded border bg-white p-3"/></div><div className="space-y-3"><label className="block text-sm text-slate-500">Payment Type<select value={editor.value.paymentType} onChange={(event) => change("paymentType", event.target.value)} className="mt-1 block h-12 w-full rounded border bg-white px-3">{["Cash", "Cheque", "UPI", "Card", "Bank Transfer"].map((method) => <option key={method}>{method}</option>)}</select></label><textarea value={editor.value.description} onChange={(event) => change("description", event.target.value)} placeholder="Description" className="h-20 w-full rounded border bg-white p-3"/></div><div className="flex flex-wrap items-start justify-end gap-3"><label className="flex items-center gap-2"><input type="checkbox" checked={editor.value.roundOff} onChange={(event) => change("roundOff", event.target.checked)}/>Round Off</label><input type="number" value={editor.value.roundOffValue} onChange={(event) => change("roundOffValue", event.target.value)} disabled={!editor.value.roundOff} className="h-10 w-20 rounded border px-2"/><b className="pt-2">Total</b><div className="grid h-12 min-w-48 place-items-center rounded border bg-white font-bold">{money(total)}</div></div></section></div>

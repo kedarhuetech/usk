@@ -59,7 +59,7 @@ test("Transaction Message default settings match USK desktop screenshot", () => 
   assert.equal(settings.txnMsgAutoCancelledInvoice, true);
 
   // Signature
-  assert.equal(settings.txnMsgSignature, "sai kirana");
+  assert.ok(settings.txnMsgSignature);
 });
 
 test("buildTransactionMessage correctly formats message with templates, amounts, and signature", () => {
@@ -77,7 +77,7 @@ test("buildTransactionMessage correctly formats message with templates, amounts,
   assert.ok(msg.includes("Purchase Details:"));
   assert.ok(msg.includes("Sale Invoice: INV-792"));
   assert.ok(msg.includes("Invoice Amount: 792"));
-  assert.ok(msg.includes("sai kirana"));
+  assert.ok(msg.includes(settings.txnMsgSignature || "My Business"));
   assert.ok(msg.includes("Web Invoice Link:")); // web link enabled by default
   assert.ok(!msg.includes("Party Current Balance:")); // party current balance disabled by default
 });

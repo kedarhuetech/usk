@@ -270,8 +270,16 @@ router.get("/", async (req, res) => {
     const params = [businessId];
 
     if (type && type !== "all") {
-      conditions.push("t.transaction_type = ?");
-      params.push(type);
+      if (type === "sale") {
+        conditions.push("(t.transaction_type = 'sale' OR t.transaction_type = 'pos')");
+      } else if (type === "credit_note" || type === "sale_return") {
+        conditions.push("(t.transaction_type = 'credit_note' OR t.transaction_type = 'sale_return')");
+      } else if (type === "debit_note" || type === "purchase_return") {
+        conditions.push("(t.transaction_type = 'debit_note' OR t.transaction_type = 'purchase_return')");
+      } else {
+        conditions.push("t.transaction_type = ?");
+        params.push(type);
+      }
     }
 
     if (partyId) {
@@ -315,7 +323,9 @@ router.get("/", async (req, res) => {
               t.subtotal, t.discount_percent, t.discount_amount, t.tax_amount, t.round_off, t.total_amount,
               t.paid_amount, t.balance_amount, t.payment_mode, t.payment_status, t.payment_ref_no,
               t.cash_tendered, t.change_returned, t.vehicle_no, t.e_way_bill_no, t.po_number, t.po_date,
-              t.notes, t.terms, t.image_id, t.image_url, t.image_name, t.document_id, t.document_url, t.document_name,
+              t.notes, t.terms, t.terms_title, t.driver_name, t.state_of_supply, t.reverse_charge, t.payment_terms,
+              t.shipping_charges, t.packaging_charges, t.other_charges,
+              t.image_id, t.image_url, t.image_name, t.document_id, t.document_url, t.document_name,
               t.created_at, t.updated_at
        FROM transactions t
        LEFT JOIN parties p ON t.party_id = p.id
@@ -464,13 +474,40 @@ router.get("/", async (req, res) => {
         cashTendered: parseFloat(row.cash_tendered) || 0,
         changeReturned: parseFloat(row.change_returned) || 0,
         vehicleNo: row.vehicle_no || "",
+        vehicleNumber: row.vehicle_no || "",
+        driverName: row.driver_name || "",
         eWayBillNo: row.e_way_bill_no || "",
+        ewayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
         linkedInvoiceId: row.po_number || "",
         poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
         description: row.notes || "",
         terms: row.terms || "",
+        termsTitle: row.terms_title || "",
+        stateOfSupply: row.state_of_supply || "None",
+        reverseCharge: Boolean(row.reverse_charge),
+        paymentTerms: row.payment_terms || "Due on Receipt",
+        shippingCharges: parseFloat(row.shipping_charges) || 0,
+        packagingCharges: parseFloat(row.packaging_charges) || 0,
+        otherCharges: parseFloat(row.other_charges) || 0,
+        additionalCharges: {
+          shipping: parseFloat(row.shipping_charges) || 0,
+          packaging: parseFloat(row.packaging_charges) || 0,
+          other: parseFloat(row.other_charges) || 0,
+        },
+        image: row.image_url || "",
+        document: row.document_url || "",
+        imageUrl: row.image_url || "",
+        documentUrl: row.document_url || "",
+        imageName: row.image_name || "",
+        documentName: row.document_name || "",
+        files: {
+          image: row.image_url || "",
+          document: row.document_url || "",
+          imageName: row.image_name || "",
+          documentName: row.document_name || "",
+        },
         payments,
         items,
         rows: items.map((it) => ({
@@ -490,6 +527,20 @@ router.get("/", async (req, res) => {
           billingAddress: row.billing_address || "",
           shippingAddress: row.shipping_address || "",
           paymentType: row.payment_mode || "Cash",
+          paymentTerms: row.payment_terms || "Due on Receipt",
+          notes: row.notes || "",
+          description: row.notes || "",
+          showDescription: Boolean(row.notes),
+          terms: row.terms || "",
+          termsTitle: row.terms_title || "",
+          showTerms: Boolean(row.terms),
+          poNumber: row.po_number || "",
+          poDate: toSqlDate(row.po_date) || "",
+          vehicleNumber: row.vehicle_no || "",
+          driverName: row.driver_name || "",
+          ewayBillNo: row.e_way_bill_no || "",
+          stateOfSupply: row.state_of_supply || "None",
+          reverseCharge: Boolean(row.reverse_charge),
         },
         totals: {
           subtotal: parseFloat(row.subtotal) || effectiveTotal,
@@ -703,13 +754,40 @@ router.get("/:id", async (req, res) => {
         cashTendered: parseFloat(row.cash_tendered) || 0,
         changeReturned: parseFloat(row.change_returned) || 0,
         vehicleNo: row.vehicle_no || "",
+        vehicleNumber: row.vehicle_no || "",
+        driverName: row.driver_name || "",
         eWayBillNo: row.e_way_bill_no || "",
+        ewayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
         linkedInvoiceId: row.po_number || "",
         poDate: toSqlDate(row.po_date),
         notes: row.notes || "",
         description: row.notes || "",
         terms: row.terms || "",
+        termsTitle: row.terms_title || "",
+        stateOfSupply: row.state_of_supply || "None",
+        reverseCharge: Boolean(row.reverse_charge),
+        paymentTerms: row.payment_terms || "Due on Receipt",
+        shippingCharges: parseFloat(row.shipping_charges) || 0,
+        packagingCharges: parseFloat(row.packaging_charges) || 0,
+        otherCharges: parseFloat(row.other_charges) || 0,
+        additionalCharges: {
+          shipping: parseFloat(row.shipping_charges) || 0,
+          packaging: parseFloat(row.packaging_charges) || 0,
+          other: parseFloat(row.other_charges) || 0,
+        },
+        image: row.image_url || "",
+        document: row.document_url || "",
+        imageUrl: row.image_url || "",
+        documentUrl: row.document_url || "",
+        imageName: row.image_name || "",
+        documentName: row.document_name || "",
+        files: {
+          image: row.image_url || "",
+          document: row.document_url || "",
+          imageName: row.image_name || "",
+          documentName: row.document_name || "",
+        },
         payments,
         items,
         rows: items.map((it) => ({
@@ -729,6 +807,20 @@ router.get("/:id", async (req, res) => {
           billingAddress,
           shippingAddress,
           paymentType: row.payment_mode || "Cash",
+          paymentTerms: row.payment_terms || "Due on Receipt",
+          notes: row.notes || "",
+          description: row.notes || "",
+          showDescription: Boolean(row.notes),
+          terms: row.terms || "",
+          termsTitle: row.terms_title || "",
+          showTerms: Boolean(row.terms),
+          poNumber: row.po_number || "",
+          poDate: toSqlDate(row.po_date) || "",
+          vehicleNumber: row.vehicle_no || "",
+          driverName: row.driver_name || "",
+          ewayBillNo: row.e_way_bill_no || "",
+          stateOfSupply: row.state_of_supply || "None",
+          reverseCharge: Boolean(row.reverse_charge),
         },
         totals: {
           subtotal: parseFloat(row.subtotal) || effectiveTotal,
@@ -859,22 +951,30 @@ const saveTransactionHandler = async (req, res) => {
     const paymentRefNo = body.paymentRefNo || body.refNo || null;
     const cashTendered = parseFloat(body.cashTendered ?? body.tendered ?? 0) || 0;
     const changeReturned = parseFloat(body.changeReturned ?? body.change ?? 0) || 0;
-    const vehicleNo = body.vehicleNo || null;
-    const eWayBillNo = body.eWayBillNo || null;
-    const poNumber = body.poNumber || body.linkedInvoiceId || null;
-    const poDate = toSqlDate(body.poDate || body.po_date || body.form?.poDate);
-    const notes = body.notes || body.description || null;
-    const terms = body.terms || null;
+    const vehicleNo = body.vehicleNo || body.vehicle_no || body.vehicleNumber || body.form?.vehicleNumber || null;
+    const driverName = body.driverName || body.driver_name || body.form?.driverName || null;
+    const eWayBillNo = body.eWayBillNo || body.e_way_bill_no || body.ewayBillNo || body.form?.ewayBillNo || null;
+    const poNumber = body.poNumber || body.po_number || body.customerPoNumber || body.form?.poNumber || body.linkedInvoiceId || null;
+    const poDate = toSqlDate(body.poDate || body.po_date || body.customerPoDate || body.form?.poDate);
+    const notes = body.notes || body.description || body.form?.description || null;
+    const terms = body.terms || body.form?.terms || null;
+    const termsTitle = body.termsTitle || body.terms_title || body.form?.termsTitle || null;
+    const stateOfSupply = body.stateOfSupply || body.state_of_supply || body.state || body.form?.stateOfSupply || null;
+    const reverseCharge = (body.reverseCharge || body.reverse_charge || body.form?.reverseCharge) ? 1 : 0;
+    const paymentTerms = body.paymentTerms || body.payment_terms || body.form?.paymentTerms || null;
+    const shippingCharges = parseFloat(body.shippingCharges ?? body.shipping_charges ?? body.additionalCharges?.shipping ?? 0) || 0;
+    const packagingCharges = parseFloat(body.packagingCharges ?? body.packaging_charges ?? body.additionalCharges?.packaging ?? 0) || 0;
+    const otherCharges = parseFloat(body.otherCharges ?? body.other_charges ?? body.additionalCharges?.other ?? 0) || 0;
 
     // Extract and persist attachments
     const filesInput = (body.files && typeof body.files === "object") ? body.files : {};
 
-    let rawImage = body.imageUrl || body.image_url || filesInput.image || filesInput.imageUrl || null;
+    let rawImage = body.imageUrl || body.image_url || body.image || filesInput.image || filesInput.imageUrl || null;
     let imageName = body.imageName || body.image_name || filesInput.imageName || filesInput.image_name || (rawImage && typeof rawImage === "object" ? rawImage.name : null) || null;
     let imageId = body.imageId || body.image_id || filesInput.imageId || filesInput.image_id || (rawImage && typeof rawImage === "object" ? (rawImage.fileId || rawImage.id) : null) || null;
     let imageUrl = typeof rawImage === "string" ? rawImage : (rawImage && typeof rawImage === "object" ? (rawImage.url || rawImage.imageUrl) : null);
 
-    let rawDoc = body.documentUrl || body.document_url || filesInput.document || filesInput.documentUrl || null;
+    let rawDoc = body.documentUrl || body.document_url || body.document || filesInput.document || filesInput.documentUrl || null;
     let documentName = body.documentName || body.document_name || filesInput.documentName || filesInput.document_name || (rawDoc && typeof rawDoc === "object" ? rawDoc.name : null) || null;
     let documentId = body.documentId || body.document_id || filesInput.documentId || filesInput.document_id || (rawDoc && typeof rawDoc === "object" ? (rawDoc.fileId || rawDoc.id) : null) || null;
     let documentUrl = typeof rawDoc === "string" ? rawDoc : (rawDoc && typeof rawDoc === "object" ? (rawDoc.url || rawDoc.documentUrl) : null);
@@ -1017,8 +1117,10 @@ const saveTransactionHandler = async (req, res) => {
         subtotal, discount_percent, discount_amount, tax_amount, round_off, total_amount,
         paid_amount, balance_amount, payment_mode, payment_status, payment_ref_no,
         cash_tendered, change_returned, vehicle_no, e_way_bill_no, po_number, po_date,
-        notes, terms, image_id, image_url, image_name, document_id, document_url, document_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        notes, terms, terms_title, driver_name, state_of_supply, reverse_charge, payment_terms,
+        shipping_charges, packaging_charges, other_charges,
+        image_id, image_url, image_name, document_id, document_url, document_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         transaction_type = VALUES(transaction_type),
         document_number = VALUES(document_number),
@@ -1049,6 +1151,14 @@ const saveTransactionHandler = async (req, res) => {
         po_date = VALUES(po_date),
         notes = VALUES(notes),
         terms = VALUES(terms),
+        terms_title = VALUES(terms_title),
+        driver_name = VALUES(driver_name),
+        state_of_supply = VALUES(state_of_supply),
+        reverse_charge = VALUES(reverse_charge),
+        payment_terms = VALUES(payment_terms),
+        shipping_charges = VALUES(shipping_charges),
+        packaging_charges = VALUES(packaging_charges),
+        other_charges = VALUES(other_charges),
         image_id = VALUES(image_id),
         image_url = VALUES(image_url),
         image_name = VALUES(image_name),
@@ -1062,7 +1172,9 @@ const saveTransactionHandler = async (req, res) => {
         subtotal, discountPercent, discountAmount, taxAmount, roundOff, totalAmount,
         paidAmount, balanceAmount, paymentMode, paymentStatus, paymentRefNo,
         cashTendered, changeReturned, vehicleNo, eWayBillNo, poNumber, poDate,
-        notes, terms, imageId, imageUrl, imageName, documentId, documentUrl, documentName
+        notes, terms, termsTitle, driverName, stateOfSupply, reverseCharge, paymentTerms,
+        shippingCharges, packagingCharges, otherCharges,
+        imageId, imageUrl, imageName, documentId, documentUrl, documentName
       ]
     );
 
