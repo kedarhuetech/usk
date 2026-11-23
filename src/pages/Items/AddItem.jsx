@@ -346,8 +346,15 @@ function getBatchTotal(rows) {
 }
 
 // Creates editable item form.
-function createEditableItemForm(initialItem, defaultUnit = "PCS") {
-  if (!initialItem) return { ...itemDefaults, unit: defaultUnit || itemDefaults.unit, baseUnit: defaultUnit || itemDefaults.baseUnit };
+function createEditableItemForm(initialItem, defaultUnit = "PCS", defaultTaxRate = "") {
+  if (!initialItem) {
+    return {
+      ...itemDefaults,
+      unit: defaultUnit || itemDefaults.unit,
+      baseUnit: defaultUnit || itemDefaults.baseUnit,
+      taxRate: defaultTaxRate || itemDefaults.taxRate,
+    };
+  }
 
   const openingQuantity = hasValue(initialItem.openingQuantity) ? initialItem.openingQuantity : initialItem.stock || "";
 
@@ -373,7 +380,7 @@ function createEditableItemForm(initialItem, defaultUnit = "PCS") {
     purchaseTaxMode: initialItem.purchaseTaxMode || itemDefaults.purchaseTaxMode,
     discount: initialItem.discount || "",
     discountType: initialItem.discountType || itemDefaults.discountType,
-    taxRate: initialItem.taxRate || itemDefaults.taxRate,
+    taxRate: initialItem.taxRate || defaultTaxRate || itemDefaults.taxRate,
     openingQuantity,
     atPrice: initialItem.atPrice || "",
     asOfDate: initialItem.asOfDate || itemDefaults.asOfDate,
@@ -874,7 +881,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
 
   const fileRef = useRef(null);
-  const [form, setForm] = useState(() => createEditableItemForm(initialItem, appSettings.defaultItemUnit));
+  const [form, setForm] = useState(() => createEditableItemForm(initialItem, appSettings.defaultItemUnit, appSettings.defaultTaxRate));
   const [categories, setCategories] = useState(() => (
     initialItem?.category && !defaultCategories.includes(initialItem.category)
       ? [...defaultCategories, initialItem.category]

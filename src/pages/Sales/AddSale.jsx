@@ -1201,6 +1201,14 @@ function CellInput({ error, className = "", ...props }) {
 
 // Renders the invoice table interface.
 function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {}, isPurchase = false }) {
+  const customTaxNames = useMemo(
+    () => (appSettings.taxRatesList || []).map((t) => t.name).filter(Boolean),
+    [appSettings.taxRatesList]
+  );
+  const effectiveSaleTaxOptions = useMemo(
+    () => [...new Set([...saleTaxOptions, ...customTaxNames])],
+    [customTaxNames]
+  );
   const [serialModalRow, setSerialModalRow] = useState(null);
   const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
@@ -1406,7 +1414,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                           updateRow(row.id, "item", selected.description);
                         }
                         if (selected.gst_rate !== null && selected.gst_rate !== undefined) {
-                          const matchedTax = matchGstRateToOption(selected.gst_rate, saleTaxOptions);
+                          const matchedTax = matchGstRateToOption(selected.gst_rate, effectiveSaleTaxOptions);
                           if (matchedTax) updateRow(row.id, "taxRate", matchedTax);
                         }
                         if (selected.cess_rate !== null && selected.cess_rate !== undefined && selected.cess_rate > 0) {
@@ -1552,7 +1560,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                 )}
                 {appSettings.billingType !== "Lite Sale" && appSettings.enableGst !== false && (
                   <>
-                    <td className="border-r border-slate-200 p-1"><SelectInput value={row.taxRate} onChange={(value) => updateRow(row.id, "taxRate", value)} options={saleTaxOptions} className="border-transparent bg-transparent focus:bg-white" /></td>
+                    <td className="border-r border-slate-200 p-1"><SelectInput value={row.taxRate} onChange={(value) => updateRow(row.id, "taxRate", value)} options={effectiveSaleTaxOptions} className="border-transparent bg-transparent focus:bg-white" /></td>
                     {appSettings.additionalCessOnItem && (
                       <td className="border-r border-slate-200 p-1">
                         <CellInput inputMode="decimal" value={row.cessPercent || ""} onChange={(event) => updateRow(row.id, "cessPercent", event.target.value)} placeholder="0%" />

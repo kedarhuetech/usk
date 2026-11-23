@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { FiHelpCircle, FiPlus, FiTrash2, FiX, FiUploadCloud, FiFileText, FiCheck, FiCheckCircle, FiAlertCircle, FiLoader } from "react-icons/fi";
 import HsnAutocomplete from "../../components/Common/HsnAutocomplete.jsx";
 import { uploadHsnMasterFile, lookupHsnCode } from "../../services/hsnService.js";
@@ -232,7 +232,7 @@ export default function TaxesTab({ settings, update }) {
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
-              checked={settings.compositeScheme ?? true}
+              checked={settings.compositeScheme ?? false}
               onChange={(e) => handleToggle("compositeScheme", e.target.checked)}
               className="h-4 w-4 rounded accent-blue-600 cursor-pointer"
             />
@@ -244,7 +244,7 @@ export default function TaxesTab({ settings, update }) {
           {settings.compositeScheme && (
             <div className="inline-flex items-center ml-1">
               <select
-                value={settings.compositeSchemeType || "Manufacturer 1.0%"}
+                value={settings.compositeSchemeType || "Trader 1.0%"}
                 onChange={(e) => update("compositeSchemeType", e.target.value)}
                 className="h-8 rounded border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-800 outline-none hover:border-slate-400 focus:border-blue-500 shadow-2xs"
               >
@@ -259,7 +259,7 @@ export default function TaxesTab({ settings, update }) {
         </div>
 
         {/* 7. Enable TCS */}
-        <div className="flex items-center">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -270,10 +270,25 @@ export default function TaxesTab({ settings, update }) {
             <span className="font-medium text-slate-800">Enable TCS</span>
           </label>
           <InfoTooltip text="Tax Collected at Source (Sec 206C) on sale of goods." />
+          {settings.enableTcs && (
+            <div className="inline-flex items-center ml-2 gap-1 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Rate:</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={settings.tcsRate ?? 0.1}
+                onChange={(e) => update("tcsRate", parseFloat(e.target.value) || 0)}
+                className="w-16 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 shadow-2xs"
+              />
+              <span className="font-bold text-slate-500">%</span>
+            </div>
+          )}
         </div>
 
         {/* 8. Enable TDS */}
-        <div className="flex items-center">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-3 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -284,6 +299,21 @@ export default function TaxesTab({ settings, update }) {
             <span className="font-medium text-slate-800">Enable TDS</span>
           </label>
           <InfoTooltip text="Tax Deducted at Source (Sec 194Q) deductible by customer." />
+          {settings.enableTds && (
+            <div className="inline-flex items-center ml-2 gap-1 text-xs text-slate-600">
+              <span className="font-semibold text-slate-700">Rate:</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={settings.tdsRate ?? 0.1}
+                onChange={(e) => update("tdsRate", parseFloat(e.target.value) || 0)}
+                className="w-16 h-7 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 outline-none focus:border-blue-500 shadow-2xs"
+              />
+              <span className="font-bold text-slate-500">%</span>
+            </div>
+          )}
         </div>
 
         {/* 9. Action Buttons: Tax List & HSN Master */}
