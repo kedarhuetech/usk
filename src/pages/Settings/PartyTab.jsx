@@ -1,6 +1,6 @@
 // Implements the Party Settings Tab interface matching the USK desktop settings.
 import { useState } from "react";
-import { FiCheck, FiChevronRight, FiInfo, FiX } from "react-icons/fi";
+import { FiX } from "react-icons/fi";
 
 // Default party custom fields definition
 const DEFAULT_CUSTOM_FIELDS = [
