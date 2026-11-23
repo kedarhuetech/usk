@@ -567,7 +567,9 @@ router.post("/send", async (req, res) => {
   }
 
   const cleanDigits = String(recipientPhone).replace(/[^0-9]/g, "");
-  const formattedPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+  let formattedPhone = cleanDigits;
+  if (cleanDigits.length === 10) formattedPhone = `91${cleanDigits}`;
+  else if (cleanDigits.length === 11 && cleanDigits.startsWith("0")) formattedPhone = `91${cleanDigits.slice(1)}`;
   const phoneNumberId = connection.selection?.phoneNumberId || connection.assets?.phoneNumbers?.[0]?.id || config.testMode?.phoneNumberId;
 
   if (!phoneNumberId) {
@@ -671,6 +673,12 @@ router.post("/send", async (req, res) => {
 
         if (effectiveTemplateName === "sale_invoice_alert" || effectiveTemplateName === "purchase_bill_alert") {
           effectiveVariables = { body: [customerName, docNumber, amount, balance, companyName] };
+        } else if (effectiveTemplateName === "service_reminder_alert") {
+          const serviceMatch = text.match(/(?:service for|service|regarding your)\s*([^.,\n]+)/i);
+          const serviceName = req.body?.serviceName || (serviceMatch ? serviceMatch[1].trim() : "Maintenance Service");
+          const dueMatch = text.match(/(?:due on|scheduled on|due date)\s*([^\n.,]+)/i);
+          const dueDate = req.body?.serviceDueDate || req.body?.dueDate || (dueMatch ? dueMatch[1].trim() : new Date().toLocaleDateString("en-IN"));
+          effectiveVariables = { body: [customerName, companyName, serviceName, dueDate] };
         } else if (effectiveTemplateName === "payment_receipt_alert") {
           effectiveVariables = { body: [customerName, docNumber, amount, "Online / Cash", companyName] };
         } else if (effectiveTemplateName === "order_booking_alert" || effectiveTemplateName === "estimate_quotation_alert") {

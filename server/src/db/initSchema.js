@@ -65,6 +65,7 @@ export async function initializeDatabaseSchema() {
 
       await addCol("parties", "pan VARCHAR(32)");
       await addCol("service_reminders", "party_id VARCHAR(64) DEFAULT NULL AFTER business_id");
+      await addCol("service_reminder_history", "due_date DATE DEFAULT NULL AFTER message_text");
       await addCol("parties", "billing_street TEXT");
       await addCol("parties", "billing_city VARCHAR(100)");
       await addCol("parties", "billing_state VARCHAR(100)");
@@ -460,6 +461,7 @@ export async function initializeDatabaseSchema() {
       channel VARCHAR(50) NOT NULL,
       recipient VARCHAR(64) NOT NULL,
       message_text TEXT,
+      due_date DATE DEFAULT NULL,
       status VARCHAR(50) DEFAULT 'Sent',
       sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_srv_hist_rem (business_id, reminder_id)
