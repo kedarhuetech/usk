@@ -26,13 +26,18 @@ export function deduplicatePartyList(list) {
   for (const party of list) {
     if (!party) continue;
     const id = String(party.id || "").trim();
-    const name = String(party.partyName || party.name || "").trim().toLowerCase();
+    const rawName = String(party.partyName || party.name || party.party_name || "").trim();
+    const normName = rawName.toLowerCase().replace(/\s+/g, " ");
     if (id && seenIds.has(id)) continue;
-    if (name && seenNames.has(name)) continue;
+    if (normName && seenNames.has(normName)) continue;
 
     if (id) seenIds.add(id);
-    if (name) seenNames.add(name);
-    result.push(party);
+    if (normName) seenNames.add(normName);
+    result.push({
+      ...party,
+      partyName: party.partyName || rawName,
+      name: party.name || rawName,
+    });
   }
   return result;
 }
@@ -41,8 +46,11 @@ export function setMemoryParties(list) {
   if (Array.isArray(list)) {
     const normalized = list.map((party) => {
       const isInactive = party?.status === "inactive" || party?.isActive === false;
+      const rawName = String(party?.partyName || party?.name || party?.party_name || "").trim();
       return {
         ...party,
+        partyName: party?.partyName || rawName,
+        name: party?.name || rawName,
         status: isInactive ? "inactive" : "active",
         isActive: !isInactive,
       };
@@ -50,6 +58,11 @@ export function setMemoryParties(list) {
     memoryParties = deduplicatePartyList(normalized);
   } else {
     memoryParties = [];
+  }
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
+    } catch {}
   }
 }
 
@@ -61,7 +74,10 @@ function readParties() {
     const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
     if (Array.isArray(value) && value.length > 0) {
       const deduplicated = deduplicatePartyList(value);
-      if (isDatabaseMode()) memoryParties = deduplicated;
+      memoryParties = deduplicated;
+      try {
+        window.localStorage.setItem(PARTIES_KEY, JSON.stringify(deduplicated));
+      } catch {}
       return deduplicated;
     }
     return [];
@@ -85,8 +101,8 @@ function recordMatchesParty(record, party) {
   const partyId = String(party.id || "");
   const recordId = String(record?.partyId || record?.form?.partyId || record?.customerId || record?.supplierId || "");
   if (partyId && recordId && partyId === recordId) return true;
-  const partyName = String(party.partyName || party.name || "").trim().toLowerCase();
-  const recordName = String(record?.partyName || record?.customerName || record?.customer || record?.supplier || record?.party || record?.form?.customer || record?.form?.party || "").trim().toLowerCase();
+  const partyName = String(party.partyName || party.name || party.party_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const recordName = String(record?.partyName || record?.customerName || record?.customer || record?.supplier || record?.party || record?.form?.customer || record?.form?.party || "").trim().toLowerCase().replace(/\s+/g, " ");
   return Boolean(partyName && recordName && partyName === recordName);
 }
 
@@ -103,25 +119,28 @@ export async function fetchPartiesFromDb() {
 // Saves party.
 export function saveParty(party, options = {}) {
   const isInactive = party?.status === "inactive" || party?.isActive === false;
-  const partyName = String(party?.partyName || party?.name || "").trim();
+  const rawName = String(party?.partyName || party?.name || party?.party_name || "").trim();
+  const partyName = rawName.replace(/\s+/g, " ");
+  const normName = partyName.toLowerCase();
   const currentList = readParties();
 
-  // Find existing by ID or case-insensitive party name
+  // Find existing by ID or case-insensitive party name (with whitespace normalized)
   const existingIndex = currentList.findIndex(
     (entry) =>
       (party.id && String(entry.id) === String(party.id)) ||
-      (partyName && String(entry.partyName || entry.name || "").trim().toLowerCase() === partyName.toLowerCase())
+      (normName && String(entry.partyName || entry.name || entry.party_name || "").trim().toLowerCase().replace(/\s+/g, " ") === normName)
   );
 
   const existingEntry = existingIndex >= 0 ? currentList[existingIndex] : null;
-  const id = party.id || existingEntry?.id || crypto.randomUUID();
+  // If entry exists by name, preserve its canonical ID!
+  const id = existingEntry?.id || party.id || crypto.randomUUID();
 
   const saved = {
     ...(existingEntry || {}),
     ...party,
     id,
-    partyName: partyName || existingEntry?.partyName || "",
-    name: partyName || existingEntry?.name || "",
+    partyName: partyName || existingEntry?.partyName || rawName,
+    name: partyName || existingEntry?.name || rawName,
     status: isInactive ? "inactive" : "active",
     isActive: !isInactive,
     updatedAt: new Date().toISOString(),
@@ -132,12 +151,14 @@ export function saveParty(party, options = {}) {
     ...currentList.filter(
       (entry) =>
         String(entry.id) !== String(saved.id) &&
-        String(entry.partyName || entry.name || "").trim().toLowerCase() !== partyName.toLowerCase()
+        String(entry.partyName || entry.name || entry.party_name || "").trim().toLowerCase().replace(/\s+/g, " ") !== normName
     ),
   ];
   memoryParties = deduplicatePartyList(next);
   if (typeof window !== "undefined" && window.localStorage) {
-    window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
+    try {
+      window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
+    } catch {}
   }
   setMemoryParties(memoryParties);
   if (isDatabaseMode() && !options?.skipRemoteSync) {

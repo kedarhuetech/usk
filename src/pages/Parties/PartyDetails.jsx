@@ -420,22 +420,32 @@ function PartyDetails() {
 
   const handleImportParties = async (selectedContacts) => {
     if (!selectedContacts?.length) return;
-    const existing = parties.length > 0 ? [...parties] : [...getParties()];
-    const seenNames = new Set(existing.map((p) => String(p.partyName || p.name || "").trim().toLowerCase()));
-    const seenPhones = new Set(existing.map((p) => String(p.phone || "").replace(/\D/g, "")).filter(Boolean));
+    let existing = [];
+    try {
+      existing = await loadBusinessParties();
+    } catch {
+      existing = parties.length > 0 ? [...parties] : [...getParties()];
+    }
+    const seenNames = new Set(
+      existing.map((p) => String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean)
+    );
+    const seenPhones = new Set(
+      existing.map((p) => String(p.phone || p.mobile || "").replace(/\D/g, "")).filter((ph) => ph.length >= 10)
+    );
     let firstSavedId = null;
     let importedCount = 0;
 
     for (const c of selectedContacts) {
-      const cName = String(c.name || "").trim();
+      const cName = String(c.name || "").trim().replace(/\s+/g, " ");
+      if (!cName) continue;
       const normName = cName.toLowerCase();
       const cleanP = String(c.phone || "").replace(/\D/g, "");
 
-      if (seenNames.has(normName) || (cleanP && seenPhones.has(cleanP))) {
+      if (seenNames.has(normName) || (cleanP.length >= 10 && seenPhones.has(cleanP))) {
         const match = existing.find(
           (p) =>
-            String(p.partyName || p.name || "").trim().toLowerCase() === normName ||
-            (cleanP && String(p.phone || "").replace(/\D/g, "") === cleanP)
+            String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " ") === normName ||
+            (cleanP.length >= 10 && String(p.phone || p.mobile || "").replace(/\D/g, "") === cleanP)
         );
         if (match && !firstSavedId) firstSavedId = match.id;
         continue;
@@ -455,7 +465,7 @@ function PartyDetails() {
         if (saved?.id) {
           if (!firstSavedId) firstSavedId = saved.id;
           seenNames.add(normName);
-          if (cleanP) seenPhones.add(cleanP);
+          if (cleanP.length >= 10) seenPhones.add(cleanP);
           existing.push(saved);
           importedCount += 1;
         }
@@ -1896,6 +1906,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
         isOpen={importPartiesOpen}
         onClose={() => setImportPartiesOpen(false)}
         onImportParties={handleImportParties}
+        existingParties={parties}
       />
       {importNotice && (
         <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-xl transition animate-in fade-in slide-in-from-bottom duration-200">

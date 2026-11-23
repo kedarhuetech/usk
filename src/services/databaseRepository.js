@@ -17,7 +17,7 @@ import { apiRequest } from "./apiClient.js";
 import { getStorageMode, setStorageMode } from "./dataStorageConfig.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { transactionStorageKeys, setMemoryCollection } from "./transactionRepository.js";
-import { setMemoryParties } from "./partiesStorage.js";
+import { setMemoryParties, deduplicatePartyList } from "./partiesStorage.js";
 import { setMemoryItems } from "./itemsStorage.js";
 import { getActiveBusinessId, getScopedStorageKey } from "../config/businessConfig.js";
 
@@ -110,10 +110,25 @@ export const partiesDb = {
       body: JSON.stringify(party),
     });
     const saved = res?.data || res;
-    // Update scoped local cache
-    const current = readLocal(getScopedStorageKey(PARTIES_KEY), []);
-    const updated = [saved, ...current.filter((p) => String(p.id) !== String(saved.id))];
-    writeLocal(getScopedStorageKey(PARTIES_KEY), updated);
+    const savedName = String(saved?.partyName || saved?.name || saved?.party_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+    // Update scoped local cache with strict name and ID deduplication
+    const scopedKey = getScopedStorageKey(PARTIES_KEY);
+    const current = readLocal(scopedKey, []);
+    const updated = deduplicatePartyList([
+      saved,
+      ...current.filter((p) => {
+        if (String(p.id) === String(saved.id)) return false;
+        const pName = String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+        return !savedName || pName !== savedName;
+      }),
+    ]);
+    writeLocal(scopedKey, updated);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem(PARTIES_KEY, JSON.stringify(updated));
+      } catch {}
+    }
     return saved;
   },
 

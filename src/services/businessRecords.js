@@ -148,9 +148,11 @@ export async function loadBusinessSummary() {
 // Saves business party directly to MySQL database with awaited persistence
 export async function saveBusinessParty(value) {
   let party = value;
-  if (!party.id) {
+  const rawName = String(party?.partyName || party?.name || party?.party_name || "").trim();
+  const normName = rawName.toLowerCase().replace(/\s+/g, " ");
+  if (!party.id && normName) {
     const existing = getParties().find(
-      (p) => String(p.partyName || p.name || "").trim().toLowerCase() === String(party.partyName || party.name || "").trim().toLowerCase()
+      (p) => String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " ") === normName
     );
     if (existing?.id) {
       party = { ...party, id: existing.id };

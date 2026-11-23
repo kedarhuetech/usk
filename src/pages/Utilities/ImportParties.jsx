@@ -162,17 +162,17 @@ function ImportParties() {
       }
       const existingNames = new Set(
         existing
-          .map((p) => normalized(p.partyName || p.name).toLowerCase())
+          .map((p) => normalized(p.partyName || p.name || p.party_name).toLowerCase().replace(/\s+/g, " "))
           .filter(Boolean)
       );
       const keys = new Set(
-        existing.map((party) => `${normalized(party.partyName).toLowerCase()}|${String(party.phone || "").replace(/\D/g, "") || normalized(party.email).toLowerCase()}`)
+        existing.map((party) => `${normalized(party.partyName || party.name || party.party_name).toLowerCase().replace(/\s+/g, " ")}|${String(party.phone || "").replace(/\D/g, "") || normalized(party.email).toLowerCase()}`)
       );
       let imported = 0;
       let duplicates = 0;
       let failed = 0;
       for (const row of validRows) {
-        const rowNameNorm = normalized(row.partyName).toLowerCase();
+        const rowNameNorm = normalized(row.partyName).toLowerCase().replace(/\s+/g, " ");
         const key = `${rowNameNorm}|${row.phone.replace(/\D/g, "") || row.email.toLowerCase()}`;
         if (existingNames.has(rowNameNorm) || keys.has(key)) {
           duplicates += 1;

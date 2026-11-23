@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { companyProfileApi } from "../../services/apiClient.js";
 import {
   FiCheck,
   FiChevronLeft,
@@ -71,9 +72,18 @@ export default function PrintTab({ settings, update }) {
     update("themeColor", hex);
   };
 
-  const handleLogoUpload = (e) => {
+  const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      try {
+        const res = await companyProfileApi.uploadAsset(file, "company-logo");
+        if (res?.data?.url || res?.url) {
+          update("companyLogo", res.data?.url || res.url);
+          return;
+        }
+      } catch (uploadErr) {
+        console.warn("Direct upload error, falling back to data URL:", uploadErr.message);
+      }
       const reader = new FileReader();
       reader.onload = () => {
         update("companyLogo", reader.result);
@@ -82,9 +92,18 @@ export default function PrintTab({ settings, update }) {
     }
   };
 
-  const handleSignatureUpload = (e) => {
+  const handleSignatureUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
+      try {
+        const res = await companyProfileApi.uploadAsset(file, "company-signature");
+        if (res?.data?.url || res?.url) {
+          update("signatureImage", res.data?.url || res.url);
+          return;
+        }
+      } catch (uploadErr) {
+        console.warn("Direct upload error, falling back to data URL:", uploadErr.message);
+      }
       const reader = new FileReader();
       reader.onload = () => {
         update("signatureImage", reader.result);
