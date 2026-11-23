@@ -76,6 +76,11 @@ function normalizePurchaseReturn(item) {
     balance: Number(item.balance ?? item.balanceAmount ?? 0),
     type: item.type === "Purchase Return" ? "Purchase Return" : "Debit Note",
     status: item.status || "Debit",
+    description: item.description || item.notes || "",
+    notes: item.notes || item.description || "",
+    terms: item.terms || "",
+    billNumber: item.billNumber || item.poNumber || item.linkedInvoiceId || "",
+    phone: item.phone || item.partyPhone || "",
     rows: (item.rows || item.items || []).map((r) => ({
       id: r.id || crypto.randomUUID(),
       item: r.item || r.itemName || r.name || "",
@@ -315,6 +320,11 @@ export default function PurchaseReturns() {
         totalAmount: Number(saved.total || 0),
         paidAmount: Number(saved.received || 0),
         balanceAmount: Number(saved.balance || 0),
+        notes: saved.description || saved.notes || (saved.billNumber ? `Debit Note for Bill ${saved.billNumber}` : ""),
+        description: saved.description || saved.notes || "",
+        terms: saved.terms || "",
+        linkedInvoiceId: saved.billNumber || saved.billId || null,
+        poNumber: saved.billNumber || saved.billId || null,
         items: (saved.rows || []).map((r) => ({
           itemName: r.item,
           quantity: Number(r.qty || 1),

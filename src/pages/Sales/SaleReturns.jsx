@@ -570,7 +570,11 @@ export default function SaleReturns() {
         unitPrice: Number(r.price || r.rate || 0),
         totalAmount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
       })),
-      notes: result.notes || `Credit Note for Invoice ${result.invoiceNumber || ""}`,
+      notes: result.notes || result.description || `Credit Note for Invoice ${result.invoiceNumber || ""}`,
+      description: result.description || result.notes || "",
+      terms: result.terms || "",
+      linkedInvoiceId: result.invoiceNumber || result.invoiceId || null,
+      poNumber: result.invoiceNumber || result.invoiceId || null,
     }).catch((e) => console.warn("[CreditNote MySQL Save Notice]", e.message));
 
     // Auto-dispatch Meta WhatsApp transaction message if enabled in settings

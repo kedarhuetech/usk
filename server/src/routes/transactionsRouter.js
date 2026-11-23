@@ -70,8 +70,16 @@ router.get("/", async (req, res) => {
     const params = [businessId];
 
     if (type && type !== "all") {
-      conditions.push("t.transaction_type = ?");
-      params.push(type);
+      if (type === "sale") {
+        conditions.push("(t.transaction_type = 'sale' OR t.transaction_type = 'pos')");
+      } else if (type === "credit_note" || type === "sale_return") {
+        conditions.push("(t.transaction_type = 'credit_note' OR t.transaction_type = 'sale_return')");
+      } else if (type === "debit_note" || type === "purchase_return") {
+        conditions.push("(t.transaction_type = 'debit_note' OR t.transaction_type = 'purchase_return')");
+      } else {
+        conditions.push("t.transaction_type = ?");
+        params.push(type);
+      }
     }
 
     if (partyId) {

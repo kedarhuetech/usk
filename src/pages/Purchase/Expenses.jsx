@@ -377,7 +377,10 @@ export default function Expenses() {
         totalAmount: Number(clean.amount || 0),
         paidAmount: Number(clean.paid || 0),
         balanceAmount: Math.max(0, Number(clean.amount || 0) - Number(clean.paid || 0)),
-        notes: clean.category,
+        notes: clean.description || clean.category || "",
+        description: clean.description || clean.notes || clean.category || "",
+        paymentMode: clean.paymentType || "Cash",
+        paymentType: clean.paymentType || "Cash",
         items: (clean.rows || []).map((r) => ({
           itemName: r.item,
           description: r.description,
