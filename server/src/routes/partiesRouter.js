@@ -214,11 +214,32 @@ const savePartyHandler = async (req, res) => {
     const businessId = businessIdFromRequest(req);
     const body = req.body || {};
 
-    const id = req.params?.id || body.id || `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const partyName = (body.partyName || body.name || body.party_name || "").trim();
     if (!partyName) {
       return res.status(400).json({ success: false, message: "Party name is required." });
     }
+
+    const targetId = req.params?.id || body.id;
+
+    // Strict uniqueness check: verify whether another party already uses this name in this business
+    const [existingByName] = await pool.query(
+      `SELECT id, party_name FROM parties WHERE business_id = ? AND LOWER(TRIM(party_name)) = LOWER(TRIM(?)) LIMIT 1`,
+      [businessId, partyName]
+    );
+
+    if (existingByName.length > 0) {
+      const existing = existingByName[0];
+      // If a different party ID was supplied, reject the duplicate name
+      if (targetId && String(targetId) !== String(existing.id)) {
+        return res.status(400).json({
+          success: false,
+          message: `A party named "${existing.party_name}" already exists. Please choose a different party name.`,
+          existingPartyId: existing.id,
+        });
+      }
+    }
+
+    const id = targetId || (existingByName.length > 0 ? existingByName[0].id : `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`);
 
     const phone = body.phone || body.mobile || null;
     const email = body.email || null;
@@ -302,6 +323,12 @@ const savePartyHandler = async (req, res) => {
       },
     });
   } catch (err) {
+    if (err.code === "ER_DUP_ENTRY" || err.errno === 1062) {
+      return res.status(400).json({
+        success: false,
+        message: `A party named "${(req.body?.partyName || req.body?.name || req.body?.party_name || '').trim()}" already exists. Please choose a different party name.`,
+      });
+    }
     console.error("[Parties POST Error]", err);
     return res.status(500).json({ success: false, message: err.message });
   }

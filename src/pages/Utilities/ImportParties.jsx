@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
-import { saveBusinessParty } from "../../services/businessRecords";
+import { loadBusinessParties, saveBusinessParty } from "../../services/businessRecords";
 
 const columns = [
   ["partyName", "Party Name", true],
@@ -151,14 +151,30 @@ function ImportParties() {
     setSaving(true);
     setStatus({ type: "", message: "" });
     try {
-      const existing = getParties();
-      const keys = new Set(existing.map((party) => `${normalized(party.partyName).toLowerCase()}|${String(party.phone || "").replace(/\D/g, "") || normalized(party.email).toLowerCase()}`));
+      let existing = [];
+      try {
+        existing = await loadBusinessParties();
+      } catch {
+        existing = getParties();
+      }
+      if (!Array.isArray(existing) || existing.length === 0) {
+        existing = getParties();
+      }
+      const existingNames = new Set(
+        existing
+          .map((p) => normalized(p.partyName || p.name).toLowerCase())
+          .filter(Boolean)
+      );
+      const keys = new Set(
+        existing.map((party) => `${normalized(party.partyName).toLowerCase()}|${String(party.phone || "").replace(/\D/g, "") || normalized(party.email).toLowerCase()}`)
+      );
       let imported = 0;
       let duplicates = 0;
       let failed = 0;
       for (const row of validRows) {
-        const key = `${row.partyName.toLowerCase()}|${row.phone.replace(/\D/g, "") || row.email.toLowerCase()}`;
-        if (keys.has(key)) {
+        const rowNameNorm = normalized(row.partyName).toLowerCase();
+        const key = `${rowNameNorm}|${row.phone.replace(/\D/g, "") || row.email.toLowerCase()}`;
+        if (existingNames.has(rowNameNorm) || keys.has(key)) {
           duplicates += 1;
           continue;
         }
@@ -167,6 +183,7 @@ function ImportParties() {
           delete party.rowNumber;
           delete party.errors;
           await saveBusinessParty({ ...party, id: undefined });
+          existingNames.add(rowNameNorm);
           keys.add(key);
           imported += 1;
         } catch {

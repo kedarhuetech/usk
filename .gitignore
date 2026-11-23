@@ -29,3 +29,7 @@ server/.env
 .env.local
 .env.*.local
 .whatsapp_connection_store.json
+
+# User uploaded binary storage
+storage/businesses/*
+!storage/businesses/.gitkeep

@@ -21,6 +21,7 @@
  */
 
 import { pool } from "./mysql.js";
+import { deduplicateParties } from "../../scripts/deduplicateParties.js";
 
 export async function initializeDatabaseSchema() {
   console.log("[MySQL Schema] Initializing normalized relational tables (ZERO JSON types, pure rows & columns)...");
@@ -75,12 +76,20 @@ export async function initializeDatabaseSchema() {
       await addCol("parties", "balance_type VARCHAR(20) DEFAULT 'to_receive'");
       await addCol("parties", "is_active TINYINT(1) DEFAULT 1");
 
+      await addCol("company_profile_assets", "storage_key VARCHAR(500) NULL");
+      await addCol("company_profile_assets", "file_id VARCHAR(64) NULL");
+      try {
+        await pool.query("ALTER TABLE company_profile_assets MODIFY COLUMN data MEDIUMBLOB NULL");
+      } catch {}
+
       await addCol("inventory_items", "barcode VARCHAR(100)");
       await addCol("inventory_items", "item_type VARCHAR(32) DEFAULT 'product'");
       await addCol("inventory_items", "cess_rate DECIMAL(5,2) DEFAULT 0.00");
       await addCol("inventory_items", "opening_stock DECIMAL(12,2) DEFAULT 0.00");
       await addCol("inventory_items", "is_serial_tracked TINYINT(1) DEFAULT 0");
       await addCol("inventory_items", "description TEXT");
+      await addCol("inventory_items", "image_url VARCHAR(500) NULL");
+      await addCol("inventory_items", "image_id VARCHAR(64) NULL");
       await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
       await addCol("transaction_items", "barcode VARCHAR(100)");
       await addCol("transaction_items", "is_active TINYINT(1) DEFAULT 1");
@@ -243,7 +252,7 @@ export async function initializeDatabaseSchema() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id, business_id),
       INDEX idx_parties_biz (business_id),
-      INDEX idx_parties_name (business_id, party_name),
+      UNIQUE KEY uq_parties_biz_name (business_id, party_name),
       INDEX idx_parties_phone (business_id, phone),
       INDEX idx_parties_type (business_id, party_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
@@ -281,6 +290,8 @@ export async function initializeDatabaseSchema() {
       is_batch_tracked TINYINT(1) DEFAULT 0,
       is_serial_tracked TINYINT(1) DEFAULT 0,
       description TEXT,
+      image_url VARCHAR(500) NULL,
+      image_id VARCHAR(64) NULL,
       is_active TINYINT(1) DEFAULT 1,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -288,7 +299,8 @@ export async function initializeDatabaseSchema() {
       INDEX idx_items_name (business_id, name),
       INDEX idx_items_code (business_id, item_code),
       INDEX idx_items_barcode (business_id, barcode),
-      INDEX idx_items_category (business_id, category)
+      INDEX idx_items_category (business_id, category),
+      INDEX idx_items_image (business_id, image_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
     // 7. Item Batches Table (Normalized Child Table for Batches - Pure Rows & Columns)
@@ -747,7 +759,7 @@ export async function initializeDatabaseSchema() {
       INDEX idx_bank_tx_date (business_id, transaction_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
 
-    // 30. Company Profile Assets Table (Logos, Signatures, etc. with pure MySQL BLOB storage)
+    // 30. Company Profile Assets Table (Logos, Signatures, etc. with filesystem storage & BLOB compatibility)
     `CREATE TABLE IF NOT EXISTS company_profile_assets (
       id VARCHAR(64) PRIMARY KEY,
       business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
@@ -755,11 +767,34 @@ export async function initializeDatabaseSchema() {
       original_filename VARCHAR(255) NULL,
       mime_type VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
       size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
-      data MEDIUMBLOB NOT NULL,
+      storage_key VARCHAR(500) NULL,
+      file_id VARCHAR(64) NULL,
+      data MEDIUMBLOB NULL,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
       INDEX idx_cpa_biz (business_id),
       INDEX idx_cpa_type (business_id, asset_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`,
+
+    // 31. Business Files Metadata Table (Relational storage metadata for files stored on filesystem / cloud)
+    `CREATE TABLE IF NOT EXISTS business_files (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL DEFAULT 'demo-business',
+      module VARCHAR(32) NOT NULL,
+      category VARCHAR(32) NOT NULL,
+      original_filename VARCHAR(255) NOT NULL,
+      stored_filename VARCHAR(255) NOT NULL,
+      storage_driver VARCHAR(16) NOT NULL DEFAULT 'local',
+      storage_key VARCHAR(500) NOT NULL,
+      mime_type VARCHAR(100) NOT NULL,
+      size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+      sha256_hash VARCHAR(64) NOT NULL,
+      is_deleted TINYINT(1) DEFAULT 0,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_bf_biz (business_id),
+      INDEX idx_bf_biz_module (business_id, module, category),
+      INDEX idx_bf_hash (business_id, sha256_hash)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`
   ];
 
@@ -787,6 +822,13 @@ export async function initializeDatabaseSchema() {
         ('933f31db-61eb-4c2b-a3d1-2c862c8fc888', 'demo-business', 'rt fpharma', '987654567', 'customer', 0.00, 0.00, 'to_receive');`
     );
   } catch {}
+
+  // Automatically deduplicate existing duplicate party rows and ensure unique party name index
+  try {
+    await deduplicateParties();
+  } catch (dedupErr) {
+    console.warn("[MySQL Schema] Party deduplication notice on startup:", dedupErr.message);
+  }
 
   // Safe non-destructive migration of existing company logo and signature assets from business_growth_assets
   try {
@@ -817,6 +859,22 @@ export async function initializeDatabaseSchema() {
     }
   } catch (migErr) {
     console.warn("[MySQL Schema] Notice during company profile assets migration:", migErr.message);
+  }
+
+  // Safe idempotent migration of Company Profile logo and signature BLOBs to filesystem storage (Phase 3)
+  try {
+    const { migrateCompanyProfileAssets } = await import("../services/storage/companyProfileAssetMigration.js");
+    await migrateCompanyProfileAssets({ businessId: "demo-business" });
+  } catch (fsMigErr) {
+    console.warn("[MySQL Schema] Notice during company profile filesystem migration:", fsMigErr.message);
+  }
+
+  // Safe idempotent migration of Item/Product images to filesystem storage (Phase 4)
+  try {
+    const { migrateItemImages } = await import("../services/storage/itemImageMigration.js");
+    await migrateItemImages({ businessId: "demo-business" });
+  } catch (itemMigErr) {
+    console.warn("[MySQL Schema] Notice during item image filesystem migration:", itemMigErr.message);
   }
 
   console.log("[MySQL Schema] All 30 production tables verified successfully (ZERO JSON columns, pure rows & columns).");

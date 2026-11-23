@@ -10,6 +10,8 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { storageService } from "../services/storage/storageService.js";
+import { getFileMetadataById } from "../db/businessFilesRepository.js";
 
 const router = Router();
 
@@ -27,8 +29,8 @@ const upload = multer({
 });
 
 /**
- * Safely persists a Base64 data URL into company_profile_assets
- * and returns the persistent asset reference URL.
+ * Safely persists a Base64 data URL into filesystem storage and company_profile_assets
+ * without storing binary BLOB in MySQL, and returns the persistent asset reference URL.
  */
 async function persistBase64Asset(val, entityType, businessId) {
   if (!val || typeof val !== "string" || !val.startsWith("data:image/")) {
@@ -40,15 +42,26 @@ async function persistBase64Asset(val, entityType, businessId) {
     const mimeType = matches[1];
     const buffer = Buffer.from(matches[2], "base64");
     if (buffer.length > 10 * 1024 * 1024) return null;
-    const id = crypto.randomUUID();
     const ext = mimeType.split("/")[1] || "png";
     const filename = `${entityType}-${Date.now()}.${ext}`;
+
+    // 1. Save to filesystem storage foundation (saves file to disk + business_files metadata)
+    const fileResult = await storageService.saveFileAndMetadata({
+      businessId,
+      category: "company-profile",
+      fileBuffer: buffer,
+      originalFilename: filename,
+      mimeType,
+    });
+
+    // 2. Insert into company_profile_assets with storage reference and NULL BLOB data
     await pool.execute(
-      `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, data)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [id, businessId, entityType, filename, mimeType, buffer.length, buffer]
+      `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [fileResult.id, businessId, entityType, filename, mimeType, buffer.length, fileResult.storageKey, fileResult.id]
     );
-    return `/api/settings/company-profile/assets/${id}?businessId=${encodeURIComponent(businessId)}`;
+
+    return `/api/settings/company-profile/assets/${fileResult.id}?businessId=${encodeURIComponent(businessId)}`;
   } catch (err) {
     console.error(`Failed to persist Base64 asset (${entityType}):`, err.message);
     return null;
@@ -114,7 +127,8 @@ router.post("/", async (req, res) => {
 
 /**
  * POST /api/settings/company-profile/assets
- * Uploads a company logo or signature image directly into company_profile_assets
+ * Uploads a company logo or signature image directly into filesystem storage
+ * with metadata in business_files and reference in company_profile_assets (NULL BLOB data).
  */
 router.post(
   "/company-profile/assets",
@@ -135,27 +149,36 @@ router.post(
       if (!req.file) {
         return res.status(400).json({ success: false, message: "A JPG, PNG, WEBP, or GIF image is required." });
       }
-      const id = crypto.randomUUID();
       const assetType = String(req.body.assetType || req.body.entityType || "company-logo").slice(0, 32);
       const originalFilename = (req.file.originalname || "").slice(0, 255);
       const mimeType = req.file.mimetype || "application/octet-stream";
       const sizeBytes = req.file.size;
-      const data = req.file.buffer;
+      const fileBuffer = req.file.buffer;
 
+      // 1. Save to filesystem storage foundation (saves file to disk + business_files metadata)
+      const fileResult = await storageService.saveFileAndMetadata({
+        businessId,
+        category: "company-profile",
+        fileBuffer,
+        originalFilename,
+        mimeType,
+      });
+
+      // 2. Insert into company_profile_assets with storage reference and NULL BLOB data
       await pool.execute(
-        `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, businessId, assetType, originalFilename, mimeType, sizeBytes, data]
+        `INSERT INTO company_profile_assets (id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+        [fileResult.id, businessId, assetType, originalFilename, mimeType, sizeBytes, fileResult.storageKey, fileResult.id]
       );
 
       return res.status(201).json({
         success: true,
         data: {
-          id,
+          id: fileResult.id,
           name: originalFilename,
-          mimeType,
-          size: sizeBytes,
-          url: `/api/settings/company-profile/assets/${id}`,
+          mimeType: fileResult.mimeType || mimeType,
+          size: fileResult.sizeBytes || sizeBytes,
+          url: `/api/settings/company-profile/assets/${fileResult.id}`,
         },
       });
     } catch (error) {
@@ -169,42 +192,92 @@ router.post(
 
 /**
  * GET /api/settings/company-profile/assets/:id
- * Streams image binary from company_profile_assets with read fallback
+ * Streams image binary from private filesystem storage with graceful BLOB read fallback
  */
 router.get("/company-profile/assets/:id", async (req, res) => {
   try {
-    const businessId = req.query.businessId || req.get("x-business-id");
+    const rawBusinessId = req.query.businessId || req.get("x-business-id");
+    const businessId = rawBusinessId && rawBusinessId !== "local-development" ? rawBusinessId : null;
+
+    // 1. Look up in company_profile_assets
     let rows;
-    if (businessId && businessId !== "local-development") {
+    if (businessId) {
       [rows] = await pool.execute(
-        "SELECT mime_type, original_filename, size_bytes, data FROM company_profile_assets WHERE id = ? AND business_id = ?",
+        "SELECT id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data FROM company_profile_assets WHERE id = ? AND business_id = ?",
         [req.params.id, businessId]
       );
     }
     if (!rows || !rows.length) {
       [rows] = await pool.execute(
-        "SELECT mime_type, original_filename, size_bytes, data FROM company_profile_assets WHERE id = ?",
+        "SELECT id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data FROM company_profile_assets WHERE id = ?",
         [req.params.id]
       );
     }
-    // Backward-compatibility: If asset not found in company_profile_assets, read-only fallback to business_growth_assets
-    if (!rows || !rows.length) {
-      try {
-        [rows] = await pool.execute(
-          "SELECT mime_type, original_filename, size_bytes, data FROM business_growth_assets WHERE id = ?",
-          [req.params.id]
-        );
-      } catch {}
+
+    const asset = rows && rows.length ? rows[0] : null;
+
+    // If company_profile_assets record found:
+    if (asset) {
+      // Check if file is stored on filesystem
+      if (asset.storage_key) {
+        const exists = await storageService.fileExists(asset.storage_key);
+        if (exists) {
+          const stream = storageService.createReadStream(asset.storage_key);
+          res.type(asset.mime_type || "application/octet-stream");
+          if (asset.size_bytes) {
+            res.set("Content-Length", String(asset.size_bytes));
+          }
+          res.set("Cache-Control", "private, max-age=86400");
+          return stream.pipe(res);
+        }
+      }
+
+      // If not on filesystem or file missing, check for original BLOB fallback
+      if (asset.data && asset.data.length > 0) {
+        return res
+          .type(asset.mime_type || "application/octet-stream")
+          .set("Content-Length", String(asset.size_bytes || asset.data.length))
+          .set("Cache-Control", "private, max-age=86400")
+          .send(asset.data);
+      }
     }
-    if (!rows || !rows.length) {
-      return res.status(404).json({ success: false, message: "Asset not found." });
+
+    // 2. Direct business_files lookup fallback
+    try {
+      const meta = await getFileMetadataById(req.params.id, businessId, { allowAnyBusiness: !businessId });
+      if (meta && meta.storage_key) {
+        const exists = await storageService.fileExists(meta.storage_key);
+        if (exists) {
+          const stream = storageService.createReadStream(meta.storage_key);
+          res.type(meta.mime_type || "application/octet-stream");
+          if (meta.size_bytes) {
+            res.set("Content-Length", String(meta.size_bytes));
+          }
+          res.set("Cache-Control", "private, max-age=86400");
+          return stream.pipe(res);
+        }
+      }
+    } catch {}
+
+    // 3. Backward-compatibility: If asset not found, read-only fallback to business_growth_assets
+    let bgRows;
+    try {
+      [bgRows] = await pool.execute(
+        "SELECT mime_type, original_filename, size_bytes, data FROM business_growth_assets WHERE id = ?",
+        [req.params.id]
+      );
+    } catch {}
+
+    if (bgRows && bgRows.length && bgRows[0].data) {
+      const bgAsset = bgRows[0];
+      return res
+        .type(bgAsset.mime_type || "application/octet-stream")
+        .set("Content-Length", String(bgAsset.size_bytes || bgAsset.data?.length || 0))
+        .set("Cache-Control", "private, max-age=86400")
+        .send(bgAsset.data);
     }
-    const asset = rows[0];
-    return res
-      .type(asset.mime_type || "application/octet-stream")
-      .set("Content-Length", String(asset.size_bytes || asset.data?.length || 0))
-      .set("Cache-Control", "private, max-age=86400")
-      .send(asset.data);
+
+    return res.status(404).json({ success: false, message: "Asset not found." });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
