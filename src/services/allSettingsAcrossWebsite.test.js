@@ -366,3 +366,107 @@ test("14. SERVICE REMINDERS SETTINGS: Two-way synchronization between appSetting
     autoNotifyWhatsApp: true,
   });
 });
+
+test("15. TRANSACTION HEADER: cashSaleByDefault, addTimeOnTransactions, customerPoDetails, billingNameOfParties persist and take effect", () => {
+  saveAppSettings({
+    cashSaleByDefault: true,
+    addTimeOnTransactions: true,
+    customerPoDetails: true,
+    billingNameOfParties: true,
+    enableInvoiceBillNo: false,
+  });
+
+  const settings = getAppSettings();
+  assert.equal(settings.cashSaleByDefault, true);
+  assert.equal(settings.addTimeOnTransactions, true);
+  assert.equal(settings.customerPoDetails, true);
+  assert.equal(settings.billingNameOfParties, true);
+  assert.equal(settings.enableInvoiceBillNo, false);
+
+  // Reset
+  saveAppSettings({
+    cashSaleByDefault: false,
+    addTimeOnTransactions: false,
+    customerPoDetails: false,
+    billingNameOfParties: false,
+    enableInvoiceBillNo: true,
+  });
+});
+
+test("16. ITEMS TABLE: inclusiveTaxOnRate, displayPurchasePriceOfItems, freeItemQuantity, and itemCountLabel propagate", () => {
+  saveAppSettings({
+    inclusiveTaxOnRate: true,
+    displayPurchasePriceOfItems: true,
+    enableFreeItemQuantity: true,
+    enableItemCount: true,
+    itemCountLabel: "Distinct Items",
+  });
+
+  let settings = getAppSettings();
+  assert.equal(settings.inclusiveTaxOnRate, true);
+  assert.equal(settings.displayPurchasePriceOfItems, true);
+  assert.equal(settings.enableFreeItemQuantity, true);
+  assert.equal(settings.enableItemCount, true);
+  assert.equal(settings.itemCountLabel, "Distinct Items");
+
+  // Calculate row with tax inclusive rate (priceMode: "With Tax") and freeItemQuantity
+  const rowWithTaxInc = calculateRow(
+    { qty: 2, freeQty: 1, price: 118, priceMode: "With Tax", taxRate: "GST @ 18%" },
+    { ...settings, inclusiveTaxOnRate: true }
+  );
+  assert.equal(rowWithTaxInc.amount, 236);
+  assert.equal(rowWithTaxInc.taxable, 200);
+  assert.equal(rowWithTaxInc.tax, 36);
+  assert.equal(rowWithTaxInc.freeQty, 1);
+  assert.equal(rowWithTaxInc.totalQty, 3);
+
+  // Reset
+  saveAppSettings({
+    inclusiveTaxOnRate: false,
+    displayPurchasePriceOfItems: false,
+    enableFreeItemQuantity: false,
+    enableItemCount: false,
+    itemCountLabel: "Count",
+  });
+});
+
+test("17. BILLING TYPE: Lite Sale vs Full Sale modes persist and determine form visibility", () => {
+  saveAppSettings({ billingType: "Lite Sale" });
+  assert.equal(getAppSettings().billingType, "Lite Sale");
+
+  saveAppSettings({ billingType: "Full Sale" });
+  assert.equal(getAppSettings().billingType, "Full Sale");
+});
+
+test("18. TRANSACTION FEATURES: Due dates, link payments, repeat invoices, and termsApplicableFor configuration persist", () => {
+  saveAppSettings({
+    dueDatesAndPaymentTerms: true,
+    linkPaymentsToInvoices: true,
+    enableRepeatInvoices: true,
+    doNotShowInvoicePreview: true,
+    showProfitWhileMakingSaleInvoice: true,
+    showWholesalePriceToggle: true,
+    termsTitle: "Terms of Supply & Warranty",
+    termsAndConditions: "Goods once sold are covered under 1 year manufacturer warranty.",
+    termsApplicableFor: {
+      saleInvoice: true,
+      saleOrder: true,
+      deliveryChallan: false,
+      estimateQuotation: true,
+      purchaseBill: false,
+      purchaseOrder: false,
+      proformaInvoice: true,
+    },
+  });
+
+  const settings = getAppSettings();
+  assert.equal(settings.dueDatesAndPaymentTerms, true);
+  assert.equal(settings.linkPaymentsToInvoices, true);
+  assert.equal(settings.enableRepeatInvoices, true);
+  assert.equal(settings.doNotShowInvoicePreview, true);
+  assert.equal(settings.showProfitWhileMakingSaleInvoice, true);
+  assert.equal(settings.showWholesalePriceToggle, true);
+  assert.equal(settings.termsTitle, "Terms of Supply & Warranty");
+  assert.equal(settings.termsApplicableFor.saleOrder, true);
+  assert.equal(settings.termsApplicableFor.deliveryChallan, false);
+});
