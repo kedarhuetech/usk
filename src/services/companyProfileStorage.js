@@ -144,34 +144,73 @@ export async function saveCompanyProfile(profile, options = {}) {
     ...profile,
   };
 
-  if (profile.businessName) {
+  if (profile.businessName !== undefined) {
     nextProfile.companyName = profile.businessName;
-  } else if (profile.companyName && !profile.businessName) {
+  } else if (profile.companyName !== undefined && profile.businessName === undefined) {
     nextProfile.businessName = profile.companyName;
   }
 
-  // Keep aliases in sync
-  if (nextProfile.phone) nextProfile.phoneNumber = nextProfile.phone;
-  if (nextProfile.phoneNumber && !nextProfile.phone) nextProfile.phone = nextProfile.phoneNumber;
+  // Keep aliases in sync without resurrecting empty values
+  if (profile.phoneNumber !== undefined) {
+    nextProfile.phone = profile.phoneNumber;
+    nextProfile.phoneNumber = profile.phoneNumber;
+  } else if (profile.phone !== undefined) {
+    nextProfile.phoneNumber = profile.phone;
+    nextProfile.phone = profile.phone;
+  }
 
-  if (nextProfile.email) nextProfile.emailId = nextProfile.email;
-  if (nextProfile.emailId && !nextProfile.email) nextProfile.email = nextProfile.emailId;
+  if (profile.emailId !== undefined) {
+    nextProfile.email = profile.emailId;
+    nextProfile.emailId = profile.emailId;
+  } else if (profile.email !== undefined) {
+    nextProfile.emailId = profile.email;
+    nextProfile.email = profile.email;
+  }
 
-  if (nextProfile.businessAddress) nextProfile.streetAddress = nextProfile.businessAddress;
-  if (nextProfile.streetAddress && !nextProfile.businessAddress) nextProfile.businessAddress = nextProfile.streetAddress;
+  if (profile.businessAddress !== undefined) {
+    nextProfile.streetAddress = profile.businessAddress;
+    nextProfile.businessAddress = profile.businessAddress;
+    nextProfile.address = profile.businessAddress;
+  } else if (profile.streetAddress !== undefined) {
+    nextProfile.businessAddress = profile.streetAddress;
+    nextProfile.streetAddress = profile.streetAddress;
+    nextProfile.address = profile.streetAddress;
+  }
 
-  if (nextProfile.logo) nextProfile.logoUrl = nextProfile.logo;
-  if (nextProfile.logoUrl && !nextProfile.logo) nextProfile.logo = nextProfile.logoUrl;
-  if (nextProfile.signature) nextProfile.signatureUrl = nextProfile.signature;
-  if (nextProfile.signatureUrl && !nextProfile.signature) nextProfile.signature = nextProfile.signatureUrl;
+  if (profile.logo !== undefined) {
+    nextProfile.logoUrl = profile.logo;
+    nextProfile.logo = profile.logo;
+  } else if (profile.logoUrl !== undefined) {
+    nextProfile.logo = profile.logoUrl;
+    nextProfile.logoUrl = profile.logoUrl;
+  }
 
-  // Keep bank details in sync
-  const bDetails = nextProfile.bankDetails || {};
-  const bankName = nextProfile.bankName || bDetails.bankName || "";
-  const accountNumber = nextProfile.accountNumber || bDetails.accountNumber || "";
-  const ifscCode = nextProfile.ifscCode || bDetails.ifscCode || "";
-  const branchName = nextProfile.branchName || bDetails.branchName || "";
-  const upiId = nextProfile.upiId || bDetails.upiId || "";
+  if (profile.signature !== undefined) {
+    nextProfile.signatureUrl = profile.signature;
+    nextProfile.signature = profile.signature;
+  } else if (profile.signatureUrl !== undefined) {
+    nextProfile.signature = profile.signatureUrl;
+    nextProfile.signatureUrl = profile.signatureUrl;
+  }
+
+  // Keep bank details in sync without resurrecting empty values via || fallback
+  const bDetails = (profile.bankDetails && typeof profile.bankDetails === "object") ? profile.bankDetails : {};
+
+  const bankName = profile.bankName !== undefined
+    ? profile.bankName
+    : (bDetails.bankName !== undefined ? bDetails.bankName : (nextProfile.bankName ?? ""));
+  const accountNumber = profile.accountNumber !== undefined
+    ? profile.accountNumber
+    : (bDetails.accountNumber !== undefined ? bDetails.accountNumber : (nextProfile.accountNumber ?? ""));
+  const ifscCode = profile.ifscCode !== undefined
+    ? profile.ifscCode
+    : (bDetails.ifscCode !== undefined ? bDetails.ifscCode : (nextProfile.ifscCode ?? ""));
+  const branchName = profile.branchName !== undefined
+    ? profile.branchName
+    : (bDetails.branchName !== undefined ? bDetails.branchName : (nextProfile.branchName ?? ""));
+  const upiId = profile.upiId !== undefined
+    ? profile.upiId
+    : (bDetails.upiId !== undefined ? bDetails.upiId : (nextProfile.upiId ?? ""));
 
   nextProfile.bankName = bankName;
   nextProfile.accountNumber = accountNumber;

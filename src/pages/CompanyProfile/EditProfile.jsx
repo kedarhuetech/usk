@@ -171,6 +171,26 @@ export default function EditProfile() {
         next.companyName = value;
       } else if (name === "companyName") {
         next.businessName = value;
+      } else if (name === "phoneNumber") {
+        next.phone = value;
+      } else if (name === "phone") {
+        next.phoneNumber = value;
+      } else if (name === "emailId") {
+        next.email = value;
+      } else if (name === "email") {
+        next.emailId = value;
+      } else if (name === "businessAddress") {
+        next.streetAddress = value;
+        next.address = value;
+      } else if (name === "streetAddress") {
+        next.businessAddress = value;
+        next.address = value;
+      }
+      if (["bankName", "accountNumber", "ifscCode", "branchName", "upiId"].includes(name)) {
+        next.bankDetails = {
+          ...(prev.bankDetails || {}),
+          [name]: value,
+        };
       }
       return next;
     });
@@ -289,7 +309,7 @@ export default function EditProfile() {
         } catch (uploadErr) {
           throw new Error(uploadErr?.message || "Failed to upload business logo.");
         }
-      } else if (!formData.logo && clearedFields.has("logo")) {
+      } else if (!formData.logo || clearedFields.has("logo") || clearedFields.has("logoUrl")) {
         finalLogoUrl = "";
       }
 
@@ -303,7 +323,7 @@ export default function EditProfile() {
         } catch (uploadErr) {
           throw new Error(uploadErr?.message || "Failed to upload signature image.");
         }
-      } else if (!formData.signature && clearedFields.has("signature")) {
+      } else if (!formData.signature || clearedFields.has("signature") || clearedFields.has("signatureUrl")) {
         finalSignatureUrl = "";
       }
 

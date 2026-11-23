@@ -455,18 +455,20 @@ router.post("/company-profile", async (req, res) => {
     // Helper to resolve string fields with aliases while distinguishing omitted from explicitly cleared
     const resolveField = (aliases, existingValue) => {
       const isCleared = isExplicitClear || aliases.some((a) => clearFields.has(a));
-      const presentAlias = aliases.find((key) => hasOwn(body, key));
-      if (presentAlias !== undefined) {
-        const definedAlias = aliases.find((key) => hasOwn(body, key) && body[key] !== undefined) ?? presentAlias;
-        const raw = body[definedAlias];
-        if (raw == null) {
-          return isCleared ? null : (existingValue ?? null);
+      if (isCleared) return null;
+
+      const presentAliases = aliases.filter((key) => hasOwn(body, key));
+      if (presentAliases.length > 0) {
+        // If any present alias has a non-empty string, prioritize it
+        for (const key of presentAliases) {
+          const val = body[key];
+          if (val != null) {
+            const str = String(val).trim();
+            if (str !== "") return str;
+          }
         }
-        const str = String(raw).trim();
-        if (str === "") {
-          return isCleared ? null : (existingValue ?? null);
-        }
-        return str;
+        // All present aliases were explicitly null, empty, or whitespace
+        return null;
       }
       return existingValue ?? null;
     };
@@ -474,29 +476,23 @@ router.post("/company-profile", async (req, res) => {
     // Helper for bank details supporting root and nested bankDetails object
     const resolveBankField = (fieldName, existingValue) => {
       const isCleared = isExplicitClear || clearFields.has(fieldName) || clearFields.has("bankDetails");
+      if (isCleared) return null;
+
       const bankDetails = body.bankDetails;
       const hasRoot = hasOwn(body, fieldName);
       const hasNested = Boolean(bankDetails && typeof bankDetails === "object" && hasOwn(bankDetails, fieldName));
 
-      if (hasRoot || hasNested) {
-        let raw;
-        if (hasRoot && body[fieldName] !== undefined) {
-          raw = body[fieldName];
-        } else if (hasNested && bankDetails[fieldName] !== undefined) {
-          raw = bankDetails[fieldName];
-        } else if (hasRoot) {
-          raw = body[fieldName];
-        } else {
-          raw = bankDetails[fieldName];
-        }
-        if (raw == null) {
-          return isCleared ? null : (existingValue ?? null);
-        }
+      if (hasRoot) {
+        const raw = body[fieldName];
+        if (raw == null) return null;
         const str = String(raw).trim();
-        if (str === "") {
-          return isCleared ? null : (existingValue ?? null);
-        }
-        return str;
+        return str === "" ? null : str;
+      }
+      if (hasNested) {
+        const raw = bankDetails[fieldName];
+        if (raw == null) return null;
+        const str = String(raw).trim();
+        return str === "" ? null : str;
       }
       return existingValue ?? null;
     };
@@ -545,12 +541,14 @@ router.post("/company-profile", async (req, res) => {
     let signatureUrl;
     const hasSignature = hasOwn(body, "signatureUrl") || hasOwn(body, "signature");
     const isSignatureCleared = isExplicitClear || clearFields.has("signature") || clearFields.has("signatureUrl");
-    if (hasSignature) {
+    if (isSignatureCleared) {
+      signatureUrl = null;
+    } else if (hasSignature) {
       const rawSig = (hasOwn(body, "signatureUrl") && body.signatureUrl !== undefined)
         ? body.signatureUrl
         : body.signature;
       if (rawSig == null || String(rawSig).trim() === "") {
-        signatureUrl = isSignatureCleared ? null : (existing?.signature_url ?? null);
+        signatureUrl = null;
       } else if (typeof rawSig === "string" && rawSig.startsWith("data:image/")) {
         signatureUrl = await persistBase64Asset(rawSig, "company-signature", businessId);
       } else {
@@ -568,12 +566,14 @@ router.post("/company-profile", async (req, res) => {
     let logoUrl;
     const hasLogo = hasOwn(body, "logoUrl") || hasOwn(body, "logo");
     const isLogoCleared = isExplicitClear || clearFields.has("logo") || clearFields.has("logoUrl");
-    if (hasLogo) {
+    if (isLogoCleared) {
+      logoUrl = null;
+    } else if (hasLogo) {
       const rawLogo = (hasOwn(body, "logoUrl") && body.logoUrl !== undefined)
         ? body.logoUrl
         : body.logo;
       if (rawLogo == null || String(rawLogo).trim() === "") {
-        logoUrl = isLogoCleared ? null : (existing?.logo_url ?? null);
+        logoUrl = null;
       } else if (typeof rawLogo === "string" && rawLogo.startsWith("data:image/")) {
         logoUrl = await persistBase64Asset(rawLogo, "company-logo", businessId);
       } else {
