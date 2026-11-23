@@ -38,8 +38,16 @@ export const BACKUP_SOURCES = [
   { category: "Purchases", key: "ledgerly:expenseCategories.v1", shape: "array" },
   { category: "Purchases", key: "ledgerly:expenseItems.v1", shape: "array" },
   { category: "Cash & bank", key: CASH_ADJUSTMENTS_STORAGE_KEY, shape: "array" },
+  { category: "Cash & bank", key: "ledgerly:bankAccounts.v1", shape: "array" },
+  { category: "Cash & bank", key: "ledgerly:bankTransactions.v1", shape: "array" },
   { category: "Cash & bank", key: getChequeStorageKey(), shape: "array" },
   { category: "Loans", key: getLoanAccountsStorageKey(), shape: "array" },
+  { category: "Settings", key: "ledgerly:appSettings.v1", shape: "object" },
+  { category: "Settings", key: "ledgerly:printSettings.v1", shape: "object" },
+  { category: "Settings", key: "ledgerly:serviceReminders.v1", shape: "array" },
+  { category: "Settings", key: "ledgerly:serviceReminderSettings.v1", shape: "object" },
+  { category: "Business growth", key: "ledgerly:onlineStoreSettings.v1", shape: "object" },
+  { category: "Business growth", key: "ledgerly:onlineStoreOrders.v1", shape: "array" },
 ];
 
 const SECRET_FIELD = /(password|passcode|access.?token|refresh.?token|auth.?token|(^|[._-])token($|[._-])|secret|api.?key|authorization|credential)/i;

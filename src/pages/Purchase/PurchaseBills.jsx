@@ -12,6 +12,8 @@ import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getPaymentOuts } from "../../services/transactionRepository.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
+import { getAppSettings } from "../../services/appSettingsStorage";
+import { getInventoryItems } from "../../services/itemsStorage";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateText = (value) => {
@@ -69,6 +71,26 @@ export default function PurchaseBills() {
   const refresh = (next) => { replacePurchaseBills(next); setRecords(next); };
   const addPurchase = () => navigate("/purchase-expense/purchase-bills/new", { state: { from: "/purchase-expense/purchase-bills" } });
   const remove = (bill) => {
+    const appSettings = getAppSettings();
+    if (appSettings.stopSaleOnNegativeStock) {
+      const allInventory = getInventoryItems();
+      const rows = bill.rows || bill.items || [];
+      const wouldCauseNegative = rows.find((r) => {
+        const item = allInventory.find(
+          (it) => it.id === r.sourceItemId || it.id === r.itemId || (it.itemName && it.itemName.toLowerCase() === (r.item || "").toLowerCase())
+        );
+        if (item && item.type !== "service") {
+          const currentStock = Number(item.openingQuantity ?? item.stock ?? 0);
+          const billQty = Number(r.qty ?? r.quantity ?? 0);
+          return currentStock - billQty < 0;
+        }
+        return false;
+      });
+      if (wouldCauseNegative) {
+        toast.error(`Cannot delete this purchase bill: removing purchased stock would cause "${wouldCauseNegative.item}" inventory to drop below zero.`);
+        return;
+      }
+    }
     setConfirmModal({
       isOpen: true,
       title: "Delete Purchase Bill",

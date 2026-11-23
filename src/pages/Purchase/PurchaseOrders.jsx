@@ -418,6 +418,8 @@ export default function PurchaseOrders() {
           const isOverdue = new Date(`${order.dueDate}T23:59:59`) < new Date() && summary.remainingAmount > 0;
           const statusDisplay = summary.isFullyConverted
             ? "Fully Converted"
+            : summary.isPartiallyConverted
+            ? "Partially Received"
             : isOverdue
             ? "Order Overdue"
             : summary.status;

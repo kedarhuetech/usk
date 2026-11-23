@@ -87,7 +87,9 @@ function normalizeLoan(loan) {
 
 function readLoans() {
   try {
-    const parsed = JSON.parse(localStorageRef().getItem(storageKey()) || "[]");
+    const raw = localStorageRef().getItem(storageKey());
+    const fallbackRaw = storageKey() !== LOAN_ACCOUNTS_STORAGE_KEY ? localStorageRef().getItem(LOAN_ACCOUNTS_STORAGE_KEY) : null;
+    const parsed = JSON.parse(raw || fallbackRaw || "[]");
     return Array.isArray(parsed) ? parsed.map(normalizeLoan).filter(Boolean) : [];
   } catch (error) {
     if (error instanceof SyntaxError) return [];
@@ -276,7 +278,11 @@ export async function recordRepayment(loanId, repayment) {
   normalized.createdAt = new Date().toISOString();
 
   if (isDatabaseMode()) {
-    await cashBankDb.saveRepayment(loanId, normalized);
+    try {
+      await cashBankDb.saveRepayment(loanId, normalized);
+    } catch (err) {
+      console.warn("[LoanRepayments] Failed to record repayment in MySQL, using local storage fallback:", err.message);
+    }
   }
 
   loans[index] = { ...loan, repayments: [normalized, ...(loan.repayments || [])], updatedAt: new Date().toISOString() };

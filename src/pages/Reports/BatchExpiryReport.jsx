@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
+import { FiPrinter } from "react-icons/fi";
 import { listBatchExpiryStatus, reconcileBatchQuantities } from "../../services/batchInventoryService.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "../../services/itemsStorage.js";
 import { businessDataApi } from "../../services/apiClient.js";
@@ -49,6 +51,25 @@ export default function BatchExpiryReport() {
     };
   }, []);
 
+  const handleExcel = () => {
+    const data = [
+      ["#", "Item Name", "Batch No.", "Available Qty", "Mfg Date", "Expiry Date", "Status"],
+      ...batches.map((b, i) => [
+        i + 1,
+        b.itemName || b.name,
+        b.batchNo || "—",
+        b.quantity || 0,
+        b.mfgDate || "—",
+        b.expiryDate || "—",
+        b.status || "Valid",
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Batch Expiry");
+    XLSX.writeFile(wb, "Batch_Expiry_Report.xlsx");
+  };
+
   return (
     <section className="min-h-0 flex-1 overflow-auto bg-white p-5">
       <div className="mb-4 flex items-center justify-between">
@@ -58,21 +79,37 @@ export default function BatchExpiryReport() {
             Near expiry means expiry within the next 30 calendar days.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 transition"
-        >
-          {loading ? (
-            <>
-              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-transparent" />
-              <span>Refreshing...</span>
-            </>
-          ) : (
-            <span>Refresh</span>
-          )}
-        </button>
+        <div className="flex items-center gap-3 print:hidden">
+          <button
+            type="button"
+            onClick={handleExcel}
+            className="flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 transition"
+          >
+            <span>▦</span> Excel Report
+          </button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
+          >
+            <FiPrinter /> Print
+          </button>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 transition"
+          >
+            {loading ? (
+              <>
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-600 border-t-transparent" />
+                <span>Refreshing...</span>
+              </>
+            ) : (
+              <span>Refresh</span>
+            )}
+          </button>
+        </div>
       </div>
 
       {error && (

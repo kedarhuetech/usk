@@ -19,9 +19,11 @@ function localStorageRef() {
 
 function readRecords() {
   const raw = localStorageRef().getItem(storageKey());
-  if (!raw) return [];
+  const fallbackRaw = storageKey() !== CHEQUE_STORAGE_KEY ? localStorageRef().getItem(CHEQUE_STORAGE_KEY) : null;
+  const content = raw || fallbackRaw;
+  if (!content) return [];
   try {
-    const records = JSON.parse(raw);
+    const records = JSON.parse(content);
     if (!Array.isArray(records)) return [];
     return records.filter((record) => {
       if (!record || typeof record !== "object" || typeof record.id !== "string" || validateCheque(record)) return false;
@@ -189,6 +191,8 @@ export async function updateCheque(id, changes) {
   return updated;
 }
 
+import { saveBankTransaction } from "./bankAccounts.js";
+
 export async function updateChequeStatus(id, status) {
   let records = readRecords();
   let index = records.findIndex((record) => record.id === id);
@@ -226,6 +230,23 @@ export async function updateChequeStatus(id, status) {
 
   records[index] = updated;
   writeRecords(records);
+
+  if (status === "Cleared" && Number(records[index].amount) > 0) {
+    try {
+      const isReceived = records[index].type === "Received";
+      saveBankTransaction({
+        id: `txn-cheque-${records[index].id}`,
+        accountId: records[index].bankAccountId || records[index].accountId || "bank-1",
+        amount: Number(records[index].amount),
+        type: isReceived ? "money-in" : "money-out",
+        date: new Date().toISOString().slice(0, 10),
+        description: isReceived
+          ? `Cheque cleared: #${records[index].chequeNumber || records[index].number || ""} from ${records[index].partyName || ""}`
+          : `Issued cheque cleared: #${records[index].chequeNumber || records[index].number || ""} to ${records[index].partyName || ""}`,
+      }).catch(() => {});
+    } catch {}
+  }
+
   return updated;
 }
 

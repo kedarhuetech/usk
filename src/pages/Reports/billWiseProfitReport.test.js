@@ -11,9 +11,14 @@ import { ensureLocalTestData } from "../../services/localTransactionTestData.js"
 import { getSaleInvoices } from "../../services/salesStorage.js";
 import { getInventoryItems } from "../../services/itemsStorage.js";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage.js";
+import { clearMemoryCollections } from "../../services/transactionRepository.js";
 
 function setupInMemoryStorage(initial = {}) {
+  clearMemoryCollections();
   const store = new Map(Object.entries(initial));
+  if (!store.has("ledgerly:storageMode")) {
+    store.set("ledgerly:storageMode", "local");
+  }
   globalThis.window = {
     localStorage: {
       getItem: (key) => store.get(key) ?? null,

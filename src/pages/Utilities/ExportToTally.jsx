@@ -9,10 +9,13 @@ import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 const transactionTypes = [
   { value: "sale", label: "Sale", load: getSaleInvoices },
   { value: "purchase", label: "Purchase", load: getPurchaseBills },
+  { value: "credit_note", label: "Credit Note (Sale Return)", load: () => { try { return JSON.parse(localStorage.getItem("ledgerly:saleReturns.v1") || "[]"); } catch { return []; } } },
+  { value: "debit_note", label: "Debit Note (Purchase Return)", load: () => { try { return JSON.parse(localStorage.getItem("ledgerly:purchaseReturns.v1") || "[]"); } catch { return []; } } },
 ];
 
-// This helper handles escape logic.
+// This helper handles escape logic, stripping illegal XML 1.0 control characters and escaping special entities.
 const xmlEscape = (value) => String(value ?? "")
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
   .replace(/>/g, "&gt;")
@@ -89,16 +92,22 @@ function masterXml(records) {
 // This helper handles xml logic.
 function voucherXml(records) {
   const vouchers = records.map((record) => {
-    const isPurchase = record.exportType === "purchase";
+    const isPurchase = record.exportType === "purchase" || record.exportType === "debit_note";
+    const vchType = record.exportType === "credit_note" ? "Credit Note"
+      : record.exportType === "debit_note" ? "Debit Note"
+      : isPurchase ? "Purchase" : "Sales";
     // Handles result.
     const rows = (record.rows || []).filter((row) => text(row.item) && Number(row.qty || row.calculated?.qty) > 0);
     const inventory = rows.map((row) => {
       const quantity = Number(row.qty || row.calculated?.qty || 0);
       const lineAmount = Number(row.calculated?.amount ?? row.amount ?? 0);
-      return `<ALLINVENTORYENTRIES.LIST><STOCKITEMNAME>${xmlEscape(row.item)}</STOCKITEMNAME><ISDEEMEDPOSITIVE>${isPurchase ? "No" : "Yes"}</ISDEEMEDPOSITIVE><ACTUALQTY>${quantity} pcs</ACTUALQTY><BILLEDQTY>${quantity} pcs</BILLEDQTY><RATE>${lineAmount / quantity}</RATE><AMOUNT>${isPurchase ? lineAmount : -lineAmount}</AMOUNT></ALLINVENTORYENTRIES.LIST>`;
+      const unit = xmlEscape(row.unit || "pcs");
+      return `<ALLINVENTORYENTRIES.LIST><STOCKITEMNAME>${xmlEscape(row.item)}</STOCKITEMNAME><ISDEEMEDPOSITIVE>${isPurchase ? "No" : "Yes"}</ISDEEMEDPOSITIVE><ACTUALQTY>${quantity} ${unit}</ACTUALQTY><BILLEDQTY>${quantity} ${unit}</BILLEDQTY><RATE>${quantity > 0 ? lineAmount / quantity : 0}</RATE><AMOUNT>${isPurchase ? lineAmount : -lineAmount}</AMOUNT></ALLINVENTORYENTRIES.LIST>`;
     }).join("");
     const total = isPurchase ? record.exportAmount : -record.exportAmount;
-    return `<TALLYMESSAGE><VOUCHER VCHTYPE="${isPurchase ? "Purchase" : "Sales"}" ACTION="Create"><DATE>${record.exportDate.replace(/-/g, "")}</DATE><VOUCHERNUMBER>${xmlEscape(record.exportNumber)}</VOUCHERNUMBER><VOUCHERTYPENAME>${isPurchase ? "Purchase" : "Sales"}</VOUCHERTYPENAME><PARTYLEDGERNAME>${xmlEscape(record.exportParty)}</PARTYLEDGERNAME><PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW><ALLLEDGERENTRIES.LIST><LEDGERNAME>${xmlEscape(record.exportParty)}</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? "No" : "Yes"}</ISDEEMEDPOSITIVE><AMOUNT>${total}</AMOUNT></ALLLEDGERENTRIES.LIST>${inventory}</VOUCHER></TALLYMESSAGE>`;
+    const narration = xmlEscape(record.description || record.form?.description || record.notes || "");
+    const narrationTag = narration ? `<NARRATION>${narration}</NARRATION>` : "";
+    return `<TALLYMESSAGE><VOUCHER VCHTYPE="${vchType}" ACTION="Create"><DATE>${record.exportDate.replace(/-/g, "")}</DATE><VOUCHERNUMBER>${xmlEscape(record.exportNumber)}</VOUCHERNUMBER><VOUCHERTYPENAME>${vchType}</VOUCHERTYPENAME><PARTYLEDGERNAME>${xmlEscape(record.exportParty)}</PARTYLEDGERNAME><PERSISTEDVIEW>Invoice Voucher View</PERSISTEDVIEW>${narrationTag}<ALLLEDGERENTRIES.LIST><LEDGERNAME>${xmlEscape(record.exportParty)}</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? "No" : "Yes"}</ISDEEMEDPOSITIVE><AMOUNT>${total}</AMOUNT></ALLLEDGERENTRIES.LIST>${inventory}</VOUCHER></TALLYMESSAGE>`;
   }).join("");
   return `<?xml version="1.0" encoding="UTF-8"?><ENVELOPE><HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER><BODY><IMPORTDATA><REQUESTDESC><REPORTNAME>Vouchers</REPORTNAME><STATICVARIABLES><SVCURRENTCOMPANY></SVCURRENTCOMPANY></STATICVARIABLES></REQUESTDESC><REQUESTDATA>${vouchers}</REQUESTDATA></IMPORTDATA></BODY></ENVELOPE>`;
 }

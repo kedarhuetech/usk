@@ -182,9 +182,9 @@ function BarcodeGenerator() {
     const label = document.querySelector("#generated-barcode .barcode-print-label")?.outerHTML;
     const copies = Array.from({ length: Number(generated.quantity) }, () => label).join("");
     printWindow.document.write(`<html><head><title>Barcode labels</title><style>
-      @page { margin: 10mm; } body { margin: 0; font-family: Arial, sans-serif; }
+      @page { margin: 8mm; } body { margin: 0; font-family: Arial, sans-serif; }
       .sheet { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8mm; }
-      .barcode-print-label { box-sizing: border-box; width: 80mm; padding: 4mm; text-align: center; border: 1px solid #cbd5e1; }
+      .barcode-print-label { box-sizing: border-box; width: 80mm; padding: 4mm; text-align: center; border: 1px solid #cbd5e1; page-break-inside: avoid; break-inside: avoid; }
       .barcode-print-label p { margin: 1mm 0; font-size: 10pt; } .barcode-print-label svg { width: 100%; height: 22mm; }
     </style></head><body><div class="sheet">${copies}</div></body></html>`);
     printWindow.document.close();

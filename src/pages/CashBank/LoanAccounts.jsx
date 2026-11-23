@@ -107,7 +107,8 @@ function RepaymentForm({ loan, onCancel, onSaved }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    const repayment = { id: repaymentId, paymentDate, amountPaid: Number(amountPaid), principalPaid: Number(principalPaid), reference, notes };
+    const calculatedInterest = Math.max(0, Math.round((Number(amountPaid || 0) - Number(principalPaid || 0)) * 100) / 100);
+    const repayment = { id: repaymentId, paymentDate, amountPaid: Number(amountPaid), principalPaid: Number(principalPaid), interestPaid: calculatedInterest, reference, notes };
     const validation = validateRepayment(repayment, loan);
     if (validation) { setError(validation); return; }
     setSaving(true); setError("");

@@ -233,12 +233,26 @@ function InvoiceActionsMenu({ invoice, open, onToggle, onAction }) {
   const toggle = (event) => {
     if (open) { onToggle(false); return; }
     const rect = event.currentTarget.getBoundingClientRect();
-    const menuHeight = Math.min(540, window.innerHeight * 0.72);
-    const top = Math.max(12, rect.top - menuHeight - 4);
-    setPosition({ top, right: Math.max(8, window.innerWidth - rect.right) });
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const menuHeight = actions.length * 38 + 16;
+    const shouldFlipUp = spaceBelow < menuHeight + 16 && spaceAbove > spaceBelow;
+    if (shouldFlipUp) {
+      setPosition({
+        bottom: Math.max(8, window.innerHeight - rect.top + 4),
+        right: Math.max(8, window.innerWidth - rect.right),
+        maxHeight: Math.min(560, Math.max(100, spaceAbove - 16)),
+      });
+    } else {
+      setPosition({
+        top: Math.max(8, rect.bottom + 4),
+        right: Math.max(8, window.innerWidth - rect.right),
+        maxHeight: Math.min(560, Math.max(100, spaceBelow - 16)),
+      });
+    }
     onToggle(true);
   };
-  return <div ref={rootRef} className="relative"><button type="button" onClick={toggle} aria-label="More invoice actions" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiMoreVertical className="h-5 w-5" /></button>{open && <div style={{ top: position.top, right: position.right }} className="fixed z-[100] max-h-[min(560px,72vh)] w-60 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-xl">{actions.map((action) => <button key={action} type="button" onClick={() => onAction(action, invoice)} className="w-full rounded px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100">{action}</button>)}</div>}</div>;
+  return <div ref={rootRef} className="relative"><button type="button" onClick={toggle} aria-label="More invoice actions" className="rounded p-1.5 text-slate-500 hover:bg-slate-200"><FiMoreVertical className="h-5 w-5" /></button>{open && <><div className="fixed inset-0 z-[90] cursor-default bg-transparent" onClick={() => onToggle(false)} /><div style={{ ...(position.bottom != null ? { bottom: position.bottom } : { top: position.top }), right: position.right, maxHeight: position.maxHeight }} className="fixed z-[100] w-60 overflow-y-auto rounded-md border border-slate-200 bg-white p-1 shadow-xl">{actions.map((action) => <button key={action} type="button" onClick={() => onAction(action, invoice)} className="w-full rounded px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-100">{action}</button>)}</div></>}</div>;
 }
 
 // Renders the sale invoices interface.

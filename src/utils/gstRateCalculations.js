@@ -101,11 +101,27 @@ export function extractTaxRateNumber(rateStr) {
 }
 
 /**
+ * Determines supply type for 0% and non-taxable GST lines (Table 8 of GSTR-1).
+ */
+export function getSupplyTypeFromRate(rateStr) {
+  const s = String(rateStr || "").trim().toUpperCase();
+  if (s.includes("NON-GST") || s.includes("NON GST")) return "Non-GST";
+  if (s.includes("NIL")) return "Nil-Rated";
+  if (s.includes("EXEMPT")) return "Exempt";
+  return "Standard";
+}
+
+/**
  * Formats a tax rate number into a user-friendly display string.
  */
-export function formatTaxRateLabel(rateNum) {
+export function formatTaxRateLabel(rateNum, supplyType) {
   const r = num(rateNum);
-  if (r === 0) return "0% (Exempt / Nil)";
+  if (r === 0) {
+    if (supplyType === "Nil-Rated") return "0% (Nil-Rated)";
+    if (supplyType === "Exempt") return "0% (Exempt)";
+    if (supplyType === "Non-GST") return "Non-GST Supply";
+    return "0% (Exempt / Nil)";
+  }
   return `${r}%`;
 }
 
@@ -229,9 +245,12 @@ export function resolveRowGst(row = {}, isInterstate = false) {
     }
   }
 
+  const supplyType = getSupplyTypeFromRate(safeRow.taxRate ?? calculated.taxRate);
+
   return {
     taxable,
     taxRate: taxRateNum,
+    supplyType,
     cgst,
     sgst,
     igst,
@@ -370,7 +389,8 @@ export function extractTransactionTaxLines(transaction, type = "Sale", options =
         date: txDate,
         party: partyName || "General",
         taxRate: gst.taxRate,
-        rateLabel: formatTaxRateLabel(gst.taxRate),
+        supplyType: gst.supplyType,
+        rateLabel: formatTaxRateLabel(gst.taxRate, gst.supplyType),
         taxable: gst.taxable,
         cgst: gst.cgst,
         sgst: gst.sgst,
@@ -548,6 +568,9 @@ export function calculateGstRateMetrics(filteredLines = []) {
   let totalIgst = 0;
   let totalCess = 0;
   let totalTax = 0;
+  let nilRatedTaxable = 0;
+  let exemptedTaxable = 0;
+  let nonGstTaxable = 0;
 
   // Rate aggregation map: rateNumber -> aggregation object
   const rateMap = new Map();
@@ -578,6 +601,13 @@ export function calculateGstRateMetrics(filteredLines = []) {
     totalTax += tax;
 
     globalTxSet.add(line.transactionId);
+
+    if (line.taxRate === 0) {
+      const st = line.supplyType || (line.rateLabel && line.rateLabel.includes("Nil") ? "Nil-Rated" : line.rateLabel && line.rateLabel.includes("Non-GST") ? "Non-GST" : "Exempt");
+      if (st === "Nil-Rated") nilRatedTaxable += taxable;
+      else if (st === "Non-GST") nonGstTaxable += taxable;
+      else exemptedTaxable += taxable;
+    }
 
     const rNum = line.taxRate;
     if (!rateMap.has(rNum)) {
@@ -641,6 +671,12 @@ export function calculateGstRateMetrics(filteredLines = []) {
     totalTax,
     totalTransactions: globalTxSet.size,
     rateBreakdown,
+    table8Breakdown: {
+      nilRated: round2(nilRatedTaxable),
+      exempted: round2(exemptedTaxable),
+      nonGst: round2(nonGstTaxable),
+      totalZeroTax: round2(nilRatedTaxable + exemptedTaxable + nonGstTaxable),
+    },
   };
 }
 

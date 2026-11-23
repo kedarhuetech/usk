@@ -332,6 +332,8 @@ export function buildCashFlowEntries(params = {}) {
     expenses = [],
     adjustments = [],
     bankTransactions = [],
+    saleReturns = [],
+    purchaseReturns = [],
     saleInvoiceUi = {},
   } = params || {};
   const list = [];
@@ -342,6 +344,8 @@ export function buildCashFlowEntries(params = {}) {
   const safeExpenses = Array.isArray(expenses) ? expenses : [];
   const safeAdjustments = Array.isArray(adjustments) ? adjustments : [];
   const safeBankTransactions = Array.isArray(bankTransactions) ? bankTransactions : [];
+  const safeSaleReturns = Array.isArray(saleReturns) ? saleReturns : [];
+  const safePurchaseReturns = Array.isArray(purchaseReturns) ? purchaseReturns : [];
   const safeUi = saleInvoiceUi || {};
 
   // 1. Sales
@@ -458,6 +462,52 @@ export function buildCashFlowEntries(params = {}) {
       raw: bt,
       storageKey: "ledgerly:bankTransactions.v1",
     });
+  }
+
+  // 7. Sale Returns (Credit Notes) with cash refund
+  for (const sr of safeSaleReturns) {
+    if (sr.cancelled || sr.status === "Cancelled") continue;
+    const refundAmt = Number(sr.received || sr.refundAmount || 0);
+    if (refundAmt > 0) {
+      list.push({
+        id: `sr-${sr.id}`,
+        date: parseYMD(sr.form?.invoiceDate || sr.date || sr.createdAt),
+        number: sr.number || sr.refNo || "",
+        name: sr.party || "Customer",
+        category: "",
+        type: "Credit Note Refund",
+        paymentMethod: sr.paymentType || "Cash",
+        total: refundAmt,
+        cashIn: 0,
+        cashOut: refundAmt,
+        isUnpaid: false,
+        raw: sr,
+        storageKey: "ledgerly:saleReturns.v1",
+      });
+    }
+  }
+
+  // 8. Purchase Returns (Debit Notes) with cash refund received
+  for (const pr of safePurchaseReturns) {
+    if (pr.cancelled || pr.status === "Cancelled") continue;
+    const receivedAmt = Number(pr.received || pr.receivedAmount || 0);
+    if (receivedAmt > 0) {
+      list.push({
+        id: `pr-${pr.id}`,
+        date: parseYMD(pr.date || pr.createdAt),
+        number: pr.refNo || pr.number || "",
+        name: pr.party || "Supplier",
+        category: "",
+        type: "Debit Note Refund",
+        paymentMethod: pr.paymentType || "Cash",
+        total: receivedAmt,
+        cashIn: receivedAmt,
+        cashOut: 0,
+        isUnpaid: false,
+        raw: pr,
+        storageKey: "ledgerly:purchaseReturns.v1",
+      });
+    }
   }
 
   // Sort chronologically ascending

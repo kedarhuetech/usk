@@ -132,8 +132,6 @@ router.get("/", async (req, res) => {
       category: row.category || "General",
       hsnCode: row.hsn_code || "",
       unit: row.unit || "PCS",
-      type: row.item_type || "product",
-      itemType: row.item_type || "product",
       isActive: row.is_active !== 0,
       salePrice: parseFloat(row.sale_price) || 0,
       price: parseFloat(row.sale_price) || 0,

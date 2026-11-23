@@ -859,6 +859,14 @@ function RowSerialModal({ row, item, onSave, onClose }) {
   const [text, setText] = useState((row.serialNumbers || []).join("\n"));
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const parsed = text
     .split(/[\n,]/)
     .map((s) => s.trim())
@@ -1171,7 +1179,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
       <table className="w-full min-w-[1080px] border-collapse text-[13px] xl:min-w-0">
         <thead>
           <tr className="bg-white text-left text-xs font-bold uppercase text-slate-700">
-            <th rowSpan="2" className="w-10 border-r border-slate-200 px-2 py-1.5 text-center">#</th>
+            <th rowSpan="2" className="sticky left-0 z-20 w-10 border-r border-slate-200 bg-white px-2 py-1.5 text-center shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">#</th>
             <th rowSpan="2" className="w-[25%] min-w-[200px] border-r border-slate-200 px-2 py-1.5">Item</th>
             {appSettings.enableHsnSacCode !== false && (
               <th rowSpan="2" className="w-24 border-r border-slate-200 px-2 py-1.5 text-center">HSN/SAC</th>
@@ -1218,7 +1226,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
 
             return (
               <tr key={row.id} className={`group ${index % 2 === 0 ? "bg-slate-50" : "bg-white"}`}>
-                <td className="border-r border-slate-200 px-1 py-1.5 text-center text-slate-500">
+                <td className={`sticky left-0 z-10 border-r border-slate-200 px-1 py-1.5 text-center text-slate-500 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)] ${index % 2 === 0 ? "bg-slate-50" : "bg-white"}`}>
                   <div className="flex items-center justify-center gap-1">
                     <span>{index + 1}</span>
                     <button type="button" onClick={() => deleteRow(row.id)} aria-label="Delete row" className="rounded p-1 text-slate-400 opacity-100 hover:bg-rose-50 hover:text-rose-600 md:opacity-0 md:group-hover:opacity-100">
@@ -1359,7 +1367,19 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                     </button>
                   </td>
                 )}
-                <td className="border-r border-slate-200 p-1"><CellInput inputMode="decimal" error={rowErrors.qty} value={row.qty} onChange={(event) => updateRow(row.id, "qty", event.target.value)} /></td>
+                <td className="border-r border-slate-200 p-1">
+                  <CellInput inputMode="decimal" error={rowErrors.qty} value={row.qty} onChange={(event) => updateRow(row.id, "qty", event.target.value)} />
+                  {(() => {
+                    if (isPurchase) return null;
+                    const matchedItem = items.find((it) => it.id === row.sourceItemId || (it.name && it.name.toLowerCase() === (row.item || "").trim().toLowerCase()));
+                    const minWholesale = Number(matchedItem?.minimumWholesaleQuantity || matchedItem?.wholesale?.minimumQty || 0);
+                    const wholesalePrice = Number(matchedItem?.wholesalePrice || matchedItem?.wholesale?.price || 0);
+                    if (wholesalePrice > 0 && Math.abs(Number(row.price || 0) - wholesalePrice) < 0.01 && minWholesale > 0 && Number(row.qty || 0) < minWholesale) {
+                      return <span className="block text-[10px] text-amber-600 font-semibold mt-0.5" title={`Wholesale price requires minimum ${minWholesale} qty`}>Min wholesale: {minWholesale}</span>;
+                    }
+                    return null;
+                  })()}
+                </td>
                 <td className="border-r border-slate-200 p-1"><UnitSelector value={row.unit} onChange={(value) => updateRow(row.id, "unit", value)} className="[&_button]:h-8 [&_button]:px-2 [&_button]:text-[13px]" /></td>
                 <td className="border-r border-slate-200 p-1">
                   <div className="grid gap-1">
@@ -1385,7 +1405,7 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
             );
           })}
           <tr className="bg-white font-bold text-slate-700">
-            <td className="border-r border-slate-200 p-1" />
+            <td className="sticky left-0 z-10 border-r border-slate-200 bg-white p-1 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]" />
             <td className="border-r border-slate-200 p-1">
               <button type="button" onClick={() => setRows((current) => [...current, createRow()])} className="rounded-md border border-blue-300 px-3.5 py-1.5 text-[13px] font-bold text-blue-600 hover:bg-blue-50">
                 Add Row
@@ -2028,11 +2048,11 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const [settings, setSettings] = useState(Object.fromEntries(saleSettings.filter((item) => item.type === "checkbox").map((item) => [item.id, item.enabled])));
   const [form, setForm] = useState(() => {
     const baseFallback = {
-      customer: purchaseOrderConversion?.supplier || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || (getAppSettings().cashSaleByDefault ? "Cash Sale" : ""),
-      phone: purchaseOrderConversion?.phone || quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
+      customer: purchaseOrderConversion?.supplier || purchaseOrderConversion?.partyName || purchaseOrderConversion?.party || purchaseOrderConversion?.customer || quotationConversion?.customer || saleOrderConversion?.customer || deliveryChallanConversion?.party || onlineOrderConversion?.customerName || (getAppSettings().cashSaleByDefault ? "Cash Sale" : ""),
+      phone: purchaseOrderConversion?.phone || purchaseOrderConversion?.partyPhone || quotationConversion?.phone || saleOrderConversion?.phone || deliveryChallanConversion?.phone || onlineOrderConversion?.mobile || onlineOrderConversion?.mobileNumber || "",
       billingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
       shippingAddress: quotationConversion?.billingAddress || saleOrderConversion?.billingAddress || deliveryChallanConversion?.billingAddress || onlineOrderConversion?.address || "",
-      invoiceNumber: quotationConversion?.number || deliveryChallanConversion?.number || "1",
+      invoiceNumber: "1",
       invoiceDate: purchaseOrderConversion?.date || quotationConversion?.date || deliveryChallanConversion?.date || currentLocalDate(),
       stateOfSupply: purchaseOrderConversion?.state || quotationConversion?.state || deliveryChallanConversion?.state || "None",
       partyBalance: "",
@@ -2043,10 +2063,13 @@ function AddSale({ mode = "sale", localOnly = false }) {
       description: purchaseOrderConversion ? `Converted from Purchase Order ${purchaseOrderConversion.number}.` : quotationConversion?.description || (saleOrderConversion
         ? `Converted from Sale Order${saleOrderConversions.length > 1 ? "s" : ""} ${saleOrderConversions.map((order) => order.number).join(", ")}.`
         : deliveryChallanConversions.length
-        ? `Converted from Delivery Challan${deliveryChallanConversions.length > 1 ? "s" : ""} ${deliveryChallanConversions.map((challan) => challan.number).join(", ")}.`
+        ? `Converted from Delivery Challan${deliveryChallanConversions.length > 1 ? "s" : ""} ${deliveryChallanConversions.map((challan) => challan.number).join(", ")}. ${deliveryChallanConversion?.description || ""}`.trim()
         : onlineOrderConversion
         ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
         : ""),
+      ewayBillNo: deliveryChallanConversion?.ewayBillNo || deliveryChallanConversion?.eWayBillNo || "",
+      vehicleNumber: deliveryChallanConversion?.vehicleNumber || deliveryChallanConversion?.vehicleNo || "",
+      driverName: deliveryChallanConversion?.driverName || "",
       paymentType: "Cash",
     };
     return extractEditForm(editInvoice, baseFallback);
@@ -2217,6 +2240,20 @@ function AddSale({ mode = "sale", localOnly = false }) {
       if (row.price !== "" && toNumber(row.price) < 0) rowErrors.price = "Invalid price";
       if (row.discountPercent !== "" && (toNumber(row.discountPercent) < 0 || toNumber(row.discountPercent) > 100)) rowErrors.discountPercent = "Invalid discount";
       if (row.discountAmount !== "" && toNumber(row.discountAmount) < 0) rowErrors.discountAmount = "Invalid discount";
+
+      // Wholesale minimum quantity validation
+      if (!isPurchase && trimmedItem && toNumber(row.qty) > 0) {
+        const matchedItem = items.find(
+          (item) =>
+            (row.sourceItemId && String(item.id) === String(row.sourceItemId)) ||
+            (String(item.name || item.itemName || "").trim().toLowerCase() === rowItemName)
+        );
+        const minWholesaleQty = Number(matchedItem?.minimumWholesaleQuantity || matchedItem?.wholesale?.minimumQty || 0);
+        const itemWholesalePrice = Number(matchedItem?.wholesalePrice || matchedItem?.wholesale?.price || 0);
+        if (itemWholesalePrice > 0 && Math.abs(toNumber(row.price) - itemWholesalePrice) < 0.01 && minWholesaleQty > 0 && toNumber(row.qty) < minWholesaleQty) {
+          rowErrors.qty = `Min wholesale qty for ${matchedItem.name || trimmedItem} is ${minWholesaleQty}`;
+        }
+      }
 
       // Batch tracking validation for sales
       if (!isPurchase && appSettings.enableBatchTracking && row.item.trim() && toNumber(row.qty) > 0) {
@@ -2511,6 +2548,24 @@ function AddSale({ mode = "sale", localOnly = false }) {
     if (!validate()) {
       setToast("Please fix highlighted fields.");
       return;
+    }
+    if (isPurchase && !editInvoice) {
+      const allPurchases = getPurchaseBills();
+      const currentBillNo = String(form.invoiceNumber || "").trim().toLowerCase();
+      const currentSupplier = String(form.customer || "").trim().toLowerCase();
+      if (currentBillNo && currentSupplier) {
+        const duplicate = allPurchases.find((b) => {
+          const bNo = String(b.form?.invoiceNumber || b.invoiceNumber || "").trim().toLowerCase();
+          const bSupp = String(b.form?.customer || b.partyName || b.supplier || "").trim().toLowerCase();
+          return bNo === currentBillNo && bSupp === currentSupplier;
+        });
+        if (duplicate) {
+          const confirmDuplicate = typeof window !== "undefined" && window.confirm
+            ? window.confirm(`Warning: Bill #${form.invoiceNumber} already exists for supplier "${form.customer}". Do you still want to save this purchase bill?`)
+            : true;
+          if (!confirmDuplicate) return;
+        }
+      }
     }
     const invoice = buildInvoice();
     if (isPurchase && editInvoice && localOnlyPurchase) {

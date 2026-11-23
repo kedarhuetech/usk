@@ -6,6 +6,7 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
+import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { getParties } from "../../services/partiesStorage";
 import { calculatePartyBalances } from "../../services/partyBalances";
 import {
@@ -47,6 +48,7 @@ export default function AllPartiesReport() {
   const [partyTypeFilter, setPartyTypeFilter] = useState("All parties");
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [printModalOpen, setPrintModalOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -243,7 +245,7 @@ export default function AllPartiesReport() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => setPrintModalOpen(true)}
             className="flex flex-col items-center gap-1 hover:text-blue-600 transition"
           >
             <FiPrinter className="h-5 w-5 text-slate-600" />
@@ -381,6 +383,33 @@ export default function AllPartiesReport() {
           <span className="font-bold text-rose-500">{money(totalPayable)}</span>
         </div>
       </div>
+
+      <ReportPrintPreviewModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        title="All Parties Balance Report"
+        dateFrom={from}
+        dateTo={to}
+        user="All Users"
+        records={filteredRows.map((p) => ({
+          date: to,
+          customer: p.partyName,
+          invoiceNumber: p.phone || "—",
+          paymentType: p.receivableBalance > 0 ? "Receivable" : "Payable",
+          totalAmount: Math.max(p.receivableBalance, p.payableBalance),
+          receivedAmount: p.receivableBalance,
+          balanceAmount: p.payableBalance,
+          form: {
+            customer: p.partyName,
+            invoiceNumber: p.phone || "—",
+            invoiceDate: to,
+            paymentType: p.receivableBalance > 0 ? "Receivable" : "Payable",
+          },
+          rows: [],
+        }))}
+        totalLabel="Net Balance:"
+        totalAmount={Math.abs(totalReceivable - totalPayable)}
+      />
     </div>
   );
 }

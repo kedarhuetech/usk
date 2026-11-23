@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import {
   FiCheck,
   FiDownload,
@@ -15,6 +16,7 @@ import { getCompanyProfile } from "../../services/companyProfileStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { businessGrowthApi } from "../../services/apiClient.js";
 import { normalizePersistedAssetUrls } from "../../services/businessGrowthData.js";
+import { openPrintWindow } from "../../services/unifiedPrintService.js";
 import {
   APP_SETTINGS_UPDATED_EVENT,
   getAppSettings,
@@ -1252,6 +1254,74 @@ function SalePreview() {
     setTimeout(() => setShareNotice(null), 8000);
   };
 
+  const handleDownloadPdf = async () => {
+    if (!invoiceRef.current || !normalized) return;
+    try {
+      setShareNotice({ type: "info", text: "Generating high-resolution PDF..." });
+      const canvas = await html2canvas(invoiceRef.current, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Invoice_${normalized.invoiceNumber || "sale"}.pdf`);
+      setShareNotice({ type: "success", text: "✓ PDF downloaded successfully!" });
+      setTimeout(() => setShareNotice(null), 4000);
+    } catch {
+      window.print();
+    }
+  };
+
+  const handlePrintThermal = () => {
+    if (!normalized) return;
+    const lines = normalized.rows || normalized.items || [];
+    const compName = companyName || "USK";
+    const dateStr = normalized.invoiceDate || "";
+    const invNo = normalized.invoiceNumber || "";
+    const customer = normalized.customer || "Walk-in";
+    const total = normalized.totalAmount ?? normalized.totals?.finalTotal ?? 0;
+    const paid = normalized.receivedAmount ?? normalized.totals?.received ?? 0;
+    const balance = Math.max(0, Number(total) - Number(paid));
+
+    const itemRows = lines.map((r) => `
+      <div style="padding: 3px 0; border-bottom: 1px dotted #ccc; display: flex; justify-content: space-between; font-size: 11px;">
+        <span>${r.item || r.name} (${r.qty || 1} × ₹${Number(r.price || r.rate || 0).toFixed(2)})</span>
+        <b>₹${Number(r.amount || (Number(r.qty || 1) * Number(r.price || r.rate || 0))).toFixed(2)}</b>
+      </div>
+    `).join("");
+
+    const thermalHtml = `<!DOCTYPE html><html><head><title>Thermal Receipt ${invNo}</title><style>@page{margin:0;}body{margin:0;padding:8px;font-family:monospace;font-size:11px;width:72mm;color:#000;}</style></head><body>
+      <div style="text-align:center;">
+        <h3 style="margin:0;font-size:14px;text-transform:uppercase;">${compName}</h3>
+        <p style="margin:2px 0;font-size:10px;">${companyPhone || ""}</p>
+        <p style="margin:2px 0;font-size:10px;font-weight:bold;">${companyGstin ? `GSTIN: ${companyGstin}` : ""}</p>
+        <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:3px 0;margin:5px 0;font-weight:bold;">TAX INVOICE</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px;">
+        <span>Bill: <b>${invNo}</b></span><span>${dateStr}</span>
+      </div>
+      <div style="font-size:10px;">Customer: ${customer}</div>
+      <div style="border-top:1px dashed #000;margin-top:4px;padding-top:3px;">
+        ${itemRows}
+      </div>
+      <div style="border-top:1px dashed #000;margin-top:5px;padding-top:4px;font-size:11px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:bold;">
+          <span>TOTAL:</span><span>₹${Number(total).toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span>Paid:</span><span>₹${Number(paid).toFixed(2)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:bold;">
+          <span>Balance:</span><span>₹${Number(balance).toFixed(2)}</span>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:10px;font-size:10px;">Thank You! Visit Again</div>
+      <script>setTimeout(function(){ window.print(); }, 250);</script>
+    </body></html>`;
+
+    openPrintWindow(thermalHtml, true);
+  };
+
   if (!normalized) {
     return (
       <div className="grid min-h-[80vh] place-items-center bg-slate-100 p-6">
@@ -1370,8 +1440,8 @@ function SalePreview() {
             )}
           </div>
           <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center text-[13px]">
-            <button type="button" onClick={() => window.print()} className="rounded-md p-2 hover:bg-slate-50"><FiDownload className="mx-auto mb-2 h-5 w-5 text-blue-600" />Download PDF</button>
-            <button type="button" onClick={() => window.print()} className="rounded-md p-2 hover:bg-slate-50"><FiPrinter className="mx-auto mb-2 h-5 w-5 text-blue-600" />Print Thermal</button>
+            <button type="button" onClick={handleDownloadPdf} className="rounded-md p-2 hover:bg-slate-50"><FiDownload className="mx-auto mb-2 h-5 w-5 text-blue-600" />Download PDF</button>
+            <button type="button" onClick={handlePrintThermal} className="rounded-md p-2 hover:bg-slate-50"><FiPrinter className="mx-auto mb-2 h-5 w-5 text-blue-600" />Print Thermal</button>
             <button type="button" onClick={() => window.print()} className="rounded-md bg-blue-600 p-2 text-white"><FiPrinter className="mx-auto mb-2 h-5 w-5" />Print Normal</button>
           </div>
         </aside>

@@ -278,7 +278,15 @@ export function saveSaleInvoice(invoice, options = {}) {
     for (const row of normalized.rows || []) {
       const match = inventory.find((i) => i.id === row.sourceItemId || i.id === row.itemId || (i.itemName && i.itemName.toLowerCase() === (row.item || "").toLowerCase()));
       if (match) {
-        const available = Number(match.openingQuantity ?? match.stock ?? 0);
+        let available = Number(match.openingQuantity ?? match.stock ?? 0);
+        if (existingInvoice) {
+          const origRow = (existingInvoice.rows || []).find(
+            (r) => r.sourceItemId === match.id || r.itemId === match.id || (r.item && r.item.toLowerCase() === (match.itemName || "").toLowerCase())
+          );
+          if (origRow) {
+            available += Number(origRow.qty ?? origRow.quantity ?? 0);
+          }
+        }
         const reqQty = Number(row.qty ?? row.quantity ?? 0);
         if (reqQty > available) {
           throw new Error(`Stop Sale on Negative Stock is enabled: "${match.itemName || row.item}" has only ${available} in stock (requested: ${reqQty}).`);
@@ -456,6 +464,54 @@ export function setSaleInvoiceLifecycle(invoiceId, invoiceStatus) {
   const invoice = readInvoices().find((entry) => String(entry.id || entry.invoiceId) === String(invoiceId));
   if (!invoice) throw new Error("Sale invoice not found.");
   return saveSaleInvoice({ ...invoice, invoiceStatus, cancelled: invoiceStatus === "Cancelled", status: invoiceStatus, updatedAt: new Date().toISOString() });
+}
+
+export function applyPaymentToSaleInvoice(invoiceId, paymentAmount = 0) {
+  if (!invoiceId) return null;
+  const currentInvoices = getSaleInvoices();
+  const index = currentInvoices.findIndex((inv) =>
+    String(inv.id || "").toLowerCase() === String(invoiceId).toLowerCase() ||
+    String(inv.invoiceNumber || inv.form?.invoiceNumber || "").toLowerCase() === String(invoiceId).toLowerCase()
+  );
+  if (index < 0) return null;
+
+  const inv = currentInvoices[index];
+  const total = Number(inv.totals?.finalTotal ?? inv.totalAmount ?? inv.total ?? 0);
+  const currentPaid = Number(inv.totals?.received ?? inv.receivedAmount ?? inv.paidAmount ?? 0);
+  const newPaid = currentPaid + Number(paymentAmount || 0);
+  const newBalance = Math.max(0, total - newPaid);
+
+  const updatedInvoice = {
+    ...inv,
+    receivedAmount: newPaid,
+    balanceAmount: newBalance,
+    totals: {
+      ...(inv.totals || {}),
+      received: newPaid,
+      paid: newPaid,
+      balance: newBalance,
+    },
+    status: newBalance <= 0.01 ? "Paid" : "Partially Paid",
+    updatedAt: new Date().toISOString(),
+  };
+
+  currentInvoices[index] = updatedInvoice;
+  writeTransactionCollection(SALE_INVOICES_KEY, currentInvoices);
+  notifyBusinessDataChanged();
+
+  // Sync to MySQL
+  try {
+    transactionsDb.save({
+      ...updatedInvoice,
+      transactionType: "sale",
+      type: "sale",
+      receivedAmount: newPaid,
+      balanceAmount: newBalance,
+      status: updatedInvoice.status,
+    }).catch(() => {});
+  } catch {}
+
+  return updatedInvoice;
 }
 
 export const saleInvoicesStorageKey = SALE_INVOICES_KEY;

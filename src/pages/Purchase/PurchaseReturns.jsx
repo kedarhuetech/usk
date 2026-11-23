@@ -13,7 +13,7 @@ import {
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties, saveParty } from "../../services/partiesStorage";
-import { getPurchaseBills } from "../../services/purchaseBillsStorage";
+import { getPurchaseBills, applyDebitNoteToPurchaseBill } from "../../services/purchaseBillsStorage";
 import { moveBatchRows, reverseBatchMovement } from "../../services/batchInventoryService.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
 import {
@@ -326,6 +326,14 @@ export default function PurchaseReturns() {
       });
 
       persist(editor.mode === "edit" ? records.map((r) => (r.id === saved.id ? saved : r)) : [saved, ...records]);
+
+      // Adjust linked purchase bill balance and debitNoteAppliedAmount
+      if (saved.billNumber || saved.billId) {
+        try {
+          applyDebitNoteToPurchaseBill(saved.billNumber || saved.billId, total);
+        } catch {}
+      }
+
       setEditor(null);
       toast.success(editor.mode === "edit" ? "Debit note updated." : "Debit note created.");
 

@@ -6,6 +6,7 @@ import ReportsSection from "../../components/Dashboard/ReportsSection";
 import StatCard from "../../components/Dashboard/StatCard";
 import WidgetCard from "../../components/Dashboard/WidgetCard";
 import { dashboardData } from "../../constants/dashboardData";
+import { formatCurrency } from "../../services/appSettingsStorage";
 import { loadBusinessSummary } from "../../services/businessRecords";
 import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
 import { purchaseBillsStorageKey } from "../../services/purchaseBillsStorage.js";
@@ -61,7 +62,7 @@ function Dashboard() {
     const amount = summary ? (stat.id === "receivable" ? summary.receivable : summary.payable) : null;
     const formatted = amount == null
       ? (loading ? "Loading…" : "—")
-      : new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(amount);
+      : formatCurrency(amount);
 
     return {
       ...stat,

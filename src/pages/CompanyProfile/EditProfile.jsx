@@ -257,6 +257,23 @@ export default function EditProfile() {
     setIsSaving(true);
     setErrorMessage("");
 
+    const trimmedGstin = (formData.gstin || "").trim().toUpperCase();
+    if (trimmedGstin) {
+      const gstinPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i;
+      if (!gstinPattern.test(trimmedGstin)) {
+        setErrorMessage("Please enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5).");
+        setIsSaving(false);
+        return;
+      }
+    }
+
+    const trimmedPhone = (formData.phone || formData.mobileNumber || "").replace(/\D/g, "");
+    if (formData.phone && (trimmedPhone.length < 10 || trimmedPhone.length > 13)) {
+      setErrorMessage("Please enter a valid 10-digit contact phone number.");
+      setIsSaving(false);
+      return;
+    }
+
     try {
       const businessId = getActiveBusinessId();
       let finalLogoUrl = formData.logoUrl || formData.logo || "";

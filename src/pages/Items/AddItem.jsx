@@ -10,7 +10,9 @@ import UnitSelector from "../../components/items/UnitSelector";
 import { defaultCategories, defaultSubCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
 import { matchGstRateToOption } from "../../services/hsnService.js";
 import { saveBusinessItem } from "../../services/businessRecords";
+import { getInventoryItems } from "../../services/itemsStorage.js";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { getAppSettings } from "../../services/appSettingsStorage.js";
 
 // Renders the select field interface.
 function SelectField({ label, value, options, onChange, className = "" }) {
@@ -171,6 +173,14 @@ function SubCategoryPicker({ category, value, onSelect, onAddNew }) {
 function CategoryModal({ onClose, onCreate }) {
   const [name, setName] = useState("");
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
       <Card className="w-full max-w-sm overflow-hidden shadow-2xl">
@@ -195,6 +205,14 @@ function CategoryModal({ onClose, onCreate }) {
 function SubCategoryModal({ category, onClose, onCreate }) {
   const [name, setName] = useState("");
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
       <Card className="w-full max-w-sm overflow-hidden shadow-2xl">
@@ -217,8 +235,30 @@ function SubCategoryModal({ category, onClose, onCreate }) {
 
 // Renders the unit modal interface.
 function UnitModal({ form, setField, onClose }) {
+  const [unitError, setUnitError] = useState("");
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handleSave = () => {
+    if (form.secondaryUnit && form.secondaryUnit !== form.baseUnit) {
+      const rate = Number(form.conversionRate);
+      if (form.conversionRate !== undefined && form.conversionRate !== "" && (!rate || rate <= 0 || isNaN(rate))) {
+        setUnitError("Conversion rate must be greater than zero.");
+        return;
+      }
+    }
+    setField("unit", form.baseUnit || form.secondaryUnit);
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <Card className="w-full max-w-md overflow-visible shadow-2xl">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <h2 className="text-lg font-bold text-slate-800">Select Unit</h2>
@@ -227,15 +267,32 @@ function UnitModal({ form, setField, onClose }) {
           </button>
         </div>
         <div className="grid gap-5 p-5 sm:grid-cols-2">
-          <UnitSelector label="Base Unit" value={form.baseUnit} onChange={(value) => setField("baseUnit", value)} />
-          <UnitSelector label="Secondary Unit" value={form.secondaryUnit} onChange={(value) => setField("secondaryUnit", value)} />
+          <UnitSelector label="Base Unit" value={form.baseUnit} onChange={(value) => { setField("baseUnit", value); setUnitError(""); }} />
+          <UnitSelector label="Secondary Unit" value={form.secondaryUnit} onChange={(value) => { setField("secondaryUnit", value); setUnitError(""); }} />
         </div>
+        {form.secondaryUnit && form.secondaryUnit !== form.baseUnit && (
+          <div className="px-5 pb-3">
+            <label className="block text-xs font-semibold text-slate-700">
+              Conversion Rate (1 {form.secondaryUnit} = ? {form.baseUnit || "Base Unit"})
+              <input
+                type="number"
+                min="0.0001"
+                step="any"
+                value={form.conversionRate ?? "1"}
+                onChange={(e) => {
+                  setField("conversionRate", e.target.value);
+                  setUnitError("");
+                }}
+                className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm outline-none focus:border-blue-500"
+                placeholder="e.g. 10"
+              />
+            </label>
+            {unitError && <p className="mt-1 text-xs font-medium text-rose-600">{unitError}</p>}
+          </div>
+        )}
         <div className="flex justify-end border-t border-slate-100 px-5 py-4">
           <Button
-            onClick={() => {
-              setField("unit", form.baseUnit || form.secondaryUnit);
-              onClose();
-            }}
+            onClick={handleSave}
             className="rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Save
@@ -350,6 +407,15 @@ function createEditableBatchRows(initialItem) {
 // Renders the batch modal interface.
 function BatchModal({ rows, setRows, onSave, onClose }) {
   const total = getBatchTotal(rows);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   // Updates row.
   const updateRow = (index, field, value) => {
     setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [field]: value } : row)));
@@ -444,6 +510,14 @@ function BatchModal({ rows, setRows, onSave, onClose }) {
 function SerialModal({ serials, onSave, onClose }) {
   const [text, setText] = useState((serials || []).join("\n"));
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const parsed = text
     .split(/[\n,]/)
@@ -653,9 +727,12 @@ function DiscountGroup({ form, setField }) {
 // Renders the taxes section interface.
 function TaxesSection({ form, setField, compact = false, enabled = true }) {
   if (!enabled) return null;
-  const currentOptions = taxOptions.includes(form.taxRate)
-    ? taxOptions
-    : [form.taxRate, ...taxOptions].filter(Boolean);
+  const settings = getAppSettings();
+  const customNames = (settings?.taxRatesList || []).map((t) => t.name).filter(Boolean);
+  const combined = [...new Set([...taxOptions, ...customNames])];
+  const currentOptions = combined.includes(form.taxRate)
+    ? combined
+    : [form.taxRate, ...combined].filter(Boolean);
   return (
     <Card className={`p-5 ${compact ? "" : "min-h-32"}`}>
       <SelectField label="Tax Rate" value={form.taxRate} onChange={(value) => setField("taxRate", value)} options={currentOptions} className="max-w-xs" />
@@ -883,14 +960,29 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
       sac: form.type === "service" ? form.hsn : "",
       image,
       imageUrl: image,
-      wholesale: wholesaleVisible ? wholesale : null,
-      wholesalePrice: wholesaleVisible ? wholesale.price : "",
-      wholesaleTaxMode: wholesaleVisible ? wholesale.taxMode : "",
-      minimumWholesaleQuantity: wholesaleVisible ? wholesale.minimumQty : "",
+      wholesale: (wholesaleVisible && wholesale.price) ? { ...wholesale, minimumQty: Number(wholesale.minimumQty) > 0 ? wholesale.minimumQty : "1" } : null,
+      wholesalePrice: (wholesaleVisible && wholesale.price) ? wholesale.price : "",
+      wholesaleTaxMode: (wholesaleVisible && wholesale.price) ? wholesale.taxMode : "",
+      minimumWholesaleQuantity: (wholesaleVisible && wholesale.price) ? (Number(wholesale.minimumQty) > 0 ? wholesale.minimumQty : "1") : "",
       enableBatchTracking: hasBatchStock || Boolean(form.enableBatchTracking ?? initialItem?.enableBatchTracking),
       batchTracking: hasBatchStock || Boolean(form.enableBatchTracking ?? initialItem?.enableBatchTracking),
       batches: savedBatchRows,
     };
+    const cleanBarcode = String(form.barcode || form.itemCode || "").trim();
+    if (cleanBarcode) {
+      const existingItems = getInventoryItems();
+      const targetId = String(initialItem?.id || form.id || "");
+      const duplicate = existingItems.find(
+        (it) => String(it.id || "") !== targetId &&
+          (String(it.barcode || "").trim().toLowerCase() === cleanBarcode.toLowerCase() ||
+           String(it.itemCode || "").trim().toLowerCase() === cleanBarcode.toLowerCase())
+      );
+      if (duplicate) {
+        setSaveStatus(`Barcode "${cleanBarcode}" already assigned to "${duplicate.itemName || duplicate.name || 'another item'}".`);
+        return;
+      }
+    }
+
     try {
       const savedItem = await (onSave ? onSave(itemPayload) : saveBusinessItem(itemPayload));
       setSaveStatus(`${savedItem?.itemName || itemPayload.itemName || "Item"} saved.`);
@@ -1137,7 +1229,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
         </div>
 
         <footer className="flex justify-end gap-4 border-t border-slate-100 bg-white px-5 py-4">
-          {saveStatus && <p className={`mr-auto self-center text-sm font-semibold ${saveStatus.includes("Could not") ? "text-red-600" : "text-emerald-600"}`}>{saveStatus}</p>}
+          {saveStatus && <p className={`mr-auto self-center text-sm font-semibold ${saveStatus.includes("Could not") || saveStatus.includes("already assigned") ? "text-red-600" : "text-emerald-600"}`}>{saveStatus}</p>}
           <Button type="button" onClick={onClose} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</Button>
           {!isEditMode && <Button onClick={() => saveItem(true)} className="rounded-md border border-slate-200 bg-white text-slate-400">Save & New</Button>}
           <Button onClick={() => saveItem()} className="rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</Button>

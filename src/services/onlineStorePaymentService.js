@@ -16,20 +16,12 @@ export const PAYMENT_STATUSES = {
 // Builds a standard NPCI UPI URI scheme.
 export function generateUpiUri({ upiId, payeeName = "Store", amount = 0, note = "Online Order" }) {
   if (!upiId) return "";
-  const cleanUpi = String(upiId).trim();
-  const cleanName = String(payeeName).trim().slice(0, 50) || "Store";
+  const cleanUpi = encodeURIComponent(String(upiId).trim());
+  const cleanName = encodeURIComponent(String(payeeName).trim().slice(0, 50) || "Store");
   const safeAmount = Number(amount || 0).toFixed(2);
-  const cleanNote = String(note).trim().slice(0, 40) || "Online Order";
+  const cleanNote = encodeURIComponent(String(note).trim().slice(0, 40) || "Online Order");
 
-  const params = new URLSearchParams({
-    pa: cleanUpi,
-    pn: cleanName,
-    am: safeAmount,
-    cu: "INR",
-    tn: cleanNote,
-  });
-
-  return `upi://pay?${params.toString()}`;
+  return `upi://pay?pa=${cleanUpi}&pn=${cleanName}&am=${safeAmount}&cu=INR&tn=${cleanNote}`;
 }
 
 // Generates a base64 Data URL for the QR code image.

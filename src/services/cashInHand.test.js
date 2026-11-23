@@ -38,6 +38,7 @@ test("cash adjustment validation requires a real difference and reason", () => {
 test("cash adjustments persist in browser local storage and load after a refresh", async () => {
   const originalWindow = globalThis.window;
   const values = new Map();
+  values.set("ledgerly:storageMode", "local");
   globalThis.window = { localStorage: {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),

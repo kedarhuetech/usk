@@ -46,6 +46,7 @@ function readParties() {
   } catch {
     return [];
   }
+  return memoryParties;
 }
 
 function readList(key) {
@@ -89,6 +90,7 @@ export function saveParty(party, options = {}) {
     updatedAt: new Date().toISOString(),
   };
   const next = [saved, ...readParties().filter((entry) => String(entry.id) !== String(saved.id))];
+  memoryParties = next;
   if (typeof window !== "undefined" && window.localStorage) {
     window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   }
@@ -104,6 +106,7 @@ export function saveParty(party, options = {}) {
 export function deleteParty(partyId, options = {}) {
   if (typeof window === "undefined" || !window.localStorage) return;
   const next = readParties().filter((entry) => String(entry.id) !== String(partyId));
+  memoryParties = next;
   window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
   setMemoryParties(next);
   if (isDatabaseMode() && !options?.skipRemoteSync) {

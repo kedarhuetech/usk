@@ -119,7 +119,27 @@ function Sidebar() {
       // Ignore storage error
     }
 
-    return [...navMatches, ...itemMatches.slice(0, 10)];
+    let partyMatches = [];
+    try {
+      const parties = JSON.parse(localStorage.getItem("ledgerly:parties.v1") || "[]");
+      parties.forEach((p) => {
+        const pName = String(p.partyName || p.name || "");
+        const pPhone = String(p.phone || "");
+        if (pName.toLowerCase().includes(q) || pPhone.includes(q)) {
+          partyMatches.push({
+            id: `party-${p.id}`,
+            label: pName,
+            parentLabel: pPhone ? `Ph: ${pPhone} · Party` : "Party Directory",
+            path: "/parties/party-details",
+            state: { partyId: p.id },
+          });
+        }
+      });
+    } catch {
+      // Ignore storage error
+    }
+
+    return [...navMatches, ...itemMatches.slice(0, 10), ...partyMatches.slice(0, 5)];
   }, [searchableNavItems, query]);
 
   // Keyboard shortcut listener: Ctrl+K / Ctrl+F
@@ -310,9 +330,10 @@ function Sidebar() {
                   </button>
                 ))
               ) : query.trim() ? (
-                <p className="px-3 py-6 text-center text-sm text-slate-500">
-                  No matching pages or items found
-                </p>
+                <div className="px-3 py-6 text-center text-sm text-slate-500">
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">No results found</p>
+                  <p className="text-xs text-slate-400 mt-1">No transactions, items, or parties matched your search for "{query}"</p>
+                </div>
               ) : (
                 <p className="px-3 py-6 text-center text-xs text-slate-400">
                   Type to search navigation pages, transactions, or inventory items...

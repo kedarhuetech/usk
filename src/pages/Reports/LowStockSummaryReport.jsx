@@ -59,6 +59,8 @@ export default function LowStockSummaryReport() {
 
   const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
   const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
+  const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
+  const purchaseReturns = useMemo(() => readLocal("ledgerly:purchaseReturns.v1"), [refreshTrigger]);
 
   const categories = useMemo(() => {
     const set = new Set();
@@ -90,8 +92,28 @@ export default function LowStockSummaryReport() {
         if (name) get(name).purchased += Math.max(Number(r.qty || r.quantity || 0), 0);
       });
     });
+    saleReturns.forEach((sr) => {
+      if (sr.cancelled || sr.status === "Cancelled") return;
+      (sr.rows || []).forEach((r) => {
+        const name = (r.item || "").trim();
+        if (name) {
+          const entry = get(name);
+          entry.sold = Math.max(0, entry.sold - Math.max(Number(r.qty || r.quantity || 0), 0));
+        }
+      });
+    });
+    purchaseReturns.forEach((pr) => {
+      if (pr.cancelled || pr.status === "Cancelled") return;
+      (pr.rows || []).forEach((r) => {
+        const name = (r.item || "").trim();
+        if (name) {
+          const entry = get(name);
+          entry.purchased = Math.max(0, entry.purchased - Math.max(Number(r.qty || r.quantity || 0), 0));
+        }
+      });
+    });
     return map;
-  }, [sales, purchases]);
+  }, [sales, purchases, saleReturns, purchaseReturns]);
 
   // Filter low stock items: stock <= minStock
   const rows = useMemo(() => {
@@ -118,13 +140,15 @@ export default function LowStockSummaryReport() {
         const purchasePrice = Number(item.purchasePrice || item.atPrice || 0);
         const stockValue = purchasePrice > 0 ? purchasePrice * Math.max(0, stockQty) : 0;
 
+        const isLow = minStock > 0 ? stockQty <= minStock : stockQty < 0;
+
         return {
           id: item.id,
           name,
           minStock,
           stockQty,
           stockValue,
-          isLow: stockQty <= minStock,
+          isLow,
         };
       })
       .filter((r) => r.isLow)

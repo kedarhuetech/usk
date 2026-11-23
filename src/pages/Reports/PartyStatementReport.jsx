@@ -202,7 +202,7 @@ export default function PartyStatementReport() {
         "Payment Type": "—",
         Debit: statement.openingBalanceSigned > 0 ? statement.openingBalance : "",
         Credit: statement.openingBalanceSigned < 0 ? statement.openingBalance : "",
-        "Running Balance": formatRunningBalance(statement.openingBalanceSigned),
+        "Running Balance": statement.openingBalanceSigned,
       },
       // Transactions
       ...statement.transactions.map((t, idx) => ({
@@ -213,7 +213,7 @@ export default function PartyStatementReport() {
         "Payment Type": t.paymentType || "Cash",
         Debit: t.debit > 0 ? t.debit : "",
         Credit: t.credit > 0 ? t.credit : "",
-        "Running Balance": t.runningBalanceFormatted,
+        "Running Balance": t.runningBalanceSigned !== undefined ? t.runningBalanceSigned : (t.debit - t.credit),
       })),
       // Totals
       {
@@ -224,7 +224,7 @@ export default function PartyStatementReport() {
         "Payment Type": "",
         Debit: statement.totalDebit,
         Credit: statement.totalCredit,
-        "Running Balance": formatRunningBalance(statement.closingBalanceSigned),
+        "Running Balance": statement.closingBalanceSigned,
       },
     ];
 

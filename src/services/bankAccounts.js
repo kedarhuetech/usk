@@ -75,6 +75,10 @@ export async function deleteBankAccount(id) {
   return result?.data ?? result;
 }
 
+export function deleteBankTransaction(id) {
+  return businessGrowthApi.remove(BANK_TRANSACTIONS_RESOURCE, id);
+}
+
 function asPaise(value) {
   const amount = Number(value);
   return Number.isFinite(amount) ? Math.round(amount * 100) : 0;

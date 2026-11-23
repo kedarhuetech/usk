@@ -54,7 +54,16 @@ export function calculateBalanceSheet(params = {}) {
     return { id: `loan:${loan.id}`, name: `Loan — ${loan.loanName || loan.lenderName || "Account"}`, amount: cents(Math.max(0, n(loan.originalAmount) - repaid)) };
   }).filter((loan) => loan.amount > 0);
 
-  const cashEntries = buildCashFlowEntries({ sales: safeTransactions.sales || [], purchases: safeTransactions.purchases || [], paymentIns: safeTransactions.paymentIns || [], paymentOuts: safeTransactions.paymentOuts || [], expenses: safeTransactions.expenses || [], adjustments: safeTransactions.cashAdjustments || [], bankTransactions: [], saleInvoiceUi: safeTransactions.saleUi || {} });
+  const cashEntries = buildCashFlowEntries({
+    sales: safeTransactions.sales || [],
+    purchases: safeTransactions.purchases || [],
+    paymentIns: safeTransactions.paymentIns || [],
+    paymentOuts: safeTransactions.paymentOuts || [],
+    expenses: safeTransactions.expenses || [],
+    adjustments: safeTransactions.cashAdjustments || [],
+    bankTransactions: safeBankTransactions,
+    saleInvoiceUi: safeTransactions.saleUi || {},
+  });
   const cashPortion = (entry) => {
     if (Array.isArray(entry?.raw?.payments) && entry.raw.payments.length) return entry.raw.payments.filter((part) => String(part?.type || "").toLowerCase() === "cash").reduce((sum, part) => sum + n(part?.amount), 0);
     return String(entry?.paymentMethod || "").trim().toLowerCase() === "cash" ? n(entry.cashIn) + n(entry.cashOut) : 0;

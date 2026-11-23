@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   FiAlertCircle,
   FiCalendar,
+  FiCamera,
   FiCheck,
   FiChevronDown,
   FiChevronRight,
@@ -11,6 +12,7 @@ import {
   FiFileText,
   FiInfo,
   FiPlus,
+  FiPrinter,
   FiSearch,
   FiSettings,
   FiTag,
@@ -25,7 +27,16 @@ import {
 } from "../../services/itemsStorage";
 import { getParties, saveParty, partiesStorageKey } from "../../services/partiesStorage";
 import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey } from "../../services/salesStorage";
-import { saveBusinessSaleInvoice, saveBusinessParty, saveBusinessItem } from "../../services/businessRecords";
+import {
+  saveBusinessSaleInvoice,
+  saveBusinessItem,
+  loadBusinessItems,
+  saveBusinessParty,
+  loadBusinessParties,
+} from "../../services/businessRecords";
+import AddItem from "../Items/AddItem";
+import AddPartyModal from "../Parties/AddPartyModal";
+import BarcodeScanModal from "../../components/items/BarcodeScanModal";
 import {
   addPosBill,
   closePosBill,
@@ -130,16 +141,16 @@ function billDraftSignature(bill) {
   });
 }
 
-function ActionButton({ children, primary = false, onClick, disabled = false }) {
+function ActionButton({ children, primary = false, onClick, disabled = false, className = "" }) {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`min-h-[48px] rounded-md border px-3 py-2 text-sm font-semibold transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${primary
+      className={`min-h-[36px] sm:min-h-[38px] rounded-md border px-2 sm:px-3 py-1.5 text-xs font-semibold transition hover:brightness-95 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 text-center flex items-center justify-center ${primary
         ? "border-emerald-500 bg-emerald-200 text-slate-800"
         : "border-blue-300 bg-blue-100 text-slate-700"
-        }`}
+        } ${className}`}
     >
       {children}
     </button>
@@ -505,6 +516,7 @@ export default function PointOfSale() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerOpen, setCustomerOpen] = useState(false);
   const [productOpen, setProductOpen] = useState(false);
+  const [barcodeModal, setBarcodeModal] = useState(false);
 
   // Modal State Management
   const [modal, setModal] = useState(null); // { type: string, data?: any }
@@ -522,15 +534,46 @@ export default function PointOfSale() {
     toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // Sync with storage changes
+  // Sync with storage & database changes
   useEffect(() => {
-    const handleStorageChange = () => {
+    let mounted = true;
+    async function syncFromDb() {
+      try {
+        const [items, parties] = await Promise.all([
+          loadBusinessItems(),
+          loadBusinessParties(),
+        ]);
+        if (!mounted) return;
+        if (Array.isArray(items)) {
+          setProducts(loadProducts());
+        }
+        if (Array.isArray(parties)) {
+          setCustomers(loadCustomers());
+        }
+      } catch (err) {
+        console.warn("POS syncFromDb fallback:", err);
+      }
+    }
+    syncFromDb();
+
+    const handleDataChanged = () => {
       setProducts(loadProducts());
       setCustomers(loadCustomers());
       setStorageError(validatePosStorage());
     };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+
+    window.addEventListener("storage", handleDataChanged);
+    window.addEventListener("inventory-items-changed", handleDataChanged);
+    window.addEventListener("parties-changed", handleDataChanged);
+    window.addEventListener("ledgerly:business-data-changed", handleDataChanged);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", handleDataChanged);
+      window.removeEventListener("inventory-items-changed", handleDataChanged);
+      window.removeEventListener("parties-changed", handleDataChanged);
+      window.removeEventListener("ledgerly:business-data-changed", handleDataChanged);
+    };
   }, [loadProducts, loadCustomers]);
 
   useEffect(() => {
@@ -563,29 +606,26 @@ export default function PointOfSale() {
   // Filter products for search
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return products.filter((product) => product.isActive !== false).slice(0, 10);
-
-    return products
-      .filter((product) => {
-        if (product.isActive === false) return false;
-        const matchFields = [product.name, product.code, product.id];
-        if (enableBarcodeScanning) matchFields.push(product.barcode);
-        if (enableItemCategory) matchFields.push(product.category);
-        return matchFields.some((val) => String(val || "").toLowerCase().includes(query));
-      })
-      .slice(0, 12);
+    const active = products.filter((product) => product.isActive !== false);
+    if (!query) return active;
+    return active.filter((product) => {
+      const matchFields = [product.name, product.code];
+      if (enableBarcodeScanning) matchFields.push(product.barcode);
+      if (enableItemCategory && product.category) matchFields.push(product.category);
+      return matchFields.some((value) => String(value || "").toLowerCase().includes(query));
+    });
   }, [products, search, enableBarcodeScanning, enableItemCategory]);
 
   // Filter customers for dropdown
   const filteredCustomers = useMemo(() => {
     const query = customerSearch.trim().toLowerCase();
-    return customers
-      .filter((customer) =>
-        [customer.name, customer.phone].some((val) =>
-          String(val || "").toLowerCase().includes(query)
-        )
+    const list = Array.isArray(customers) ? customers : [];
+    if (!query) return list;
+    return list.filter((customer) =>
+      [customer.name, customer.phone, customer.partyName].some((val) =>
+        String(val || "").toLowerCase().includes(query)
       )
-      .slice(0, 8);
+    );
   }, [customers, customerSearch]);
 
   // Get currently selected line item
@@ -595,6 +635,31 @@ export default function PointOfSale() {
     }
     return draft.items.find((item) => item.lineId === selectedId) || null;
   }, [draft.items, selectedId]);
+
+  function handleBarcodeScan(scannedCode) {
+    const code = String(scannedCode || "").trim();
+    if (!code) return;
+    setBarcodeModal(false);
+
+    const matched = products.find((product) => {
+      if (product.isActive === false) return false;
+      const fields = [product.barcode, product.code];
+      return fields.some((val) => String(val || "").trim().toLowerCase() === code.toLowerCase());
+    });
+
+    if (matched) {
+      addProduct(matched);
+      showToast(`Scanned & added "${matched.name}" to bill!`);
+    } else {
+      setModal({
+        type: "addProduct",
+        name: "",
+        code,
+        barcode: code,
+      });
+      showToast(`Barcode "${code}" not found. Add it as a new item now.`, "info");
+    }
+  }
 
   // Add product to bill
   function addProduct(product) {
@@ -608,7 +673,7 @@ export default function PointOfSale() {
     }
     const existing = draft.items.find((item) => item.productId === product.id);
     const requestedQuantity = Number(existing?.qty || 0) + 1;
-    if (product.type !== "service" && requestedQuantity > Number(product.stock || 0)) {
+    if (appSettings.stopSaleOnNegativeStock && product.type !== "service" && requestedQuantity > Number(product.stock || 0)) {
       showToast(`Only ${Number(product.stock || 0)} ${product.unit || "unit(s)"} available.`, "warning");
       return;
     }
@@ -858,9 +923,15 @@ export default function PointOfSale() {
       const quantityInBill = calculations.lines
         .filter((entry) => entry.productId === line.productId)
         .reduce((sum, entry) => sum + entry.qty, 0);
-      if ((product.type || product.itemType) !== "service" && quantityInBill > stock) {
+      if (appSettings.stopSaleOnNegativeStock && (product.type || product.itemType) !== "service" && quantityInBill > stock) {
         showToast(`Insufficient stock for ${line.name}. Available: ${stock}.`, "warning");
         return;
+      }
+      if (appSettings.enableItemSerialTracking && (product.hasSerialTracking || product.enableSerialTracking || (Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0))) {
+        const serials = Array.isArray(line.serialNumbers) ? line.serialNumbers : [];
+        if (serials.length < line.qty && Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0) {
+          line.serialNumbers = product.serialNumbers.slice(0, line.qty);
+        }
       }
     }
     if (saveBillLockRef.current) return;
@@ -1046,107 +1117,82 @@ export default function PointOfSale() {
   ];
 
   return (
-    <main className="flex h-screen w-screen min-h-[600px] flex-col overflow-hidden bg-[#e8edf5] text-[#41485d]">
-      {/* Top Header Bar */}
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 text-sm">
-        <div className="flex items-center gap-5 text-slate-700">
-          <button
-            type="button"
-            onClick={() => navigate("/company-profile")}
-            className="font-semibold text-slate-800 hover:text-blue-600 transition"
-          >
-            Company
-          </button>
-          <button
-            type="button"
-            onClick={() => setModal({ type: "shortcuts" })}
-            className="hover:text-blue-600 transition"
-          >
-            Help
-          </button>
+    <main className="flex h-full w-full max-w-full flex-col overflow-hidden bg-[#e8edf5] text-[#41485d]">
+      {/* Bill Tabs & Actions Bar */}
+      <nav className="flex h-9 shrink-0 items-center justify-between gap-1 border-b border-slate-200 bg-white px-2 w-full max-w-full overflow-hidden select-none">
+        <div className="flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto py-0.5">
+          {billSession.bills.map((bill) => (
+            <div
+              key={bill.id}
+              className={`flex h-full shrink-0 items-center gap-1 rounded-t border-t-2 px-2 ${
+                bill.id === billSession.activeBillId
+                  ? "border-blue-600 bg-[#f8f9fc]"
+                  : "border-transparent bg-white"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => activateBill(bill.id)}
+                className="max-w-28 sm:max-w-36 truncate text-xs font-semibold text-slate-800"
+                aria-current={bill.id === billSession.activeBillId ? "page" : undefined}
+              >
+                #{bill.invoiceNo}
+              </button>
+              <button
+                type="button"
+                onClick={() => requestCloseBill(bill.id)}
+                aria-label={`Close bill ${bill.invoiceNo}`}
+                className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+              >
+                <FiX size={12} />
+              </button>
+            </div>
+          ))}
           <button
             type="button"
             onClick={handleNewBillClick}
-            title="Start a new bill"
-            className="hover:text-blue-600 transition"
+            className="flex h-6.5 shrink-0 items-center gap-1 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
           >
-            ⟳
+            <FiPlus className="text-blue-600" size={12} />
+            <span>New Bill</span>
           </button>
         </div>
 
-        <div className="hidden items-center gap-2 text-xs md:flex">
-          <span>Customer Support:</span>
-          <a className="text-blue-600 hover:underline" href="tel:+9876544567">
-            +91-8764567987
-          </a>
-          <span className="text-slate-300">|</span>
-          <button
-            type="button"
-            onClick={() => showToast("Online Support is available 24/7 at supportudyog.com")}
-            className="text-blue-600 hover:underline"
-          >
-            Get Instant Online Support
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <div className="hidden text-[11px] text-slate-500 xl:block">
+            Saved: <span className="font-semibold text-slate-700">{bills.length}</span>
+          </div>
           <button
             type="button"
             title="Settings"
             onClick={() => setModal({ type: "settings" })}
-            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 transition"
+            className="rounded p-1 text-slate-600 hover:bg-slate-100 transition"
           >
-            <FiSettings size={18} />
+            <FiSettings size={15} />
           </button>
           <button
             type="button"
-            title="Close POS (Esc)"
-            aria-label="Close POS and return to previous page"
+            title="Close POS"
+            aria-label="Close POS"
             onClick={handleClosePOS}
-            className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer shadow-sm"
+            className="flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition cursor-pointer shadow-xs"
           >
-            <FiX className="h-4 w-4" />
+            <FiX className="h-3 w-3" />
             <span>Close</span>
           </button>
         </div>
-      </header>
-
-      {/* Bill Tabs & Actions Bar */}
-      <nav className="flex h-[48px] shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3">
-        <div className="flex h-full min-w-0 items-center gap-1 overflow-x-auto">
-          {billSession.bills.map((bill) => (
-            <div key={bill.id} className={`flex h-full shrink-0 items-center gap-3 rounded-t-md border-t-2 px-3 ${bill.id === billSession.activeBillId ? "border-blue-600 bg-[#f8f9fc]" : "border-transparent bg-white"}`}>
-              <button type="button" onClick={() => activateBill(bill.id)} className="max-w-40 truncate text-sm font-semibold text-slate-800" aria-current={bill.id === billSession.activeBillId ? "page" : undefined}>
-                #{bill.invoiceNo}
-              </button>
-              <button type="button" onClick={() => requestCloseBill(bill.id)} aria-label={`Close bill ${bill.invoiceNo}`} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 transition">
-                <FiX />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={handleNewBillClick}
-          className="flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition"
-        >
-          <FiPlus className="text-blue-600" /> New Bill [Ctrl+T]
-        </button>
-        <div className="ml-auto hidden text-xs text-slate-500 sm:block">
-          Saved bills: <span className="font-semibold text-slate-700">{bills.length}</span>
-        </div>
       </nav>
 
-      {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{storageError}</p>}
+      {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-700">{storageError}</p>}
 
       {/* Main Split Grid */}
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-1.5 overflow-auto p-1.5 lg:grid-cols-[minmax(0,1.82fr)_minmax(340px,1fr)]">
+      <div className="flex-1 min-h-0 w-full max-w-full flex flex-col lg:flex-row gap-1 p-1 overflow-hidden">
         {activeBill ? <>
           {/* Left Section: Search, Table, Shortcuts Bar */}
-          <section className="flex min-h-[500px] flex-col gap-1.5">
+          <section className="flex flex-col flex-1 min-h-0 min-w-0 max-w-full gap-1 overflow-hidden">
             {/* Item Search Bar */}
             <div className="relative shrink-0">
-              <label className="flex h-[58px] items-center gap-3 rounded-md border-2 border-blue-500 bg-white px-3 shadow-sm">
+              <label className="flex h-9 items-center gap-2 rounded-md border-2 border-blue-500 bg-white px-2 shadow-xs">
                 <input
                   ref={searchRef}
                   aria-label="Search items"
@@ -1187,26 +1233,41 @@ export default function PointOfSale() {
                     }
                   }}
                   placeholder={enableBarcodeScanning ? "Search item name or code, or scan barcode..." : "Search item name or code..."}
-                  className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:font-medium placeholder:text-slate-400 sm:text-lg"
+                  className="min-w-0 flex-1 bg-transparent text-xs sm:text-sm outline-none placeholder:font-medium placeholder:text-slate-400"
                 />
                 {search && (
                   <button
                     type="button"
                     onClick={() => setSearch("")}
                     aria-label="Clear search"
-                    className="rounded p-1 text-slate-400 hover:text-slate-600"
+                    className="rounded p-0.5 text-slate-400 hover:text-slate-600 mr-1"
                   >
-                    <FiX />
+                    <FiX size={13} />
                   </button>
                 )}
-                <FiSearch size={24} className="shrink-0 text-blue-500" />
+                {enableBarcodeScanning && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setBarcodeModal(true);
+                    }}
+                    title="Scan Barcode (Camera / USB Scanner)"
+                    className="flex shrink-0 items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition mr-1"
+                  >
+                    <FiCamera size={13} />
+                    <span>Scan</span>
+                  </button>
+                )}
+                <FiSearch size={16} className="shrink-0 text-blue-500" />
               </label>
 
               {/* Product Dropdown Results */}
               {productOpen && (
-                <div className="absolute left-0 right-0 top-full z-20 max-h-80 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
-                  <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 border-b">
-                    Stored Items in LocalStorage ({products.length} total)
+                <div className="absolute left-0 right-0 top-full z-20 max-h-80 overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                  <div className="bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-500 border-b">
+                    All Items ({filteredProducts.length})
                   </div>
                   {filteredProducts.map((product) => (
                     <button
@@ -1214,24 +1275,24 @@ export default function PointOfSale() {
                       key={product.id}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => addProduct(product)}
-                      className="flex w-full items-center justify-between border-b border-slate-100 px-4 py-2.5 text-left transition hover:bg-blue-50"
+                      className="flex w-full items-center justify-between border-b border-slate-100 px-3 py-1.5 text-left transition hover:bg-blue-50"
                     >
                       <div>
-                        <span className="block font-semibold text-slate-800">{product.name}</span>
-                        <span className="text-xs text-slate-500">
+                        <span className="block font-semibold text-slate-800 text-xs">{product.name}</span>
+                        <span className="text-[10px] text-slate-500">
                           {product.code} · {product.unit} · GST {product.taxRate}%
                           {product.type !== "service" ? ` · Stock: ${product.stock}` : ""}
                           {enableItemCategory && product.category ? ` · ${product.category}` : ""}
                           {enableBarcodeScanning && product.barcode ? ` · Barcode: ${product.barcode}` : ""}
                         </span>
                       </div>
-                      <span className="font-bold text-slate-900">₹{money(product.price)}</span>
+                      <span className="font-bold text-slate-900 text-xs">₹{money(product.price)}</span>
                     </button>
                   ))}
 
                   {filteredProducts.length === 0 && (
-                    <div className="p-4 text-sm text-slate-500">
-                      No matching item found in local storage.
+                    <div className="p-3 text-xs text-slate-500">
+                      No matching item found.
                       <button
                         type="button"
                         onClick={() => {
@@ -1248,7 +1309,7 @@ export default function PointOfSale() {
                         }}
                         className="ml-2 font-bold text-blue-600 hover:underline"
                       >
-                        + Add this item to LocalStorage
+                        + Add Item
                       </button>
                     </div>
                   )}
@@ -1258,22 +1319,22 @@ export default function PointOfSale() {
 
             {/* Items Table */}
             <div
-              className="min-h-[220px] flex-1 overflow-auto rounded-md border border-slate-300 bg-white shadow-sm"
+              className="flex-1 min-h-0 w-full max-w-full overflow-y-auto overflow-x-auto rounded-md border border-slate-300 bg-white shadow-xs"
               onClick={() => setProductOpen(false)}
             >
-              <table className="min-w-[900px] w-full border-collapse text-sm">
+              <table className="w-full min-w-[620px] border-collapse text-xs">
                 <thead className="sticky top-0 z-10 bg-[#f3f4f6] text-left font-semibold text-slate-600">
-                  <tr className="h-[55px]">
-                    <th className="border border-slate-200 px-3">#</th>
-                    <th className="border border-slate-200 px-3">ITEM CODE</th>
-                    <th className="border border-slate-200 px-3">ITEM NAME</th>
-                    <th className="border border-slate-200 px-2 text-center">QTY</th>
-                    <th className="border border-slate-200 px-2">UNIT</th>
-                    <th className="border border-slate-200 px-2">PRICE/UNIT (₹)</th>
-                    <th className="border border-slate-200 px-2">DISCOUNT (₹)</th>
-                    <th className="border border-slate-200 px-2">TAX (₹)</th>
-                    <th className="border border-slate-200 px-2">TOTAL (₹)</th>
-                    <th className="border border-slate-200 px-2 text-center">ACTION</th>
+                  <tr className="h-7.5">
+                    <th className="border border-slate-200 px-2">#</th>
+                    <th className="border border-slate-200 px-2">ITEM CODE</th>
+                    <th className="border border-slate-200 px-2">ITEM NAME</th>
+                    <th className="border border-slate-200 px-1 text-center">QTY</th>
+                    <th className="border border-slate-200 px-1">UNIT</th>
+                    <th className="border border-slate-200 px-1">PRICE/UNIT (₹)</th>
+                    <th className="border border-slate-200 px-1">DISCOUNT (₹)</th>
+                    <th className="border border-slate-200 px-1">TAX (₹)</th>
+                    <th className="border border-slate-200 px-1">TOTAL (₹)</th>
+                    <th className="border border-slate-200 px-1 text-center">ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1283,18 +1344,18 @@ export default function PointOfSale() {
                       <tr
                         key={item.lineId}
                         onClick={() => setSelectedId(item.lineId)}
-                        className={`h-[52px] cursor-pointer transition ${isSelected
+                        className={`h-8 cursor-pointer transition ${isSelected
                           ? "bg-[#e3f1ff] ring-1 ring-blue-300"
                           : "hover:bg-slate-50"
                           }`}
                       >
-                        <td className="border border-slate-200 px-3 font-medium">{index + 1}</td>
-                        <td className="border border-slate-200 px-3 text-slate-600">{item.code}</td>
-                        <td className="border border-slate-200 px-3">
-                          <div className="font-semibold text-slate-800">{item.name}</div>
-                          <div className="text-xs text-slate-500">GST {item.taxRate}%</div>
+                        <td className="border border-slate-200 px-2 font-medium">{index + 1}</td>
+                        <td className="border border-slate-200 px-2 text-slate-600">{item.code}</td>
+                        <td className="border border-slate-200 px-2">
+                          <div className="font-semibold text-slate-800 leading-tight">{item.name}</div>
+                          <div className="text-[10px] text-slate-500">GST {item.taxRate}%</div>
                         </td>
-                        <td className="border border-slate-200 p-1 text-center">
+                        <td className="border border-slate-200 p-0.5 text-center">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1306,13 +1367,13 @@ export default function PointOfSale() {
                                 qty: String(item.qty),
                               });
                             }}
-                            className="rounded border border-slate-200 bg-white px-2.5 py-1 text-sm font-semibold hover:border-blue-500 hover:text-blue-600 transition"
+                            className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs font-semibold hover:border-blue-500 hover:text-blue-600 transition"
                             title="Click to change quantity"
                           >
                             {item.qty}
                           </button>
                         </td>
-                        <td className="border border-slate-200 px-2">
+                        <td className="border border-slate-200 px-1">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1330,25 +1391,25 @@ export default function PointOfSale() {
                             {item.unit}
                           </button>
                         </td>
-                        <td className="border border-slate-200 px-2 font-medium">
+                        <td className="border border-slate-200 px-1 font-medium">
                           ₹{money(item.price)}
                         </td>
-                        <td className="border border-slate-200 px-2 text-slate-600">
+                        <td className="border border-slate-200 px-1 text-slate-600">
                           {item.discount > 0 ? (
                             <span className="text-emerald-600 font-semibold">
                               −₹{money(item.discount)}
                             </span>
                           ) : (
-                            "₹0.00"
+                            "0.00"
                           )}
                         </td>
-                        <td className="border border-slate-200 px-2 text-slate-600">
+                        <td className="border border-slate-200 px-1 text-slate-600">
                           ₹{money(item.itemTax)}
                         </td>
-                        <td className="border border-slate-200 px-2 font-bold text-slate-900">
+                        <td className="border border-slate-200 px-1 font-bold text-slate-900">
                           ₹{money(item.total)}
                         </td>
-                        <td className="border border-slate-200 px-2 text-center">
+                        <td className="border border-slate-200 p-0.5 text-center">
                           <button
                             type="button"
                             onClick={(event) => {
@@ -1362,7 +1423,7 @@ export default function PointOfSale() {
                             title="Remove item"
                             className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition"
                           >
-                            <FiTrash2 size={16} />
+                            <FiTrash2 size={14} />
                           </button>
                         </td>
                       </tr>
@@ -1373,9 +1434,9 @@ export default function PointOfSale() {
                     <tr>
                       <td
                         colSpan={10}
-                        className="h-48 border border-slate-200 text-center text-slate-400"
+                        className="py-4 border border-slate-200 text-center text-slate-400 text-xs"
                       >
-                        <FiFileText size={32} className="mx-auto mb-2 opacity-40" />
+                        <FiFileText size={18} className="mx-auto mb-1 opacity-40" />
                         No items added. Search or scan a product above to add.
                       </td>
                     </tr>
@@ -1385,21 +1446,27 @@ export default function PointOfSale() {
             </div>
 
             {/* Bottom Action Buttons Bar */}
-            <div className="grid shrink-0 grid-cols-2 gap-2 rounded-md border border-slate-200 bg-white p-2 sm:grid-cols-4">
+            <div className="grid shrink-0 grid-cols-4 sm:grid-cols-4 lg:grid-cols-7 gap-1 rounded-md border border-slate-200 bg-white p-1">
               {shortcuts.map(([label, action]) => (
-                <ActionButton key={label} onClick={action}>
+                <button
+                  key={label}
+                  type="button"
+                  onClick={action}
+                  className="h-7 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-slate-700 px-1 text-[11px] font-medium leading-none text-center transition active:scale-[0.98] truncate"
+                  title={label}
+                >
                   {label}
-                </ActionButton>
+                </button>
               ))}
             </div>
 
             {/* Backup & Status Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
-              <span className="flex items-center gap-1.5 text-slate-600">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                All products loaded directly from LocalStorage ({products.length} products).
+            <div className="flex shrink-0 items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] shadow-xs">
+              <span className="flex items-center gap-1.5 text-slate-600 truncate">
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                <span className="truncate">All products loaded ({products.length} products).</span>
               </span>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 shrink-0 font-medium">
                 <button
                   type="button"
                   onClick={() => {
@@ -1413,13 +1480,13 @@ export default function PointOfSale() {
                       stock: "",
                     });
                   }}
-                  className="font-semibold text-blue-600 hover:underline"
+                  className="text-blue-600 hover:underline"
                 >
-                  + Add New Product
+                  + Add Product
                 </button>
                 <button
                   type="button"
-                  className="font-semibold text-slate-600 hover:text-blue-600 hover:underline"
+                  className="text-slate-600 hover:text-blue-600 hover:underline"
                   onClick={() => {
                     const data = JSON.stringify({ products, customers, bills, draft }, null, 2);
                     const blob = new Blob([data], { type: "application/json" });
@@ -1439,40 +1506,89 @@ export default function PointOfSale() {
           </section>
 
           {/* Right Section: Bill Details, Totals & Payment Controls */}
-          <aside className="flex min-h-[500px] flex-col gap-1.5">
-            {/* Customer & Date Selector */}
-            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-              <label className="flex h-[52px] items-center justify-between rounded-xl border border-slate-300 px-4">
-                <span className="text-sm font-semibold text-slate-700">Date</span>
-                <input
-                  type="date"
-                  aria-label="Bill date"
-                  value={draft.date}
-                  onChange={(event) => updateDraft({ date: event.target.value })}
-                  className="max-w-[165px] bg-transparent text-sm font-medium text-slate-800 outline-none"
-                />
-                <FiCalendar className="text-blue-500" size={19} />
-              </label>
-
-              <div className="relative mt-3">
-                <div className="flex h-[56px] items-center rounded-xl border border-slate-300 px-3">
-                  <FiUser className="mr-2 text-slate-400" />
+          <aside className="w-full lg:w-[310px] xl:w-[340px] shrink-0 flex flex-col min-h-0 gap-1 overflow-y-auto">
+            {/* Customer & Date Selector (Compact Side-by-Side) */}
+            <div className="shrink-0 rounded-md border border-slate-200 bg-white p-1.5 shadow-xs">
+              <div className="grid grid-cols-[105px_1fr] gap-1.5">
+                <label className="flex h-7.5 items-center justify-between rounded border border-slate-300 px-1.5 text-[11px]">
                   <input
-                    value={customerOpen ? customerSearch : draft.customer}
-                    onChange={(event) => {
-                      setCustomerSearch(event.target.value);
-                      setCustomerOpen(true);
-                    }}
-                    onFocus={() => {
-                      setCustomerSearch(draft.customer);
-                      setCustomerOpen(true);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && customerSearch.trim()) {
-                        event.preventDefault();
-                        const existing = filteredCustomers[0];
-                        if (existing) selectCustomer(existing);
-                        else {
+                    type="date"
+                    aria-label="Bill date"
+                    value={draft.date}
+                    onChange={(event) => updateDraft({ date: event.target.value })}
+                    className="bg-transparent text-[10px] font-medium text-slate-800 outline-none w-full"
+                  />
+                </label>
+
+                <div className="relative">
+                  <div className="flex h-7.5 items-center rounded border border-slate-300 px-1.5">
+                    <FiUser className="mr-1 text-slate-400 shrink-0" size={12} />
+                    <input
+                      value={customerOpen ? customerSearch : draft.customer}
+                      onChange={(event) => {
+                        setCustomerSearch(event.target.value);
+                        setCustomerOpen(true);
+                      }}
+                      onFocus={() => {
+                        setCustomerSearch(draft.customer);
+                        setCustomerOpen(true);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && customerSearch.trim()) {
+                          event.preventDefault();
+                          const existing = filteredCustomers[0];
+                          if (existing) selectCustomer(existing);
+                          else {
+                            setModal({
+                              type: "addCustomer",
+                              name: customerSearch.trim(),
+                              phone: "",
+                              address: "",
+                            });
+                            setCustomerOpen(false);
+                          }
+                        }
+                      }}
+                      placeholder="Customer name / phone"
+                      className="min-w-0 flex-1 bg-transparent text-[11px] font-medium text-slate-800 outline-none placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCustomerOpen((open) => !open)}
+                      aria-label="Show customers"
+                      className="p-0.5"
+                    >
+                      <FiChevronDown className="text-blue-500 shrink-0" size={13} />
+                    </button>
+                  </div>
+
+                  {/* Customer Dropdown */}
+                  {customerOpen && (
+                    <div className="absolute left-0 right-0 top-full z-20 max-h-72 overflow-y-auto rounded-md border border-slate-300 bg-white shadow-xl">
+                      <div className="bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-500 border-b">
+                        All Customers ({filteredCustomers.length})
+                      </div>
+                      {filteredCustomers.map((customer) => (
+                        <button
+                          type="button"
+                          key={customer.id}
+                          onClick={() => selectCustomer(customer)}
+                          className="block w-full border-b border-slate-100 px-2.5 py-1 text-left hover:bg-blue-50 transition"
+                        >
+                          <span className="flex items-center gap-1.5 font-semibold text-slate-800 text-xs">
+                            <span>{customer.name}</span>
+                            {(customer.status === "Inactive" || customer.isInactive) && (
+                              <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-semibold text-amber-800">
+                                Inactive
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-[10px] text-slate-500">{customer.phone || "No phone"}</span>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
                           setModal({
                             type: "addCustomer",
                             name: customerSearch.trim(),
@@ -1480,74 +1596,25 @@ export default function PointOfSale() {
                             address: "",
                           });
                           setCustomerOpen(false);
-                        }
-                      }
-                    }}
-                    placeholder="Search customer name or phone"
-                    className="min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setCustomerOpen((open) => !open)}
-                    aria-label="Show customers"
-                    className="p-1"
-                  >
-                    <FiChevronDown className="text-blue-500" />
-                  </button>
-                </div>
-
-                {/* Customer Dropdown */}
-                {customerOpen && (
-                  <div className="absolute left-0 right-0 top-full z-20 max-h-56 overflow-auto rounded-md border border-slate-300 bg-white shadow-xl">
-                    <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-500 border-b">
-                      Customers in LocalStorage ({customers.length})
-                    </div>
-                    {filteredCustomers.map((customer) => (
+                        }}
+                        className="w-full px-2.5 py-1.5 text-left text-xs font-bold text-blue-600 hover:bg-blue-50 border-t"
+                      >
+                        <FiPlus className="mr-1 inline" /> + Add customer
+                      </button>
                       <button
                         type="button"
-                        key={customer.id}
-                        onClick={() => selectCustomer(customer)}
-                        className="block w-full border-b border-slate-100 px-3 py-2 text-left hover:bg-blue-50 transition"
+                        onClick={() => {
+                          updateDraft({ customer: "", customerPhone: "" });
+                          setCustomerOpen(false);
+                          showToast("Set as Walk-in Customer");
+                        }}
+                        className="w-full px-2.5 py-1 text-left text-[11px] font-medium text-slate-500 hover:bg-slate-50"
                       >
-                        <span className="flex items-center gap-1.5 font-semibold text-slate-800">
-                          <span>{customer.name}</span>
-                          {(customer.status === "Inactive" || customer.isInactive) && (
-                            <span className="rounded bg-amber-100 px-1.5 py-0.2 text-[10px] font-semibold text-amber-800">
-                              Inactive
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-xs text-slate-500">{customer.phone || "No phone number"}</span>
+                        Walk-in customer (default)
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModal({
-                          type: "addCustomer",
-                          name: customerSearch.trim(),
-                          phone: "",
-                          address: "",
-                        });
-                        setCustomerOpen(false);
-                      }}
-                      className="w-full px-3 py-2.5 text-left text-sm font-bold text-blue-600 hover:bg-blue-50 border-t"
-                    >
-                      <FiPlus className="mr-2 inline" /> + Add new customer
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateDraft({ customer: "", customerPhone: "" });
-                        setCustomerOpen(false);
-                        showToast("Set as Walk-in Customer");
-                      }}
-                      className="w-full px-3 py-2 text-left text-xs font-medium text-slate-500 hover:bg-slate-50"
-                    >
-                      Walk-in customer (default)
-                    </button>
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1555,41 +1622,37 @@ export default function PointOfSale() {
             <button
               type="button"
               onClick={handleBreakupClick}
-              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-3 text-left shadow-sm hover:bg-slate-50 transition"
+              className="flex shrink-0 items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1 text-left shadow-xs hover:bg-slate-50 transition"
             >
-              <span className="flex items-center gap-3">
-                <span className="grid h-12 w-12 place-items-center rounded-full bg-blue-50 text-blue-500">
-                  <FiFileText size={24} />
+              <span className="flex items-center gap-2">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-blue-50 text-blue-500 shrink-0">
+                  <FiFileText size={15} />
                 </span>
                 <span>
-                  <span className="block text-xl font-bold text-slate-900">
+                  <span className="block text-base font-bold text-slate-900 leading-tight">
                     Total ₹ {money(calculations.total)}
                   </span>
-                  <span className="block text-xs font-medium text-slate-500">
-                    Items: {draft.items.length}, Quantity:{" "}
+                  <span className="block text-[10px] font-medium text-slate-500">
+                    Items: {draft.items.length}, Qty:{" "}
                     {calculations.lines.reduce((sum, item) => sum + item.qty, 0)}
                   </span>
                 </span>
               </span>
-              <span className="flex items-center gap-1 text-right text-xs font-bold leading-tight text-blue-600">
-                <span>
-                  Full Breakup
-                  <br />
-                  [Ctrl+F]
-                </span>
-                <FiChevronRight size={20} />
+              <span className="flex items-center gap-0.5 text-right text-[11px] font-bold leading-tight text-blue-600">
+                <span>Full Breakup</span>
+                <FiChevronRight size={14} />
               </span>
             </button>
 
             {/* Payment & Charges Box */}
-            <div className="flex min-h-[210px] flex-1 flex-col rounded-md border border-slate-200 bg-white shadow-sm">
-              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold text-slate-600">
+            <div className="flex flex-col rounded-md border border-slate-200 bg-white shadow-xs overflow-hidden shrink-0">
+              <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0">
+                <label className="text-[10px] font-semibold text-slate-600">
                   Payment Mode
                   <select
                     value={draft.paymentMode}
                     onChange={(event) => updateDraft({ paymentMode: event.target.value })}
-                    className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-blue-500"
+                    className="mt-0.5 h-7 w-full rounded border border-slate-300 bg-white px-1 text-[11px] font-semibold text-slate-700 outline-blue-500"
                   >
                     <option>Cash</option>
                     <option>UPI</option>
@@ -1598,7 +1661,7 @@ export default function PointOfSale() {
                     <option>Credit</option>
                   </select>
                 </label>
-                <label className="text-xs font-semibold text-slate-600">
+                <label className="text-[10px] font-semibold text-slate-600">
                   Amount Received (₹)
                   <input
                     type="number"
@@ -1607,44 +1670,50 @@ export default function PointOfSale() {
                     value={draft.amountReceived}
                     onChange={(event) => updateDraft({ amountReceived: event.target.value })}
                     placeholder={money(calculations.total)}
-                    className="mt-1.5 h-[48px] w-full rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-blue-500"
+                    className="mt-0.5 h-7 w-full rounded border border-slate-300 px-1 text-[11px] font-semibold text-slate-700 outline-blue-500"
                   />
                 </label>
               </div>
 
-              <div className="flex-1 border-t border-slate-100 bg-[#fafafa] px-3 py-2.5">
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+              <div className="border-t border-slate-100 bg-[#fafafa] px-2 py-1 text-[11px] space-y-0.5">
+                <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
                   <span>₹ {money(calculations.subtotal)}</span>
                 </div>
-                <div className="flex justify-between py-1 text-sm text-slate-600">
-                  <span>Item discounts</span>
-                  <span className="text-emerald-600 font-medium">− ₹ {money(calculations.itemDiscount)}</span>
-                </div>
-                <div className="flex justify-between py-1 text-sm text-slate-600">
+                {calculations.itemDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-medium">
+                    <span>Item discounts</span>
+                    <span>− ₹ {money(calculations.itemDiscount)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-600">
                   <span>Tax (GST)</span>
                   <span>₹ {money(calculations.tax)}</span>
                 </div>
-                <div className="flex justify-between py-1 text-sm text-slate-600">
-                  <span>Bill discount</span>
-                  <span className="text-emerald-600 font-medium">− ₹ {money(calculations.billDiscount)}</span>
-                </div>
+                {calculations.billDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-medium">
+                    <span>Bill discount</span>
+                    <span>− ₹ {money(calculations.billDiscount)}</span>
+                  </div>
+                )}
                 {calculations.loyaltyDiscount > 0 && (
-                  <div className="flex justify-between py-1 text-sm text-purple-700 font-medium">
+                  <div className="flex justify-between text-purple-700 font-medium">
                     <span>Loyalty Redeemed</span>
                     <span>− ₹ {money(calculations.loyaltyDiscount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between py-1 text-sm text-slate-600">
-                  <span>Additional charges</span>
-                  <span>₹ {money(calculations.charges)}</span>
-                </div>
-                <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 text-sm font-bold text-slate-800">
+                {calculations.charges > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Additional charges</span>
+                    <span>₹ {money(calculations.charges)}</span>
+                  </div>
+                )}
+                <div className="mt-0.5 flex justify-between border-t border-slate-200 pt-0.5 font-bold text-slate-800">
                   <span>Change to Return</span>
                   <span className="text-emerald-700">₹ {money(calculations.change)}</span>
                 </div>
                 {calculations.due > 0 && (
-                  <div className="flex justify-between pt-1 font-bold text-rose-600">
+                  <div className="flex justify-between pt-0.5 font-bold text-rose-600">
                     <span>Balance Due</span>
                     <span>₹ {money(calculations.due)}</span>
                   </div>
@@ -1653,58 +1722,75 @@ export default function PointOfSale() {
             </div>
 
             {/* Save / Print Buttons */}
-            <div className="grid shrink-0 gap-2 rounded-md border border-slate-200 bg-white p-2 shadow-sm">
-              <ActionButton primary onClick={() => saveBill(true)}>
-                Save &amp; Print Bill [Ctrl+P]
-              </ActionButton>
-              <ActionButton onClick={handleOtherPaymentsClick}>
-                Other/Credit Payments [Ctrl+M]
-              </ActionButton>
-              <ActionButton onClick={() => saveBill(false)}>Save Bill</ActionButton>
+            <div className="shrink-0 space-y-1 rounded-md border border-slate-200 bg-white p-1.5 shadow-xs">
+              <button
+                type="button"
+                onClick={() => saveBill(true)}
+                className="flex h-8.5 w-full items-center justify-center gap-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs active:scale-[0.99] transition cursor-pointer"
+              >
+                <FiPrinter size={14} />
+                <span>Save &amp; Print Bill</span>
+              </button>
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={handleOtherPaymentsClick}
+                  className="flex h-7.5 items-center justify-center rounded border border-blue-300 bg-blue-50 text-blue-700 font-semibold text-[11px] hover:bg-blue-100 active:scale-[0.99] transition text-center px-1 truncate cursor-pointer"
+                >
+                  Other/Credit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveBill(false)}
+                  className="flex h-7.5 items-center justify-center rounded border border-slate-300 bg-slate-100 text-slate-800 font-semibold text-[11px] hover:bg-slate-200 active:scale-[0.99] transition cursor-pointer"
+                >
+                  Save Bill
+                </button>
+              </div>
             </div>
 
             {/* Saved Bills Accordion */}
-            <details className="rounded-md border border-slate-200 bg-white p-3 shadow-sm">
-              <summary className="cursor-pointer font-semibold text-slate-800">
+            <details className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[11px] shadow-xs">
+              <summary className="cursor-pointer font-semibold text-slate-700">
                 Saved bills ({bills.length})
               </summary>
-              <div className="mt-2 max-h-48 space-y-2 overflow-auto">
+              <div className="mt-1 max-h-24 space-y-0.5 overflow-auto">
                 {bills.map((bill) => (
                   <div
                     key={bill.invoiceNo}
-                    className="flex items-center justify-between gap-2 border-b border-slate-100 py-2 text-sm"
+                    className="flex items-center justify-between gap-1 border-b border-slate-100 py-0.5 text-[10px]"
                   >
                     <button
                       type="button"
                       onClick={() => openSavedBill(bill)}
-                      className="min-w-0 text-left hover:text-blue-600"
+                      className="min-w-0 text-left hover:text-blue-600 truncate"
                     >
-                      <span className="block font-semibold">{bill.invoiceNo}</span>
-                      <span className="block text-xs text-slate-500">
-                        {bill.customer || "Walk-in"} · {bill.date}
+                      <span className="font-semibold mr-1">#{bill.invoiceNo}</span>
+                      <span className="text-slate-500">
+                        {bill.customer || "Walk-in"}
                       </span>
                     </button>
                     <span className="shrink-0 font-bold text-slate-800">₹{money(bill.total)}</span>
                   </div>
                 ))}
-                {bills.length === 0 && <p className="text-sm text-slate-400">No saved bills yet.</p>}
+                {bills.length === 0 && <p className="text-slate-400">No saved bills yet.</p>}
               </div>
               {bills.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setModal({ type: "clearBills" })}
-                  className="mt-3 text-xs font-semibold text-rose-600 underline"
+                  className="mt-1 text-[10px] font-semibold text-rose-600 underline"
                 >
                   Clear saved bills
                 </button>
               )}
             </details>
           </aside>
-        </> : <section className="col-span-full flex min-h-[420px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-sm">
-          <h2 className="text-lg font-bold text-slate-800">No open bills</h2>
-          <p className="mt-2 text-sm text-slate-500">Start a new bill to add products and take payment.</p>
-          <button type="button" onClick={handleNewBillClick} className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"><FiPlus /> New Bill [Ctrl+T]</button>
-          {bills.length > 0 && <div className="mt-6 max-h-56 w-full max-w-lg overflow-auto rounded border border-slate-200 p-3 text-left"><h3 className="mb-2 text-sm font-semibold text-slate-700">Saved bills</h3>{bills.map((bill) => <button key={bill.id || bill.invoiceNo} type="button" onClick={() => openSavedBill(bill)} className="flex w-full items-center justify-between border-t border-slate-100 py-2 text-left text-sm hover:text-blue-600"><span>{bill.invoiceNo} · {bill.customer || "Walk-in"}</span><span>₹{money(bill.total)}</span></button>)}</div>}
+        </> : <section className="col-span-full flex min-h-[300px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-xs">
+          <h2 className="text-base font-bold text-slate-800">No open bills</h2>
+          <p className="mt-1 text-xs text-slate-500">Start a new bill to add products and take payment.</p>
+          <button type="button" onClick={handleNewBillClick} className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"><FiPlus /> New Bill</button>
+          {bills.length > 0 && <div className="mt-4 max-h-48 w-full max-w-lg overflow-auto rounded border border-slate-200 p-2 text-left"><h3 className="mb-1.5 text-xs font-semibold text-slate-700">Saved bills</h3>{bills.map((bill) => <button key={bill.id || bill.invoiceNo} type="button" onClick={() => openSavedBill(bill)} className="flex w-full items-center justify-between border-t border-slate-100 py-1 text-xs hover:text-blue-600"><span>{bill.invoiceNo} · {bill.customer || "Walk-in"}</span><span>₹{money(bill.total)}</span></button>)}</div>}
         </section>}
       </div>
 
@@ -1731,6 +1817,14 @@ export default function PointOfSale() {
       {/* PROPER POPUP MODALS WITH RICH UI (ZERO PROMPT / ALERT DIALOGS) */}
       {/* ============================================================== */}
 
+      {/* Barcode Scanner Modal */}
+      {barcodeModal && (
+        <BarcodeScanModal
+          onClose={() => setBarcodeModal(false)}
+          onScan={handleBarcodeScan}
+        />
+      )}
+
       {modal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
@@ -1754,7 +1848,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const qty = Number(modal.qty);
                   const product = products.find((entry) => entry.id === modal.item.productId);
@@ -1762,7 +1856,7 @@ export default function PointOfSale() {
                     showToast("Quantity must be greater than zero.", "warning");
                     return;
                   }
-                  if (product && product.type !== "service" && qty > Number(product.stock || 0)) {
+                  if (appSettings.stopSaleOnNegativeStock && product && product.type !== "service" && qty > Number(product.stock || 0)) {
                     showToast(`Only ${Number(product.stock || 0)} ${product.unit || "unit(s)"} available.`, "warning");
                     return;
                   }
@@ -1792,10 +1886,11 @@ export default function PointOfSale() {
                     <button
                       type="button"
                       onClick={() =>
-                        setModal((m) => ({
-                          ...m,
-                          qty: String(Math.max(1, Number(m.qty) - 1)),
-                        }))
+                        setModal((m) => {
+                          const currentVal = Number(m.qty) || 1;
+                          const nextVal = currentVal > 1 ? currentVal - 1 : Math.max(0.01, Number((currentVal - 0.25).toFixed(2)));
+                          return { ...m, qty: String(nextVal) };
+                        })
                       }
                       className="h-10 w-10 rounded-lg border bg-slate-100 font-bold text-lg hover:bg-slate-200"
                     >
@@ -1816,7 +1911,7 @@ export default function PointOfSale() {
                       onClick={() =>
                         setModal((m) => ({
                           ...m,
-                          qty: String(Number(m.qty || 0) + 1),
+                          qty: String(Number((Number(m.qty || 0) + 1).toFixed(2))),
                         }))
                       }
                       className="h-10 w-10 rounded-lg border bg-slate-100 font-bold text-lg hover:bg-slate-200"
@@ -1826,13 +1921,13 @@ export default function PointOfSale() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  {[1, 2, 5, 10].map((step) => (
+                <div className="flex flex-wrap gap-2">
+                  {[0.25, 0.5, 1, 2, 5, 10].map((step) => (
                     <button
                       key={step}
                       type="button"
                       onClick={() => setModal((m) => ({ ...m, qty: String(step) }))}
-                      className="flex-1 rounded-md border border-slate-200 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                      className="flex-1 min-w-[48px] rounded-md border border-slate-200 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                     >
                       {step} {modal.item.unit}
                     </button>
@@ -1874,7 +1969,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const rawVal = Number(modal.discountValue) || 0;
                   const maxAllowed = Number(modal.item.price) * Number(modal.item.qty);
@@ -1969,7 +2064,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   if (modal.unit?.trim()) {
                     updateItem(modal.item.lineId, { unit: modal.unit.trim() });
@@ -2088,7 +2183,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const val = Math.max(0, Number(modal.charges) || 0);
                   updateDraft({ additionalCharges: val });
@@ -2159,14 +2254,15 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const rawVal = Number(modal.discountValue) || 0;
+                  const maxAllowedDiscount = Math.max(0, calculations.subtotal - (calculations.itemDiscount || 0));
                   let finalDiscount = rawVal;
                   if (modal.discountType === "percent") {
-                    finalDiscount = (calculations.subtotal * rawVal) / 100;
+                    finalDiscount = (maxAllowedDiscount * rawVal) / 100;
                   }
-                  finalDiscount = Math.min(calculations.subtotal, Math.max(0, finalDiscount));
+                  finalDiscount = Math.min(maxAllowedDiscount, Math.max(0, finalDiscount));
                   updateDraft({ billDiscount: finalDiscount });
                   showToast(`Bill discount applied: ₹${money(finalDiscount)}`);
                   setModal(null);
@@ -2249,7 +2345,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   const points = Math.max(0, Math.min(modal.availablePoints, Number(modal.pointsToRedeem) || 0));
                   updateDraft({ loyaltyPointsRedeemed: points });
@@ -2315,7 +2411,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   updateDraft({ remarks: modal.remarks });
                   showToast("Remarks saved for this bill");
@@ -2356,270 +2452,96 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* 9. Add Customer Modal */}
+          {/* 9. Add Customer Modal (Official AddPartyModal from Parties Section) */}
           {modal.type === "addCustomer" && (
-            <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-              <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiUser className="text-blue-600" /> Add Customer to LocalStorage
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setModal(null)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-200"
-                >
-                  <FiX size={18} />
-                </button>
-              </div>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!modal.name?.trim()) return;
-                  const newCust = {
-                    id: `c-${crypto.randomUUID()}`,
-                    name: modal.name.trim(),
-                    partyName: modal.name.trim(),
-                    phone: modal.phone?.trim() || "",
-                    phoneNumber: modal.phone?.trim() || "",
-                    address: modal.address?.trim() || "",
-                  };
-                  try {
-                    await saveBusinessParty(newCust);
-                  } catch (error) {
-                    showToast(`Could not save customer: ${error.message || "Storage write failed."}`, "warning");
-                    return;
-                  }
-                  setCustomers((current) => [...current, newCust]);
-                  updateDraft({ customer: newCust.name, customerPhone: newCust.phone });
-                  showToast(`Saved customer "${newCust.name}"!`);
-                  setModal(null);
+            <div
+              className="w-full max-w-6xl max-h-[88vh] overflow-y-auto"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <AddPartyModal
+                embedded
+                initialParty={{
+                  partyName: modal.name || "",
+                  phone: modal.phone || "",
+                  billingAddress: modal.address || "",
                 }}
-                className="p-5 space-y-3.5"
-              >
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Customer Name*
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    placeholder="Enter customer name"
-                    value={modal.name}
-                    onChange={(e) => setModal((m) => ({ ...m, name: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. 9876543210"
-                    value={modal.phone}
-                    onChange={(e) => setModal((m) => ({ ...m, phone: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Address (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="City, Area"
-                    value={modal.address}
-                    onChange={(e) => setModal((m) => ({ ...m, address: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <button
-                    type="button"
-                    onClick={() => setModal(null)}
-                    className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 shadow-sm"
-                  >
-                    Save Customer
-                  </button>
-                </div>
-              </form>
+                appSettings={appSettings}
+                onClose={() => setModal(null)}
+                onSave={async (partyData) => {
+                  try {
+                    const saved = await saveBusinessParty(partyData);
+                    const mapped = {
+                      id: saved.id,
+                      name: saved.partyName || saved.name || "Customer",
+                      partyName: saved.partyName || saved.name || "Customer",
+                      phone: saved.phoneNumber || saved.phone || "",
+                      address: saved.billingAddress || saved.address || "",
+                      loyaltyPoints: Number(saved.loyaltyPoints || saved.points || 0),
+                      status: saved.status,
+                      isActive: saved.isActive !== false && saved.status !== "inactive",
+                    };
+                    setCustomers((curr) => [...curr.filter((c) => c.id !== mapped.id), mapped]);
+                    updateDraft({
+                      customer: mapped.name,
+                      customerPhone: mapped.phone,
+                    });
+                    showToast(`Saved party "${mapped.name}" and selected for bill!`);
+                    setModal(null);
+                    return saved;
+                  } catch (error) {
+                    showToast(`Could not save party: ${error.message || "Save failed."}`, "warning");
+                    throw error;
+                  }
+                }}
+              />
             </div>
           )}
 
-          {/* 10. Add Custom Product to Inventory Modal */}
+          {/* 10. Add Item Modal (Integrated from Items Section) */}
           {modal.type === "addProduct" && (
-            <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-              <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiPlus className="text-blue-600" /> Add Product to LocalStorage Inventory
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setModal(null)}
-                  className="rounded p-1 text-slate-400 hover:bg-slate-200"
-                >
-                  <FiX size={18} />
-                </button>
-              </div>
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!modal.name?.trim()) return;
-
-                  if (!Number.isFinite(Number(modal.price)) || Number(modal.price) < 0
-                    || !Number.isFinite(Number(modal.stock || 0)) || Number(modal.stock || 0) < 0) {
-                    showToast("Enter a valid price and stock quantity.", "warning");
-                    return;
-                  }
-                  const generatedCode = `ITM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-                  const newProduct = {
-                    id: `p-${crypto.randomUUID()}`,
-                    itemName: modal.name.trim(),
-                    name: modal.name.trim(),
-                    itemCode: modal.code?.trim() || generatedCode,
-                    code: modal.code?.trim() || generatedCode,
-                    salePrice: Number(modal.price) || 0,
-                    price: Number(modal.price) || 0,
-                    unit: modal.unit || "Pcs",
-                    taxRate: appSettings.enableGst === false ? "0%" : `${Number(modal.taxRate) || 0}%`,
-                    stock: Number(modal.stock) || 0,
-                  };
-
-                  try {
-                    const saved = await saveBusinessItem(newProduct);
-                    setProducts((curr) => [...curr.filter((item) => item.id !== newProduct.id), saved || newProduct]);
-                  } catch (error) {
-                    showToast(`Could not save product: ${error.message || "Storage write failed."}`, "warning");
-                    return;
-                  }
-                  addProduct(newProduct);
-                  showToast(`Saved "${newProduct.name}" to inventory & added to bill!`);
-                  setModal(null);
+            <div
+              className="w-full max-w-6xl max-h-[88vh] overflow-y-auto"
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <AddItem
+                embedded
+                mode="add"
+                initialItem={{
+                  itemName: modal.name || "",
+                  salePrice: modal.price || "",
+                  barcode: modal.barcode || "",
+                  itemCode: modal.code || "",
                 }}
-                className="p-5 space-y-3.5"
-              >
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Product Name*
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    autoFocus
-                    placeholder="e.g. Masala Tea 250g"
-                    value={modal.name}
-                    onChange={(e) => setModal((m) => ({ ...m, name: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Selling Price (₹)*
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0"
-                      step="any"
-                      placeholder="0.00"
-                      value={modal.price}
-                      onChange={(e) => setModal((m) => ({ ...m, price: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      Unit
-                    </label>
-                    <select
-                      value={modal.unit}
-                      onChange={(e) => setModal((m) => ({ ...m, unit: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-blue-500"
-                    >
-                      <option>Pcs</option>
-                      <option>Kg</option>
-                      <option>Gm</option>
-                      <option>Litre</option>
-                      <option>Box</option>
-                      <option>Pack</option>
-                      <option>Dozen</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      {enableBarcodeScanning ? "Item Code / Barcode" : "Item Code"}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. ITM-102"
-                      value={modal.code}
-                      onChange={(e) => setModal((m) => ({ ...m, code: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
-                      GST Rate (%)
-                    </label>
-                    <select
-                      value={modal.taxRate}
-                      onChange={(e) => setModal((m) => ({ ...m, taxRate: e.target.value }))}
-                      className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-blue-500"
-                    >
-                      <option value="0">0% (None)</option>
-                      <option value="5">5%</option>
-                      <option value="12">12%</option>
-                      <option value="18">18%</option>
-                      <option value="28">28%</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Opening Stock Quantity
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="100"
-                    value={modal.stock}
-                    onChange={(e) => setModal((m) => ({ ...m, stock: e.target.value }))}
-                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-blue-500"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2.5 pt-3 border-t">
-                  <button
-                    type="button"
-                    onClick={() => setModal(null)}
-                    className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 shadow-sm"
-                  >
-                    Save &amp; Add to Bill
-                  </button>
-                </div>
-              </form>
+                onClose={() => setModal(null)}
+                onSave={async (itemPayload) => {
+                  try {
+                    const saved = await saveBusinessItem(itemPayload);
+                    const normalized = {
+                      id: saved.id,
+                      isActive: saved.isActive !== false,
+                      code: saved.itemCode || saved.code || `ITM-${String(saved.id || "").slice(-4)}`,
+                      name: saved.itemName || saved.name || "Item",
+                      price: Number(saved.salePrice ?? saved.price ?? 0),
+                      taxRate: appSettings.enableGst === false ? 0 : Number(String(saved.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
+                      unit: saved.unit || saved.baseUnit || "Pcs",
+                      stock: Number(saved.currentStock ?? saved.stock ?? saved.openingQuantity ?? 0),
+                      discount: Number(saved.discount || 0),
+                      discountType: saved.discountType || "Percentage",
+                      category: saved.category || "",
+                      barcode: saved.barcode || saved.barCode || saved.itemBarcode || "",
+                      type: saved.type || saved.itemType || "product",
+                    };
+                    setProducts((curr) => [...curr.filter((p) => p.id !== normalized.id), normalized]);
+                    addProduct(normalized);
+                    showToast(`Saved "${normalized.name}" & added to bill!`);
+                    setModal(null);
+                    return saved;
+                  } catch (error) {
+                    showToast(`Could not save item: ${error.message || "Save failed"}`, "warning");
+                    throw error;
+                  }
+                }}
+              />
             </div>
           )}
 
@@ -2628,7 +2550,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiFileText className="text-blue-600" /> Bill Summary &amp; Breakup [Ctrl+F]
+                  <FiFileText className="text-blue-600" /> Bill Summary &amp; Breakup
                 </h3>
                 <button
                   type="button"
@@ -2729,7 +2651,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiDollarSign className="text-blue-600" /> Other / Credit Payments [Ctrl+M]
+                  <FiDollarSign className="text-blue-600" /> Other / Credit Payments
                 </h3>
                 <button
                   type="button"
@@ -2740,7 +2662,7 @@ export default function PointOfSale() {
                 </button>
               </div>
               <form
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   updateDraft({
                     paymentMode: modal.paymentMode,
@@ -2899,7 +2821,7 @@ export default function PointOfSale() {
             <div className="w-full max-w-md rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
               <div className="flex items-center justify-between border-b px-5 py-3.5 bg-slate-50">
                 <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                  <FiSettings className="text-blue-600" /> POS Settings &amp; LocalStorage
+                  <FiSettings className="text-blue-600" /> POS Settings &amp; Data
                 </h3>
                 <button
                   type="button"
@@ -2912,11 +2834,11 @@ export default function PointOfSale() {
               <div className="p-5 space-y-4 text-sm">
                 <div className="rounded-lg bg-slate-50 p-3.5 border border-slate-200 space-y-2">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600">Inventory Items (LocalStorage):</span>
+                    <span className="text-slate-600">Inventory Items:</span>
                     <strong className="text-slate-900">{products.length} items</strong>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-600">Customers (LocalStorage):</span>
+                    <span className="text-slate-600">Customers:</span>
                     <strong className="text-slate-900">{customers.length} customers</strong>
                   </div>
                   <div className="flex justify-between text-xs">

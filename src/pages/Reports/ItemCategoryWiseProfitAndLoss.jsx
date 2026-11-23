@@ -449,9 +449,11 @@ export default function ItemCategoryWiseProfitAndLoss() {
     };
 
     const getCatEntry = (categoryName) => {
-      if (!categoryMap.has(categoryName)) {
-        categoryMap.set(categoryName, {
-          category: categoryName,
+      const trimmed = String(categoryName || "Uncategorized").trim() || "Uncategorized";
+      const catKey = trimmed.toLowerCase();
+      if (!categoryMap.has(catKey)) {
+        categoryMap.set(catKey, {
+          category: trimmed,
           soldItemIds: new Set(),
           qtySold: 0,
           grossSales: 0,
@@ -463,7 +465,7 @@ export default function ItemCategoryWiseProfitAndLoss() {
           itemsMap: new Map(),
         });
       }
-      return categoryMap.get(categoryName);
+      return categoryMap.get(catKey);
     };
 
     const getItemEntry = (catEntry, itemId, itemName) => {

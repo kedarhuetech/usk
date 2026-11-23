@@ -104,6 +104,14 @@ export default function StockSummaryReport() {
     () => readLocal("ledgerly:saleOrders.v1"),
     [refreshTrigger]
   );
+  const saleReturns = useMemo(
+    () => readLocal("ledgerly:saleReturns.v1"),
+    [refreshTrigger]
+  );
+  const purchaseReturns = useMemo(
+    () => readLocal("ledgerly:purchaseReturns.v1"),
+    [refreshTrigger]
+  );
 
   /* ── category list ── */
   const categories = useMemo(() => {
@@ -153,6 +161,36 @@ export default function StockSummaryReport() {
         const name = (r.item || "").trim();
         if (!name) return;
         getEntry(name).purchasedQty += Math.max(Number(r.qty || r.quantity || 0), 0);
+      });
+    });
+
+    // Process sale returns (credit notes) → add back to available stock (reduce soldQty)
+    saleReturns.forEach((sr) => {
+      if (sr.cancelled || sr.status === "Cancelled") return;
+      if (cutoff) {
+        const d = parseYMD(sr.form?.invoiceDate || sr.date || sr.createdAt);
+        if (d && d > cutoff) return;
+      }
+      (sr.rows || []).forEach((r) => {
+        const name = (r.item || "").trim();
+        if (!name) return;
+        const entry = getEntry(name);
+        entry.soldQty = Math.max(0, entry.soldQty - Math.max(Number(r.qty || r.quantity || 0), 0));
+      });
+    });
+
+    // Process purchase returns (debit notes) → reduce stock (reduce purchasedQty)
+    purchaseReturns.forEach((pr) => {
+      if (pr.cancelled || pr.status === "Cancelled") return;
+      if (cutoff) {
+        const d = parseYMD(pr.date || pr.createdAt);
+        if (d && d > cutoff) return;
+      }
+      (pr.rows || []).forEach((r) => {
+        const name = (r.item || "").trim();
+        if (!name) return;
+        const entry = getEntry(name);
+        entry.purchasedQty = Math.max(0, entry.purchasedQty - Math.max(Number(r.qty || r.quantity || 0), 0));
       });
     });
 
