@@ -377,10 +377,13 @@ test("Scenario 10: Repeated reminder processing (duplicate prevention)", () => {
       settings,
     });
 
-    // Alert should NO LONGER be in activeAlerts for this due date
+    // Alert should NO LONGER be in activeAlerts for this due date and must transition to Reminded (not Overdue)
     assert.equal(step2.activeAlerts.length, 0);
     assert.equal(step2.all[0].alreadyNotifiedForThisDueDate, true);
     assert.equal(step2.all[0].isEligibleForNotification, false);
+    assert.equal(step2.all[0].status, "Reminded");
+    assert.equal(step2.overdue.length, 0, "Reminded notifications must not be placed in overdue");
+    assert.equal(step2.reminded.length, 1, "Must be categorized under reminded / sent history");
   } finally {
     env.restore();
   }
