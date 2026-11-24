@@ -226,23 +226,16 @@ router.post(
  */
 router.get("/company-profile/assets/:id", async (req, res) => {
   try {
-    const rawBusinessId = req.query.businessId || req.get("x-business-id");
-    const businessId = rawBusinessId && rawBusinessId !== "local-development" ? rawBusinessId : null;
+    const businessId = businessIdFromRequest(req);
+    if (!businessId) {
+      return res.status(401).json({ success: false, message: "Unauthorized access: business ID required." });
+    }
 
-    // 1. Look up in company_profile_assets
-    let rows;
-    if (businessId) {
-      [rows] = await pool.execute(
-        "SELECT id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data FROM company_profile_assets WHERE id = ? AND business_id = ?",
-        [req.params.id, businessId]
-      );
-    }
-    if (!rows || !rows.length) {
-      [rows] = await pool.execute(
-        "SELECT id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data FROM company_profile_assets WHERE id = ?",
-        [req.params.id]
-      );
-    }
+    // 1. Look up in company_profile_assets with strict business_id check
+    const [rows] = await pool.execute(
+      "SELECT id, business_id, asset_type, original_filename, mime_type, size_bytes, storage_key, file_id, data FROM company_profile_assets WHERE id = ? AND business_id = ?",
+      [req.params.id, businessId]
+    );
 
     const asset = rows && rows.length ? rows[0] : null;
 

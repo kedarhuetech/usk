@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import googleAuthRoutes from "./routes/googleAuth.js";
 import businessAuthRoutes from "./routes/authRouter.js";
-import { optionalAuth } from "./middleware/authMiddleware.js";
+import { optionalAuth, requireAuth } from "./middleware/authMiddleware.js";
 import googleDriveBackupRoutes from "./routes/googleDriveBackup.js";
 import googleBusinessRoutes from "./routes/googleBusiness.js";
 import marketingStudioRoutes from "./routes/marketingStudio.js";
@@ -98,8 +98,8 @@ app.use("/api/purchase-job-works", purchaseJobWorksRoutes);
 app.use("/api/balance-sheet", balanceSheetRoutes);
 app.use("/api/expense-categories", expenseCategoriesRoutes);
 app.use("/api/expense-items", expenseItemsRoutes);
-app.use("/api/maintenance", maintenanceRoutes);
-app.use("/api/database/maintenance", maintenanceRoutes);
+app.use("/api/maintenance", requireAuth, maintenanceRoutes);
+app.use("/api/database/maintenance", requireAuth, maintenanceRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {

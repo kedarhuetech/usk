@@ -142,17 +142,14 @@ router.post(
  */
 router.get("/attachments/:id", async (req, res) => {
   try {
-    const rawBusinessId = req.query.businessId || req.get("x-business-id");
-    const businessId = rawBusinessId && rawBusinessId !== "local-development" ? rawBusinessId : null;
-
-    let file = null;
-    if (businessId) {
-      file = await getFileMetadataById(req.params.id, businessId);
-    } else {
-      file = await getFileMetadataById(req.params.id, null, { allowAnyBusiness: true });
+    const businessId = businessIdFromRequest(req);
+    if (!businessId) {
+      return res.status(401).json({ success: false, message: "Unauthorized access: business ID required." });
     }
 
-    if (!file) {
+    const file = await getFileMetadataById(req.params.id, businessId);
+
+    if (!file || file.business_id !== businessId) {
       return res.status(404).json({ success: false, message: "Attachment not found." });
     }
 
@@ -257,8 +254,8 @@ router.get("/", async (req, res) => {
     const limitParam = req.query.limit;
     const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
     const limit = isAll
-      ? 100000
-      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+      ? 5000
+      : Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 50));
     const offset = isAll ? 0 : (page - 1) * limit;
     const type = (req.query.type || "").trim().toLowerCase();
     const partyId = (req.query.partyId || "").trim();
@@ -294,13 +291,19 @@ router.get("/", async (req, res) => {
     }
 
     if (startDate) {
-      conditions.push("t.transaction_date >= ?");
-      params.push(startDate);
+      const match = startDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        conditions.push("t.transaction_date >= ?");
+        params.push(startDate);
+      }
     }
 
     if (endDate) {
-      conditions.push("t.transaction_date <= ?");
-      params.push(endDate);
+      const match = endDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (match) {
+        conditions.push("t.transaction_date <= ?");
+        params.push(endDate);
+      }
     }
 
     const whereClause = conditions.join(" AND ");
