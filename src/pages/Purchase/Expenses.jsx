@@ -57,12 +57,26 @@ function extractName(val) {
   return "";
 }
 
+function dedupeNames(arr) {
+  const seen = new Set();
+  const result = [];
+  for (const item of (arr || [])) {
+    const name = extractName(item);
+    const lower = name.toLowerCase();
+    if (name && !seen.has(lower)) {
+      seen.add(lower);
+      result.push(name);
+    }
+  }
+  return result;
+}
+
 function read(key, fallback) {
   try {
     const data = JSON.parse(localStorage.getItem(key) || "null");
     if (key === RECORDS_KEY && Array.isArray(data)) return data.map(normalizeExpense);
     if (key === CATEGORIES_KEY && Array.isArray(data)) {
-      const normalized = data.map(extractName).filter(Boolean);
+      const normalized = dedupeNames(data);
       return normalized.length > 0 ? normalized : fallback;
     }
     return data ?? fallback;
@@ -135,7 +149,7 @@ export default function Expenses() {
   const navigate = useNavigate();
   const location = useLocation();
   const [records, setRecords] = useState(() => read(RECORDS_KEY, []));
-  const [categories, setCategories] = useState(() => read(CATEGORIES_KEY, DEFAULT_CATEGORIES));
+  const [categories, setCategories] = useState(() => dedupeNames(read(CATEGORIES_KEY, DEFAULT_CATEGORIES)));
   const [tab, setTab] = useState("Category");
   const [selected, setSelected] = useState("");
   const [leftSearch, setLeftSearch] = useState("");
@@ -170,7 +184,7 @@ export default function Expenses() {
     onConfirm: null,
   });
   const saveRecords = (next) => { setRecords(next); localStorage.setItem(RECORDS_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
-  const saveCategories = (next) => { setCategories(next); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
+  const saveCategories = (next) => { const deduped = dedupeNames(next); setCategories(deduped); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(deduped)); notifyBusinessDataChanged(); };
   const startNew = () => setEditor({ mode: "new", entry: blankEntry(records.length + 1) });
   const entriesFor = (name) => {
     const target = String(name || "").trim().toLowerCase();
@@ -195,8 +209,7 @@ export default function Expenses() {
   }, [records, expenseItems]);
   const names = useMemo(() => {
     const raw = tab === "Category" ? categories : items;
-    if (!Array.isArray(raw)) return [];
-    return raw.map(extractName).filter(Boolean);
+    return dedupeNames(raw);
   }, [tab, categories, items]);
   const shownNames = useMemo(() => {
     const q = String(leftSearch || "").trim().toLowerCase();
@@ -308,7 +321,7 @@ export default function Expenses() {
           const catRes = await expenseCategoriesDb.getAll();
           const list = Array.isArray(catRes) ? catRes : (catRes?.data || []);
           if (isMounted && list.length > 0) {
-            const catNames = list.map(extractName).filter(Boolean);
+            const catNames = dedupeNames(list);
             if (catNames.length > 0) {
               setCategories(catNames);
               localStorage.setItem(CATEGORIES_KEY, JSON.stringify(catNames));
@@ -534,7 +547,7 @@ export default function Expenses() {
       toast.error("This category already exists.");
       return;
     }
-    const updated = [...categories.map(extractName).filter(Boolean), name];
+    const updated = dedupeNames([...categories, name]);
     saveCategories(updated);
     if (isDatabaseMode()) {
       try {
