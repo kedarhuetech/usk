@@ -51,7 +51,7 @@ export function rowsToItems(rows) {
     minimumStock: column("minimumstock", "minimumquantity", "minstock", "minquantity", "minimumstock", "minstock", "reorderpoint", "reorderlevel", "alertquantity"),
     location: column("itemlocation", "location", "rack", "shelf"),
     isActive: column("active", "isactive", "enabled"),
-    description: column("description", "details", "itemdescription", "desc"),
+    description: column("description", "itemdescription", "productdescription", "details", "itemdetails", "productdetails", "desc", "notes", "itemnotes", "note", "itemnote", "remarks", "itemremarks"),
   };
   if (indexes.name < 0) throw new Error("The file must include an Item Name column.");
   return rowsWithValues.slice(1).map((values, rowIndex) => {

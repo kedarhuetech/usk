@@ -637,6 +637,7 @@ const saveItemHandler = async (req, res) => {
         minimumStock: minStock,
         min_stock: minStock,
         isBatchTracked: Boolean(isBatchTracked),
+        description: description || "",
         imageUrl: imageUrl || "",
         image: imageUrl || "",
         imageId: imageId || null,
