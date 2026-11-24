@@ -75,8 +75,11 @@ export async function deleteBankAccount(id) {
   return result?.data ?? result;
 }
 
-export function deleteBankTransaction(id) {
-  return businessGrowthApi.remove(BANK_TRANSACTIONS_RESOURCE, id);
+export async function deleteBankTransaction(id) {
+  const result = await apiRequest(`/bank-accounts/transactions/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  return result?.data ?? result;
 }
 
 function asPaise(value) {

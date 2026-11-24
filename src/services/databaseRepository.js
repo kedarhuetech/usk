@@ -564,8 +564,6 @@ export const transactionsDb = {
       };
 
       const form = {
-        customer: party,
-        phone,
         billingAddress: doc.billingAddress || doc.form?.billingAddress || "",
         shippingAddress: doc.shippingAddress || doc.form?.shippingAddress || "",
         invoiceNumber: String(doc.documentNumber || doc.invoiceNumber || doc.form?.invoiceNumber || "1"),

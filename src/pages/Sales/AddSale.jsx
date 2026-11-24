@@ -2956,7 +2956,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
         const matchedItem = items.find(
           (item) =>
             (row.sourceItemId && String(item.id) === String(row.sourceItemId)) ||
-            (String(item.name || item.itemName || "").trim().toLowerCase() === rowItemName)
+            (String(item.name || item.itemName || "").trim().toLowerCase() === trimmedItem)
         );
         const minWholesaleQty = Number(matchedItem?.minimumWholesaleQuantity || matchedItem?.wholesale?.minimumQty || 0);
         const itemWholesalePrice = Number(matchedItem?.wholesalePrice || matchedItem?.wholesale?.price || 0);

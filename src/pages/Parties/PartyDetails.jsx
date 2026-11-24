@@ -367,11 +367,6 @@ function PartyDetails() {
   const location = useLocation();
   const appSettings = useAppSettings() || {};
 
-  useEffect(() => {
-    if (location.state?.openAddParty) {
-      setIsModalOpen(true);
-    }
-  }, [location.state]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
   const [deletePartyConfirm, setDeletePartyConfirm] = useState(null);
@@ -383,6 +378,12 @@ function PartyDetails() {
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [reminderExtraMessage, setReminderExtraMessage] = useState("");
   const [reminderNotice, setReminderNotice] = useState("");
+
+  useEffect(() => {
+    if (location.state?.openAddParty) {
+      setIsModalOpen(true);
+    }
+  }, [location.state]);
   const [balanceFilter, setBalanceFilter] = useState(() => {
     const params = new URLSearchParams(location.search);
     const f = params.get("filter") || location.state?.filter;
