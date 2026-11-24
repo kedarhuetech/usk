@@ -28,10 +28,10 @@ function ReportsSection({ reports }) {
             key={report}
             type="button"
             onClick={() => navigate("/reports")}
-            className="flex items-center justify-between rounded-lg border border-[#D8E1E8] bg-[#EEF2F6] p-5 text-left text-sm font-semibold text-[#1E293B] hover:border-[#FF5A1F] hover:bg-[#FF5A1F]/10 hover:text-[#FF5A1F] dark:border-slate-700 dark:bg-[#1A1E27] dark:text-slate-200 dark:hover:border-[#FF5A1F] transition cursor-pointer"
+            className="flex items-center justify-between rounded-lg border border-slate-200 p-5 text-left text-sm font-semibold text-slate-800 hover:border-blue-200 hover:bg-blue-50"
           >
             {report}
-            <FiChevronRight className="h-5 w-5 text-[#FF5A1F]" />
+            <FiChevronRight className="h-5 w-5 text-blue-600" />
           </button>
         ))}
       </div>

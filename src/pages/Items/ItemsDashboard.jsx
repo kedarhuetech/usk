@@ -793,9 +793,9 @@ function ItemsDashboard() {
   };
 
   return (
-    <div className="flex min-h-full flex-col bg-[#EEF2F6] p-2 gap-2">
-      <div className="grid grid-cols-3 bg-[#FBFCFE] border border-[#D8E1E8] rounded-xl overflow-hidden shadow-xs">
-        {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setSelectedId(""); setSearch(""); }} className={`border-b-2 px-3 py-4 text-center text-sm font-bold transition cursor-pointer ${activeTab === tab.id ? "border-[#FF5A1F] text-[#FF5A1F]" : "border-transparent text-slate-500 hover:text-slate-800"}`}>{tab.label}</button>)}
+    <div className="flex min-h-full flex-col bg-slate-200 p-1.5">
+      <div className="mb-1 grid grid-cols-3 bg-white">
+        {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setSelectedId(""); setSearch(""); }} className={`border-b-2 px-3 py-4 text-center text-sm font-bold transition ${activeTab === tab.id ? "border-sky-600 text-slate-800" : "border-transparent text-slate-400 hover:text-slate-700"}`}>{tab.label}</button>)}
       </div>
       {loadError && <div role="alert" className="mb-1 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{loadError}</div>}
       {notice && <div role="status" className="mb-1 flex items-center justify-between rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-700">{notice}<button type="button" onClick={() => setNotice("")} aria-label="Dismiss message"><FiX /></button></div>}

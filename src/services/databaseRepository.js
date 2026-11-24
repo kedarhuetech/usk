@@ -939,15 +939,8 @@ export const expenseCategoriesDb = {
       const res = await apiRequest("/expense-categories");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
-        const seen = new Set();
-        const dedupedList = list.filter(item => {
-          const name = String(item?.categoryName || item?.name || item || "").trim().toLowerCase();
-          if (!name || seen.has(name)) return false;
-          seen.add(name);
-          return true;
-        });
-        writeLocal("ledgerly:expenseCategories.v1", dedupedList);
-        return dedupedList;
+        writeLocal("ledgerly:expenseCategories.v1", list);
+        return list;
       }
       return readLocal("ledgerly:expenseCategories.v1", []);
     } catch (err) {

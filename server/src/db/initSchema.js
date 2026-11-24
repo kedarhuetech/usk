@@ -566,8 +566,7 @@ export async function initializeDatabaseSchema() {
       category_name VARCHAR(100) NOT NULL,
       expense_type VARCHAR(50) DEFAULT 'indirect',
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
-      INDEX idx_expcat_biz (business_id),
-      UNIQUE KEY idx_biz_cat_unique (business_id, category_name)
+      INDEX idx_expcat_biz (business_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
 
     // 17b. Expense Items Table

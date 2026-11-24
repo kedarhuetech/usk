@@ -936,21 +936,21 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#EEF2F6] overflow-hidden p-2 gap-2">
-      <div className="flex h-14 sm:h-16 shrink-0 items-center justify-between border border-[#D8E1E8] bg-[#FBFCFE] rounded-xl px-4 sm:px-6 shadow-xs">
-        <h1 className="flex items-center gap-2 text-xl font-bold text-[#0F172A]">Parties</h1>
-        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-[#FF5A1F] text-white hover:bg-[#E84E0F] shadow-xs text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
+    <div className="flex h-full flex-col bg-slate-200 overflow-hidden">
+      <div className="flex h-14 sm:h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
+        <h1 className="flex items-center gap-2 text-xl font-bold text-slate-700">Parties</h1>
+        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700 text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
       </div>
-      {loadError && <p className="bg-[#FBFCFE] rounded-xl border border-red-200 px-5 py-2 text-sm text-red-600">{loadError}</p>}
+      {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
       {/* Mobile Master-Detail View Switcher (< md) */}
-      <div className="flex md:hidden border border-[#D8E1E8] bg-[#FBFCFE] rounded-xl p-1.5 gap-1.5 shrink-0 z-10 shadow-xs">
+      <div className="flex md:hidden border-b border-slate-200 bg-white p-1.5 gap-1.5 shrink-0 z-10 shadow-xs">
         <button
           type="button"
           onClick={() => setMobileView("list")}
           className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer ${
             mobileView === "list"
-              ? "bg-[#1E293B] text-white shadow-xs"
-              : "bg-[#EEF2F6] text-slate-700 hover:bg-[#E2E9F0]"
+              ? "bg-[#14171E] text-white shadow-xs"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
           }`}
         >
           Parties List ({filteredParties.length})
@@ -961,15 +961,15 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
           className={`flex-1 py-2 text-center text-xs font-bold rounded-lg transition cursor-pointer truncate px-2 ${
             mobileView === "details"
               ? "bg-[#FF5A1F] text-white shadow-xs"
-              : "bg-[#EEF2F6] text-slate-700 hover:bg-[#E2E9F0]"
+              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
           }`}
         >
           {selectedParty ? selectedParty.partyName : "Cash Sale"} Details &amp; Txns
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-2 md:grid-cols-[minmax(260px,28%)_1fr]">
-        <section className={`flex flex-col overflow-hidden rounded-xl border border-[#D8E1E8] bg-[#FBFCFE] shadow-xs ${
+      <div className="grid min-h-0 flex-1 gap-1 p-1 md:grid-cols-[minmax(260px,28%)_1fr]">
+        <section className={`flex flex-col overflow-hidden rounded-md bg-white ${
           mobileView === "details" ? "hidden md:flex" : "flex"
         } min-h-[360px] md:min-h-0`}>
           <div className="p-4 pb-2"><label className="flex h-11 items-center gap-3 rounded-full border border-slate-200 px-4 text-slate-400"><FiSearch /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search Party Name" className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" /></label></div>
@@ -1154,7 +1154,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
         </section>
 
         {/* Right Section: Party Header & Transactions */}
-        <section className={`min-w-0 overflow-hidden rounded-xl border border-[#D8E1E8] bg-[#FBFCFE] shadow-xs flex flex-col ${
+        <section className={`min-w-0 overflow-hidden rounded-md bg-white flex flex-col ${
           mobileView === "list" ? "hidden md:flex" : "flex"
         }`}>
           {/* Mobile Back Button to Party List */}
