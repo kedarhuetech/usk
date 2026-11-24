@@ -420,3 +420,175 @@ test("restoreUsvToDatabase: empty array clears dataset; missing dataset preserve
   const loanDelete = conn.executed.find((q) => q.sql.includes("loan_accounts"));
   assert.equal(loanDelete, undefined, "Missing loan dataset must NOT execute DELETE");
 });
+
+test("restoreUsvToDatabase: handles cross-business ID collisions by allocating new IDs and remapping foreign references", async () => {
+  const conflictingExistingIds = {
+    inventory_adjustments: ["b34e4f18-b9e7-434b-aa16-f6b75b1490d"],
+    inventory_items: ["item-colliding"],
+    parties: ["party-colliding"],
+    transactions: ["txn-colliding"],
+    bank_accounts: ["bank-colliding"],
+    loan_accounts: ["loan-colliding"],
+    service_reminders: ["srv-colliding"],
+  };
+
+  const executed = [];
+  const conn = {
+    executed,
+    async query(sql, params = []) {
+      executed.push({ sql: sql.trim(), params });
+      for (const [table, ids] of Object.entries(conflictingExistingIds)) {
+        if (sql.includes(`FROM \`${table}\``) || sql.includes(`FROM ${table}`)) {
+          // If query is selecting conflicting candidate IDs
+          const matches = ids.filter((id) => params.includes(id));
+          return [matches.map((id) => ({ id }))];
+        }
+      }
+      return [[]];
+    },
+  };
+
+  const targetBusinessId = "biz-target-new";
+  const payload = {
+    format: SUPPORTED_BACKUP_FORMAT,
+    formatVersion: SUPPORTED_BACKUP_VERSION,
+    data: {
+      "ledgerly:parties.v1": [
+        { id: "party-colliding", partyName: "Colliding Customer" },
+        { id: "party-clean", partyName: "Clean Customer" },
+      ],
+      "ledgerly:inventoryItems.v1": [
+        {
+          id: "item-colliding",
+          itemName: "Colliding Item",
+          batches: [{ id: "batch-1", batchNo: "B-001" }],
+        },
+        {
+          id: "item-clean",
+          itemName: "Clean Item",
+        },
+      ],
+      "ledgerly:inventoryAdjustments.v1": [
+        {
+          id: "b34e4f18-b9e7-434b-aa16-f6b75b1490d",
+          itemId: "item-colliding",
+          itemName: "Colliding Item Adjustment",
+          quantity: 5,
+        },
+        {
+          id: "adj-clean",
+          itemId: "item-clean",
+          itemName: "Clean Item Adjustment",
+          quantity: 2,
+        },
+      ],
+      "ledgerly:saleInvoices.v1": [
+        {
+          id: "txn-colliding",
+          partyId: "party-colliding",
+          form: { invoiceNumber: "INV-C1" },
+          rows: [
+            { id: "row-1", itemId: "item-colliding", qty: 1, price: 100 },
+          ],
+        },
+      ],
+      "ledgerly:bankAccounts.v1": [
+        { id: "bank-colliding", accountName: "Colliding Bank" },
+      ],
+      "ledgerly:bankTransactions.v1": [
+        { id: "btx-1", accountId: "bank-colliding", amount: 1000 },
+      ],
+      "usv.loanAccounts.v1": [
+        {
+          id: "loan-colliding",
+          accountName: "Colliding Loan",
+          repayments: [{ id: "repay-1", amountPaid: 500 }],
+        },
+      ],
+      "ledgerly:serviceReminders.v1": [
+        {
+          id: "srv-colliding",
+          partyId: "party-colliding",
+          serviceName: "Inspection",
+          history: [{ id: "hist-1", messageText: "Due" }],
+        },
+      ],
+    },
+  };
+
+  const result = await restoreUsvToDatabase(conn, targetBusinessId, payload);
+  assert.equal(result.success, true);
+  assert.equal(result.businessId, targetBusinessId);
+
+  // 1. Inventory adjustments: Conflicting ID must be remapped to a new UUID
+  const adjInserts = executed.filter((q) => q.sql.includes("INSERT INTO inventory_adjustments"));
+  assert.equal(adjInserts.length, 2);
+
+  const collidingAdj = adjInserts.find((q) => q.params[3] === "Colliding Item Adjustment");
+  assert.ok(collidingAdj, "Must insert colliding adjustment");
+  assert.notEqual(collidingAdj.params[0], "b34e4f18-b9e7-434b-aa16-f6b75b1490d", "Conflicting ID must NOT be reused");
+  assert.match(collidingAdj.params[0], /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Must generate valid UUID");
+
+  const cleanAdj = adjInserts.find((q) => q.params[3] === "Clean Item Adjustment");
+  assert.ok(cleanAdj, "Must insert clean adjustment");
+  assert.equal(cleanAdj.params[0], "adj-clean", "Non-conflicting ID must be preserved");
+
+  // 2. Inventory Items: Conflicting item must have new UUID, clean item keeps ID
+  const itemInserts = executed.filter((q) => q.sql.includes("INSERT INTO inventory_items"));
+  const collidingItem = itemInserts.find((q) => q.params[2] === "Colliding Item");
+  const cleanItem = itemInserts.find((q) => q.params[2] === "Clean Item");
+  assert.notEqual(collidingItem.params[0], "item-colliding");
+  assert.equal(cleanItem.params[0], "item-clean");
+
+  const newItemId = collidingItem.params[0];
+  // Verify adjustment referenced the remapped item ID!
+  assert.equal(collidingAdj.params[2], newItemId, "Adjustment must reference remapped item_id");
+
+  // Verify batch referenced the remapped item ID!
+  const batchInsert = executed.find((q) => q.sql.includes("INSERT INTO item_batches"));
+  assert.equal(batchInsert.params[1], newItemId, "Batch must reference remapped item_id");
+
+  // 3. Parties & Transactions: Conflicting party has new UUID
+  const partyInserts = executed.filter((q) => q.sql.includes("INSERT INTO parties"));
+  const collidingParty = partyInserts.find((q) => q.params[2] === "Colliding Customer");
+  const cleanParty = partyInserts.find((q) => q.params[2] === "Clean Customer");
+  assert.notEqual(collidingParty.params[0], "party-colliding");
+  assert.equal(cleanParty.params[0], "party-clean");
+
+  const newPartyId = collidingParty.params[0];
+
+  // Verify transaction remapped its ID and party_id
+  const txnInsert = executed.find((q) => q.sql.includes("INSERT INTO transactions"));
+  assert.notEqual(txnInsert.params[0], "txn-colliding", "Conflicting txn ID must be remapped");
+  assert.equal(txnInsert.params[6], newPartyId, "Transaction must reference remapped party_id");
+
+  // Verify line item remapped its transaction_id and item_id
+  const lineInsert = executed.find((q) => q.sql.includes("INSERT INTO transaction_items"));
+  assert.equal(lineInsert.params[1], txnInsert.params[0], "Line item must reference remapped transaction_id");
+  assert.equal(lineInsert.params[3], newItemId, "Line item must reference remapped item_id");
+
+  // 4. Bank account and transaction
+  const bankInsert = executed.find((q) => q.sql.includes("INSERT INTO bank_accounts"));
+  assert.notEqual(bankInsert.params[0], "bank-colliding");
+  const newBankId = bankInsert.params[0];
+
+  const btxInsert = executed.find((q) => q.sql.includes("INSERT INTO bank_transactions"));
+  assert.equal(btxInsert.params[2], newBankId, "Bank transaction must reference remapped account_id");
+
+  // 5. Loan and repayment
+  const loanInsert = executed.find((q) => q.sql.includes("INSERT INTO loan_accounts"));
+  assert.notEqual(loanInsert.params[0], "loan-colliding");
+  const newLoanId = loanInsert.params[0];
+
+  const repayInsert = executed.find((q) => q.sql.includes("INSERT INTO loan_repayments"));
+  assert.equal(repayInsert.params[2], newLoanId, "Loan repayment must reference remapped loan_id");
+
+  // 6. Service reminder and history
+  const srvInsert = executed.find((q) => q.sql.includes("INSERT INTO service_reminders"));
+  assert.notEqual(srvInsert.params[0], "srv-colliding");
+  assert.equal(srvInsert.params[2], newPartyId, "Service reminder must reference remapped party_id");
+  const newSrvId = srvInsert.params[0];
+
+  const histInsert = executed.find((q) => q.sql.includes("INSERT INTO service_reminder_history"));
+  assert.equal(histInsert.params[1], newSrvId, "Service reminder history must reference remapped reminder_id");
+});

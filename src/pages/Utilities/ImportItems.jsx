@@ -111,6 +111,7 @@ function barcodeReviewFromProduct(product, barcode, source) {
     purchasePrice: "",
     taxRate: "",
     openingQuantity: "",
+    description: product.description || product.generic_name || "",
     lookupNote: itemName
       ? `Details found via ${source}. Review the imported product details and complete prices before saving.`
       : "This barcode was found, but the product name is missing. Enter it before saving.",
@@ -178,6 +179,7 @@ function emptyBarcodeReview(barcode) {
     salePrice: "",
     taxRate: "",
     openingQuantity: "",
+    description: "",
     lookupNote: "No provider returned product details. Enter and review the item details before saving.",
   };
 }
@@ -550,6 +552,7 @@ function ImportItems() {
           minimumStock: row.minimumStock ?? row.minStock,
           hsn: row.hsnCode ?? row.hsn,
           hsnCode: row.hsnCode ?? row.hsn,
+          description: row.description || "",
         });
         imported += 1;
         if (codeKey) existingKeys.add(codeKey);

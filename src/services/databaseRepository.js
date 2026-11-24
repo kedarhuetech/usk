@@ -735,13 +735,14 @@ export const bankAccountsDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:bankTransactions.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:bankTransactions.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:bankTransactions.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:bankTransactions.v1"), null) || readLocal("ledgerly:bankTransactions.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to local cache for bank transactions:", err.message);
-      return readLocal("ledgerly:bankTransactions.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:bankTransactions.v1"), null) || readLocal("ledgerly:bankTransactions.v1", []);
     }
   },
 
@@ -869,13 +870,14 @@ export const cashBankDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:cashAdjustments.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:cashAdjustments.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:cashAdjustments.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:cashAdjustments.v1"), null) || readLocal("ledgerly:cashAdjustments.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Sync notice for cash in hand:", err.message);
-      return readLocal("ledgerly:cashAdjustments.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:cashAdjustments.v1"), null) || readLocal("ledgerly:cashAdjustments.v1", []);
     }
   },
   async syncCheques({ throwOnError = false } = {}) {
@@ -940,13 +942,14 @@ export const expenseCategoriesDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:expenseCategories.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:expenseCategories.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:expenseCategories.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:expenseCategories.v1"), null) || readLocal("ledgerly:expenseCategories.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Sync notice for expense categories:", err.message);
-      return readLocal("ledgerly:expenseCategories.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:expenseCategories.v1"), null) || readLocal("ledgerly:expenseCategories.v1", []);
     }
   },
   async save(category) {
@@ -978,13 +981,14 @@ export const expenseItemsDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:expenseItems.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:expenseItems.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:expenseItems.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:expenseItems.v1"), null) || readLocal("ledgerly:expenseItems.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Sync notice for expense items:", err.message);
-      return readLocal("ledgerly:expenseItems.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:expenseItems.v1"), null) || readLocal("ledgerly:expenseItems.v1", []);
     }
   },
   async save(item) {
@@ -1015,13 +1019,14 @@ export const unitsDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:customUnits.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:customUnits.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:customUnits.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:customUnits.v1"), null) || readLocal("ledgerly:customUnits.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Sync notice for units:", err.message);
-      return readLocal("ledgerly:customUnits.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:customUnits.v1"), null) || readLocal("ledgerly:customUnits.v1", []);
     }
   },
   async syncConversions({ throwOnError = false } = {}) {
@@ -1030,13 +1035,14 @@ export const unitsDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:unitConversions.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:unitConversions.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:unitConversions.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:unitConversions.v1"), null) || readLocal("ledgerly:unitConversions.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Sync notice for unit conversions:", err.message);
-      return readLocal("ledgerly:unitConversions.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:unitConversions.v1"), null) || readLocal("ledgerly:unitConversions.v1", []);
     }
   },
   async save(unit) {
@@ -1109,13 +1115,14 @@ export const inventoryAdjustmentsDb = {
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
         writeLocal("ledgerly:inventoryAdjustments.v1", list);
+        writeLocal(getScopedStorageKey("ledgerly:inventoryAdjustments.v1"), list);
         return list;
       }
-      return readLocal("ledgerly:inventoryAdjustments.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:inventoryAdjustments.v1"), null) || readLocal("ledgerly:inventoryAdjustments.v1", []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Sync notice for inventory adjustments:", err.message);
-      return readLocal("ledgerly:inventoryAdjustments.v1", []);
+      return readLocal(getScopedStorageKey("ledgerly:inventoryAdjustments.v1"), null) || readLocal("ledgerly:inventoryAdjustments.v1", []);
     }
   },
   async save(adjustment) {

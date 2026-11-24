@@ -6,7 +6,7 @@ import { partiesStorageKey } from "./partiesStorage.js";
 import { purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { saleInvoicesStorageKey } from "./salesStorage.js";
 import { SERVICE_REMINDER_RECORDS_KEY } from "./serviceRemindersStorage.js";
-import { getScopedStorageKey } from "../config/businessConfig.js";
+import { getScopedStorageKey, getActiveBusinessId } from "../config/businessConfig.js";
 import { createDatabaseBackupRestoreRepository, createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
@@ -67,6 +67,119 @@ function cleanSecrets(value, path, redactedPaths) {
   }));
 }
 
+export function getBackupTenantContext(storage) {
+  let businessId = "";
+  let isExplicit = false;
+
+  if (storage && typeof storage.getItem === "function") {
+    try {
+      const authBiz = storage.getItem("usk_auth_business_id");
+      if (authBiz && typeof authBiz === "string" && authBiz.trim() && authBiz.trim() !== "local-development") {
+        businessId = authBiz.trim();
+        isExplicit = true;
+      }
+      if (!businessId) {
+        const userRaw = storage.getItem("usk_auth_user");
+        if (userRaw) {
+          const u = JSON.parse(userRaw);
+          if (u && u.businessId && typeof u.businessId === "string" && u.businessId.trim() && u.businessId.trim() !== "local-development") {
+            businessId = u.businessId.trim();
+            isExplicit = true;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  if (!businessId) {
+    businessId = getActiveBusinessId();
+  }
+
+  return { businessId, isExplicit };
+}
+
+function verifyBusinessOwnership(parsedValue, expectedBusinessId) {
+  if (!parsedValue || typeof parsedValue !== "object") return false;
+  if (!Array.isArray(parsedValue)) {
+    const bizId = String(parsedValue.businessId || parsedValue.business_id || "").trim();
+    return bizId === expectedBusinessId;
+  }
+  if (parsedValue.length === 0) return false;
+  let taggedCount = 0;
+  for (const record of parsedValue) {
+    if (!record || typeof record !== "object") return false;
+    const bizId = String(record.business_id || record.businessId || "").trim();
+    if (bizId) {
+      if (bizId !== expectedBusinessId) return false;
+      taggedCount++;
+    }
+  }
+  return taggedCount > 0;
+}
+
+function getCandidateStorageKeys(source, businessId) {
+  // Genuinely global settings (printer config, margins, paper size)
+  if (source.key === "ledgerly:printSettings.v1") {
+    return {
+      scopedKeys: [getScopedStorageKey("ledgerly:printSettings.v1", businessId)],
+      legacyKeys: ["ledgerly:printSettings.v1"],
+      isGlobal: true,
+    };
+  }
+
+  // Business growth (Online store - strictly preserved per requirement 9)
+  if (source.category === "Business growth") {
+    return {
+      scopedKeys: [],
+      legacyKeys: [source.key],
+      isGlobal: true,
+    };
+  }
+
+  // Cheques
+  if (source.key === CHEQUE_STORAGE_KEY) {
+    return {
+      scopedKeys: [
+        getScopedStorageKey(CHEQUE_STORAGE_KEY, businessId),
+        getScopedStorageKey("ledgerly:cheques.v1", businessId),
+      ],
+      legacyKeys: [CHEQUE_STORAGE_KEY, "ledgerly:cheques.v1"],
+      isGlobal: false,
+    };
+  }
+
+  // Loans
+  if (source.key === LOAN_ACCOUNTS_STORAGE_KEY) {
+    return {
+      scopedKeys: [
+        getScopedStorageKey(LOAN_ACCOUNTS_STORAGE_KEY, businessId),
+        getScopedStorageKey("ledgerly:loanAccounts.v1", businessId),
+      ],
+      legacyKeys: [LOAN_ACCOUNTS_STORAGE_KEY, "ledgerly:loanAccounts.v1"],
+      isGlobal: false,
+    };
+  }
+
+  // Service reminders
+  if (source.key === SERVICE_REMINDER_RECORDS_KEY) {
+    return {
+      scopedKeys: [
+        getScopedStorageKey(SERVICE_REMINDER_RECORDS_KEY, businessId),
+        getScopedStorageKey("ledgerly:serviceReminders.v1", businessId),
+      ],
+      legacyKeys: [SERVICE_REMINDER_RECORDS_KEY, "ledgerly:serviceReminders.v1"],
+      isGlobal: false,
+    };
+  }
+
+  // All other tenant-specific business data
+  return {
+    scopedKeys: [getScopedStorageKey(source.key, businessId)],
+    legacyKeys: [source.key],
+    isGlobal: false,
+  };
+}
+
 function readBackupStorage(storage) {
   if (!storage || typeof storage.getItem !== "function") {
     throw new Error("Browser local storage is unavailable. No backup was created.");
@@ -75,22 +188,52 @@ function readBackupStorage(storage) {
   const included = [];
   const redactedPaths = [];
 
+  const { businessId, isExplicit } = getBackupTenantContext(storage);
+
   for (const source of BACKUP_SOURCES) {
-    let raw;
+    let raw = null;
+    const { scopedKeys, legacyKeys, isGlobal } = getCandidateStorageKeys(source, businessId);
+
     try {
-      if (source.key === "ledgerly:companyProfile.v1") {
-        const scopedKey = getScopedStorageKey("ledgerly:companyProfile.v1");
-        raw = storage.getItem(scopedKey) ?? storage.getItem("ledgerly:companyProfile.v1");
-      } else if (source.key === CHEQUE_STORAGE_KEY) {
-        const scopedKey = getChequeStorageKey();
-        raw = storage.getItem(scopedKey) ?? storage.getItem(CHEQUE_STORAGE_KEY) ?? storage.getItem("ledgerly:cheques.v1");
-      } else if (source.key === LOAN_ACCOUNTS_STORAGE_KEY) {
-        const scopedKey = getLoanAccountsStorageKey();
-        raw = storage.getItem(scopedKey) ?? storage.getItem(LOAN_ACCOUNTS_STORAGE_KEY) ?? storage.getItem("ledgerly:loanAccounts.v1");
-      } else if (source.key === SERVICE_REMINDER_RECORDS_KEY) {
-        raw = storage.getItem(SERVICE_REMINDER_RECORDS_KEY) ?? storage.getItem("ledgerly:serviceReminders.v1");
-      } else {
-        raw = storage.getItem(source.key);
+      // 1. Try reading from the active tenant's scoped keys (never other tenants' scoped keys)
+      for (const scopedKey of scopedKeys) {
+        const val = storage.getItem(scopedKey);
+        if (val !== null && val !== undefined) {
+          raw = val;
+          break;
+        }
+      }
+
+      // 2. If absent from scoped keys, evaluate legacy unscoped keys
+      if (raw === null || raw === undefined) {
+        for (const legacyKey of legacyKeys) {
+          const val = storage.getItem(legacyKey);
+          if (val === null || val === undefined) continue;
+
+          // For genuinely global settings or online store, allow direct fallback
+          if (isGlobal) {
+            raw = val;
+            break;
+          }
+
+          // If no explicit tenant session exists in storage (legacy unauthenticated/test mode),
+          // allow legacy unscoped key
+          if (!isExplicit) {
+            raw = val;
+            break;
+          }
+
+          // In an explicit tenant session, NEVER use an unscoped key unless ownership can be verified
+          try {
+            const parsed = JSON.parse(val);
+            if (verifyBusinessOwnership(parsed, businessId)) {
+              raw = val;
+              break;
+            }
+          } catch {
+            // Malformed data will be handled or ignored
+          }
+        }
       }
     } catch (error) {
       throw new Error(`Could not read ${source.category} data (${source.key}). No backup was created.`, { cause: error });
@@ -113,7 +256,7 @@ function readBackupStorage(storage) {
     included.push({ category: source.category, key: source.key, recordCount: Array.isArray(value) ? value.length : 1 });
   }
 
-  return { data, included, redactedPaths };
+  return { data, included, redactedPaths, businessId };
 }
 
 export function collectBackupData(storage = typeof window !== "undefined" ? window.localStorage : null) {
@@ -156,7 +299,18 @@ export function resolveSourceDefinition(key) {
   }
 
   // 5. Direct exact match in BACKUP_SOURCES
-  return BACKUP_SOURCES.find((s) => s.key === key) || null;
+  const direct = BACKUP_SOURCES.find((s) => s.key === key);
+  if (direct) return direct;
+
+  // 6. Scoped key match (prefix before business ID suffix)
+  const colonIdx = key.lastIndexOf(":");
+  if (colonIdx > 0) {
+    const baseKey = key.slice(0, colonIdx);
+    const matched = BACKUP_SOURCES.find((s) => s.key === baseKey);
+    if (matched) return matched;
+  }
+
+  return null;
 }
 
 function filenameFor(timestamp) {
@@ -177,6 +331,7 @@ export function createBackupPayload(collected, { now = new Date(), version = imp
       included: collected.included,
       redactedFields: collected.redactedPaths,
       dataSource: "browser-local-storage",
+      ...(collected.businessId ? { businessId: collected.businessId } : {}),
     },
     data: collected.data,
   };
