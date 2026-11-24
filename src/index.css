@@ -804,8 +804,8 @@ html.dark .focus\:ring-blue-100:focus {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*       OPTION 2: UNIFIED MODERN LIGHT THEME (STRIPE / LINEAR SAAS)           */
-/*       Canvas: #F8FAFC | Cards: #FFFFFF | Borders: #E2E8F0 | Accent: #FF5A1F */
+/*       NORDIC MIST SLATE & BOLD AMBER-ORANGE THEME                          */
+/*       Canvas: #EEF2F6 | Cards: #FBFCFE | Borders: #D8E1E8 | Accent: #FF5A1F */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── 1. Page Backgrounds & Canvas ── */
@@ -821,7 +821,7 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .bg-\[\#fbfcfd\],
 .main-content-section .bg-\[\#e8edf5\],
 .main-content-section .bg-\[\#eaf0f6\] {
-  background-color: #F8FAFC !important;
+  background-color: #EEF2F6 !important;
   color: #0F172A !important;
 }
 
@@ -833,8 +833,8 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .rounded-lg.bg-white,
 .main-content-section .rounded-xl.bg-white,
 .main-content-section .rounded-2xl.bg-white {
-  background-color: #FFFFFF !important;
-  border-color: #E2E8F0 !important;
+  background-color: #FBFCFE !important;
+  border-color: #D8E1E8 !important;
   color: #0F172A !important;
 }
 
@@ -842,8 +842,8 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .bg-slate-100,
 .main-content-section .bg-gray-100,
 .main-content-section .bg-slate-200\/60 {
-  background-color: #F1F5F9 !important;
-  border-color: #E2E8F0 !important;
+  background-color: #E2E9F0 !important;
+  border-color: #D8E1E8 !important;
 }
 
 /* ── 3. Primary CTAs & Buttons (Bold Orange & Charcoal Cohesive) ── */
@@ -890,7 +890,7 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section input:not([type="checkbox"]):not([type="radio"]),
 .main-content-section select,
 .main-content-section textarea {
-  background-color: #FFFFFF !important;
+  background-color: #F8FAFC !important;
   border-color: #CBD5E1 !important;
   color: #0F172A !important;
 }
@@ -938,30 +938,30 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section table thead,
 .main-content-section table thead tr,
 .main-content-section table thead th {
-  background-color: #F8FAFC !important;
+  background-color: #E2E9F0 !important;
   color: #334155 !important;
-  border-color: #E2E8F0 !important;
+  border-color: #D8E1E8 !important;
   font-weight: 600 !important;
 }
 
 .main-content-section table tbody tr td {
-  border-color: #E2E8F0 !important;
+  border-color: #D8E1E8 !important;
   color: #0F172A !important;
 }
 
 .main-content-section table tbody tr:nth-child(even):not(:hover) {
-  background-color: #F8FAFC !important;
+  background-color: #F4F7FA !important;
 }
 
 .main-content-section table tbody tr:nth-child(odd):not(:hover) {
-  background-color: #FFFFFF !important;
+  background-color: #FBFCFE !important;
 }
 
 .main-content-section table tbody tr:hover,
 .main-content-section .hover\:bg-slate-50:hover,
 .main-content-section .hover\:bg-gray-50:hover,
 .main-content-section .hover\:bg-blue-50:hover {
-  background-color: rgba(255, 90, 31, 0.06) !important;
+  background-color: rgba(255, 90, 31, 0.08) !important;
 }
 
 /* ── 7. Subtle Row Tints & Badges ── */
@@ -984,7 +984,7 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .border-gray-200,
 .main-content-section .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
 .main-content-section .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #E2E8F0 !important;
+  border-color: #D8E1E8 !important;
 }
 
 /* ── 9. Text Readability & Contrast ── */
@@ -1013,7 +1013,7 @@ html.dark .focus\:ring-blue-100:focus {
   height: 7px;
 }
 .main-content-section::-webkit-scrollbar-track {
-  background: #F8FAFC;
+  background: #EEF2F6;
 }
 .main-content-section::-webkit-scrollbar-thumb {
   background: #CBD5E1;
