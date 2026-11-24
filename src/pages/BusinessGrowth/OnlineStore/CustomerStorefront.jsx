@@ -230,18 +230,11 @@ function CartPanel({
   onRemove,
   onPlaceOrder,
 }) {
-  if (!open) return null;
-
-  const minimum = toAmount(storeState.minimumOrderAmount);
-  const remaining = Math.max(minimum - totals.subtotal, 0);
-  const canPlaceOrder =
-    storeState.acceptOnlineOrders && cartLines.length > 0 && remaining <= 0;
-
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState("");
 
   useEffect(() => {
     let active = true;
-    if (storeState.upiId && totals.total > 0) {
+    if (open && storeState.upiId && totals.total > 0) {
       const uri = generateUpiUri({
         upiId: storeState.upiId,
         payeeName: storeState.businessName || storeState.storeName,
@@ -257,7 +250,14 @@ function CartPanel({
     return () => {
       active = false;
     };
-  }, [storeState.upiId, storeState.businessName, storeState.storeName, totals.total]);
+  }, [open, storeState.upiId, storeState.businessName, storeState.storeName, totals.total]);
+
+  if (!open) return null;
+
+  const minimum = toAmount(storeState.minimumOrderAmount);
+  const remaining = Math.max(minimum - totals.subtotal, 0);
+  const canPlaceOrder =
+    storeState.acceptOnlineOrders && cartLines.length > 0 && remaining <= 0;
 
   return (
     <div

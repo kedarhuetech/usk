@@ -1,8 +1,8 @@
 import { getActiveBusinessId } from "../config/businessConfig.js";
 
 // Sends app requests to the existing backend with the active business context.
-const RAW_URL = (typeof process !== "undefined" && process.env?.VITE_API_BASE_URL)
-  || (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL)
+const RAW_URL = (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL)
+  || (typeof globalThis !== "undefined" && globalThis.process?.env?.VITE_API_BASE_URL)
   || (typeof window === "undefined" ? "http://127.0.0.1:5000" : "/api");
 // Clean base URL without trailing slash or trailing /api
 export const API_BASE_URL = RAW_URL.replace(/\/api\/?$/, "").replace(/\/$/, "");

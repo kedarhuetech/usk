@@ -225,18 +225,20 @@ function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, o
   const submit = () => {
     setError("");
     const selectedRows = (value.rows || value.items || []).filter((row) => Number(row.qty) > 0);
-    if (!value.partyId && value.party) {
+    let resolvedPartyId = value.partyId;
+    if (!resolvedPartyId && value.party) {
       const match = parties.find((p) => (p.partyName || p.name || "").toLowerCase() === value.party.toLowerCase());
-      if (match) value.partyId = match.id;
-      else if (value.party.toLowerCase() === "cash sale") value.partyId = "cash-sale";
+      if (match) resolvedPartyId = match.id;
+      else if (value.party.toLowerCase() === "cash sale") resolvedPartyId = "cash-sale";
     }
-    if (!value.partyId || !parties.some((party) => String(party.id) === String(value.partyId))) { setError("Select an existing customer."); return; }
+    if (!resolvedPartyId || !parties.some((party) => String(party.id) === String(resolvedPartyId))) { setError("Select an existing customer."); return; }
     if (!selectedInvoice) { setError("Select an active sales invoice for this customer."); return; }
     if (!selectedRows.length) { setError("Enter a return quantity for at least one item."); return; }
     if (selectedRows.some((row) => !Number.isFinite(Number(row.qty)) || Number(row.qty) <= 0 || Number(row.qty) > row.remainingQty)) { setError("Each return quantity must be positive and no greater than its remaining quantity."); return; }
     if (value.settlementMode === "refund" && (received <= 0 || received > refundableLimit)) { setError(`Refund must be greater than zero and no more than ${money(refundableLimit)}.`); return; }
     const saved = {
       ...value,
+      partyId: resolvedPartyId,
       invoice: selectedInvoice,
       rows: selectedRows,
       received,

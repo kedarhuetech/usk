@@ -7,9 +7,9 @@ function parseYMD(val) {
   if (!val) return "";
   if (typeof val === "string") {
     const s = val.trim();
-    const ymd = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    const ymd = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
     if (ymd) return `${ymd[1]}-${ymd[2].padStart(2, "0")}-${ymd[3].padStart(2, "0")}`;
-    const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
     if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
   }
   const d = new Date(val);

@@ -310,7 +310,7 @@ export default function EditProfile() {
             ? `${asset.url}?businessId=${encodeURIComponent(businessId)}`
             : "";
         } catch (uploadErr) {
-          throw new Error(uploadErr?.message || "Failed to upload business logo.");
+          throw new Error(uploadErr?.message || "Failed to upload business logo.", { cause: uploadErr });
         }
       } else if (!formData.logo || clearedFields.has("logo") || clearedFields.has("logoUrl")) {
         finalLogoUrl = "";
@@ -324,7 +324,7 @@ export default function EditProfile() {
             ? `${asset.url}?businessId=${encodeURIComponent(businessId)}`
             : "";
         } catch (uploadErr) {
-          throw new Error(uploadErr?.message || "Failed to upload signature image.");
+          throw new Error(uploadErr?.message || "Failed to upload signature image.", { cause: uploadErr });
         }
       } else if (!formData.signature || clearedFields.has("signature") || clearedFields.has("signatureUrl")) {
         finalSignatureUrl = "";

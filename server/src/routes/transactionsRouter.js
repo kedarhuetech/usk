@@ -501,16 +501,6 @@ router.get("/", async (req, res) => {
         },
         image: row.image_url || "",
         document: row.document_url || "",
-        imageUrl: row.image_url || "",
-        documentUrl: row.document_url || "",
-        imageName: row.image_name || "",
-        documentName: row.document_name || "",
-        files: {
-          image: row.image_url || "",
-          document: row.document_url || "",
-          imageName: row.image_name || "",
-          documentName: row.document_name || "",
-        },
         payments,
         items,
         rows: items.map((it) => ({
@@ -781,16 +771,6 @@ router.get("/:id", async (req, res) => {
         },
         image: row.image_url || "",
         document: row.document_url || "",
-        imageUrl: row.image_url || "",
-        documentUrl: row.document_url || "",
-        imageName: row.image_name || "",
-        documentName: row.document_name || "",
-        files: {
-          image: row.image_url || "",
-          document: row.document_url || "",
-          imageName: row.image_name || "",
-          documentName: row.document_name || "",
-        },
         payments,
         items,
         rows: items.map((it) => ({

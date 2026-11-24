@@ -1,5 +1,5 @@
 // Implements the online store page.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiArrowLeft,
@@ -1344,9 +1344,18 @@ function OnlineStore() {
     if (shareStatusTimer.current) window.clearTimeout(shareStatusTimer.current);
   }, []);
 
+  const selectedOnlineItems = useMemo(() => {
+    const selectedIds = new Set(storeState.selectedItemIds || []);
+    return items.filter((item) => selectedIds.has(item.id));
+  }, [items, storeState.selectedItemIds]);
+  const storeOrders = useMemo(() => orders.filter((order) => order.storeId === storeState.prototypeStoreId), [orders, storeState.prototypeStoreId]);
+
+  // Refreshes items.
+  const refreshItems = useCallback(() => loadGrowthItems().then(setItems).catch((error) => toast.error(error.message)), []);
+  // Refreshes orders.
+  const refreshOrders = useCallback(() => loadGrowthOrders().then(setOrders).catch((error) => toast.error(error.message)), []);
+
   useEffect(() => {
-    // Refreshes orders.
-    const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => toast.error(error.message));
     // Refreshes when visible.
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") refreshOrders();
@@ -1368,18 +1377,7 @@ function OnlineStore() {
       window.removeEventListener("inventory-items-changed", refreshItems);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, []);
-
-  const selectedOnlineItems = useMemo(() => {
-    const selectedIds = new Set(storeState.selectedItemIds || []);
-    return items.filter((item) => selectedIds.has(item.id));
-  }, [items, storeState.selectedItemIds]);
-  const storeOrders = useMemo(() => orders.filter((order) => order.storeId === storeState.prototypeStoreId), [orders, storeState.prototypeStoreId]);
-
-  // Refreshes items.
-  const refreshItems = () => loadGrowthItems().then(setItems).catch((error) => toast.error(error.message));
-  // Refreshes orders.
-  const refreshOrders = () => loadGrowthOrders().then(setOrders).catch((error) => toast.error(error.message));
+  }, [refreshItems, refreshOrders]);
 
   // Opens new item.
   const openNewItem = () => {

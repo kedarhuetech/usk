@@ -70,7 +70,7 @@ function escapeHtml(value) {
 function formatDateDMY(dateStr) {
   if (!dateStr) return "-";
   const s = String(dateStr).trim();
-  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
   if (dmy) return `${dmy[1].padStart(2, "0")}/${dmy[2].padStart(2, "0")}/${dmy[3]}`;
   const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (ymd) return `${ymd[3].padStart(2, "0")}/${ymd[2].padStart(2, "0")}/${ymd[1]}`;
@@ -367,11 +367,6 @@ function PartyDetails() {
   const location = useLocation();
   const appSettings = useAppSettings() || {};
 
-  useEffect(() => {
-    if (location.state?.openAddParty) {
-      setIsModalOpen(true);
-    }
-  }, [location.state]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [partyBeingEdited, setPartyBeingEdited] = useState(null);
   const [deletePartyConfirm, setDeletePartyConfirm] = useState(null);
@@ -383,6 +378,12 @@ function PartyDetails() {
   const [reminderModalOpen, setReminderModalOpen] = useState(false);
   const [reminderExtraMessage, setReminderExtraMessage] = useState("");
   const [reminderNotice, setReminderNotice] = useState("");
+
+  useEffect(() => {
+    if (location.state?.openAddParty) {
+      setIsModalOpen(true);
+    }
+  }, [location.state]);
   const [balanceFilter, setBalanceFilter] = useState(() => {
     const params = new URLSearchParams(location.search);
     const f = params.get("filter") || location.state?.filter;
@@ -420,7 +421,7 @@ function PartyDetails() {
 
   const handleImportParties = async (selectedContacts) => {
     if (!selectedContacts?.length) return;
-    let existing = [];
+    let existing;
     try {
       existing = await loadBusinessParties();
     } catch {

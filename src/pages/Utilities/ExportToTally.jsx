@@ -1,3 +1,4 @@
+/* eslint-disable no-control-regex */
 // Implements the export to tally page.
 import { useEffect, useMemo, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiDownload } from "react-icons/fi";
@@ -10,11 +11,12 @@ import { transactionsDb } from "../../services/databaseRepository.js";
 const transactionTypes = [
   { value: "sale", label: "Sale", load: getSaleInvoices },
   { value: "purchase", label: "Purchase", load: getPurchaseBills },
-  { value: "credit_note", label: "Credit Note (Sale Return)", load: () => { try { return JSON.parse(localStorage.getItem("ledgerly:saleReturns.v1") || "[]"); } catch { return []; } } },
-  { value: "debit_note", label: "Debit Note (Purchase Return)", load: () => { try { return JSON.parse(localStorage.getItem("ledgerly:purchaseReturns.v1") || "[]"); } catch { return []; } } },
+  { value: "credit_note", label: "Credit Note (Sale Return)", load: () => transactionsDb.listByType("credit_note") },
+  { value: "debit_note", label: "Debit Note (Purchase Return)", load: () => transactionsDb.listByType("debit_note") },
 ];
 
 // This helper handles escape logic, stripping illegal XML 1.0 control characters and escaping special entities.
+// eslint-disable-next-line no-control-regex
 const xmlEscape = (value) => String(value ?? "")
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
   .replace(/&/g, "&amp;")

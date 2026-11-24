@@ -652,11 +652,11 @@ function ItemsDashboard() {
   const createConversion = () => {
     const factor = Number(conversionFactor);
     if (!conversionUnit) {
-      setError("Please select a target unit.");
+      setNotice("Please select a target unit.");
       return;
     }
     if (!Number.isFinite(factor) || factor <= 0) {
-      setError("Conversion factor must be greater than zero.");
+      setNotice("Conversion factor must be greater than zero.");
       return;
     }
     addUnitConversion(selectedUnit, { factor, toUnit: conversionUnit });

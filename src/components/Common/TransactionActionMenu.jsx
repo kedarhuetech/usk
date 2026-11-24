@@ -35,7 +35,7 @@ function getTransactionDocument(transaction) {
     transaction.partyName ||
     "Party";
 
-  let rows = [];
+  let rows;
   if (Array.isArray(raw.rows) && raw.rows.length > 0) {
     rows = raw.rows.map((r, i) => ({
       index: i + 1,
@@ -205,7 +205,7 @@ export default function TransactionActionMenu({
     const raw = transaction.raw || {};
     const source = transaction.source || "Transaction";
     const num = transaction.number || "—";
-    const rawId = raw.id || transaction.id?.replace(/^[a-z\-]+:/i, "");
+    const rawId = raw.id || transaction.id?.replace(/^[a-z-]+:/i, "");
     const rawWithId = { ...raw, id: rawId };
 
     // 1. View / Edit

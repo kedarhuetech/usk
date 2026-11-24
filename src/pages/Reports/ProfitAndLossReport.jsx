@@ -112,14 +112,16 @@ function recordAmount(row) {
 
 function recordTax(row) {
   if (!row) return 0;
-  const t =
-    row.totals?.totalTax ??
-    row.totals?.tax ??
-    row.totals?.gst ??
-    (Number(row.totals?.cgst || 0) + Number(row.totals?.sgst || 0) + Number(row.totals?.igst || 0)) ??
-    row.form?.taxAmount ??
-    row.taxAmount;
-  return Number(t || 0);
+  const directTax = row.totals?.totalTax ?? row.totals?.tax ?? row.totals?.gst;
+  if (directTax !== undefined && directTax !== null && Number.isFinite(Number(directTax))) {
+    return Number(directTax);
+  }
+  const splitTax = Number(row.totals?.cgst || 0) + Number(row.totals?.sgst || 0) + Number(row.totals?.igst || 0);
+  if (splitTax > 0) {
+    return splitTax;
+  }
+  const fallback = row.form?.taxAmount ?? row.taxAmount;
+  return Number(fallback || 0);
 }
 
 const localDate = (date = new Date()) =>
@@ -352,7 +354,7 @@ export default function ProfitAndLossReport() {
             (rowName && String(it.itemName || it.name || "").trim().toLowerCase() === rowName)
         );
 
-        let unitCost = 0;
+        let unitCost;
         if (matchedItem) {
           unitCost = Number(matchedItem.purchasePrice || matchedItem.atPrice || 0);
           if (!unitCost) {
@@ -482,7 +484,7 @@ export default function ProfitAndLossReport() {
 
   /* ── export ── */
   const handleExcel = () => {
-    let rows = [];
+    let rows;
     if (view === "Accounting") {
       rows = [
         ["Particulars", "Amount"],

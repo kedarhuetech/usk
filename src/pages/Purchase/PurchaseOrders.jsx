@@ -128,6 +128,10 @@ function printPurchaseOrderDoc(order, autoPrint = false) {
   openPrintWindow(html, autoPrint);
 }
 
+function generatePurchaseOrderId() {
+  return `purchase-order-${Date.now()}`;
+}
+
 export default function PurchaseOrders() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -303,7 +307,7 @@ export default function PurchaseOrders() {
         console.warn("[PurchaseOrders] Auto-create supplier notice:", partyErr?.message);
       }
     }
-    const orderId = value.id || `purchase-order-${Date.now()}`;
+    const orderId = value.id || generatePurchaseOrderId();
     const saved = { ...value, id: orderId, amount: total, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated purchase order" : "Created purchase order", at: new Date().toISOString() }] };
 
     // Persist to MySQL backend FIRST with strict fail-fast validation

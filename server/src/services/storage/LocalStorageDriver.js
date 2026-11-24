@@ -123,7 +123,7 @@ export class LocalStorageDriver {
       return await fs.promises.readFile(absolutePath);
     } catch (err) {
       if (err.code === "ENOENT") {
-        throw new Error(`File not found: "${storageKey}" does not exist in storage.`);
+        throw new Error(`File not found: "${storageKey}" does not exist in storage.`, { cause: err });
       }
       throw err;
     }
@@ -174,7 +174,7 @@ export class LocalStorageDriver {
       };
     } catch (err) {
       if (err.code === "ENOENT") {
-        throw new Error(`File not found: "${storageKey}" does not exist in storage.`);
+        throw new Error(`File not found: "${storageKey}" does not exist in storage.`, { cause: err });
       }
       throw err;
     }

@@ -54,7 +54,7 @@ function invoiceDate(invoice) {
   const value = invoice.form?.invoiceDate || invoice.transactionDate || invoice.transaction_date || invoice.invoiceDate || invoice.date || invoice.createdAt;
   if (!value) return null;
   const s = String(value).trim();
-  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
   const normalized = dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : (s.length >= 10 ? s.slice(0, 10) : value);
   const date = new Date(normalized.length === 10 ? `${normalized}T00:00:00` : normalized);
   return Number.isNaN(date.getTime()) ? null : date;
@@ -65,7 +65,7 @@ function isInDateRange(value, start, end) {
   if (!start && !end) return true;
   if (!value) return false;
   const s = String(value).trim();
-  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
   const normalized = dmy ? `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}` : (s.length === 10 ? s : value);
   const date = new Date(normalized.length === 10 ? `${normalized}T00:00:00` : normalized);
   if (Number.isNaN(date.getTime())) return false;
