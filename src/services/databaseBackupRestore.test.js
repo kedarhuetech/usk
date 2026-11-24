@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 import {
   createDatabaseBackupRestoreRepository,
   createLocalStorageBackupRestoreRepository,
@@ -159,21 +160,22 @@ test("syncAllFromDatabase: synchronizes supported main-application datasets into
     assert.ok(Array.isArray(results), "syncAllFromDatabase must return results array");
     assert.ok(results.length >= 10, "Must synchronize all supported main-application datasets");
 
-    // Verify localStorage keys were populated
-    assert.ok(storageValues.has("ledgerly:parties.v1"), "Must hydrate parties");
-    assert.ok(storageValues.has("ledgerly:inventoryItems.v1"), "Must hydrate items");
-    assert.ok(storageValues.has("ledgerly:saleInvoices.v1"), "Must hydrate sale invoices");
-    assert.ok(storageValues.has("ledgerly:serviceReminderRecords.v1"), "Must hydrate service reminders");
-    assert.ok(storageValues.has("ledgerly:bankAccounts.v1"), "Must hydrate bank accounts");
-    assert.ok(storageValues.has("ledgerly:bankTransactions.v1"), "Must hydrate bank transactions");
-    assert.ok(storageValues.has("ledgerly:cashAdjustments.v1"), "Must hydrate cash adjustments");
-    assert.ok(storageValues.has("usv.cheques.v1"), "Must hydrate cheques");
-    assert.ok(storageValues.has("usv.loanAccounts.v1"), "Must hydrate loans");
-    assert.ok(storageValues.has("ledgerly:customUnits.v1"), "Must hydrate units");
-    assert.ok(storageValues.has("ledgerly:unitConversions.v1"), "Must hydrate unit conversions");
-    assert.ok(storageValues.has("ledgerly:inventoryAdjustments.v1"), "Must hydrate inventory adjustments");
-    assert.ok(storageValues.has("ledgerly:expenseCategories.v1"), "Must hydrate expense categories");
-    assert.ok(storageValues.has("ledgerly:expenseItems.v1"), "Must hydrate expense items");
+    // Verify localStorage keys were populated (either base key or scoped key)
+    const hasKey = (baseKey) => storageValues.has(baseKey) || storageValues.has(getScopedStorageKey(baseKey));
+    assert.ok(hasKey("ledgerly:parties.v1"), "Must hydrate parties");
+    assert.ok(hasKey("ledgerly:inventoryItems.v1"), "Must hydrate items");
+    assert.ok(hasKey("ledgerly:saleInvoices.v1"), "Must hydrate sale invoices");
+    assert.ok(hasKey("ledgerly:serviceReminderRecords.v1"), "Must hydrate service reminders");
+    assert.ok(hasKey("ledgerly:bankAccounts.v1"), "Must hydrate bank accounts");
+    assert.ok(hasKey("ledgerly:bankTransactions.v1"), "Must hydrate bank transactions");
+    assert.ok(hasKey("ledgerly:cashAdjustments.v1"), "Must hydrate cash adjustments");
+    assert.ok(hasKey("usv.cheques.v1"), "Must hydrate cheques");
+    assert.ok(hasKey("usv.loanAccounts.v1"), "Must hydrate loans");
+    assert.ok(hasKey("ledgerly:customUnits.v1"), "Must hydrate units");
+    assert.ok(hasKey("ledgerly:unitConversions.v1"), "Must hydrate unit conversions");
+    assert.ok(hasKey("ledgerly:inventoryAdjustments.v1"), "Must hydrate inventory adjustments");
+    assert.ok(hasKey("ledgerly:expenseCategories.v1"), "Must hydrate expense categories");
+    assert.ok(hasKey("ledgerly:expenseItems.v1"), "Must hydrate expense items");
   } finally {
     globalThis.fetch = originalFetch;
     globalThis.window = originalWindow;
