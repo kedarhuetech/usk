@@ -17,6 +17,57 @@ import { signAuthToken, requireAuth } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
+// Rate limiting map for OTP sending: email -> array of timestamps
+const otpRateLimitMap = new Map();
+const MAX_OTP_PER_10_MIN = 5;
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+
+function checkOtpRateLimit(email) {
+  const now = Date.now();
+  const history = (otpRateLimitMap.get(email) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (history.length >= MAX_OTP_PER_10_MIN) {
+    return false;
+  }
+  history.push(now);
+  otpRateLimitMap.set(email, history);
+  return true;
+}
+
+// Failed OTP attempt tracking: email -> attempt count
+const otpAttemptsMap = new Map();
+const MAX_OTP_ATTEMPTS = 5;
+
+// Failed login attempt tracking: email -> { count, lockedUntil }
+const loginAttemptsMap = new Map();
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
+function checkLoginLockout(email) {
+  const record = loginAttemptsMap.get(email);
+  if (!record) return null;
+  if (Date.now() < record.lockedUntil) {
+    const minutesLeft = Math.max(1, Math.ceil((record.lockedUntil - Date.now()) / 60000));
+    return `Too many failed login attempts. Account temporarily locked for security. Please try again in ${minutesLeft} minute(s).`;
+  }
+  if (Date.now() >= record.lockedUntil) {
+    loginAttemptsMap.delete(email);
+  }
+  return null;
+}
+
+function recordFailedLogin(email) {
+  const record = loginAttemptsMap.get(email) || { count: 0, lockedUntil: 0 };
+  record.count += 1;
+  if (record.count >= MAX_LOGIN_ATTEMPTS) {
+    record.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
+  }
+  loginAttemptsMap.set(email, record);
+}
+
+function clearFailedLogin(email) {
+  loginAttemptsMap.delete(email);
+}
+
 // Email format validator
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
@@ -38,6 +89,13 @@ router.post("/register/send-otp", async (req, res) => {
 
     if (!isValidEmail(email)) {
       return res.status(400).json({ success: false, message: "Please provide a valid email address." });
+    }
+
+    if (!checkOtpRateLimit(email)) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many verification code requests. Please wait a few minutes before trying again.",
+      });
     }
 
     // Check if email already registered
@@ -97,6 +155,18 @@ router.post("/register/verify-otp", async (req, res) => {
       return res.status(400).json({ success: false, message: "Email and verification code are required." });
     }
 
+    const attempts = (otpAttemptsMap.get(email) || 0) + 1;
+    otpAttemptsMap.set(email, attempts);
+
+    if (attempts > MAX_OTP_ATTEMPTS) {
+      await pool.query("DELETE FROM email_verifications WHERE LOWER(email) = ?", [email]);
+      otpAttemptsMap.delete(email);
+      return res.status(429).json({
+        success: false,
+        message: "Too many incorrect verification attempts. This code has expired. Please request a new code.",
+      });
+    }
+
     const [rows] = await pool.query(
       `SELECT id, otp_code, expires_at, is_verified 
        FROM email_verifications 
@@ -106,7 +176,11 @@ router.post("/register/verify-otp", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(400).json({ success: false, message: "Invalid verification code. Please check and try again." });
+      const remaining = Math.max(0, MAX_OTP_ATTEMPTS - attempts);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid verification code. ${remaining} attempt(s) remaining.`,
+      });
     }
 
     const verification = rows[0];
@@ -118,6 +192,7 @@ router.post("/register/verify-otp", async (req, res) => {
     }
 
     // Mark verified
+    otpAttemptsMap.delete(email);
     await pool.query("UPDATE email_verifications SET is_verified = 1 WHERE id = ?", [verification.id]);
 
     return res.json({
@@ -198,8 +273,11 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: "Password must be at least 6 characters long." });
+    if (password.length < 6 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters long and contain both letters and numbers.",
+      });
     }
 
     if (password !== confirmPassword) {
@@ -308,6 +386,11 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ success: false, message: "Email and password are required." });
     }
 
+    const lockoutMsg = checkLoginLockout(email);
+    if (lockoutMsg) {
+      return res.status(429).json({ success: false, message: lockoutMsg });
+    }
+
     // Query user by email
     const [rows] = await pool.query(
       `SELECT u.id, u.email, u.password_hash, u.business_id, u.role, u.is_verified,
@@ -321,6 +404,7 @@ router.post("/login", async (req, res) => {
     );
 
     if (rows.length === 0) {
+      recordFailedLogin(email);
       return res.status(401).json({ success: false, message: "Invalid email or password." });
     }
 
@@ -329,8 +413,11 @@ router.post("/login", async (req, res) => {
     // Verify password with bcryptjs
     const passwordValid = await bcrypt.compare(password, user.password_hash);
     if (!passwordValid) {
+      recordFailedLogin(email);
       return res.status(401).json({ success: false, message: "Invalid email or password." });
     }
+
+    clearFailedLogin(email);
 
     const businessId = user.business_id;
     const businessName = user.business_name || user.company_name || businessId;

@@ -6,8 +6,14 @@
  */
 
 import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const JWT_SECRET = process.env.JWT_SECRET || "usk_super_secret_jwt_key_2026_secured_production";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
+
+export const JWT_SECRET = process.env.JWT_SECRET || "usk_production_jwt_secret_key_99882233_secure_auth_token";
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
 /**

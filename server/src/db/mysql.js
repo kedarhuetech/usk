@@ -28,10 +28,14 @@ export const pool = mysql.createPool({
 
 // This helper handles id from request logic.
 export function businessIdFromRequest(req) {
+  // If request has authenticated user via JWT, their tenant context is immutable
+  if (req.user && req.user.businessId) {
+    return String(req.user.businessId).trim();
+  }
+
   const imageRead = req.method === "GET" && /(?:^|\/)assets\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
   let requestedId = String(
-    req.user?.businessId ||
     req.get("x-business-id") ||
     (imageRead ? req.query.businessId : "") ||
     ""

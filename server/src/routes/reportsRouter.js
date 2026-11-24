@@ -11,14 +11,21 @@ import { pool, businessIdFromRequest } from "../db/mysql.js";
 
 const router = Router();
 
+function toSqlDate(val, fallback = null) {
+  if (!val || typeof val !== "string") return fallback;
+  const match = val.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return fallback;
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
 /**
  * GET /api/reports/profit-and-loss
  */
 router.get("/profit-and-loss", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const startDate = req.query.startDate || "2000-01-01";
-    const endDate = req.query.endDate || "2099-12-31";
+    const startDate = toSqlDate(req.query.startDate, "2000-01-01");
+    const endDate = toSqlDate(req.query.endDate, "2099-12-31");
 
     // 1. Total Sales Revenue
     const [salesRows] = await pool.query(
@@ -175,7 +182,7 @@ router.get("/stock-summary", async (req, res) => {
 router.get("/daybook", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const date = toSqlDate(req.query.date, new Date().toISOString().slice(0, 10));
     const [rows] = await pool.query(
       `SELECT id, transaction_type, document_number, transaction_date, party_name,
               total_amount, paid_amount, balance_amount, payment_mode
@@ -198,8 +205,8 @@ router.get("/daybook", async (req, res) => {
 router.get("/cash-flow", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const startDate = req.query.startDate || "2000-01-01";
-    const endDate = req.query.endDate || "2099-12-31";
+    const startDate = toSqlDate(req.query.startDate, "2000-01-01");
+    const endDate = toSqlDate(req.query.endDate, "2099-12-31");
 
     const [inflows] = await pool.query(
       `SELECT COALESCE(SUM(paid_amount), 0) AS totalInflow
@@ -245,11 +252,11 @@ router.get("/all-transactions", async (req, res) => {
     const limitParam = req.query.limit;
     const isAll = limitParam === "all" || req.query.all === "true" || !limitParam;
     const limit = isAll
-      ? 100000
-      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 100));
+      ? 5000
+      : Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 100));
 
-    const startDate = (req.query.startDate || "").trim();
-    const endDate = (req.query.endDate || "").trim();
+    const startDate = toSqlDate(req.query.startDate, null);
+    const endDate = toSqlDate(req.query.endDate, null);
     const type = (req.query.type || "").trim();
 
     const conditions = ["business_id = ?"];

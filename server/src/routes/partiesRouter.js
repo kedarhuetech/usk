@@ -37,10 +37,9 @@ router.post("/send-otp", async (req, res) => {
 
     return res.json({
       success: true,
-      channel: "local_dev",
+      channel: "sms",
       phone,
-      otp: generatedOtp,
-      message: "OTP generated for instant verification.",
+      message: "Verification code sent to mobile number.",
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -93,8 +92,8 @@ router.get("/", async (req, res) => {
     const limitParam = req.query.limit;
     const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
     const limit = isAll
-      ? 100000
-      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+      ? 5000
+      : Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 50));
     const offset = isAll ? 0 : (page - 1) * limit;
     const type = (req.query.type || "").trim().toLowerCase();
     const search = (req.query.search || "").trim();

@@ -205,8 +205,8 @@ router.get("/", async (req, res) => {
     const limitParam = req.query.limit;
     const isAll = limitParam === "all" || req.query.all === "true" || limitParam === "0";
     const limit = isAll
-      ? 100000
-      : Math.min(10000, Math.max(1, parseInt(limitParam, 10) || 50));
+      ? 5000
+      : Math.min(1000, Math.max(1, parseInt(limitParam, 10) || 50));
     const offset = isAll ? 0 : (page - 1) * limit;
     const search = (req.query.search || "").trim();
     const category = (req.query.category || "").trim();
