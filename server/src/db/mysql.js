@@ -31,9 +31,9 @@ export function businessIdFromRequest(req) {
   const imageRead = req.method === "GET" && /(?:^|\/)assets\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
   let requestedId = String(
+    req.user?.businessId ||
     req.get("x-business-id") ||
     (imageRead ? req.query.businessId : "") ||
-    (process.env.NODE_ENV !== "production" ? demoBusinessId : "") ||
     ""
   ).trim();
 

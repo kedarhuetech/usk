@@ -29,34 +29,35 @@ function canUseStorage() {
 // In-memory cache for live database session
 let memoryItems = [];
 
+export function clearMemoryItems() {
+  memoryItems = [];
+}
+
 export function setMemoryItems(list) {
   if (Array.isArray(list)) {
     memoryItems = list.map((item) => normalizeInventoryItem(item));
-    if (canUseStorage()) {
-      writeItems(memoryItems);
-    }
+  } else {
+    memoryItems = [];
+  }
+  if (canUseStorage()) {
+    writeItems(memoryItems);
   }
 }
 
-// Reads items from scoped active business cache with fallback to legacy key or in-memory cache.
+// Reads items exclusively from scoped active business cache or in-memory cache.
 export function readItems() {
   if (canUseStorage()) {
     const scopedKey = getItemsStorageKey();
     const scopedData = safeParse(window.localStorage.getItem(scopedKey), null);
-    if (Array.isArray(scopedData) && scopedData.length > 0) {
+    if (Array.isArray(scopedData)) {
       return scopedData;
     }
-    const fallbackData = safeParse(window.localStorage.getItem(INVENTORY_ITEMS_KEY), null);
-    if (Array.isArray(fallbackData) && fallbackData.length > 0) {
-      return fallbackData;
-    }
-    return Array.isArray(scopedData) ? scopedData : (Array.isArray(fallbackData) ? fallbackData : []);
   }
   if (memoryItems.length > 0) return memoryItems;
   return [];
 }
 
-// Writes items to in-memory cache, scoped business key, and unscoped key to maintain consistency across all modules.
+// Writes items to in-memory cache and scoped business key.
 export function writeItems(items, { skipEvent = false } = {}) {
   if (Array.isArray(items)) {
     memoryItems = items.map((item) => normalizeInventoryItem(item));
@@ -64,7 +65,6 @@ export function writeItems(items, { skipEvent = false } = {}) {
   if (!canUseStorage()) return;
   const scopedKey = getItemsStorageKey();
   window.localStorage.setItem(scopedKey, JSON.stringify(items));
-  window.localStorage.setItem(INVENTORY_ITEMS_KEY, JSON.stringify(items));
   if (!skipEvent) {
     try {
       window.dispatchEvent(new CustomEvent("inventory-items-changed", { detail: items }));

@@ -6,6 +6,7 @@ import { recordAuditTrail } from "./auditTrailStorage.js";
 import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
 import { transactionsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getParties } from "./partiesStorage.js";
 
 const SALE_INVOICES_KEY = transactionStorageKeys.sales;
 
@@ -379,11 +380,7 @@ export function saveSaleInvoice(invoice, options = {}) {
   if (normalized.transactionType === "sale" && appSettings.blockNewPartiesFromTxn) {
     const customer = (normalized.form?.customer || normalized.customer || "").trim();
     if (customer && customer.toLowerCase() !== "cash sale") {
-      let parties = [];
-      try {
-        const rawParties = window.localStorage.getItem("ledgerly:parties.v1");
-        parties = rawParties ? JSON.parse(rawParties) : [];
-      } catch {}
+      const parties = getParties();
       const match = parties.find(
         (p) => (p.partyName || p.name || "").trim().toLowerCase() === customer.toLowerCase()
       );

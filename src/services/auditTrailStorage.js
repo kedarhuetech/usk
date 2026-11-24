@@ -2,49 +2,36 @@
 import { getAppSettings } from "./appSettingsStorage.js";
 import { auditTrailDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey, getActiveBusinessName } from "../config/businessConfig.js";
 
 export const AUDIT_TRAIL_KEY = "ledgerly:auditTrail.v1";
 export const AUDIT_TRAIL_UPDATED_EVENT = "ledgerly:audit-trail-updated";
+const getAuditTrailKey = () => getScopedStorageKey(AUDIT_TRAIL_KEY);
 
-const initialAuditLogs = [
+const getInitialAuditLogs = () => [
   {
     id: "audit-init-1",
-    timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
+    timestamp: new Date().toISOString(),
     action: "System Initialized",
     entity: "System",
-    details: "Workspace initialized for Sai Kirana Stores",
+    details: `Workspace initialized for ${getActiveBusinessName()}`,
     user: "System Admin",
-  },
-  {
-    id: "audit-init-2",
-    timestamp: new Date(Date.now() - 3600000 * 24).toISOString(),
-    action: "Company Profile Updated",
-    entity: "Profile",
-    details: "Company details updated: Sai Kirana Stores, Phone: 8369501991",
-    user: "Owner",
-  },
-  {
-    id: "audit-init-3",
-    timestamp: new Date(Date.now() - 3600000 * 12).toISOString(),
-    action: "Auto Backup Snapshot",
-    entity: "Backup",
-    details: "Scheduled auto-backup captured 15 items and 8 invoices",
-    user: "Auto Backup Daemon",
   },
 ];
 
 export function getAuditTrailLogs() {
-  if (typeof window === "undefined" || !window.localStorage) return initialAuditLogs;
+  const initial = getInitialAuditLogs();
+  if (typeof window === "undefined" || !window.localStorage) return initial;
   try {
-    const raw = window.localStorage.getItem(AUDIT_TRAIL_KEY);
+    const raw = window.localStorage.getItem(getAuditTrailKey());
     if (!raw) {
-      window.localStorage.setItem(AUDIT_TRAIL_KEY, JSON.stringify(initialAuditLogs));
-      return initialAuditLogs;
+      window.localStorage.setItem(getAuditTrailKey(), JSON.stringify(initial));
+      return initial;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : initialAuditLogs;
+    return Array.isArray(parsed) ? parsed : initial;
   } catch {
-    return initialAuditLogs;
+    return initial;
   }
 }
 
@@ -64,7 +51,7 @@ export function recordAuditTrail({ action, entity = "General", details = "", use
       user,
     };
     const next = [entry, ...existing].slice(0, 200); // keep last 200 logs
-    window.localStorage.setItem(AUDIT_TRAIL_KEY, JSON.stringify(next));
+    window.localStorage.setItem(getAuditTrailKey(), JSON.stringify(next));
     window.dispatchEvent(new CustomEvent(AUDIT_TRAIL_UPDATED_EVENT, { detail: entry }));
 
     if (isDatabaseMode()) {
@@ -82,7 +69,7 @@ export function recordAuditTrail({ action, entity = "General", details = "", use
 
 export function clearAuditTrailLogs() {
   if (typeof window === "undefined" || !window.localStorage) return;
-  window.localStorage.setItem(AUDIT_TRAIL_KEY, JSON.stringify([]));
+  window.localStorage.setItem(getAuditTrailKey(), JSON.stringify([]));
   window.dispatchEvent(new CustomEvent(AUDIT_TRAIL_UPDATED_EVENT));
 
   if (isDatabaseMode()) {

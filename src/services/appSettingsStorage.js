@@ -3,8 +3,10 @@ import { getCompanyProfile } from "./companyProfileStorage.js";
 import { recordAuditTrail } from "./auditTrailStorage.js";
 import { settingsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 export const APP_SETTINGS_KEY = "ledgerly:appSettings.v1";
+export const getAppSettingsStorageKey = () => getScopedStorageKey(APP_SETTINGS_KEY);
 export const APP_SETTINGS_UPDATED_EVENT = "ledgerly:app-settings-updated";
 export const AUTO_BACKUP_HISTORY_KEY = "ledgerly:autoBackupSnapshots.v1";
 
@@ -356,8 +358,8 @@ export const DEFAULT_SETTINGS = {
 export function resetAppSettings() {
   if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_SETTINGS };
   try {
-    window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
-    window.localStorage.removeItem("ledgerly:serviceReminderSettings.v1");
+    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(DEFAULT_SETTINGS));
+    window.localStorage.removeItem(getScopedStorageKey("ledgerly:serviceReminderSettings.v1"));
     applyScreenZoom(DEFAULT_SETTINGS.screenZoom || "100%");
     window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: DEFAULT_SETTINGS }));
     recordAuditTrail({
@@ -375,7 +377,7 @@ export function resetAppSettings() {
 export function getAppSettings() {
   if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_SETTINGS };
   try {
-    const raw = window.localStorage.getItem(APP_SETTINGS_KEY);
+    const raw = window.localStorage.getItem(getAppSettingsStorageKey());
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
     const settings = { ...DEFAULT_SETTINGS, ...parsed };
@@ -413,7 +415,7 @@ export function getAppSettings() {
       }
       if (needsHeal) {
         try {
-          window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(settings));
+          window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(settings));
         } catch {}
       }
     }
@@ -448,7 +450,7 @@ export function saveAppSettings(updates) {
   const current = getAppSettings();
   const next = { ...current, ...updates };
   try {
-    window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
+    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(next));
     if (updates.screenZoom) {
       applyScreenZoom(updates.screenZoom);
     }
@@ -458,7 +460,8 @@ export function saveAppSettings(updates) {
       updates.serviceRemindersAutoWhatsApp !== undefined
     ) {
       try {
-        const rawReminder = window.localStorage.getItem("ledgerly:serviceReminderSettings.v1");
+        const reminderKey = getScopedStorageKey("ledgerly:serviceReminderSettings.v1");
+        const rawReminder = window.localStorage.getItem(reminderKey);
         const parsed = rawReminder ? JSON.parse(rawReminder) : {};
         const updatedReminder = {
           ...parsed,
@@ -466,7 +469,7 @@ export function saveAppSettings(updates) {
           ...(updates.reminderDaysBefore !== undefined ? { reminderDaysBefore: Number(updates.reminderDaysBefore) } : {}),
           ...(updates.serviceRemindersAutoWhatsApp !== undefined ? { autoNotifyWhatsApp: Boolean(updates.serviceRemindersAutoWhatsApp) } : {}),
         };
-        window.localStorage.setItem("ledgerly:serviceReminderSettings.v1", JSON.stringify(updatedReminder));
+        window.localStorage.setItem(reminderKey, JSON.stringify(updatedReminder));
       } catch {}
     }
     window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: next }));

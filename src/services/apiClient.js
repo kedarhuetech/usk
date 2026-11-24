@@ -18,6 +18,14 @@ export async function apiRequest(path, options = {}) {
   const safeBizId = (!activeBizId || activeBizId === "local-development") ? "demo-business" : activeBizId;
   headers.set("X-Business-Id", safeBizId);
 
+  // Attach JWT Bearer token if user is signed in
+  if (typeof window !== "undefined" && window.localStorage) {
+    const token = window.localStorage.getItem("usk_auth_token");
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
+
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   // Automatically prefixes /api if not present
   const fullUrl = cleanPath.startsWith("/api")

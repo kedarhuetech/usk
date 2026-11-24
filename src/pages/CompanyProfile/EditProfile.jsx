@@ -9,6 +9,7 @@ import {
   FiInfo,
   FiUploadCloud,
   FiX,
+  FiMaximize2,
 } from "react-icons/fi";
 import {
   companyProfileUpdatedEvent,
@@ -108,6 +109,8 @@ export default function EditProfile() {
   const [isSaving, setIsSaving] = useState(false);
   const [logoFile, setLogoFile] = useState(null);
   const [signatureFile, setSignatureFile] = useState(null);
+  const [showLogoModal, setShowLogoModal] = useState(false);
+  const [logoFitMode, setLogoFitMode] = useState("cover");
 
   const isDirtyRef = useRef(false);
   const [, setIsDirty] = useState(false);
@@ -396,60 +399,51 @@ export default function EditProfile() {
           </div>
         )}
 
-        {/* Circular Logo Area */}
-        <div className="relative mt-3 mb-6 inline-block">
-          <div className="relative flex h-28 w-28 items-center justify-center rounded-full bg-[#eef5fc]">
-            {/* Blue arc progress indicator */}
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
-              viewBox="0 0 100 100"
+        {/* Profile Image & Logo Section */}
+        <div className="mt-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+          <div className="relative group">
+            <div
+              className={`relative flex h-36 w-36 items-center justify-center rounded-2xl bg-[#F8FAFC] border-2 border-slate-200 shadow-md overflow-hidden ${
+                formData.logo ? "cursor-pointer ring-2 ring-[#FF5A1F]/30 hover:ring-[#FF5A1F]" : ""
+              } transition-all`}
+              onClick={() => formData.logo && setShowLogoModal(true)}
+              title={formData.logo ? "Click to view full image in high resolution" : "Add logo"}
             >
-              <circle
-                cx="50"
-                cy="50"
-                r="46"
-                fill="none"
-                stroke="transparent"
-                strokeWidth="3.5"
-              />
-              <circle
-                cx="50"
-                cy="50"
-                r="46"
-                fill="none"
-                stroke="#0084ff"
-                strokeWidth="3.5"
-                strokeDasharray="289"
-                strokeDashoffset="216"
-                strokeLinecap="round"
-              />
-            </svg>
-
-            {formData.logo ? (
-              <img
-                src={formData.logo}
-                alt="Company Logo"
-                className="h-full w-full rounded-full object-cover p-1"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center text-center">
-                <span className="text-sm font-semibold leading-tight text-slate-400">
-                  Add
-                </span>
-                <span className="text-sm font-semibold leading-tight text-slate-400">
-                  Logo
-                </span>
-              </div>
-            )}
+              {formData.logo ? (
+                <>
+                  <img
+                    src={formData.logo}
+                    alt="Company Logo"
+                    className={`h-full w-full ${
+                      logoFitMode === "contain" ? "object-contain p-2" : "object-cover"
+                    } transition-transform duration-200 group-hover:scale-105`}
+                  />
+                  {/* Hover overlay with zoom hint */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5">
+                    <FiMaximize2 className="h-4 w-4 text-[#FF5A1F]" />
+                    <span>View HD</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center p-3">
+                  <FiUploadCloud className="h-8 w-8 text-slate-400 mb-1" />
+                  <span className="text-xs font-semibold leading-tight text-slate-500">
+                    Add Logo
+                  </span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">
+                    JPG, PNG, WEBP
+                  </span>
+                </div>
+              )}
+            </div>
 
             {/* Pencil edit badge at bottom-right */}
             <label
               htmlFor="company-logo-file-input"
-              className="absolute bottom-0 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md transition hover:bg-slate-50"
-              title="Add or edit logo"
+              className="absolute -bottom-2 -right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-white bg-[#FF5A1F] text-white shadow-lg transition hover:bg-[#EA580C] hover:scale-105"
+              title="Change logo image"
             >
               <FiEdit2 className="h-3.5 w-3.5" />
-              <span className="text-[10px] font-bold leading-none -ml-0.5">+</span>
             </label>
             <input
               id="company-logo-file-input"
@@ -459,16 +453,73 @@ export default function EditProfile() {
               className="hidden"
             />
           </div>
+
+          {/* Logo Actions & Fit Controls */}
           {formData.logo && (
-            <button
-              type="button"
-              onClick={handleRemoveLogo}
-              className="mt-1 block w-full text-center text-xs text-rose-500 hover:underline"
-            >
-              Remove Logo
-            </button>
+            <div className="space-y-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowLogoModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition cursor-pointer shadow-xs"
+                >
+                  <FiMaximize2 className="h-3.5 w-3.5 text-[#FF5A1F]" />
+                  <span>View Full Resolution</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLogoFitMode((m) => (m === "cover" ? "contain" : "cover"))}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 text-slate-600 text-xs transition cursor-pointer shadow-xs"
+                  title="Toggle fit mode"
+                >
+                  Mode: <strong className="uppercase font-bold text-slate-800">{logoFitMode}</strong>
+                </button>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={handleRemoveLogo}
+                  className="text-xs text-rose-500 hover:text-rose-600 font-semibold hover:underline cursor-pointer"
+                >
+                  Remove Logo
+                </button>
+              </div>
+            </div>
           )}
         </div>
+
+        {/* Full-Resolution Logo Modal */}
+        {showLogoModal && formData.logo && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+            onClick={() => setShowLogoModal(false)}
+          >
+            <div
+              className="relative max-w-2xl w-full max-h-[85vh] bg-[#161921] border border-slate-700 rounded-2xl shadow-2xl p-5 flex flex-col items-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-full flex items-center justify-between pb-3 border-b border-slate-700 mb-3">
+                <span className="text-sm font-bold text-white tracking-wide">
+                  Business Logo — High Resolution Original
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowLogoModal(false)}
+                  className="text-slate-400 hover:text-white transition p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer"
+                >
+                  <FiX className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="overflow-auto max-h-[70vh] w-full flex items-center justify-center bg-[#0d0f14] rounded-xl p-3 border border-slate-800">
+                <img
+                  src={formData.logo}
+                  alt="Business Logo Full Resolution"
+                  className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Form Fields Grid */}
         <form onSubmit={handleSave} className="w-full min-w-0">

@@ -125,11 +125,6 @@ export const partiesDb = {
       }),
     ]);
     writeLocal(scopedKey, updated);
-    if (typeof window !== "undefined" && window.localStorage) {
-      try {
-        window.localStorage.setItem(PARTIES_KEY, JSON.stringify(updated));
-      } catch {}
-    }
     return saved;
   },
 
@@ -176,14 +171,13 @@ export const itemsDb = {
       if (Array.isArray(list)) {
         setMemoryItems(list);
         writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), list);
-        writeLocal(INVENTORY_ITEMS_KEY, list);
         return list;
       }
-      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to scoped local cache for items:", err.message);
-      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+      return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     }
   },
 
@@ -203,10 +197,9 @@ export const itemsDb = {
       body: JSON.stringify(item),
     });
     const saved = res?.data || res;
-    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     const updated = [saved, ...current.filter((i) => String(i.id) !== String(saved.id))];
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
-    writeLocal(INVENTORY_ITEMS_KEY, updated);
     return saved;
   },
 
@@ -218,12 +211,11 @@ export const itemsDb = {
     if (options.deactivate) params.append("deactivate", "true");
     const query = params.toString() ? `?${params.toString()}` : "";
     const res = await apiRequest(`/items/${encodeURIComponent(id)}${query}`, { method: "DELETE" });
-    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     const updated = options.deactivate || res?.action === "deactivated"
       ? current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: false } : i))
       : current.filter((i) => String(i.id) !== String(id));
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
-    writeLocal(INVENTORY_ITEMS_KEY, updated);
     return res;
   },
 
@@ -232,10 +224,9 @@ export const itemsDb = {
    */
   async deactivate(id) {
     const res = await apiRequest(`/items/${encodeURIComponent(id)}/deactivate`, { method: "PATCH" });
-    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     const updated = current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: false } : i));
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
-    writeLocal(INVENTORY_ITEMS_KEY, updated);
     return res;
   },
 
@@ -244,10 +235,9 @@ export const itemsDb = {
    */
   async reactivate(id) {
     const res = await apiRequest(`/items/${encodeURIComponent(id)}/reactivate`, { method: "PATCH" });
-    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
+    const current = readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), []);
     const updated = current.map((i) => (String(i.id) === String(id) ? { ...i, isActive: true } : i));
     writeLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), updated);
-    writeLocal(INVENTORY_ITEMS_KEY, updated);
     return res;
   },
 };
@@ -295,38 +285,34 @@ export const transactionsDb = {
     try {
       const res = await apiRequest("/transactions?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
-      if (Array.isArray(list) && list.length > 0) {
-        const sales = list.filter((t) => t.transactionType === "sale" || t.transactionType === "pos" || t.type === "sale" || t.type === "pos");
-        const purchases = list.filter((t) => t.transactionType === "purchase" || t.type === "purchase");
-        const paymentIns = list.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in");
-        const paymentOuts = list.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out");
-        const expenses = list.filter((t) => t.transactionType === "expense" || t.type === "expense");
-        const estimates = list.filter((t) => t.transactionType === "estimate" || t.type === "estimate");
-        const proformas = list.filter((t) => t.transactionType === "proforma" || t.type === "proforma");
-        const challans = list.filter((t) => t.transactionType === "delivery_challan" || t.type === "delivery_challan");
-        const debitNotes = list.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note");
-        const creditNotes = list.filter((t) => t.transactionType === "credit_note" || t.transactionType === "sale_return" || t.type === "sale_return" || t.type === "credit_note");
-        const saleOrders = list.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order");
-        const purchaseOrders = list.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order");
+      const sales = list.filter((t) => t.transactionType === "sale" || t.transactionType === "pos" || t.type === "sale" || t.type === "pos");
+      const purchases = list.filter((t) => t.transactionType === "purchase" || t.type === "purchase");
+      const paymentIns = list.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in");
+      const paymentOuts = list.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out");
+      const expenses = list.filter((t) => t.transactionType === "expense" || t.type === "expense");
+      const estimates = list.filter((t) => t.transactionType === "estimate" || t.type === "estimate");
+      const proformas = list.filter((t) => t.transactionType === "proforma" || t.type === "proforma");
+      const challans = list.filter((t) => t.transactionType === "delivery_challan" || t.type === "delivery_challan");
+      const debitNotes = list.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note");
+      const creditNotes = list.filter((t) => t.transactionType === "credit_note" || t.transactionType === "sale_return" || t.type === "sale_return" || t.type === "credit_note");
+      const saleOrders = list.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order");
+      const purchaseOrders = list.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order");
 
-        if (sales.length > 0) setMemoryCollection(SALE_INVOICES_KEY, sales);
-        if (purchases.length > 0) setMemoryCollection(PURCHASE_BILLS_KEY, purchases);
-        if (paymentIns.length > 0) setMemoryCollection(transactionStorageKeys.paymentIns, paymentIns);
-        if (paymentOuts.length > 0) setMemoryCollection(transactionStorageKeys.paymentOuts, paymentOuts);
-        if (expenses.length > 0) {
-          setMemoryCollection(transactionStorageKeys.expenses, expenses);
-          setMemoryCollection("ledgerly:expenses.v1", expenses);
-        }
-        if (estimates.length > 0) setMemoryCollection("ledgerly:estimateQuotations.v1", estimates);
-        if (proformas.length > 0) setMemoryCollection("ledgerly:proformaInvoices.v1", proformas);
-        if (challans.length > 0) setMemoryCollection("ledgerly:deliveryChallans.v1", challans);
-        if (debitNotes.length > 0) setMemoryCollection("ledgerly:purchaseReturns.v1", debitNotes);
-        if (creditNotes.length > 0) setMemoryCollection("ledgerly:saleReturns.v1", creditNotes);
-        if (saleOrders.length > 0) setMemoryCollection("ledgerly:saleOrders.v1", saleOrders);
-        if (purchaseOrders.length > 0) setMemoryCollection("ledgerly:purchaseOrders.v1", purchaseOrders);
-        return list;
-      }
-      return [];
+      // ALWAYS set scoped memory collections (clears old business data if list is empty)
+      setMemoryCollection(SALE_INVOICES_KEY, sales);
+      setMemoryCollection(PURCHASE_BILLS_KEY, purchases);
+      setMemoryCollection(transactionStorageKeys.paymentIns, paymentIns);
+      setMemoryCollection(transactionStorageKeys.paymentOuts, paymentOuts);
+      setMemoryCollection(transactionStorageKeys.expenses, expenses);
+      setMemoryCollection("ledgerly:expenses.v1", expenses);
+      setMemoryCollection("ledgerly:estimateQuotations.v1", estimates);
+      setMemoryCollection("ledgerly:proformaInvoices.v1", proformas);
+      setMemoryCollection("ledgerly:deliveryChallans.v1", challans);
+      setMemoryCollection("ledgerly:purchaseReturns.v1", debitNotes);
+      setMemoryCollection("ledgerly:saleReturns.v1", creditNotes);
+      setMemoryCollection("ledgerly:saleOrders.v1", saleOrders);
+      setMemoryCollection("ledgerly:purchaseOrders.v1", purchaseOrders);
+      return list;
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Transactions fetch notice:", err.message);
@@ -693,15 +679,13 @@ export const serviceRemindersDb = {
     try {
       const res = await apiRequest("/service-reminders?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
-      if (Array.isArray(list) && list.length > 0) {
-        writeLocal(SERVICE_REMINDERS_KEY, list);
-        return list;
-      }
-      return readLocal(SERVICE_REMINDERS_KEY, []);
+      const scopedKey = getScopedStorageKey(SERVICE_REMINDERS_KEY);
+      writeLocal(scopedKey, list);
+      return list;
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to local cache for reminders:", err.message);
-      return readLocal(SERVICE_REMINDERS_KEY, []);
+      return readLocal(getScopedStorageKey(SERVICE_REMINDERS_KEY), []);
     }
   },
 
@@ -732,15 +716,17 @@ export const bankAccountsDb = {
     try {
       const res = await apiRequest("/bank-accounts");
       const list = Array.isArray(res) ? res : (res?.data || []);
+      const scopedKey = getScopedStorageKey(BANK_ACCOUNTS_KEY);
       if (Array.isArray(list)) {
+        writeLocal(scopedKey, list);
         writeLocal(BANK_ACCOUNTS_KEY, list);
         return list;
       }
-      return readLocal(BANK_ACCOUNTS_KEY, []);
+      return readLocal(scopedKey, null) || readLocal(BANK_ACCOUNTS_KEY, []);
     } catch (err) {
       if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to local cache for bank accounts:", err.message);
-      return readLocal(BANK_ACCOUNTS_KEY, []);
+      return readLocal(getScopedStorageKey(BANK_ACCOUNTS_KEY), null) || readLocal(BANK_ACCOUNTS_KEY, []);
     }
   },
 
@@ -776,17 +762,19 @@ export const bankAccountsDb = {
 
 export const settingsDb = {
   async getSettings({ throwOnError = false } = {}) {
+    const scopedKey = getScopedStorageKey(SETTINGS_KEY);
     try {
       const res = await apiRequest("/settings");
       const data = res?.data ?? res;
       if (data && typeof data === "object") {
+        writeLocal(scopedKey, data);
         writeLocal(SETTINGS_KEY, data);
         return data;
       }
-      return readLocal(SETTINGS_KEY, {});
+      return readLocal(scopedKey, null) || readLocal(SETTINGS_KEY, {});
     } catch (err) {
       if (throwOnError) throw err;
-      return readLocal(SETTINGS_KEY, {});
+      return readLocal(scopedKey, null) || readLocal(SETTINGS_KEY, {});
     }
   },
 
@@ -1216,6 +1204,11 @@ export const reportsDb = {
  */
 export async function autoMigrateLocalDataToMySQL() {
   if (typeof window === "undefined" || !window.localStorage) return;
+  const activeBiz = getActiveBusinessId();
+  if (activeBiz !== "demo-business") {
+    // Only the legacy demo business should ever run one-time localStorage migration
+    return;
+  }
   const alreadyMigrated = window.localStorage.getItem(MIGRATION_DONE_KEY);
   if (alreadyMigrated === "true") return;
 

@@ -2,10 +2,12 @@ import { getSaleInvoices } from "./salesStorage.js";
 import { getPurchaseBills } from "./purchaseBillsStorage.js";
 import { cashBankDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 // Persistence is isolated here so this browser-local store can be replaced by
 // an API adapter later without changing the Cash in Hand page or calculations.
 export const CASH_ADJUSTMENTS_STORAGE_KEY = "ledgerly:cashAdjustments.v1";
+const getCashAdjustmentsKey = () => getScopedStorageKey(CASH_ADJUSTMENTS_STORAGE_KEY);
 
 function paise(value) {
   const amount = Number(value);
@@ -182,7 +184,7 @@ export async function loadCashInHandData() {
 function readCashAdjustments() {
   if (typeof window === "undefined") return [];
   try {
-    const records = JSON.parse(window.localStorage.getItem(CASH_ADJUSTMENTS_STORAGE_KEY) || "[]");
+    const records = JSON.parse(window.localStorage.getItem(getCashAdjustmentsKey()) || "[]");
     return Array.isArray(records) ? records : [];
   } catch {
     return [];
@@ -223,7 +225,7 @@ export async function saveCashAdjustment(adjustment) {
   if (typeof window !== "undefined" && window.localStorage) {
     const existing = readCashAdjustments();
     window.localStorage.setItem(
-      CASH_ADJUSTMENTS_STORAGE_KEY,
+      getCashAdjustmentsKey(),
       JSON.stringify([saved, ...existing.filter((r) => r.id !== saved.id)])
     );
   }
