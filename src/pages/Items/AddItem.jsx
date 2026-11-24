@@ -1319,7 +1319,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
               />
             )}
           </div>
-          {enableItemDescription && (
+          {(enableItemDescription || Boolean(form.description)) && (
             <label className="mt-5 block max-w-5xl text-xs font-semibold text-slate-600">
               Item Description
               <textarea value={form.description} onChange={(event) => setField("description", event.target.value)} rows={3} className="mt-1.5 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-700 outline-none focus:border-blue-500" placeholder="Description" />

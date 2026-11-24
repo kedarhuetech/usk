@@ -219,3 +219,157 @@ test("previewBackupPayload: handles cross-business restore and scoped keys witho
   assert.ok(categories.includes("Settings"));
   assert.ok(categories.includes("Parties"));
 });
+
+test("collectBackupData: collects business-scoped parties, items, transactions, and bank accounts for the authenticated business", () => {
+  const bizId = "kedar-huetech";
+  const fixture = storageWith({
+    usk_auth_business_id: bizId,
+    [`ledgerly:companyProfile.v1:${bizId}`]: JSON.stringify({ companyName: "Kedar Pvt Ltd", businessId: bizId }),
+    [`${partiesStorageKey}:${bizId}`]: JSON.stringify([
+      { id: "p-1", partyName: "Customer A" },
+      { id: "p-2", partyName: "Customer B" },
+    ]),
+    [`${inventoryItemsStorageKey}:${bizId}`]: JSON.stringify([
+      { id: "i-1", itemName: "USB Keyboard", price: 500 },
+      { id: "i-2", itemName: "LED Bulb 9W", price: 120 },
+      { id: "i-3", itemName: "Cotton Cloth", price: 40 },
+    ]),
+    [`${saleInvoicesStorageKey}:${bizId}`]: JSON.stringify([
+      { id: "sale-101", invoiceNumber: "INV-001", totalAmount: 1500 },
+    ]),
+    [`ledgerly:bankAccounts.v1:${bizId}`]: JSON.stringify([
+      { id: "bank-1", bankName: "HDFC Bank", accountNumber: "11223344" },
+    ]),
+    // Other business records that MUST NOT be included
+    [`${partiesStorageKey}:demo-business`]: JSON.stringify([{ id: "p-demo", partyName: "Demo Party" }]),
+    [`${inventoryItemsStorageKey}:demo-business`]: JSON.stringify([{ id: "i-demo", itemName: "Demo Item" }]),
+    [`${saleInvoicesStorageKey}:demo-business`]: JSON.stringify([{ id: "s-demo", invoiceNumber: "DEMO-1" }]),
+    [`ledgerly:bankAccounts.v1:demo-business`]: JSON.stringify([{ id: "b-demo", bankName: "SBI Demo" }]),
+  });
+
+  const collected = collectBackupData(fixture.storage);
+  const payload = createBackupPayload(collected, { now });
+
+  // Verify business ID is captured
+  assert.equal(payload.manifest.businessId, bizId);
+
+  // 1. Parties: exactly 2 records, only Kedar's
+  assert.equal(Array.isArray(payload.data[partiesStorageKey]), true);
+  assert.equal(payload.data[partiesStorageKey].length, 2);
+  assert.equal(payload.data[partiesStorageKey][0].partyName, "Customer A");
+  assert.equal(payload.data[partiesStorageKey][1].partyName, "Customer B");
+
+  // 2. Items: exactly 3 records, only Kedar's
+  assert.equal(Array.isArray(payload.data[inventoryItemsStorageKey]), true);
+  assert.equal(payload.data[inventoryItemsStorageKey].length, 3);
+  assert.equal(payload.data[inventoryItemsStorageKey][0].itemName, "USB Keyboard");
+
+  // 3. Transactions: exactly 1 sale, only Kedar's
+  assert.equal(Array.isArray(payload.data[saleInvoicesStorageKey]), true);
+  assert.equal(payload.data[saleInvoicesStorageKey].length, 1);
+  assert.equal(payload.data[saleInvoicesStorageKey][0].invoiceNumber, "INV-001");
+
+  // 4. Bank accounts: exactly 1 account, only Kedar's
+  assert.equal(Array.isArray(payload.data["ledgerly:bankAccounts.v1"]), true);
+  assert.equal(payload.data["ledgerly:bankAccounts.v1"].length, 1);
+  assert.equal(payload.data["ledgerly:bankAccounts.v1"][0].bankName, "HDFC Bank");
+
+  // 5. Company profile
+  assert.equal(payload.data["ledgerly:companyProfile.v1"].companyName, "Kedar Pvt Ltd");
+
+  // Verify none of demo-business's data leaked
+  const allJson = JSON.stringify(payload.data);
+  assert.equal(allJson.includes("Demo Party"), false);
+  assert.equal(allJson.includes("Demo Item"), false);
+  assert.equal(allJson.includes("DEMO-1"), false);
+  assert.equal(allJson.includes("SBI Demo"), false);
+});
+
+test("collectBackupData: never reads another business's scoped records or includes them in the backup", () => {
+  const fixture = storageWith({
+    usk_auth_business_id: "tenant-alpha",
+    [`ledgerly:companyProfile.v1:tenant-alpha`]: JSON.stringify({ companyName: "Alpha Corp" }),
+    [`${partiesStorageKey}:tenant-alpha`]: JSON.stringify([{ id: "p-alpha", partyName: "Alpha Customer" }]),
+    // Another tenant's records
+    [`${partiesStorageKey}:tenant-beta`]: JSON.stringify([{ id: "p-beta", partyName: "Beta Customer" }]),
+    [`${inventoryItemsStorageKey}:tenant-beta`]: JSON.stringify([{ id: "i-beta", itemName: "Beta Product" }]),
+    [`${saleInvoicesStorageKey}:tenant-beta`]: JSON.stringify([{ id: "s-beta", total: 9999 }]),
+  });
+
+  const collected = collectBackupData(fixture.storage);
+  const payload = createBackupPayload(collected, { now });
+
+  // Alpha only has parties and profile
+  assert.equal(payload.data[partiesStorageKey]?.length, 1);
+  assert.equal(payload.data[partiesStorageKey][0].partyName, "Alpha Customer");
+
+  // Beta's items and sales must NOT be present in Alpha's backup
+  assert.equal(Object.hasOwn(payload.data, inventoryItemsStorageKey), false);
+  assert.equal(Object.hasOwn(payload.data, saleInvoicesStorageKey), false);
+});
+
+test("collectBackupData: missing scoped data does not silently fall back to another business's unscoped data", () => {
+  const bizId = "kedar-huetech";
+  const fixture = storageWith({
+    usk_auth_business_id: bizId,
+    [`ledgerly:companyProfile.v1:${bizId}`]: JSON.stringify({ companyName: "Kedar Pvt Ltd" }),
+    // Target business has NO scoped items or parties
+    // BUT storage has stale unscoped items tagged with demo-business
+    [inventoryItemsStorageKey]: JSON.stringify([
+      { id: "i-demo-1", itemName: "Demo Stale Item", business_id: "demo-business" },
+    ]),
+    [partiesStorageKey]: JSON.stringify([
+      { id: "p-unverified", partyName: "Untagged Party" },
+    ]),
+  });
+
+  const collected = collectBackupData(fixture.storage);
+  const payload = createBackupPayload(collected, { now });
+
+  // Must NOT fall back to demo-business unscoped items
+  assert.equal(Object.hasOwn(payload.data, inventoryItemsStorageKey), false);
+
+  // Must NOT fall back to untagged unscoped parties in an authenticated tenant session
+  assert.equal(Object.hasOwn(payload.data, partiesStorageKey), false);
+});
+
+test("collectBackupData: represents explicit empty datasets correctly with recordCount 0 without confusing with missing datasets", () => {
+  const bizId = "kedar-huetech";
+  const fixture = storageWith({
+    usk_auth_business_id: bizId,
+    [`ledgerly:companyProfile.v1:${bizId}`]: JSON.stringify({ companyName: "Kedar Pvt Ltd" }),
+    [`${inventoryItemsStorageKey}:${bizId}`]: JSON.stringify([]), // Explicit empty array
+    [`${partiesStorageKey}:${bizId}`]: JSON.stringify([{ id: "p-1", partyName: "Customer 1" }]),
+    // saleInvoices is absent (missing dataset)
+  });
+
+  const collected = collectBackupData(fixture.storage);
+  const payload = createBackupPayload(collected, { now });
+
+  // Empty items dataset must be included with recordCount 0
+  assert.equal(Object.hasOwn(payload.data, inventoryItemsStorageKey), true);
+  assert.deepEqual(payload.data[inventoryItemsStorageKey], []);
+  const itemManifest = payload.manifest.included.find((e) => e.key === inventoryItemsStorageKey);
+  assert.ok(itemManifest);
+  assert.equal(itemManifest.recordCount, 0);
+
+  // Missing sales dataset must NOT be in data or manifest
+  assert.equal(Object.hasOwn(payload.data, saleInvoicesStorageKey), false);
+  const saleManifest = payload.manifest.included.find((e) => e.key === saleInvoicesStorageKey);
+  assert.equal(saleManifest, undefined);
+});
+
+test("collectBackupData: preserves genuinely global settings (printSettings) across tenants", () => {
+  const bizId = "tenant-gamma";
+  const fixture = storageWith({
+    usk_auth_business_id: bizId,
+    [`ledgerly:companyProfile.v1:${bizId}`]: JSON.stringify({ companyName: "Gamma Co" }),
+    "ledgerly:printSettings.v1": JSON.stringify({ printerName: "Thermal-80", paperSize: "Roll" }),
+  });
+
+  const collected = collectBackupData(fixture.storage);
+  const payload = createBackupPayload(collected, { now });
+
+  assert.equal(Object.hasOwn(payload.data, "ledgerly:printSettings.v1"), true);
+  assert.equal(payload.data["ledgerly:printSettings.v1"]?.printerName, "Thermal-80");
+});

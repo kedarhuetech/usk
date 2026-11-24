@@ -20,6 +20,7 @@ test("item export/import round trip preserves active status, unit, categories, b
   assert.equal(imported.minimumStock, "2");
   assert.equal(imported.location, "A1");
   assert.equal(imported.isActive, false);
+  assert.equal(imported.description, "Green tea");
 });
 
 test("rowsToItems correctly parses HSN Code, Opening Stock, Current Stock, and Minimum Stock with typical Excel headers", () => {
@@ -75,4 +76,31 @@ test("rowsToItems correctly parses HSN Code, Opening Stock, Current Stock, and M
   assert.equal(normalized.minStock, 5);
   assert.equal(normalized.minimumStock, "5");
 });
+
+test("rowsToItems correctly parses Description with varied header aliases and normalizeInventoryItem preserves it", () => {
+  const testHeaders = [
+    ["Item Name", "Item Code", "Description"],
+    ["Item Name", "Item Code", "Item Description"],
+    ["Item Name", "Item Code", "Product Description"],
+    ["Item Name", "Item Code", "Details"],
+    ["Item Name", "Item Code", "Item Details"],
+    ["Item Name", "Item Code", "Remarks"],
+    ["Item Name", "Item Code", "Notes"],
+  ];
+
+  for (const headers of testHeaders) {
+    const rows = [
+      headers,
+      ["Wireless Keyboard", "KB-01", "Ergonomic 2.4GHz wireless keyboard"],
+    ];
+    const [parsed] = rowsToItems(rows);
+    assert.equal(parsed.itemName, "Wireless Keyboard");
+    assert.equal(parsed.itemCode, "KB-01");
+    assert.equal(parsed.description, "Ergonomic 2.4GHz wireless keyboard", `Failed for header "${headers[2]}"`);
+
+    const normalized = normalizeInventoryItem(parsed);
+    assert.equal(normalized.description, "Ergonomic 2.4GHz wireless keyboard");
+  }
+});
+
 

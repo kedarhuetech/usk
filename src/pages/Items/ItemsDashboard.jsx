@@ -77,6 +77,7 @@ function parseCsv(text) {
     purchasePrice: column("purchaseprice", "costprice", "purchasecost"),
     quantity: column("quantity", "openingquantity", "openingstock", "stock", "stockquantity"),
     hsn: column("hsn", "hsnsac", "sac"),
+    description: column("description", "itemdescription", "productdescription", "details", "itemdetails", "desc", "notes", "remarks"),
   };
   if (indexes.name < 0) throw new Error("Add an Item Name (or Name / Product Name) column to your CSV.");
   const parsed = rows.slice(1).map((values) => {
@@ -95,7 +96,7 @@ function parseCsv(text) {
       id, type, itemName: name, serviceName: type === "service" ? name : "",
       itemCode: code, code, category: get("category"), unit, baseUnit: unit,
       salePrice, price: salePrice, purchasePrice, openingQuantity, stock: openingQuantity,
-      hsnSac: get("hsn"), isActive: true, createdAt: new Date().toISOString(),
+      hsnSac: get("hsn"), description: get("description"), isActive: true, createdAt: new Date().toISOString(),
     };
   }).filter(Boolean);
   if (!parsed.length) throw new Error("No item names were found in the CSV rows.");
@@ -1089,7 +1090,9 @@ function ItemsDashboard() {
                 </div>
                 <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
                   <div className="space-y-2">
-                    {enableItemDescription && selectedItem.description && <p className="text-slate-700">DESCRIPTION: <span className="font-normal text-slate-600">{selectedItem.description}</span></p>}
+                    {(enableItemDescription || Boolean(selectedItem.description)) && selectedItem.description && (
+                      <p className="text-slate-700">DESCRIPTION: <span className="font-normal text-slate-600">{selectedItem.description}</span></p>
+                    )}
                     <p className="text-slate-700">SALE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.salePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p>
                     <p className="text-slate-700">PURCHASE PRICE: <b className="font-medium text-emerald-600">{money(selectedItem.purchasePrice)} <span className="font-normal text-slate-500">(excl)</span></b></p>
                     {enableItemCategory && selectedItem.category && (

@@ -12,6 +12,54 @@ export const SUPPORTED_BACKUP_FORMAT = "usv-backup";
 export const SUPPORTED_BACKUP_VERSION = 1;
 
 /**
+ * Queries the database to find which candidate IDs already exist in tableName.
+ * Because all records for the target business have already been deleted in the active transaction,
+ * any matching ID belongs to another business and would cause a primary-key collision.
+ */
+async function getConflictingIds(conn, tableName, candidateIds) {
+  const conflicting = new Set();
+  const validIds = candidateIds.map((id) => String(id || "").trim()).filter(Boolean);
+  if (validIds.length === 0) return conflicting;
+
+  for (let i = 0; i < validIds.length; i += 500) {
+    const chunk = validIds.slice(i, i + 500);
+    const placeholders = chunk.map(() => "?").join(",");
+    const [rows] = await conn.query(
+      `SELECT id FROM \`${tableName}\` WHERE id IN (${placeholders})`,
+      chunk
+    );
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        if (r && r.id) conflicting.add(String(r.id));
+      }
+    }
+  }
+  return conflicting;
+}
+
+/**
+ * Allocates a unique ID for a record. If rawId is absent, or collides with another business's
+ * record (present in conflictSet), generates a fresh UUID and registers rawId -> newId in idMap.
+ * Otherwise, preserves rawId.
+ */
+function allocateRecordId(rawId, conflictSet, idMap) {
+  const strId = String(rawId || "").trim();
+  if (!strId || (conflictSet && conflictSet.has(strId))) {
+    let newId = crypto.randomUUID();
+    while (conflictSet && conflictSet.has(newId)) {
+      newId = crypto.randomUUID();
+    }
+    if (conflictSet) conflictSet.add(newId);
+    if (strId && idMap) {
+      idMap.set(strId, newId);
+    }
+    return newId;
+  }
+  if (conflictSet) conflictSet.add(strId);
+  return strId;
+}
+
+/**
  * Validates the core structure of a USV backup payload.
  */
 export function validateUsvPayload(payload) {
@@ -72,6 +120,12 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
     onlineStoreOrders: 0,
   };
   const replacedStores = [];
+  const partyIdMap = new Map();
+  const itemIdMap = new Map();
+  const txnIdMap = new Map();
+  const bankAccIdMap = new Map();
+  const loanIdMap = new Map();
+  const reminderIdMap = new Map();
 
   // ==========================================================================
   // 1. COMPANY PROFILE (ledgerly:companyProfile.v1 or scoped key)
@@ -156,9 +210,10 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
     await conn.query("DELETE FROM parties WHERE business_id = ?", [businessId]);
 
     const parties = data["ledgerly:parties.v1"];
+    const partyConflicts = await getConflictingIds(conn, "parties", parties.map((p) => p?.id));
     for (const p of parties) {
       if (!p || (!p.id && !p.partyName && !p.name)) continue;
-      const id = String(p.id || crypto.randomUUID());
+      const id = allocateRecordId(p.id, partyConflicts, partyIdMap);
       const partyName = String(p.partyName || p.name || "Unnamed Party").trim();
       const phone = p.phone || p.mobile || null;
       const email = p.email || null;
@@ -208,9 +263,20 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
     await conn.query("DELETE FROM inventory_items WHERE business_id = ?", [businessId]);
 
     const items = data["ledgerly:inventoryItems.v1"];
+    const itemConflicts = await getConflictingIds(conn, "inventory_items", items.map((i) => i?.id));
+    const allBatchIds = [];
+    for (const item of items) {
+      if (Array.isArray(item?.batches)) {
+        for (const b of item.batches) {
+          if (b?.id) allBatchIds.push(b.id);
+        }
+      }
+    }
+    const batchConflicts = await getConflictingIds(conn, "item_batches", allBatchIds);
+
     for (const item of items) {
       if (!item || (!item.id && !item.name && !item.itemName)) continue;
-      const id = String(item.id || crypto.randomUUID());
+      const id = allocateRecordId(item.id, itemConflicts, itemIdMap);
       const name = String(item.itemName || item.name || "Item").trim();
       const itemCode = item.itemCode || item.code || null;
       const barcode = item.barcode || null;
@@ -252,7 +318,7 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       if (Array.isArray(item.batches)) {
         for (const b of item.batches) {
           if (!b || !b.batchNo) continue;
-          const batchId = String(b.id || crypto.randomUUID());
+          const batchId = allocateRecordId(b.id, batchConflicts);
           const batchNo = String(b.batchNo).trim();
           const mfgDate = toSqlDate(b.mfgDate);
           const expDate = toSqlDate(b.expDate);
@@ -281,10 +347,14 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   // ==========================================================================
   if (Array.isArray(data["ledgerly:inventoryAdjustments.v1"])) {
     await conn.query("DELETE FROM inventory_adjustments WHERE business_id = ?", [businessId]);
-    for (const adj of data["ledgerly:inventoryAdjustments.v1"]) {
+    const adjustments = data["ledgerly:inventoryAdjustments.v1"];
+    const adjConflicts = await getConflictingIds(conn, "inventory_adjustments", adjustments.map((a) => a?.id));
+
+    for (const adj of adjustments) {
       if (!adj) continue;
-      const id = String(adj.id || crypto.randomUUID());
-      const itemId = String(adj.itemId || adj.item_id || "");
+      const id = allocateRecordId(adj.id, adjConflicts);
+      const rawItemId = String(adj.itemId || adj.item_id || "");
+      const itemId = itemIdMap.get(rawItemId) || rawItemId;
       const itemName = String(adj.itemName || adj.item || "Adjustment").trim();
       const adjustmentType = String(adj.adjustmentType || adj.type || "add").toLowerCase() === "reduce" ? "reduce" : "add";
       const quantity = parseFloat(adj.quantity ?? adj.qty ?? 0) || 0;
@@ -310,9 +380,11 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   // ==========================================================================
   if (Array.isArray(data["ledgerly:customUnits.v1"])) {
     await conn.query("DELETE FROM units WHERE business_id = ?", [businessId]);
-    for (const u of data["ledgerly:customUnits.v1"]) {
+    const units = data["ledgerly:customUnits.v1"];
+    const unitConflicts = await getConflictingIds(conn, "units", units.map((u) => u?.id));
+    for (const u of units) {
       if (!u || !u.name) continue;
-      const id = String(u.id || crypto.randomUUID());
+      const id = allocateRecordId(u.id, unitConflicts);
       const name = String(u.name).trim();
       const shortName = String(u.shortName || u.short_name || name).trim();
       const precisionDec = parseInt(u.precisionDec ?? u.precision ?? 0, 10) || 0;
@@ -328,9 +400,11 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
 
   if (Array.isArray(data["ledgerly:unitConversions.v1"])) {
     await conn.query("DELETE FROM unit_conversions WHERE business_id = ?", [businessId]);
-    for (const uc of data["ledgerly:unitConversions.v1"]) {
+    const conversions = data["ledgerly:unitConversions.v1"];
+    const ucConflicts = await getConflictingIds(conn, "unit_conversions", conversions.map((uc) => uc?.id));
+    for (const uc of conversions) {
       if (!uc || !uc.unit || !uc.toUnit) continue;
-      const id = String(uc.id || crypto.randomUUID());
+      const id = allocateRecordId(uc.id, ucConflicts);
       const unit = String(uc.unit).trim();
       const toUnit = String(uc.toUnit).trim();
       const factor = parseFloat(uc.conversionFactor ?? uc.factor ?? 1) || 1;
@@ -390,9 +464,19 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       [businessId, ...includedTxnTypes]
     );
 
+    const txnConflicts = await getConflictingIds(conn, "transactions", transactionsToInsert.map((t) => t?.id));
+    const allLineIds = [];
+    for (const t of transactionsToInsert) {
+      const rawRows = Array.isArray(t?.rows) && t.rows.length ? t.rows : (Array.isArray(t?.items) ? t.items : []);
+      for (const r of rawRows) {
+        if (r?.id) allLineIds.push(r.id);
+      }
+    }
+    const lineConflicts = await getConflictingIds(conn, "transaction_items", allLineIds);
+
     for (const t of transactionsToInsert) {
       if (!t) continue;
-      const id = String(t.id || crypto.randomUUID());
+      const id = allocateRecordId(t.id, txnConflicts, txnIdMap);
       const transactionType = String(t.effectiveType).toLowerCase();
       const documentNumber = String(
         t.documentNumber ??
@@ -407,7 +491,8 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       const rawTxnDate = t.transactionDate || t.invoiceDate || t.billDate || t.form?.invoiceDate || t.date || new Date().toISOString().slice(0, 10);
       const transactionDate = toSqlDate(rawTxnDate) || new Date().toISOString().slice(0, 10);
       const dueDate = toSqlDate(t.dueDate || t.form?.dueDate);
-      const partyId = t.partyId || t.form?.partyId || t.form?.customerId || t.customerId || null;
+      const rawPartyId = t.partyId || t.form?.partyId || t.form?.customerId || t.customerId || null;
+      const partyId = (rawPartyId && partyIdMap.has(rawPartyId)) ? partyIdMap.get(rawPartyId) : rawPartyId;
       const partyName = t.partyName || t.customer || t.supplier || t.party || t.form?.customer || t.form?.supplier || null;
       const partyPhone = t.partyPhone || t.phone || t.form?.phone || null;
       const partyGstin = t.partyGstin || t.gstin || t.form?.gstin || null;
@@ -454,8 +539,9 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       const rawRows = Array.isArray(t.rows) && t.rows.length ? t.rows : (Array.isArray(t.items) ? t.items : []);
       for (const row of rawRows) {
         if (!row) continue;
-        const lineId = String(row.id || crypto.randomUUID());
-        const itemId = row.itemId || row.sourceItemId || null;
+        const lineId = allocateRecordId(row.id, lineConflicts);
+        const rawItemId = row.itemId || row.sourceItemId || null;
+        const itemId = (rawItemId && itemIdMap.has(rawItemId)) ? itemIdMap.get(rawItemId) : rawItemId;
         const itemName = String(row.item || row.itemName || row.name || "Item").trim();
         const itemCode = row.itemCode || row.code || null;
         const barcode = row.barcode || null;
@@ -504,9 +590,12 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   if (bankAccountsPresent) {
     await conn.query("DELETE FROM bank_accounts WHERE business_id = ?", [businessId]);
 
-    for (const b of data["ledgerly:bankAccounts.v1"]) {
+    const bankAccounts = data["ledgerly:bankAccounts.v1"];
+    const bankConflicts = await getConflictingIds(conn, "bank_accounts", bankAccounts.map((b) => b?.id));
+
+    for (const b of bankAccounts) {
       if (!b) continue;
-      const id = String(b.id || crypto.randomUUID());
+      const id = allocateRecordId(b.id, bankConflicts, bankAccIdMap);
       const accountName = String(b.accountName || b.bankName || "Bank Account").trim();
       const accountHolderName = b.accountHolderName || null;
       const accountNumber = b.accountNumber || null;
@@ -539,10 +628,14 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   }
 
   if (bankTxnsPresent) {
-    for (const tx of data["ledgerly:bankTransactions.v1"]) {
+    const bankTxns = data["ledgerly:bankTransactions.v1"];
+    const txConflicts = await getConflictingIds(conn, "bank_transactions", bankTxns.map((tx) => tx?.id));
+
+    for (const tx of bankTxns) {
       if (!tx) continue;
-      const id = String(tx.id || crypto.randomUUID());
-      const accountId = String(tx.accountId || tx.account_id || "").trim();
+      const id = allocateRecordId(tx.id, txConflicts);
+      const rawAccountId = String(tx.accountId || tx.account_id || "").trim();
+      const accountId = (rawAccountId && bankAccIdMap.has(rawAccountId)) ? bankAccIdMap.get(rawAccountId) : rawAccountId;
       const rawType = String(tx.type || "money-in").toLowerCase();
       const type = (rawType === "money-out" || rawType === "out" || rawType === "debit") ? "money-out" : "money-in";
       const amount = parseFloat(tx.amount ?? 0) || 0;
@@ -578,13 +671,17 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
 
   if (Array.isArray(data["ledgerly:cashAdjustments.v1"])) {
     await conn.query("DELETE FROM cash_in_hand WHERE business_id = ?", [businessId]);
-    for (const c of data["ledgerly:cashAdjustments.v1"]) {
+    const cashAdjustments = data["ledgerly:cashAdjustments.v1"];
+    const cashConflicts = await getConflictingIds(conn, "cash_in_hand", cashAdjustments.map((c) => c?.id));
+
+    for (const c of cashAdjustments) {
       if (!c) continue;
-      const id = String(c.id || crypto.randomUUID());
+      const id = allocateRecordId(c.id, cashConflicts);
       const entryDate = toSqlDate(c.entryDate || c.date) || new Date().toISOString().slice(0, 10);
       const entryType = String(c.entryType || c.type || "in").toLowerCase() === "out" ? "out" : "in";
       const amount = parseFloat(c.amount ?? 0) || 0;
-      const partyId = c.partyId || null;
+      const rawPartyId = c.partyId || null;
+      const partyId = (rawPartyId && partyIdMap.has(rawPartyId)) ? partyIdMap.get(rawPartyId) : rawPartyId;
       const partyName = c.partyName || null;
       const referenceType = c.referenceType || null;
       const referenceNo = c.referenceNo || null;
@@ -608,10 +705,14 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   );
   if (chequeKey && Array.isArray(data[chequeKey])) {
     await conn.query("DELETE FROM cheques WHERE business_id = ?", [businessId]);
-    for (const chq of data[chequeKey]) {
+    const cheques = data[chequeKey];
+    const chqConflicts = await getConflictingIds(conn, "cheques", cheques.map((chq) => chq?.id));
+
+    for (const chq of cheques) {
       if (!chq) continue;
-      const id = String(chq.id || crypto.randomUUID());
-      const partyId = chq.partyId || null;
+      const id = allocateRecordId(chq.id, chqConflicts);
+      const rawPartyId = chq.partyId || null;
+      const partyId = (rawPartyId && partyIdMap.has(rawPartyId)) ? partyIdMap.get(rawPartyId) : rawPartyId;
       const partyName = String(chq.partyName || chq.party || "Party").trim();
       const chequeNumber = String(chq.chequeNumber || chq.number || "000000").trim();
       const bankName = String(chq.bankName || "Bank").trim();
@@ -647,9 +748,21 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
     await conn.query("DELETE FROM loan_repayments WHERE business_id = ?", [businessId]);
     await conn.query("DELETE FROM loan_accounts WHERE business_id = ?", [businessId]);
 
-    for (const l of data[loanKey]) {
+    const loans = data[loanKey];
+    const loanConflicts = await getConflictingIds(conn, "loan_accounts", loans.map((l) => l?.id));
+    const allRepayIds = [];
+    for (const l of loans) {
+      if (Array.isArray(l?.repayments)) {
+        for (const r of l.repayments) {
+          if (r?.id) allRepayIds.push(r.id);
+        }
+      }
+    }
+    const repayConflicts = await getConflictingIds(conn, "loan_repayments", allRepayIds);
+
+    for (const l of loans) {
       if (!l) continue;
-      const id = String(l.id || crypto.randomUUID());
+      const id = allocateRecordId(l.id, loanConflicts, loanIdMap);
       const accountName = String(l.accountName || l.name || "Loan Account").trim();
       const lenderName = String(l.lenderName || l.lender || "Lender").trim();
       const accountNumber = l.accountNumber || "";
@@ -677,7 +790,7 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       const repayments = Array.isArray(l.repayments) ? l.repayments : [];
       for (const r of repayments) {
         if (!r) continue;
-        const repayId = String(r.id || crypto.randomUUID());
+        const repayId = allocateRecordId(r.id, repayConflicts);
         const paymentDate = toSqlDate(r.paymentDate || r.date) || new Date().toISOString().slice(0, 10);
         const amountPaid = parseFloat(r.amountPaid ?? r.amount ?? 0) || 0;
         const principalPaid = parseFloat(r.principalPaid ?? 0) || 0;
@@ -711,10 +824,23 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
     await conn.query("DELETE FROM service_reminder_history WHERE business_id = ?", [businessId]);
     await conn.query("DELETE FROM service_reminders WHERE business_id = ?", [businessId]);
 
-    for (const r of data[reminderKey]) {
+    const reminders = data[reminderKey];
+    const remConflicts = await getConflictingIds(conn, "service_reminders", reminders.map((r) => r?.id));
+    const allHistIds = [];
+    for (const r of reminders) {
+      const historyItems = Array.isArray(r?.notificationHistory) ? r.notificationHistory
+        : (Array.isArray(r?.history) ? r.history : []);
+      for (const h of historyItems) {
+        if (h?.id) allHistIds.push(h.id);
+      }
+    }
+    const histConflicts = await getConflictingIds(conn, "service_reminder_history", allHistIds);
+
+    for (const r of reminders) {
       if (!r) continue;
-      const id = String(r.id || crypto.randomUUID());
-      const partyId = r.partyId || r.customerId || null;
+      const id = allocateRecordId(r.id, remConflicts, reminderIdMap);
+      const rawPartyId = r.partyId || r.customerId || null;
+      const partyId = (rawPartyId && partyIdMap.has(rawPartyId)) ? partyIdMap.get(rawPartyId) : rawPartyId;
       const customerName = String(r.customerName || r.customer || r.partyName || "Customer").trim();
       const customerPhone = r.customerPhone || r.phone || null;
       const customerEmail = r.customerEmail || r.email || null;
@@ -742,7 +868,7 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
         : (Array.isArray(r.history) ? r.history : []);
       for (const h of historyItems) {
         if (!h) continue;
-        const histId = String(h.id || crypto.randomUUID());
+        const histId = allocateRecordId(h.id, histConflicts);
         const channel = String(h.channel || "whatsapp").slice(0, 50);
         const recipient = String(h.recipient || customerPhone || "recipient").slice(0, 64);
         const messageText = h.messageText || h.message || null;
@@ -795,9 +921,11 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   // ==========================================================================
   if (Array.isArray(data["ledgerly:expenseCategories.v1"])) {
     await conn.query("DELETE FROM expense_categories WHERE business_id = ?", [businessId]);
-    for (const ec of data["ledgerly:expenseCategories.v1"]) {
+    const expCats = data["ledgerly:expenseCategories.v1"];
+    const ecConflicts = await getConflictingIds(conn, "expense_categories", expCats.map((ec) => ec?.id));
+    for (const ec of expCats) {
       if (!ec || !ec.name) continue;
-      const id = String(ec.id || crypto.randomUUID());
+      const id = allocateRecordId(ec.id, ecConflicts);
       const name = String(ec.name).trim();
       const type = ec.type || "indirect";
       await conn.query(
@@ -810,9 +938,11 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
 
   if (Array.isArray(data["ledgerly:expenseItems.v1"])) {
     await conn.query("DELETE FROM expense_items WHERE business_id = ?", [businessId]);
-    for (const ei of data["ledgerly:expenseItems.v1"]) {
+    const expItems = data["ledgerly:expenseItems.v1"];
+    const eiConflicts = await getConflictingIds(conn, "expense_items", expItems.map((ei) => ei?.id));
+    for (const ei of expItems) {
       if (!ei || !ei.itemName) continue;
-      const id = String(ei.id || crypto.randomUUID());
+      const id = allocateRecordId(ei.id, eiConflicts);
       const name = String(ei.itemName).trim();
       const price = parseFloat(ei.price ?? 0) || 0;
       const taxRate = parseFloat(ei.taxRate ?? 0) || 0;
