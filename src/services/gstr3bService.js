@@ -3,6 +3,7 @@ import { getSaleInvoices } from "./salesStorage.js";
 import { getPurchaseBills } from "./purchaseBillsStorage.js";
 import { getParties } from "./partiesStorage.js";
 import { getCompanyProfile } from "./companyProfileStorage.js";
+import { readTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
 
 /**
  * Normalizes month/year string (e.g. "11/2026", "2026-11", "11-2026") to { year, month } numbers.
@@ -437,7 +438,7 @@ export function calculateGSTR3BData({
   // Process business expenses with GST for Input Tax Credit (ITC)
   let expenses = [];
   try {
-    expenses = JSON.parse(localStorage.getItem("ledgerly:expenses.v1") || "[]");
+    expenses = readTransactionCollection(transactionStorageKeys.expenses) || [];
   } catch {}
 
   const expensesInPeriod = (expenses || []).filter((exp) => {

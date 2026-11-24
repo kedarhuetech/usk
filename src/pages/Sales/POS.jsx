@@ -53,12 +53,13 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
+import { getScopedStorageKey } from "../../config/businessConfig.js";
 
 const STORAGE = {
-  draft: "pos_draft_v1",
-  bills: "pos_saved_bills_v1",
-  openBills: "pos_open_bills_v1",
-  activeBillId: "pos_active_bill_id_v1",
+  get draft() { return getScopedStorageKey("ledgerly:pos_draft_v1"); },
+  get bills() { return getScopedStorageKey("ledgerly:pos_saved_bills_v1"); },
+  get openBills() { return getScopedStorageKey("ledgerly:pos_open_bills_v1"); },
+  get activeBillId() { return getScopedStorageKey("ledgerly:pos_active_bill_id_v1"); },
 };
 
 function validatePosStorage() {
@@ -110,8 +111,8 @@ function readPosBillSession() {
   const savedActive = readStorage(STORAGE.activeBillId, null);
   if (Array.isArray(savedBills)) return createPosBillSession({ bills: savedBills, activeBillId: savedActive });
   const legacyDraft = readStorage(STORAGE.draft, null);
-  const migrated = legacyDraft && typeof legacyDraft === "object"
-    ? [{ ...legacyDraft, id: legacyDraft.id || createPosDraft().id }]
+  const migrated = legacyDraft && typeof legacyDraft === "object" && legacyDraft.id
+    ? [{ ...legacyDraft, id: legacyDraft.id }]
     : [];
   return createPosBillSession({ bills: migrated, activeBillId: migrated[0]?.id || null });
 }

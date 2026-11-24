@@ -1,16 +1,15 @@
 import { businessGrowthApi } from "./apiClient.js";
 import { smartAdsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
-import { getActiveBusinessId } from "../config/businessConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
-const BUSINESS_SCOPE = getActiveBusinessId();
-const STORAGE_KEY = `usk.smartAds.v1:${BUSINESS_SCOPE}`;
-const LEGACY_MIGRATION_KEY = `${STORAGE_KEY}:legacyImported`;
+const getStorageKey = () => getScopedStorageKey("usk.smartAds.v1");
+const getLegacyMigrationKey = () => `${getStorageKey()}:legacyImported`;
 
 function readStore() {
   if (typeof window === "undefined") return { campaigns: [], settings: {}, metrics: {} };
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(getStorageKey());
     if (!raw) return { campaigns: [], settings: {}, metrics: {} };
     const parsed = JSON.parse(raw);
     return {
@@ -26,7 +25,7 @@ function readStore() {
 function writeStore(store) {
   if (typeof window === "undefined") throw new Error("Smart Ads storage is unavailable in this environment.");
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    window.localStorage.setItem(getStorageKey(), JSON.stringify(store));
   } catch (error) {
     if (error?.name === "QuotaExceededError") throw new Error("Smart Ads could not save because browser storage is full. Remove unused drafts or free browser storage and try again.", { cause: error });
     throw error;
@@ -159,12 +158,13 @@ function upsertCampaign(campaign) {
 // Smart Ads repository contract. Replace these implementations with API calls during MySQL migration.
 export async function getSmartAdsCampaigns() {
   const store = readStore();
-  if (!store.campaigns.length && typeof window !== "undefined" && !window.localStorage.getItem(LEGACY_MIGRATION_KEY)) {
+  const migrationKey = getLegacyMigrationKey();
+  if (!store.campaigns.length && typeof window !== "undefined" && !window.localStorage.getItem(migrationKey)) {
     try {
       const legacy = await businessGrowthApi.list("smart-ads");
       store.campaigns = legacy.map((row) => normalizeSmartAdsCampaign(row));
       writeStore(store);
-      window.localStorage.setItem(LEGACY_MIGRATION_KEY, new Date().toISOString());
+      window.localStorage.setItem(migrationKey, new Date().toISOString());
     } catch {
       // Legacy API can be unavailable; drafts continue working locally.
     }

@@ -1,11 +1,14 @@
 import { getInventoryItems, applyBatchRowsToInventory as applyItemBatchRows } from "./itemsStorage.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 const DAY_MS = 86_400_000;
-export const batchMovementStorageKey = "ledgerly:batchMovements.v1";
+const BASE_BATCH_MOVEMENT_KEY = "ledgerly:batchMovements.v1";
+export const getBatchMovementStorageKey = () => getScopedStorageKey(BASE_BATCH_MOVEMENT_KEY);
+export const batchMovementStorageKey = BASE_BATCH_MOVEMENT_KEY;
 export const localDateOnly = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
 function readMovements() {
-  try { const value = JSON.parse(window.localStorage.getItem(batchMovementStorageKey) || "[]"); return Array.isArray(value) ? value : []; }
+  try { const value = JSON.parse(window.localStorage.getItem(getBatchMovementStorageKey()) || "[]"); return Array.isArray(value) ? value : []; }
   catch { return []; }
 }
 
@@ -14,7 +17,7 @@ export function moveBatchRows(rows, direction, { referenceId = "", sourceType = 
   const movements = readMovements();
   if (movementId && movements.some((entry) => entry.id === movementId)) return getInventoryItems();
   const items = applyItemBatchRows(rows, direction, { allowCreate });
-  if (movementId) window.localStorage.setItem(batchMovementStorageKey, JSON.stringify([...movements, { id: movementId, referenceId, sourceType, direction, rows: rows.map((row) => ({ ...row })), createdAt: new Date().toISOString() }]));
+  if (movementId) window.localStorage.setItem(getBatchMovementStorageKey(), JSON.stringify([...movements, { id: movementId, referenceId, sourceType, direction, rows: rows.map((row) => ({ ...row })), createdAt: new Date().toISOString() }]));
   return items;
 }
 
@@ -29,7 +32,7 @@ export function reverseBatchMovement(referenceId, sourceType) {
   const reverseDirection = original.direction === "add" ? "reduce" : "add";
   const items = applyItemBatchRows(original.rows, reverseDirection);
   const next = movements.map((entry) => entry.id === original.id ? { ...entry, reversedAt: new Date().toISOString() } : entry);
-  window.localStorage.setItem(batchMovementStorageKey, JSON.stringify(next));
+  window.localStorage.setItem(getBatchMovementStorageKey(), JSON.stringify(next));
   return { reversed: true, items };
 }
 

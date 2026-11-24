@@ -1,6 +1,7 @@
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { expenseCategoriesDb } from "./databaseRepository.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   parseYMD,
@@ -32,18 +33,19 @@ export const transactionStorageKeys = Object.freeze({
 const memoryStore = new Map();
 
 export function setMemoryCollection(key, records) {
+  const scopedKey = getScopedStorageKey(key);
   if (Array.isArray(records)) {
-    memoryStore.set(key, records);
+    memoryStore.set(scopedKey, records);
     if (typeof window !== "undefined" && window.localStorage) {
       try {
-        window.localStorage.setItem(key, JSON.stringify(records));
+        window.localStorage.setItem(scopedKey, JSON.stringify(records));
       } catch {}
     }
   } else {
-    memoryStore.delete(key);
+    memoryStore.delete(scopedKey);
     if (typeof window !== "undefined" && window.localStorage) {
       try {
-        window.localStorage.removeItem(key);
+        window.localStorage.removeItem(scopedKey);
       } catch {}
     }
   }
@@ -59,24 +61,26 @@ function storage() {
 }
 
 export function readTransactionCollection(key) {
-  if (memoryStore.has(key)) {
-    return memoryStore.get(key) || [];
+  const scopedKey = getScopedStorageKey(key);
+  if (memoryStore.has(scopedKey)) {
+    return memoryStore.get(scopedKey) || [];
   }
   if (typeof window === "undefined" || !window.localStorage) return [];
-  const raw = window.localStorage.getItem(key);
+  const raw = window.localStorage.getItem(scopedKey);
   if (raw == null) return [];
   let value;
   try { value = JSON.parse(raw); }
   catch (error) { throw new Error(`Saved transaction data (${key}) is corrupted: ${error.message}`, { cause: error }); }
   if (!Array.isArray(value)) throw new Error(`Saved transaction data (${key}) must be a list.`);
-  memoryStore.set(key, value);
+  memoryStore.set(scopedKey, value);
   return value;
 }
 
 export function writeTransactionCollection(key, records) {
   if (!Array.isArray(records)) throw new Error("Transaction records must be an array.");
-  memoryStore.set(key, records);
-  try { storage().setItem(key, JSON.stringify(records)); } catch {}
+  const scopedKey = getScopedStorageKey(key);
+  memoryStore.set(scopedKey, records);
+  try { storage().setItem(scopedKey, JSON.stringify(records)); } catch {}
   return records;
 }
 

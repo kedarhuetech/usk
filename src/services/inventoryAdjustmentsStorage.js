@@ -1,4 +1,8 @@
-const ADJUSTMENTS_KEY = "ledgerly:inventoryAdjustments.v1";
+import { getScopedStorageKey } from "../config/businessConfig.js";
+
+const BASE_ADJUSTMENTS_KEY = "ledgerly:inventoryAdjustments.v1";
+const getAdjustmentsKey = () => getScopedStorageKey(BASE_ADJUSTMENTS_KEY);
+export const ADJUSTMENTS_KEY = BASE_ADJUSTMENTS_KEY;
 import { getInventoryItems, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { batchMovementStorageKey, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
 import { inventoryAdjustmentsDb } from "./databaseRepository.js";
@@ -7,7 +11,7 @@ import { isDatabaseMode } from "./dataStorageConfig.js";
 // Reads adjustments.
 function readAdjustments() {
   try {
-    const value = JSON.parse(window.localStorage.getItem(ADJUSTMENTS_KEY) || "[]");
+    const value = JSON.parse(window.localStorage.getItem(getAdjustmentsKey()) || "[]");
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
@@ -21,7 +25,8 @@ export function getInventoryAdjustments(itemId) {
 
 // Saves inventory adjustment.
 export function saveInventoryAdjustment(adjustment) {
-  const before = [ADJUSTMENTS_KEY, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)]);
+  const currentKey = getAdjustmentsKey();
+  const before = [currentKey, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)]);
   try {
   const adjustments = readAdjustments();
   const existing = adjustment.id ? adjustments.find((item) => item.id === adjustment.id) : null;
@@ -33,7 +38,7 @@ export function saveInventoryAdjustment(adjustment) {
     entry.batchMovementId = movementId;
   }
   const next = existing ? adjustments.map((item) => item.id === entry.id ? entry : item) : [ ...adjustments, entry ];
-  window.localStorage.setItem(ADJUSTMENTS_KEY, JSON.stringify(next));
+  window.localStorage.setItem(currentKey, JSON.stringify(next));
   if (isDatabaseMode()) {
     const resolvedItem = getInventoryItems().find((it) => it.id === entry.itemId);
     const resolvedName = entry.itemName && entry.itemName !== "Item"
@@ -58,7 +63,8 @@ export function saveInventoryAdjustment(adjustment) {
 }
 
 export function cancelInventoryAdjustment(adjustmentId) {
-  const before = [ADJUSTMENTS_KEY, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)]);
+  const currentKey = getAdjustmentsKey();
+  const before = [currentKey, inventoryItemsStorageKey, batchMovementStorageKey].map((key) => [key, window.localStorage.getItem(key)]);
   try {
   const adjustments = readAdjustments();
   const entry = adjustments.find((item) => item.id === adjustmentId);
@@ -66,7 +72,7 @@ export function cancelInventoryAdjustment(adjustmentId) {
   if (entry.cancelled) return entry;
   if (entry.batchTracked && entry.batchMovementId) reverseBatchMovement(entry.batchMovementId, "stock-adjustment");
   const cancelled = { ...entry, cancelled: true, cancelledAt: new Date().toISOString() };
-  window.localStorage.setItem(ADJUSTMENTS_KEY, JSON.stringify(adjustments.map((item) => item.id === entry.id ? cancelled : item)));
+  window.localStorage.setItem(currentKey, JSON.stringify(adjustments.map((item) => item.id === entry.id ? cancelled : item)));
   return cancelled;
   } catch (error) {
     for (const [key, value] of before) { if (value == null) window.localStorage.removeItem(key); else window.localStorage.setItem(key, value); }

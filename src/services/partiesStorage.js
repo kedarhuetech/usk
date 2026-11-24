@@ -1,8 +1,12 @@
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { partiesDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
-const PARTIES_KEY = "ledgerly:parties.v1";
+export const PARTIES_KEY = "ledgerly:parties.v1";
+export function getPartiesStorageKey() {
+  return getScopedStorageKey(PARTIES_KEY);
+}
 const linkedPartySources = [
   ["ledgerly:saleInvoices.v1", "sales invoices"],
   ["ledgerly:purchaseBills.v1", "purchase bills"],
@@ -16,6 +20,10 @@ const linkedPartySources = [
 
 // In-memory cache for live database session
 let memoryParties = [];
+
+export function clearMemoryParties() {
+  memoryParties = [];
+}
 
 export function deduplicatePartyList(list) {
   if (!Array.isArray(list)) return [];
@@ -61,7 +69,7 @@ export function setMemoryParties(list) {
   }
   if (typeof window !== "undefined" && window.localStorage) {
     try {
-      window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
+      window.localStorage.setItem(getPartiesStorageKey(), JSON.stringify(memoryParties));
     } catch {}
   }
 }
@@ -71,12 +79,13 @@ function readParties() {
   if (memoryParties.length > 0) return memoryParties;
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
-    const value = JSON.parse(window.localStorage.getItem(PARTIES_KEY) || "[]");
-    if (Array.isArray(value) && value.length > 0) {
+    const key = getPartiesStorageKey();
+    const value = JSON.parse(window.localStorage.getItem(key) || "[]");
+    if (Array.isArray(value)) {
       const deduplicated = deduplicatePartyList(value);
       memoryParties = deduplicated;
       try {
-        window.localStorage.setItem(PARTIES_KEY, JSON.stringify(deduplicated));
+        window.localStorage.setItem(key, JSON.stringify(deduplicated));
       } catch {}
       return deduplicated;
     }
@@ -155,11 +164,6 @@ export function saveParty(party, options = {}) {
     ),
   ];
   memoryParties = deduplicatePartyList(next);
-  if (typeof window !== "undefined" && window.localStorage) {
-    try {
-      window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
-    } catch {}
-  }
   setMemoryParties(memoryParties);
   if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.save(saved).catch((err) => console.warn("[MySQL] Background party sync notice:", err.message));
@@ -173,7 +177,7 @@ export function deleteParty(partyId, options = {}) {
   if (typeof window === "undefined" || !window.localStorage) return;
   const next = readParties().filter((entry) => String(entry.id) !== String(partyId));
   memoryParties = next;
-  window.localStorage.setItem(PARTIES_KEY, JSON.stringify(next));
+  window.localStorage.setItem(getPartiesStorageKey(), JSON.stringify(next));
   setMemoryParties(next);
   if (isDatabaseMode() && !options?.skipRemoteSync) {
     partiesDb.remove(partyId).catch((err) => console.warn("[MySQL] Background party delete notice:", err.message));

@@ -59,6 +59,8 @@ import {
   TermsOfService,
 } from "./pages/Legal/LegalPages";
 import { ToastContainer } from "./components/Common/Toast";
+import AuthPage from "./pages/Auth/AuthPage";
+import AuthGuard from "./components/Auth/AuthGuard";
 
 // Renders the app interface.
 function App() {
@@ -67,12 +69,14 @@ function App() {
       <ToastContainer />
       <BrowserRouter>
         <Routes>
+        <Route path="/login" element={<AuthPage initialMode="login" />} />
+        <Route path="/register" element={<AuthPage initialMode="register" />} />
         <Route path="/store/:storeId" element={<CustomerStorefront />} />
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/data-deletion" element={<DataDeletion />} />
 
-        <Route path="/" element={<AppPasscodeGuard><MainLayout /></AppPasscodeGuard>}>
+        <Route path="/" element={<AuthGuard><AppPasscodeGuard><MainLayout /></AppPasscodeGuard></AuthGuard>}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="home" element={<Navigate to="/dashboard" replace />} />
           <Route path="company-profile" element={<EditProfile />} />

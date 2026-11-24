@@ -1,7 +1,7 @@
 // Provides the company profile storage application service.
 import { settingsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
-import { getScopedStorageKey } from "../config/businessConfig.js";
+import { getScopedStorageKey, getActiveBusinessName } from "../config/businessConfig.js";
 
 const COMPANY_PROFILE_KEY = "ledgerly:companyProfile.v1";
 export const companyProfileUpdatedEvent = "ledgerly:company-profile-updated";
@@ -121,18 +121,29 @@ export async function loadAuthoritativeCompanyProfile() {
 
 // Synchronously gets cached company profile.
 export function getCompanyProfile() {
-  if (!canUseStorage()) return { ...defaultCompanyProfile };
+  const fallback = {
+    ...defaultCompanyProfile,
+    companyName: getActiveBusinessName(),
+    businessName: getActiveBusinessName(),
+  };
+  if (!canUseStorage()) return fallback;
 
   try {
     const scopedKey = getScopedStorageKey(COMPANY_PROFILE_KEY);
-    const raw = window.localStorage.getItem(scopedKey) || window.localStorage.getItem(COMPANY_PROFILE_KEY);
+    const raw = window.localStorage.getItem(scopedKey);
     const saved = raw ? JSON.parse(raw) : null;
     if (!saved || typeof saved !== "object") {
-      return { ...defaultCompanyProfile };
+      return fallback;
     }
-    return normalizeCompanyProfile(saved);
+    const normalized = normalizeCompanyProfile(saved);
+    if (!normalized.companyName && !normalized.businessName) {
+      const bizName = getActiveBusinessName();
+      normalized.companyName = bizName;
+      normalized.businessName = bizName;
+    }
+    return normalized;
   } catch {
-    return { ...defaultCompanyProfile };
+    return fallback;
   }
 }
 
