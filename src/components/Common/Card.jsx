@@ -1,7 +1,7 @@
 // Renders the card interface.
 function Card({ children, className = "", ...props }) {
   return (
-    <section className={`min-w-0 max-w-full rounded-lg border border-slate-200 bg-white text-slate-800 dark:border-[#252B37] dark:bg-[#151821] dark:text-slate-100 ${className}`} {...props}>
+    <section className={`min-w-0 max-w-full rounded-xl border border-[#EAE2D6] bg-white text-[#242C1D] shadow-xs ${className}`} {...props}>
       {children}
     </section>
   );

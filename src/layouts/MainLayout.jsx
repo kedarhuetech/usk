@@ -70,20 +70,20 @@ function MainLayout() {
   }
 
   return (
-    <div className="flex h-full w-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-[#0B0D11] dark:text-slate-100 print:h-auto print:overflow-visible print:bg-white">
+    <div className="flex h-full w-full overflow-hidden bg-[#F7F2EB] text-[#242C1D] print:h-auto print:overflow-visible print:bg-white">
       {!isTransactionRoute && <Sidebar />}
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#F7F2EB]">
         <div className="print:hidden shrink-0 z-30">
           <Topbar onRefresh={() => setRefreshKey((key) => key + 1)} />
         </div>
 
         {showBackButton && (
-          <div className="flex h-10 shrink-0 items-center border-b border-slate-200 bg-white text-slate-800 dark:border-[#252B37] dark:bg-[#12151B] dark:text-slate-100 px-4 sm:px-6 print:hidden">
+          <div className="flex h-10 shrink-0 items-center border-b border-[#EAE2D6] bg-[#F7F2EB] text-[#242C1D] px-4 sm:px-6 print:hidden">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-[#1A1E27] dark:hover:text-[#FF5A1F]"
+              className="inline-flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium text-[#546048] transition hover:bg-[#EAE2D6] hover:text-[#242C1D] cursor-pointer"
               aria-label="Go back to the previous page"
             >
               <FiArrowLeft className="h-4 w-4" />
@@ -92,7 +92,7 @@ function MainLayout() {
           </div>
         )}
 
-        <main className={`min-h-0 min-w-0 w-full max-w-full flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"} overflow-x-hidden print:h-auto print:overflow-visible`}>
+        <main className={`main-content-section min-h-0 min-w-0 w-full max-w-full flex-1 ${isReportsRoute ? "overflow-hidden" : "overflow-y-auto"} overflow-x-hidden bg-[#F7F2EB] text-[#242C1D] print:h-auto print:overflow-visible`}>
           {outlet && cloneElement(outlet, { key: refreshKey })}
         </main>
       </div>
