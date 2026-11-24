@@ -1,11 +1,13 @@
 import { CASH_ADJUSTMENTS_STORAGE_KEY } from "./cashInHand.js";
-import { getChequeStorageKey } from "./chequesRepository.js";
+import { getChequeStorageKey, CHEQUE_STORAGE_KEY } from "./chequesRepository.js";
 import { inventoryItemsStorageKey } from "./itemsStorage.js";
-import { getLoanAccountsStorageKey } from "./loanAccountsRepository.js";
+import { getLoanAccountsStorageKey, LOAN_ACCOUNTS_STORAGE_KEY } from "./loanAccountsRepository.js";
 import { partiesStorageKey } from "./partiesStorage.js";
 import { purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { saleInvoicesStorageKey } from "./salesStorage.js";
-import { createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
+import { SERVICE_REMINDER_RECORDS_KEY } from "./serviceRemindersStorage.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
+import { createDatabaseBackupRestoreRepository, createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 
 export const BACKUP_LAST_CREATED_KEY = "usv:backupToComputer.lastCreated.v1";
@@ -40,11 +42,11 @@ export const BACKUP_SOURCES = [
   { category: "Cash & bank", key: CASH_ADJUSTMENTS_STORAGE_KEY, shape: "array" },
   { category: "Cash & bank", key: "ledgerly:bankAccounts.v1", shape: "array" },
   { category: "Cash & bank", key: "ledgerly:bankTransactions.v1", shape: "array" },
-  { category: "Cash & bank", key: getChequeStorageKey(), shape: "array" },
-  { category: "Loans", key: getLoanAccountsStorageKey(), shape: "array" },
+  { category: "Cash & bank", key: CHEQUE_STORAGE_KEY, shape: "array" },
+  { category: "Loans", key: LOAN_ACCOUNTS_STORAGE_KEY, shape: "array" },
   { category: "Settings", key: "ledgerly:appSettings.v1", shape: "object" },
   { category: "Settings", key: "ledgerly:printSettings.v1", shape: "object" },
-  { category: "Settings", key: "ledgerly:serviceReminders.v1", shape: "array" },
+  { category: "Settings", key: SERVICE_REMINDER_RECORDS_KEY, shape: "array" },
   { category: "Settings", key: "ledgerly:serviceReminderSettings.v1", shape: "object" },
   { category: "Business growth", key: "ledgerly:onlineStoreSettings.v1", shape: "object" },
   { category: "Business growth", key: "ledgerly:onlineStoreOrders.v1", shape: "array" },
@@ -74,13 +76,26 @@ function readBackupStorage(storage) {
   const redactedPaths = [];
 
   for (const source of BACKUP_SOURCES) {
-    let raw;
+    let raw = null;
     try {
-      raw = storage.getItem(source.key);
+      if (source.key === "ledgerly:companyProfile.v1") {
+        const scopedKey = getScopedStorageKey("ledgerly:companyProfile.v1");
+        raw = storage.getItem(scopedKey) ?? storage.getItem("ledgerly:companyProfile.v1");
+      } else if (source.key === CHEQUE_STORAGE_KEY) {
+        const scopedKey = getChequeStorageKey();
+        raw = storage.getItem(scopedKey) ?? storage.getItem(CHEQUE_STORAGE_KEY) ?? storage.getItem("ledgerly:cheques.v1");
+      } else if (source.key === LOAN_ACCOUNTS_STORAGE_KEY) {
+        const scopedKey = getLoanAccountsStorageKey();
+        raw = storage.getItem(scopedKey) ?? storage.getItem(LOAN_ACCOUNTS_STORAGE_KEY) ?? storage.getItem("ledgerly:loanAccounts.v1");
+      } else if (source.key === SERVICE_REMINDER_RECORDS_KEY) {
+        raw = storage.getItem(SERVICE_REMINDER_RECORDS_KEY) ?? storage.getItem("ledgerly:serviceReminders.v1");
+      } else {
+        raw = storage.getItem(source.key);
+      }
     } catch (error) {
       throw new Error(`Could not read ${source.category} data (${source.key}). No backup was created.`, { cause: error });
     }
-    if (raw === null) continue;
+    if (raw === null || raw === undefined) continue;
 
     let value;
     try {
@@ -103,6 +118,45 @@ function readBackupStorage(storage) {
 
 export function collectBackupData(storage = typeof window !== "undefined" ? window.localStorage : null) {
   return readBackupStorage(storage);
+}
+
+export function resolveSourceDefinition(key) {
+  if (!key || typeof key !== "string") return null;
+
+  // 1. Company profile (canonical or scoped)
+  if (key === "ledgerly:companyProfile.v1" || key.startsWith("ledgerly:companyProfile.v1:")) {
+    return { category: "Company profile", key: "ledgerly:companyProfile.v1", shape: "object" };
+  }
+  // 2. Cheques (usv or legacy ledgerly prefix, with or without business scope)
+  if (
+    key === CHEQUE_STORAGE_KEY ||
+    key.startsWith(`${CHEQUE_STORAGE_KEY}:`) ||
+    key === "ledgerly:cheques.v1" ||
+    key.startsWith("ledgerly:cheques.v1:")
+  ) {
+    return { category: "Cash & bank", key: CHEQUE_STORAGE_KEY, shape: "array" };
+  }
+  // 3. Loans (usv or legacy ledgerly prefix, with or without business scope)
+  if (
+    key === LOAN_ACCOUNTS_STORAGE_KEY ||
+    key.startsWith(`${LOAN_ACCOUNTS_STORAGE_KEY}:`) ||
+    key === "ledgerly:loanAccounts.v1" ||
+    key.startsWith("ledgerly:loanAccounts.v1:")
+  ) {
+    return { category: "Loans", key: LOAN_ACCOUNTS_STORAGE_KEY, shape: "array" };
+  }
+  // 4. Service reminders (serviceReminderRecords or legacy serviceReminders, with or without business scope)
+  if (
+    key === SERVICE_REMINDER_RECORDS_KEY ||
+    key.startsWith(`${SERVICE_REMINDER_RECORDS_KEY}:`) ||
+    key === "ledgerly:serviceReminders.v1" ||
+    key.startsWith("ledgerly:serviceReminders.v1:")
+  ) {
+    return { category: "Settings", key: SERVICE_REMINDER_RECORDS_KEY, shape: "array" };
+  }
+
+  // 5. Direct exact match in BACKUP_SOURCES
+  return BACKUP_SOURCES.find((s) => s.key === key) || null;
 }
 
 function filenameFor(timestamp) {
@@ -143,25 +197,63 @@ export function previewBackupPayload(payload) {
   const validation = validateBackupPayload(payload);
   if (!validation.valid) throw new Error(validation.error);
 
-  const sourcesByKey = new Map(BACKUP_SOURCES.map((source) => [source.key, source]));
   const entries = [];
+  let companyName = "Not specified";
+
   for (const [key, value] of Object.entries(payload.data)) {
-    const source = sourcesByKey.get(key);
+    const source = resolveSourceDefinition(key);
     if (!source) throw new Error(`This backup contains an unsupported data store (${key}).`);
     const validShape = source.shape === "array" ? Array.isArray(value)
       : value && typeof value === "object" && !Array.isArray(value);
     if (!validShape) throw new Error(`Backup data for ${source.category} is invalid (${key}).`);
-    entries.push({ ...source, recordCount: Array.isArray(value) ? value.length : 1 });
+
+    if (source.category === "Company profile" && value && typeof value === "object" && (value.companyName || value.businessName)) {
+      companyName = value.companyName || value.businessName;
+    }
+
+    entries.push({ ...source, originalKey: key, recordCount: Array.isArray(value) ? value.length : 1 });
   }
-  return { createdAt: payload.createdAt, companyName: payload.data["ledgerly:companyProfile.v1"]?.companyName || "Not specified", entries };
+
+  // Fallback company name check if not already set
+  if (companyName === "Not specified") {
+    const profileKey = Object.keys(payload.data).find((k) => k === "ledgerly:companyProfile.v1" || k.startsWith("ledgerly:companyProfile.v1:"));
+    if (profileKey && payload.data[profileKey] && typeof payload.data[profileKey] === "object") {
+      companyName = payload.data[profileKey].companyName || payload.data[profileKey].businessName || "Not specified";
+    }
+  }
+
+  return { createdAt: payload.createdAt, companyName, entries };
 }
 
-export function restoreBackupPayload(payload, repository = createLocalStorageBackupRestoreRepository()) {
+export function restoreBackupPayload(payload, repository = createDatabaseBackupRestoreRepository()) {
   const preview = previewBackupPayload(payload);
   if (!repository || typeof repository.restore !== "function") throw new Error("A compatible restore repository is required.");
-  repository.restore(preview.entries, payload.data);
-  notifyBusinessDataChanged();
-  return { restoredCount: preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0), entries: preview.entries };
+
+  try {
+    const rawResult = repository.restore(preview.entries, payload.data, payload);
+    if (rawResult && typeof rawResult.then === "function") {
+      return rawResult.then((result) => {
+        notifyBusinessDataChanged();
+        return {
+          restoredCount: result?.totalRestoredCount ?? preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0),
+          entries: preview.entries,
+          stats: result?.stats || {},
+          replacedStores: result?.replacedStores || preview.entries.map((e) => e.category),
+          message: result?.message || `USV restore completed: ${preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0)} records restored to MySQL.`,
+        };
+      });
+    }
+    notifyBusinessDataChanged();
+    return {
+      restoredCount: rawResult?.totalRestoredCount ?? preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0),
+      entries: preview.entries,
+      stats: rawResult?.stats || {},
+      replacedStores: rawResult?.replacedStores || preview.entries.map((e) => e.category),
+      message: rawResult?.message || `USV restore completed: ${preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0)} records saved.`,
+    };
+  } catch (err) {
+    throw err;
+  }
 }
 
 export function downloadBackupFile(payload, { windowRef = window, documentRef = document } = {}) {

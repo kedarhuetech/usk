@@ -314,6 +314,8 @@ router.get("/", async (req, res) => {
       barcode: row.barcode || row.item_code || "",
       category: row.category || "General",
       hsnCode: row.hsn_code || "",
+      hsn: row.hsn_code || "",
+      hsn_code: row.hsn_code || "",
       unit: row.unit || "PCS",
       isActive: row.is_active !== 0,
       salePrice: parseFloat(row.sale_price) || 0,
@@ -322,9 +324,13 @@ router.get("/", async (req, res) => {
       taxRate: parseFloat(row.tax_rate) || 0,
       cessRate: parseFloat(row.cess_rate) || 0,
       openingStock: parseFloat(row.opening_stock) || 0,
+      openingQuantity: parseFloat(row.opening_stock) || 0,
+      opening_stock: parseFloat(row.opening_stock) || 0,
       currentStock: parseFloat(row.current_stock) || 0,
       stock: parseFloat(row.current_stock) || 0,
       minStock: parseFloat(row.min_stock) || 0,
+      minimumStock: parseFloat(row.min_stock) || 0,
+      min_stock: parseFloat(row.min_stock) || 0,
       isBatchTracked: Boolean(row.is_batch_tracked),
       isSerialTracked: Boolean(row.is_serial_tracked),
       description: row.description || "",
@@ -405,6 +411,8 @@ router.get("/:id", async (req, res) => {
         barcode: row.barcode || row.item_code || "",
         category: row.category || "General",
         hsnCode: row.hsn_code || "",
+        hsn: row.hsn_code || "",
+        hsn_code: row.hsn_code || "",
         unit: row.unit || "PCS",
         itemType: row.item_type || "product",
         salePrice: parseFloat(row.sale_price) || 0,
@@ -413,9 +421,13 @@ router.get("/:id", async (req, res) => {
         taxRate: parseFloat(row.tax_rate) || 0,
         cessRate: parseFloat(row.cess_rate) || 0,
         openingStock: parseFloat(row.opening_stock) || 0,
+        openingQuantity: parseFloat(row.opening_stock) || 0,
+        opening_stock: parseFloat(row.opening_stock) || 0,
         currentStock: parseFloat(row.current_stock) || 0,
         stock: parseFloat(row.current_stock) || 0,
         minStock: parseFloat(row.min_stock) || 0,
+        minimumStock: parseFloat(row.min_stock) || 0,
+        min_stock: parseFloat(row.min_stock) || 0,
         isBatchTracked: Boolean(row.is_batch_tracked),
         isSerialTracked: Boolean(row.is_serial_tracked),
         isActive: row.is_active !== 0,
@@ -455,16 +467,18 @@ const saveItemHandler = async (req, res) => {
     const itemCode = (body.itemCode || body.item_code || body.code || "").trim() || null;
     const barcode = (body.barcode || body.barCode || body.itemBarcode || itemCode || "").trim() || null;
     const category = body.category || "General";
-    const hsnCode = body.hsnCode || body.hsn_code || body.hsn || null;
+    const hsnCode = (body.hsnCode || body.hsn_code || body.hsn || body.sac || "").toString().trim() || null;
     const unit = body.unit || "PCS";
     const itemType = body.itemType || body.type || "product";
     const salePrice = parseFloat(body.salePrice ?? body.sale_price ?? body.price ?? 0) || 0;
     const purchasePrice = parseFloat(body.purchasePrice ?? body.purchase_price ?? 0) || 0;
     const taxRate = parseFloat(body.taxRate ?? body.tax_rate ?? body.gst ?? 0) || 0;
     const cessRate = parseFloat(body.cessRate ?? body.cess_rate ?? 0) || 0;
-    const openingStock = parseFloat(body.openingStock ?? body.opening_stock ?? 0) || 0;
-    const currentStock = parseFloat(body.currentStock ?? body.current_stock ?? body.stock ?? openingStock) || 0;
-    const minStock = parseFloat(body.minStock ?? body.min_stock ?? 0) || 0;
+    const rawOpeningStock = body.openingStock ?? body.opening_stock ?? body.openingQuantity ?? body.opening_quantity ?? body.initialOpeningQuantity ?? null;
+    const openingStock = rawOpeningStock !== null ? (parseFloat(rawOpeningStock) || 0) : 0;
+    const currentStock = parseFloat(body.currentStock ?? body.current_stock ?? body.stock ?? rawOpeningStock ?? 0) || 0;
+    const rawMinStock = body.minStock ?? body.min_stock ?? body.minimumStock ?? body.minimum_stock ?? body.minQuantity ?? body.min_quantity ?? null;
+    const minStock = rawMinStock !== null ? (parseFloat(rawMinStock) || 0) : 0;
     const isBatchTracked = body.isBatchTracked || body.is_batch_tracked ? 1 : 0;
     const isSerialTracked = body.isSerialTracked || body.is_serial_tracked ? 1 : 0;
     const description = body.description || null;
@@ -530,6 +544,7 @@ const saveItemHandler = async (req, res) => {
         purchase_price = VALUES(purchase_price),
         tax_rate = VALUES(tax_rate),
         cess_rate = VALUES(cess_rate),
+        opening_stock = VALUES(opening_stock),
         current_stock = VALUES(current_stock),
         min_stock = VALUES(min_stock),
         is_batch_tracked = VALUES(is_batch_tracked),
@@ -602,6 +617,8 @@ const saveItemHandler = async (req, res) => {
         itemCode,
         category,
         hsnCode,
+        hsn: hsnCode,
+        hsn_code: hsnCode,
         unit,
         type: itemType,
         itemType,
@@ -609,8 +626,16 @@ const saveItemHandler = async (req, res) => {
         salePrice,
         purchasePrice,
         taxRate,
+        cessRate,
+        openingStock,
+        openingQuantity: openingStock,
+        opening_stock: openingStock,
         currentStock,
+        stock: currentStock,
+        current_stock: currentStock,
         minStock,
+        minimumStock: minStock,
+        min_stock: minStock,
         isBatchTracked: Boolean(isBatchTracked),
         imageUrl: imageUrl || "",
         image: imageUrl || "",

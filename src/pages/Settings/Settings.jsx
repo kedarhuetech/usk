@@ -54,7 +54,7 @@ const TABS = [
   { id: "party", label: "PARTY", icon: FiUsers },
   { id: "item", label: "ITEM", icon: FiPackage },
   { id: "service_reminders", label: "SERVICE REMINDERS", icon: FiBell },
-  { id: "accounting", label: "ACCOUNTING", icon: FiBook },
+  
 
 ];
 
@@ -303,7 +303,7 @@ function Settings() {
           {activeTab === "party" && <PartyTab settings={settings} update={update} />}
           {activeTab === "item" && <ItemTab settings={settings} update={update} />}
           {activeTab === "service_reminders" && <ServiceRemindersTab settings={settings} update={update} />}
-          {activeTab === "accounting" && <AccountingTab settings={settings} update={update} />}
+         
           
         </div>
       </main>

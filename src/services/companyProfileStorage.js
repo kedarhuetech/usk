@@ -114,6 +114,7 @@ export async function loadAuthoritativeCompanyProfile() {
     try {
       const key = getScopedStorageKey(COMPANY_PROFILE_KEY);
       window.localStorage.setItem(key, JSON.stringify(normalized));
+      window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(normalized));
     } catch {}
   }
   return normalized;
@@ -244,6 +245,7 @@ export async function saveCompanyProfile(profile, options = {}) {
     try {
       const key = getScopedStorageKey(COMPANY_PROFILE_KEY);
       window.localStorage.setItem(key, JSON.stringify(nextProfile));
+      window.localStorage.setItem(COMPANY_PROFILE_KEY, JSON.stringify(nextProfile));
     } catch (err) {
       console.warn("Could not cache company profile to localStorage:", err);
     }

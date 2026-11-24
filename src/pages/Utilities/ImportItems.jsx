@@ -81,8 +81,10 @@ function validateRows(rows) {
     if (row.salePrice && (!Number.isFinite(Number(row.salePrice)) || Number(row.salePrice) < 0)) errors.push("Sale Price must be a non-negative number");
     if (row.purchasePrice && (!Number.isFinite(Number(row.purchasePrice)) || Number(row.purchasePrice) < 0)) errors.push("Purchase Price must be a non-negative number");
     if (row.discount && (!Number.isFinite(Number(row.discount)) || Number(row.discount) < 0)) errors.push("Discount must be a non-negative number");
-    if (row.discount && (!Number.isFinite(Number(row.discount)) || Number(row.discount) < 0)) errors.push("Discount must be a non-negative number");
     if (row.openingQuantity && (!Number.isFinite(Number(row.openingQuantity)) || Number(row.openingQuantity) < 0)) errors.push("Quantity must be a non-negative number");
+    if (row.openingStock && (!Number.isFinite(Number(row.openingStock)) || Number(row.openingStock) < 0)) errors.push("Opening Stock must be a non-negative number");
+    if (row.minimumStock && (!Number.isFinite(Number(row.minimumStock)) || Number(row.minimumStock) < 0)) errors.push("Minimum Stock must be a non-negative number");
+    if (row.minStock && (!Number.isFinite(Number(row.minStock)) || Number(row.minStock) < 0)) errors.push("Minimum Stock must be a non-negative number");
     const key = row.itemCode
       ? `code:${row.itemCode.toLowerCase()}`
       : `name:${row.itemName.toLowerCase()}|${row.unit.toLowerCase()}`;
@@ -540,7 +542,14 @@ function ImportItems() {
           id: undefined,
           code: row.itemCode,
           barcode: row.barcode || row.itemCode,
-          stock: row.openingQuantity,
+          openingQuantity: row.openingStock ?? row.openingQuantity,
+          openingStock: row.openingStock ?? row.openingQuantity,
+          currentStock: row.currentStock ?? row.stock ?? row.openingStock ?? row.openingQuantity,
+          stock: row.currentStock ?? row.stock ?? row.openingStock ?? row.openingQuantity,
+          minStock: row.minStock ?? row.minimumStock,
+          minimumStock: row.minimumStock ?? row.minStock,
+          hsn: row.hsnCode ?? row.hsn,
+          hsnCode: row.hsnCode ?? row.hsn,
         });
         imported += 1;
         if (codeKey) existingKeys.add(codeKey);

@@ -148,3 +148,74 @@ test("rejects unsupported data stores instead of importing them", () => {
   const payload = createBackupPayload(collectBackupData(storageWith({}).storage), { now });
   assert.throws(() => previewBackupPayload({ ...payload, data: { ...payload.data, "unexpected:key": [] } }), /unsupported data store/);
 });
+
+test("collectBackupData: collects business-scoped company profile, cheques, loans, and service reminder records", () => {
+  const scopedProfileKey = "ledgerly:companyProfile.v1:demo-business";
+  const scopedChequeKey = "usv.cheques.v1:demo-business";
+  const scopedLoanKey = "usv.loanAccounts.v1:demo-business";
+  const reminderKey = "ledgerly:serviceReminderRecords.v1";
+
+  const fixture = storageWith({
+    [scopedProfileKey]: JSON.stringify({
+      companyName: "Sai Kirana Stores",
+      businessType: "Retail",
+      businessCategory: "Grocery",
+      logoUrl: "https://res.cloudinary.com/demo/image/upload/logo.png",
+      signatureUrl: "https://res.cloudinary.com/demo/image/upload/sig.png",
+    }),
+    [scopedChequeKey]: JSON.stringify([{ id: "chq-1", amount: 15000, chequeNumber: "123456" }]),
+    [scopedLoanKey]: JSON.stringify([{ id: "loan-1", accountName: "Mudra Loan", principalAmount: 50000 }]),
+    [reminderKey]: JSON.stringify([{ id: "srv-1", customerName: "Ramesh", serviceName: "Maintenance" }]),
+  });
+
+  const collected = collectBackupData(fixture.storage);
+  const payload = createBackupPayload(collected, { now });
+
+  // 1. Must collect company profile under canonical key with all fields preserved
+  assert.equal(payload.data["ledgerly:companyProfile.v1"]?.companyName, "Sai Kirana Stores");
+  assert.equal(payload.data["ledgerly:companyProfile.v1"]?.businessType, "Retail");
+  assert.equal(payload.data["ledgerly:companyProfile.v1"]?.logoUrl, "https://res.cloudinary.com/demo/image/upload/logo.png");
+
+  // 2. Must collect cheques under canonical key usv.cheques.v1
+  assert.equal(Array.isArray(payload.data["usv.cheques.v1"]), true);
+  assert.equal(payload.data["usv.cheques.v1"].length, 1);
+  assert.equal(payload.data["usv.cheques.v1"][0].chequeNumber, "123456");
+
+  // 3. Must collect loans under canonical key usv.loanAccounts.v1
+  assert.equal(Array.isArray(payload.data["usv.loanAccounts.v1"]), true);
+  assert.equal(payload.data["usv.loanAccounts.v1"].length, 1);
+  assert.equal(payload.data["usv.loanAccounts.v1"][0].principalAmount, 50000);
+
+  // 4. Must collect service reminders under ledgerly:serviceReminderRecords.v1
+  assert.equal(Array.isArray(payload.data["ledgerly:serviceReminderRecords.v1"]), true);
+  assert.equal(payload.data["ledgerly:serviceReminderRecords.v1"].length, 1);
+  assert.equal(payload.data["ledgerly:serviceReminderRecords.v1"][0].customerName, "Ramesh");
+});
+
+test("previewBackupPayload: handles cross-business restore and scoped keys without unsupported data-store error", () => {
+  const foreignPayload = {
+    format: BACKUP_FORMAT,
+    formatVersion: 1,
+    createdAt: "2026-11-20T10:00:00.000Z",
+    application: { name: "USV", version: "1.0.0" },
+    manifest: { included: [] },
+    data: {
+      "ledgerly:companyProfile.v1:foreign-branch": { companyName: "Foreign Branch Co" },
+      "usv.cheques.v1:foreign-branch": [{ id: "c1", chequeNumber: "555555" }],
+      "usv.loanAccounts.v1:foreign-branch": [{ id: "l1", accountName: "Branch Loan" }],
+      "ledgerly:serviceReminderRecords.v1:foreign-branch": [{ id: "s1", serviceName: "Inspection" }],
+      "ledgerly:parties.v1": [{ id: "p1", partyName: "Foreign Customer" }],
+    },
+  };
+
+  const preview = previewBackupPayload(foreignPayload);
+  assert.equal(preview.companyName, "Foreign Branch Co");
+  assert.equal(preview.entries.length, 5);
+
+  const categories = preview.entries.map((e) => e.category);
+  assert.ok(categories.includes("Company profile"));
+  assert.ok(categories.includes("Cash & bank"));
+  assert.ok(categories.includes("Loans"));
+  assert.ok(categories.includes("Settings"));
+  assert.ok(categories.includes("Parties"));
+});

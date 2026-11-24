@@ -166,7 +166,7 @@ export function normalizeInventoryItem(itemForm = {}) {
   const barcode = itemForm.barcode || itemForm.barCode || itemForm.itemBarcode || itemCode || "";
   const subCategory = itemForm.subCategory || itemForm.sub_category || "";
   const serialNumbers = normalizeSerialNumbers(itemForm.serialNumbers);
-  const hsn = itemForm.hsn || itemForm.hsnCode || itemForm.sac || "";
+  const hsn = (itemForm.hsn || itemForm.hsnCode || itemForm.hsn_code || itemForm.sac || "").toString().trim();
   const wholesale = itemForm.wholesale || null;
   const batches = filledBatches(itemForm.batches || []);
   const isBatchTracked = itemForm.enableBatchTracking !== undefined
@@ -177,24 +177,39 @@ export function normalizeInventoryItem(itemForm = {}) {
   const batchTotal = batchOpeningTotal(batches);
   const manualOpeningQuantity = hasValue(itemForm.openingQuantity)
     ? String(itemForm.openingQuantity)
-    : hasValue(itemForm.stock)
-      ? String(itemForm.stock)
-      : hasValue(itemForm.currentStock)
-        ? String(itemForm.currentStock)
-        : hasValue(itemForm.openingStock)
-          ? String(itemForm.openingStock)
-          : "";
+    : hasValue(itemForm.openingStock)
+      ? String(itemForm.openingStock)
+      : hasValue(itemForm.opening_stock)
+        ? String(itemForm.opening_stock)
+        : hasValue(itemForm.stock)
+          ? String(itemForm.stock)
+          : hasValue(itemForm.currentStock)
+            ? String(itemForm.currentStock)
+            : hasValue(itemForm.current_stock)
+              ? String(itemForm.current_stock)
+              : "";
   const openingQuantity = hasValue(itemForm.openingQuantity)
     ? String(itemForm.openingQuantity)
-    : batches.length
-      ? String(batchTotal)
-      : serialNumbers.length
-        ? String(serialNumbers.length)
-        : manualOpeningQuantity;
+    : hasValue(itemForm.openingStock)
+      ? String(itemForm.openingStock)
+      : hasValue(itemForm.opening_stock)
+        ? String(itemForm.opening_stock)
+        : batches.length
+          ? String(batchTotal)
+          : serialNumbers.length
+            ? String(serialNumbers.length)
+            : manualOpeningQuantity;
   const initialOpeningQuantity = hasValue(itemForm.initialOpeningQuantity)
     ? String(itemForm.initialOpeningQuantity)
     : manualOpeningQuantity;
   const discount = hasValue(itemForm.discount) ? itemForm.discount : itemForm.discountValue || "";
+
+  const openingStockNum = hasValue(openingQuantity) ? toNumber(openingQuantity) : 0;
+  const currentStockVal = itemForm.currentStock ?? itemForm.current_stock ?? itemForm.stock ?? (hasValue(openingQuantity) ? Number(openingQuantity) : 0);
+  const currentStockNum = toNumber(currentStockVal);
+
+  const minStockRaw = itemForm.minimumStock ?? itemForm.minStock ?? itemForm.min_stock ?? itemForm.minimum_stock ?? "";
+  const minStockNum = hasValue(minStockRaw) ? toNumber(minStockRaw) : 0;
 
   return {
     id,
@@ -204,6 +219,8 @@ export function normalizeInventoryItem(itemForm = {}) {
     serviceName: type === "service" ? itemName : "",
     name: itemName,
     hsn,
+    hsnCode: hsn,
+    hsn_code: hsn,
     sac: type === "service" ? hsn : "",
     category: itemForm.category || "",
     subCategory,
@@ -229,14 +246,20 @@ export function normalizeInventoryItem(itemForm = {}) {
     wholesaleTaxMode: itemForm.wholesaleTaxMode || wholesale?.taxMode || "",
     minimumWholesaleQuantity: itemForm.minimumWholesaleQuantity || wholesale?.minimumQty || "",
     taxRate: itemForm.taxRate || "None",
+    cessRate: itemForm.cessRate ?? itemForm.cess_rate ?? "",
     initialOpeningQuantity,
     openingQuantity,
-    stock: openingQuantity || "0",
-    currentStock: Number(itemForm.currentStock ?? openingQuantity ?? 0),
+    openingStock: openingStockNum,
+    opening_stock: openingStockNum,
+    stock: hasValue(currentStockNum) ? String(currentStockNum) : (openingQuantity || "0"),
+    currentStock: currentStockNum,
+    current_stock: currentStockNum,
     atPrice: itemForm.atPrice || "",
     asOfDate: itemForm.asOfDate || "",
     location: itemForm.location || "",
-    minimumStock: itemForm.minimumStock || "",
+    minimumStock: minStockRaw !== "" ? String(minStockRaw) : "",
+    minStock: minStockNum,
+    min_stock: minStockNum,
     enableBatchTracking: isBatchTracked,
     batchTracking: isBatchTracked,
     batches,
