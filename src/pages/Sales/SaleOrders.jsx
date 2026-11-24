@@ -131,6 +131,10 @@ function printSaleOrderDoc(order) {
 
 const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
 
+function generateSaleOrderId() {
+  return `sale-order-${Date.now()}`;
+}
+
 export default function SaleOrders() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -461,7 +465,7 @@ export default function SaleOrders() {
         console.warn("[SaleOrders] Auto-create party notice:", partyErr?.message);
       }
     }
-    const orderId = value.id || `sale-order-${Date.now()}`;
+    const orderId = value.id || generateSaleOrderId();
     const saved = { ...value, id: orderId, amount, updatedAt: new Date().toISOString(), createdAt: value.createdAt || new Date().toISOString(), history: [...(value.history || []), { action: editor.mode === "edit" ? "Updated sale order" : "Created sale order", at: new Date().toISOString() }] };
 
     // Persist to MySQL backend FIRST with strict fail-fast validation

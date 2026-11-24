@@ -164,7 +164,7 @@ export default function PartyStatementReport() {
   // Handle clicking a transaction row to view/edit
   const handleRowClick = (txn) => {
     if (!txn) return;
-    const rawDoc = { ...(txn.raw || txn), id: txn.raw?.id || txn.id?.replace(/^[a-z\-]+:/i, "") };
+    const rawDoc = { ...(txn.raw || txn), id: txn.raw?.id || txn.id?.replace(/^[a-z-]+:/i, "") };
     const t = txn.type || txn.source;
     if (t === "Sale" || t?.toLowerCase().includes("sale")) {
       navigate("/sales/sale-invoices/new", { state: { editInvoice: rawDoc } });

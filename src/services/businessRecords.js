@@ -226,7 +226,7 @@ export async function saveBusinessSaleInvoice(value) {
   const localInvoice = saveSaleInvoice(value, { skipRemoteSync: true });
   if (!isDatabaseMode()) return localInvoice;
 
-  let saved = localInvoice;
+  let saved;
   try {
     const remote = await transactionsDb.save(localInvoice);
     saved = { ...localInvoice, ...(remote || {}) };
@@ -318,7 +318,7 @@ export async function saveBusinessPurchaseBill(value) {
 
   if (!isDatabaseMode()) return localSaved;
 
-  let saved = localSaved;
+  let saved;
   try {
     const remote = await transactionsDb.save(localSaved);
     saved = { ...localSaved, ...(remote || {}) };

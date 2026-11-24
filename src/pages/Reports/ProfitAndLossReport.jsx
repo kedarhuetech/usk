@@ -354,7 +354,7 @@ export default function ProfitAndLossReport() {
             (rowName && String(it.itemName || it.name || "").trim().toLowerCase() === rowName)
         );
 
-        let unitCost = 0;
+        let unitCost;
         if (matchedItem) {
           unitCost = Number(matchedItem.purchasePrice || matchedItem.atPrice || 0);
           if (!unitCost) {
@@ -484,7 +484,7 @@ export default function ProfitAndLossReport() {
 
   /* ── export ── */
   const handleExcel = () => {
-    let rows = [];
+    let rows;
     if (view === "Accounting") {
       rows = [
         ["Particulars", "Amount"],

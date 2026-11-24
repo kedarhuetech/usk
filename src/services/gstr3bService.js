@@ -16,12 +16,12 @@ export function parseMonthYear(val) {
   if (typeof val === "string") {
     const s = val.trim();
     // MM/YYYY or MM-YYYY
-    const m1 = s.match(/^(\d{1,2})[-\/](\d{4})$/);
+    const m1 = s.match(/^(\d{1,2})[-/](\d{4})$/);
     if (m1) {
       return { year: Number(m1[2]), month: Number(m1[1]) };
     }
     // YYYY-MM or YYYY/MM
-    const m2 = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+    const m2 = s.match(/^(\d{4})[-/](\d{1,2})$/);
     if (m2) {
       return { year: Number(m2[1]), month: Number(m2[2]) };
     }

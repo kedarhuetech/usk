@@ -76,7 +76,7 @@ function readBackupStorage(storage) {
   const redactedPaths = [];
 
   for (const source of BACKUP_SOURCES) {
-    let raw = null;
+    let raw;
     try {
       if (source.key === "ledgerly:companyProfile.v1") {
         const scopedKey = getScopedStorageKey("ledgerly:companyProfile.v1");
@@ -229,31 +229,27 @@ export function restoreBackupPayload(payload, repository = createDatabaseBackupR
   const preview = previewBackupPayload(payload);
   if (!repository || typeof repository.restore !== "function") throw new Error("A compatible restore repository is required.");
 
-  try {
-    const rawResult = repository.restore(preview.entries, payload.data, payload);
-    if (rawResult && typeof rawResult.then === "function") {
-      return rawResult.then((result) => {
-        notifyBusinessDataChanged();
-        return {
-          restoredCount: result?.totalRestoredCount ?? preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0),
-          entries: preview.entries,
-          stats: result?.stats || {},
-          replacedStores: result?.replacedStores || preview.entries.map((e) => e.category),
-          message: result?.message || `USV restore completed: ${preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0)} records restored to MySQL.`,
-        };
-      });
-    }
-    notifyBusinessDataChanged();
-    return {
-      restoredCount: rawResult?.totalRestoredCount ?? preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0),
-      entries: preview.entries,
-      stats: rawResult?.stats || {},
-      replacedStores: rawResult?.replacedStores || preview.entries.map((e) => e.category),
-      message: rawResult?.message || `USV restore completed: ${preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0)} records saved.`,
-    };
-  } catch (err) {
-    throw err;
+  const rawResult = repository.restore(preview.entries, payload.data, payload);
+  if (rawResult && typeof rawResult.then === "function") {
+    return rawResult.then((result) => {
+      notifyBusinessDataChanged();
+      return {
+        restoredCount: result?.totalRestoredCount ?? preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0),
+        entries: preview.entries,
+        stats: result?.stats || {},
+        replacedStores: result?.replacedStores || preview.entries.map((e) => e.category),
+        message: result?.message || `USV restore completed: ${preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0)} records restored to MySQL.`,
+      };
+    });
   }
+  notifyBusinessDataChanged();
+  return {
+    restoredCount: rawResult?.totalRestoredCount ?? preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0),
+    entries: preview.entries,
+    stats: rawResult?.stats || {},
+    replacedStores: rawResult?.replacedStores || preview.entries.map((e) => e.category),
+    message: rawResult?.message || `USV restore completed: ${preview.entries.reduce((sum, entry) => sum + entry.recordCount, 0)} records saved.`,
+  };
 }
 
 export function downloadBackupFile(payload, { windowRef = window, documentRef = document } = {}) {

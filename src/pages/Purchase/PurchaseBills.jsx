@@ -180,7 +180,7 @@ export default function PurchaseBills() {
     const billNum = bill.form?.invoiceNumber || bill.invoiceNumber || "—";
     const billDate = dateText(bill.form?.invoiceDate || bill.date);
 
-    let rows = [];
+    let rows;
     const sourceRows = Array.isArray(bill.items) && bill.items.length > 0
       ? bill.items
       : Array.isArray(bill.rows) && bill.rows.length > 0

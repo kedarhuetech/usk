@@ -56,7 +56,7 @@ export function createLocalStorageBackupRestoreRepository(storage = typeof windo
             // Best-effort rollback
           }
         }
-        throw new Error(`Restore failed; previous records were rolled back where possible. ${error.message}`);
+        throw new Error(`Restore failed; previous records were rolled back where possible. ${error.message}`, { cause: error });
       }
       return { totalRestoredCount: actualEntries.length, stats: {} };
     },

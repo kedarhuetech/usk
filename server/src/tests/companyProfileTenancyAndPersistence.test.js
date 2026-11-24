@@ -62,7 +62,7 @@ async function loadCompanyProfileAuthoritative(apiClientMock, localFallbackMock 
     return { data: res.data, source: "mysql" };
   } catch (err) {
     // Under strict MySQL-only persistence, database failure must NOT silently return stale localStorage as source of truth
-    throw new Error(`Database error: ${err.message}. Cannot load authoritative Company Profile.`);
+    throw new Error(`Database error: ${err.message}. Cannot load authoritative Company Profile.`, { cause: err });
   }
 }
 

@@ -223,13 +223,13 @@ export default function AllTransactionsReport() {
 
   const allRecords = useMemo(() => {
     const list = [
-      ...sales.map((r) => {
+      ...sales.map((r, idx) => {
         const settlement = calculateInvoiceSettlement(r, { kind: "sale", payments: paymentIns });
         const { total, paid: received, outstanding: balance } = settlement;
         const isCancelled = r.status === "Cancelled" || r.cancelled || r.isCancelled;
         const status = settlement.paymentStatus;
         return {
-          id: r.id || `sale-${Math.random()}`,
+          id: r.id || `sale-${r.form?.invoiceNumber || r.invoiceNumber || idx}`,
           date: parseYMD(r.form?.invoiceDate || r.invoiceDate || r.transactionDate || r.date || r.createdAt) || "",
           refNo: r.form?.invoiceNumber || r.invoiceNumber || "—",
           partyName: r.form?.customer || r.partyName || r.customer || (r.saleType === "cash" ? "Cash Sale" : "—"),
@@ -244,13 +244,13 @@ export default function AllTransactionsReport() {
           storageKey: transactionStorageKeys.sales,
         };
       }),
-      ...purchases.map((r) => {
+      ...purchases.map((r, idx) => {
         const settlement = calculateInvoiceSettlement(r, { kind: "purchase", payments: paymentOuts });
         const { total, paid: received, outstanding: balance } = settlement;
         const isCancelled = r.status === "Cancelled" || r.cancelled;
         const status = settlement.paymentStatus;
         return {
-          id: r.id || `purch-${Math.random()}`,
+          id: r.id || `purch-${r.form?.billDate || r.form?.invoiceDate || r.billDate || r.invoiceNumber || idx}`,
           date: parseYMD(r.form?.billDate || r.form?.invoiceDate || r.billDate || r.invoiceDate || r.date || r.createdAt) || "",
           refNo: r.form?.invoiceNumber || r.invoiceNumber || "—",
           partyName: r.form?.customer || r.partyName || r.supplier || "Cash Purchase",
@@ -265,10 +265,10 @@ export default function AllTransactionsReport() {
           storageKey: transactionStorageKeys.purchases,
         };
       }),
-      ...paymentIns.map((r) => {
+      ...paymentIns.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `payin-${Math.random()}`,
+          id: r.id || `payin-${r.number || r.refNo || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || r.refNo || "—",
           partyName: r.customer || r.partyName || "—",
@@ -283,10 +283,10 @@ export default function AllTransactionsReport() {
           storageKey: transactionStorageKeys.paymentIns,
         };
       }),
-      ...paymentOuts.map((r) => {
+      ...paymentOuts.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `payout-${Math.random()}`,
+          id: r.id || `payout-${r.number || r.refNo || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || r.refNo || "—",
           partyName: r.supplier || r.party || r.customer || r.partyName || "—",
@@ -301,10 +301,10 @@ export default function AllTransactionsReport() {
           storageKey: transactionStorageKeys.paymentOuts,
         };
       }),
-      ...expenses.map((r) => {
+      ...expenses.map((r, idx) => {
         const total = Number(r.amount || 0);
         return {
-          id: r.id || `exp-${Math.random()}`,
+          id: r.id || `exp-${r.expenseNo || r.number || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.expenseNo || r.number || "—",
           partyName: r.partyName || r.paidTo || "Expense",
@@ -319,11 +319,11 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:expenses.v1",
         };
       }),
-      ...saleReturns.filter((r) => !r.cancelled).map((r) => {
+      ...saleReturns.filter((r) => !r.cancelled).map((r, idx) => {
         const total = Number(r.total ?? r.totals?.finalTotal ?? 0);
         const received = Number(r.received || 0);
         return {
-          id: r.id || `sret-${Math.random()}`,
+          id: r.id || `sret-${r.number || r.returnNo || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || r.returnNo || r.invoiceNumber || "—",
           partyName: r.party || r.customer || r.partyName || "Cash Sale",
@@ -338,10 +338,10 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:saleReturns.v1",
         };
       }),
-      ...purchaseReturns.map((r) => {
+      ...purchaseReturns.map((r, idx) => {
         const total = Number(r.totals?.finalTotal ?? r.total ?? 0);
         return {
-          id: r.id || `pret-${Math.random()}`,
+          id: r.id || `pret-${r.returnNo || r.invoiceNumber || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.returnNo || r.invoiceNumber || "—",
           partyName: r.supplier || r.partyName || "Cash Purchase",
@@ -356,10 +356,10 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:purchaseReturns.v1",
         };
       }),
-      ...estimates.map((r) => {
+      ...estimates.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `est-${Math.random()}`,
+          id: r.id || `est-${r.number || r.refNo || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || r.refNo || "—",
           partyName: r.customer || r.partyName || "Cash Sale",
@@ -374,10 +374,10 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:estimateQuotations.v1",
         };
       }),
-      ...proformas.map((r) => {
+      ...proformas.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `prof-${Math.random()}`,
+          id: r.id || `prof-${r.number || r.refNo || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || r.refNo || "—",
           partyName: r.customer || r.partyName || "Cash Sale",
@@ -392,10 +392,10 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:proformaInvoices.v1",
         };
       }),
-      ...saleOrders.map((r) => {
+      ...saleOrders.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `so-${Math.random()}`,
+          id: r.id || `so-${r.number || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || "—",
           partyName: r.customer || "Cash Sale",
@@ -410,10 +410,10 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:saleOrders.v1",
         };
       }),
-      ...purchaseOrders.map((r) => {
+      ...purchaseOrders.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `po-${Math.random()}`,
+          id: r.id || `po-${r.number || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || "—",
           partyName: r.supplier || "Supplier",
@@ -428,10 +428,10 @@ export default function AllTransactionsReport() {
           storageKey: "ledgerly:purchaseOrders.v1",
         };
       }),
-      ...deliveryChallans.map((r) => {
+      ...deliveryChallans.map((r, idx) => {
         const total = Number(r.amount || r.total || 0);
         return {
-          id: r.id || `dc-${Math.random()}`,
+          id: r.id || `dc-${r.number || idx}`,
           date: r.date || r.createdAt?.slice(0, 10) || "",
           refNo: r.number || "—",
           partyName: r.party || "Customer",

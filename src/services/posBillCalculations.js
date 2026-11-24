@@ -17,9 +17,9 @@ export function calculatePosBill(draft = {}) {
     const taxRate = nonNegativeNumber(item.taxRate);
     const isInclusive = String(item.taxMode || item.saleTaxMode || "").toLowerCase() === "inclusive" || Boolean(item.inclusive);
 
-    let taxable = netLine;
-    let itemTax = 0;
-    let total = netLine;
+    let taxable;
+    let itemTax;
+    let total;
 
     if (isInclusive && taxRate > 0) {
       taxable = Math.round((netLine / (1 + taxRate / 100)) * 100) / 100;

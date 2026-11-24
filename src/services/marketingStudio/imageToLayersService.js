@@ -53,7 +53,7 @@ export async function convertImageToLayers(file) {
     });
   } catch (error) {
     if (error instanceof TypeError) {
-      throw new Error(`Cannot reach the Vyapaar backend at ${API_BASE_URL || "the same-origin /api endpoint"}. Check that the backend is running and the Vite API proxy targets the correct port.`);
+      throw new Error(`Cannot reach the Vyapaar backend at ${API_BASE_URL || "the same-origin /api endpoint"}. Check that the backend is running and the Vite API proxy targets the correct port.`, { cause: error });
     }
     throw error;
   }

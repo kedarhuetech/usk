@@ -1,3 +1,4 @@
+/* eslint-disable no-control-regex */
 // Implements the export to tally page.
 import { useEffect, useMemo, useState } from "react";
 import { FiAlertCircle, FiCheckCircle, FiDownload } from "react-icons/fi";
@@ -15,6 +16,7 @@ const transactionTypes = [
 ];
 
 // This helper handles escape logic, stripping illegal XML 1.0 control characters and escaping special entities.
+// eslint-disable-next-line no-control-regex
 const xmlEscape = (value) => String(value ?? "")
   .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
   .replace(/&/g, "&amp;")

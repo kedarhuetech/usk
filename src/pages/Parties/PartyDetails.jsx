@@ -70,7 +70,7 @@ function escapeHtml(value) {
 function formatDateDMY(dateStr) {
   if (!dateStr) return "-";
   const s = String(dateStr).trim();
-  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const dmy = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
   if (dmy) return `${dmy[1].padStart(2, "0")}/${dmy[2].padStart(2, "0")}/${dmy[3]}`;
   const ymd = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (ymd) return `${ymd[3].padStart(2, "0")}/${ymd[2].padStart(2, "0")}/${ymd[1]}`;
@@ -421,7 +421,7 @@ function PartyDetails() {
 
   const handleImportParties = async (selectedContacts) => {
     if (!selectedContacts?.length) return;
-    let existing = [];
+    let existing;
     try {
       existing = await loadBusinessParties();
     } catch {
