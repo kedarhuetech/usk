@@ -8,6 +8,7 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { restoreUsvToDatabase } from "../services/backupRestoreService.js";
 
 const router = Router();
 
@@ -125,6 +126,32 @@ router.post("/restore", async (req, res) => {
     await conn.rollback();
     console.error("[Backup Restore Error]", err);
     return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    conn.release();
+  }
+});
+
+/**
+ * POST /api/backup/restore-payload
+ * Restores a native USV backup payload (.usvbackup) atomically into MySQL
+ */
+router.post("/restore-payload", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const businessId = businessIdFromRequest(req);
+    const payload = req.body || {};
+
+    const result = await restoreUsvToDatabase(conn, businessId, payload);
+    await conn.commit();
+    return res.json(result);
+  } catch (err) {
+    await conn.rollback();
+    console.error("[Backup Restore Payload Error]", err);
+    return res.status(err.status || 500).json({
+      success: false,
+      message: err.message || "Failed to restore backup payload to database.",
+    });
   } finally {
     conn.release();
   }

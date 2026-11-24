@@ -70,6 +70,7 @@ export function setMemoryParties(list) {
   if (typeof window !== "undefined" && window.localStorage) {
     try {
       window.localStorage.setItem(getPartiesStorageKey(), JSON.stringify(memoryParties));
+      window.localStorage.setItem(PARTIES_KEY, JSON.stringify(memoryParties));
     } catch {}
   }
 }
