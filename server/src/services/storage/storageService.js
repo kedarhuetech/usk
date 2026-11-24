@@ -177,7 +177,7 @@ export class StorageService {
 
       if (cleanupErr) {
         const compositeError = new Error(
-          `Database metadata insert failed: "${dbErr.message}". Storage file cleanup also failed: "${cleanupErr.message}". Storage key: ${fileResult.storageKey}`
+          `Database metadata insert failed: "${dbErr.message}". Physical file cleanup also failed: "${cleanupErr.message}". Storage file cleanup also failed: "${cleanupErr.message}". Storage key: ${fileResult.storageKey}`
         );
         compositeError.dbError = dbErr;
         compositeError.cleanupError = cleanupErr;

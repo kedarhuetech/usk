@@ -33,16 +33,16 @@ export function businessIdFromRequest(req) {
     return String(req.user.businessId).trim();
   }
 
-  const imageRead = req.method === "GET" && /(?:^|\/)assets\/[^/]+$/.test(req.path);
+  const mediaRead = req.method === "GET" && /(?:^|\/)(?:assets|attachments)\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
   let requestedId = String(
     req.get("x-business-id") ||
-    (imageRead ? req.query.businessId : "") ||
+    (mediaRead ? (req.query.businessId || demoBusinessId) : "") ||
     ""
   ).trim();
 
-  // For GET asset image retrieval, map legacy or incorrect query param away to demo-business
-  if (imageRead && requestedId === "local-development") {
+  // For GET asset image/attachment retrieval, map legacy or incorrect query param away to demo-business
+  if (mediaRead && requestedId === "local-development") {
     requestedId = demoBusinessId;
   }
 
