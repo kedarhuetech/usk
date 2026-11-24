@@ -2,9 +2,13 @@
 import { units as defaultUnits } from "../constants/itemsData.js";
 import { unitsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 const CUSTOM_UNITS_KEY = "ledgerly:customUnits.v1";
 const UNIT_CONVERSIONS_KEY = "ledgerly:unitConversions.v1";
+
+const getCustomUnitsKey = () => getScopedStorageKey(CUSTOM_UNITS_KEY);
+const getUnitConversionsKey = () => getScopedStorageKey(UNIT_CONVERSIONS_KEY);
 
 // Reads list.
 function readList(key) {
@@ -19,16 +23,16 @@ function readList(key) {
 
 // Gets units.
 export function getUnits() {
-  return [...new Set([...defaultUnits, ...readList(CUSTOM_UNITS_KEY).map((unit) => String(unit).trim()).filter(Boolean)])];
+  return [...new Set([...defaultUnits, ...readList(getCustomUnitsKey()).map((unit) => String(unit).trim()).filter(Boolean)])];
 }
 
 // This helper handles custom unit logic.
 export function addCustomUnit(value) {
   const name = String(value || "").trim().toUpperCase();
   if (!name) return getUnits();
-  const current = readList(CUSTOM_UNITS_KEY);
+  const current = readList(getCustomUnitsKey());
   if (!getUnits().some((unit) => unit.toLowerCase() === name.toLowerCase())) {
-    window.localStorage.setItem(CUSTOM_UNITS_KEY, JSON.stringify([...current, name]));
+    window.localStorage.setItem(getCustomUnitsKey(), JSON.stringify([...current, name]));
     if (isDatabaseMode()) {
       unitsDb.save({ name, shortName: name }).catch((err) => console.warn("[MySQL] Units background sync:", err.message));
     }
@@ -38,7 +42,7 @@ export function addCustomUnit(value) {
 
 // Gets unit conversions.
 export function getUnitConversions(unit) {
-  const conversions = readList(UNIT_CONVERSIONS_KEY);
+  const conversions = readList(getUnitConversionsKey());
   return conversions.filter((conversion) => conversion.unit === unit);
 }
 
@@ -48,7 +52,7 @@ export async function fetchUnitConversionsFromDb(unit) {
     try {
       const remote = await unitsDb.listConversions(unit);
       if (Array.isArray(remote)) {
-        window.localStorage.setItem(UNIT_CONVERSIONS_KEY, JSON.stringify(remote));
+        window.localStorage.setItem(getUnitConversionsKey(), JSON.stringify(remote));
         return remote;
       }
     } catch (err) {
@@ -69,7 +73,7 @@ export async function addUnitConversion(unit, conversion) {
       throw err;
     }
   }
-  const conversions = readList(UNIT_CONVERSIONS_KEY);
-  window.localStorage.setItem(UNIT_CONVERSIONS_KEY, JSON.stringify([...conversions, entry]));
+  const conversions = readList(getUnitConversionsKey());
+  window.localStorage.setItem(getUnitConversionsKey(), JSON.stringify([...conversions, entry]));
   return entry;
 }

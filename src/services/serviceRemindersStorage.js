@@ -6,6 +6,7 @@
 import { getAppSettings, saveAppSettings } from "./appSettingsStorage.js";
 import { serviceRemindersDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 export const SERVICE_REMINDER_SETTINGS_KEY = "ledgerly:serviceReminderSettings.v1";
 export const SERVICE_REMINDER_RECORDS_KEY = "ledgerly:serviceReminderRecords.v1";
@@ -61,7 +62,7 @@ export function getReminderSettings() {
 
   if (!canUseStorage()) return fallback;
 
-  const raw = window.localStorage.getItem(SERVICE_REMINDER_SETTINGS_KEY);
+  const raw = window.localStorage.getItem(getScopedStorageKey(SERVICE_REMINDER_SETTINGS_KEY));
   if (!raw) return fallback;
 
   const parsed = safeParse(raw, fallback);
@@ -102,7 +103,7 @@ export function saveReminderSettings(patch = {}) {
 
   if (canUseStorage()) {
     try {
-      window.localStorage.setItem(SERVICE_REMINDER_SETTINGS_KEY, JSON.stringify(next));
+      window.localStorage.setItem(getScopedStorageKey(SERVICE_REMINDER_SETTINGS_KEY), JSON.stringify(next));
     } catch (err) {
       console.error("Failed to save service reminder settings to LocalStorage:", err);
     }
@@ -126,7 +127,7 @@ export function resetReminderSettings() {
   const defaults = { ...DEFAULT_SERVICE_REMINDER_SETTINGS };
   if (canUseStorage()) {
     try {
-      window.localStorage.setItem(SERVICE_REMINDER_SETTINGS_KEY, JSON.stringify(defaults));
+      window.localStorage.setItem(getScopedStorageKey(SERVICE_REMINDER_SETTINGS_KEY), JSON.stringify(defaults));
     } catch (err) {
       console.warn("Could not reset reminder settings in storage:", err);
     }
@@ -149,7 +150,7 @@ export function resetReminderSettings() {
 export function getReminderRecords() {
   if (!canUseStorage()) return [];
 
-  const raw = window.localStorage.getItem(SERVICE_REMINDER_RECORDS_KEY);
+  const raw = window.localStorage.getItem(getScopedStorageKey(SERVICE_REMINDER_RECORDS_KEY));
   if (!raw) return [];
 
   const parsed = safeParse(raw, []);
@@ -188,7 +189,7 @@ export function saveReminderRecords(records) {
 
   if (canUseStorage()) {
     try {
-      window.localStorage.setItem(SERVICE_REMINDER_RECORDS_KEY, JSON.stringify(records));
+      window.localStorage.setItem(getScopedStorageKey(SERVICE_REMINDER_RECORDS_KEY), JSON.stringify(records));
     } catch (err) {
       console.error("Failed to save reminder records to LocalStorage:", err);
     }

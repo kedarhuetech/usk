@@ -12,6 +12,9 @@ import {
   FiUser,
   FiUsers,
   FiX,
+  FiLogOut,
+  FiBriefcase,
+  FiChevronDown,
 } from "react-icons/fi";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -28,6 +31,12 @@ import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
 import { getSaleOrders, getPurchaseOrders } from "../../services/transactionRepository.js";
 import { isReportVisible } from "../../config/reportVisibility.js";
+import {
+  getAuthUser,
+  getAuthBusinessId,
+  logoutUser,
+  AUTH_CHANGED_EVENT,
+} from "../../services/authService";
 
 const navItems = ["Company", "Help"];
 const transactionRoutes = [
@@ -67,6 +76,36 @@ export default function Topbar({ onRefresh }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [settingsVersion, setSettingsVersion] = useState(0);
   const settings = useMemo(() => getAppSettings(), [settingsVersion]);
+
+  // Auth & Tenant State
+  const [authUser, setAuthUser] = useState(getAuthUser);
+  const [authBusinessId, setAuthBusinessId] = useState(getAuthBusinessId);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const userDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setAuthUser(getAuthUser());
+      setAuthBusinessId(getAuthBusinessId());
+    };
+    window.addEventListener(AUTH_CHANGED_EVENT, handleAuthChange);
+    window.addEventListener("storage", handleAuthChange);
+    return () => {
+      window.removeEventListener(AUTH_CHANGED_EVENT, handleAuthChange);
+      window.removeEventListener("storage", handleAuthChange);
+    };
+  }, []);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutsideUser = (e) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutsideUser);
+    return () => document.removeEventListener("mousedown", handleClickOutsideUser);
+  }, []);
 
   useEffect(() => {
     const bump = () => setSettingsVersion((v) => v + 1);
@@ -534,24 +573,112 @@ export default function Topbar({ onRefresh }) {
             <FiSettings className="h-4 w-4" />
           </button>
 
-          <button
-            type="button"
-            onClick={() => navigate("/company-profile")}
-            title={companyProfile?.businessName || companyProfile?.companyName || "Company Profile"}
-            aria-label="Company Profile"
-            className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#161921] border-2 border-[#FF5A1F] text-[#FF5A1F] hover:bg-[#202530] transition cursor-pointer hover:scale-105 active:scale-95 shadow-xs shrink-0"
-          >
-            {companyProfile?.logo && !logoError ? (
-              <img
-                src={companyProfile.logo}
-                alt={companyProfile?.businessName || companyProfile?.companyName || "Company Logo"}
-                onError={() => setLogoError(true)}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <FiUser className="h-4 w-4" />
+          {/* User Profile & Business Dropdown */}
+          <div className="relative" ref={userDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setUserDropdownOpen((prev) => !prev)}
+              title={authUser?.email ? `${authUser.email} (${authBusinessId || "No Tenant"})` : "User Account"}
+              aria-label="User Account Menu"
+              className="flex h-9 items-center gap-2 px-1.5 rounded-full bg-[#161921] border border-[#2B313F] hover:border-[#FF5A1F] text-slate-200 transition cursor-pointer hover:bg-[#202530] active:scale-95 shadow-xs shrink-0"
+            >
+              <div className="h-7 w-7 rounded-full overflow-hidden bg-[#FF5A1F] ring-2 ring-[#FF5A1F]/30 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                {companyProfile?.logo && !logoError ? (
+                  <img
+                    src={companyProfile.logo}
+                    alt={companyProfile?.businessName || companyProfile?.companyName || "Company Logo"}
+                    onError={() => setLogoError(true)}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{(authUser?.email?.[0] || authBusinessId?.[0] || "U").toUpperCase()}</span>
+                )}
+              </div>
+              <FiChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform ${userDropdownOpen ? "rotate-180 text-[#FF5A1F]" : ""}`} />
+            </button>
+
+            {userDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-72 rounded-xl bg-[#161921] border border-[#2B313F] shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+                {/* User Info Header with Large Clear Avatar */}
+                <div className="px-3.5 py-3 border-b border-[#2B313F]/70">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="h-12 w-12 rounded-xl overflow-hidden bg-[#11141B] border-2 border-[#FF5A1F] flex items-center justify-center shrink-0 shadow-md">
+                      {companyProfile?.logo && !logoError ? (
+                        <img
+                          src={companyProfile.logo}
+                          alt={companyProfile?.businessName || companyProfile?.companyName || "Company Logo"}
+                          onError={() => setLogoError(true)}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-lg font-black text-[#FF5A1F]">
+                          {(authUser?.email?.[0] || authBusinessId?.[0] || "U").toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-[#FF5A1F]/20 text-[#FF5A1F] border border-[#FF5A1F]/30">
+                          {authUser?.role || "Business Admin"}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-white truncate" title={authUser?.email}>
+                        {authUser?.email || "user@business.com"}
+                      </p>
+                      <p className="text-[11px] text-slate-400 font-mono truncate" title={`Tenant ID: ${authBusinessId}`}>
+                        Tenant: <strong className="text-white">{authBusinessId || "demo-business"}</strong>
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    {companyProfile?.businessName || companyProfile?.companyName || "USK Business"}
+                  </p>
+                </div>
+
+                {/* Quick Navigation Items */}
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      navigate("/company-profile");
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-200 hover:bg-[#202530] hover:text-[#FF5A1F] transition text-left cursor-pointer"
+                  >
+                    <FiBriefcase className="h-4 w-4 text-slate-400" />
+                    <span>Company Profile</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      navigate("/settings");
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-200 hover:bg-[#202530] hover:text-[#FF5A1F] transition text-left cursor-pointer"
+                  >
+                    <FiSettings className="h-4 w-4 text-slate-400" />
+                    <span>Business Settings</span>
+                  </button>
+                </div>
+
+                {/* Divider & Logout */}
+                <div className="border-t border-[#2B313F]/70 pt-1 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      logoutUser();
+                      window.location.href = "/login";
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition text-left cursor-pointer"
+                  >
+                    <FiLogOut className="h-4 w-4" />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
             )}
-          </button>
+          </div>
         </div>
       </div>
 

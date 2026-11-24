@@ -7,6 +7,8 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import googleAuthRoutes from "./routes/googleAuth.js";
+import businessAuthRoutes from "./routes/authRouter.js";
+import { optionalAuth } from "./middleware/authMiddleware.js";
 import googleDriveBackupRoutes from "./routes/googleDriveBackup.js";
 import googleBusinessRoutes from "./routes/googleBusiness.js";
 import marketingStudioRoutes from "./routes/marketingStudio.js";
@@ -61,6 +63,8 @@ const CLIENT_ORIGINS = [...(process.env.CLIENT_ORIGIN || "").split(","), ...DEFA
 
 app.use(cors({ origin: CLIENT_ORIGINS, credentials: true }));
 app.use(express.json({ limit: "35mb" }));
+app.use(optionalAuth);
+app.use("/api/auth", businessAuthRoutes);
 app.use("/api/business-growth", businessGrowthRoutes);
 app.use("/api/business-data", businessGrowthRoutes);
 app.use("/api/marketing-studio", marketingStudioRoutes);

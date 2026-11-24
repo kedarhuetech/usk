@@ -80,11 +80,14 @@ function normalizeOrder(order = {}) {
   };
 }
 
-const ONLINE_ORDERS_LOCAL_KEY = "ledgerly:onlineStoreOrders.v1";
+import { getScopedStorageKey } from "../config/businessConfig.js";
+
+const BASE_ONLINE_ORDERS_KEY = "ledgerly:onlineStoreOrders.v1";
+const getOnlineOrdersKey = () => getScopedStorageKey(BASE_ONLINE_ORDERS_KEY);
 
 function readLocalOrders() {
   try {
-    const raw = localStorage.getItem(ONLINE_ORDERS_LOCAL_KEY);
+    const raw = localStorage.getItem(getOnlineOrdersKey());
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -93,7 +96,7 @@ function readLocalOrders() {
 
 function writeLocalOrders(orders) {
   try {
-    localStorage.setItem(ONLINE_ORDERS_LOCAL_KEY, JSON.stringify(orders));
+    localStorage.setItem(getOnlineOrdersKey(), JSON.stringify(orders));
   } catch {}
 }
 

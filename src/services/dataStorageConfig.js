@@ -38,39 +38,26 @@ export function isDatabaseMode() {
 export function purgeObsoleteLocalStorage() {
   if (typeof window === "undefined" || !window.localStorage) return;
   try {
-    const keysToRemove = [
-      "ledgerly:parties.v1",
-      "ledgerly:inventoryItems.v1",
-      "ledgerly:saleInvoices.v1",
-      "ledgerly:purchaseBills.v1",
-      "ledgerly:paymentIns.v1",
-      "ledgerly:paymentOuts.v1",
-      "ledgerly:estimateQuotations.v1",
-      "ledgerly:proformaInvoices.v1",
-      "ledgerly:deliveryChallans.v1",
-      "ledgerly:expenses.v1",
-      "ledgerly:purchaseReturns.v1",
-      "ledgerly:saleReturns.v1",
-      "ledgerly:saleOrders.v1",
-      "ledgerly:purchaseOrders.v1",
-      "ledgerly:saleInvoiceUiActions.v1",
-      "ledgerly:serviceReminderRecords.v1",
-      "ledgerly:bankAccounts.v1",
-      "ledgerly:csvImportedItems.v1",
+    const legacyKeys = [
+      "pos_draft_v1",
+      "pos_saved_bills_v1",
+      "pos_open_bills_v1",
+      "pos_active_bill_id_v1",
+      "ledgerly:batchMovements.v1",
+      "ledgerly:inventoryAdjustments.v1",
     ];
-    for (const key of keysToRemove) {
+    for (const key of legacyKeys) {
       window.localStorage.removeItem(key);
     }
+
     const allKeys = Object.keys(window.localStorage);
     for (const k of allKeys) {
-      if (
-        k.startsWith("ledgerly:") &&
-        !k.includes("storageMode") &&
-        !k.includes("appSettings") &&
-        !k.includes("companyProfile") &&
-        !k.includes("theme")
-      ) {
-        window.localStorage.removeItem(k);
+      if (k.startsWith("ledgerly:") && !k.includes("storageMode")) {
+        const parts = k.split(":");
+        // Any legacy unscoped key without tenant scoping (parts <= 2) is purged
+        if (parts.length <= 2) {
+          window.localStorage.removeItem(k);
+        }
       }
     }
   } catch (e) {
