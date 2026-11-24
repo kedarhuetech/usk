@@ -827,27 +827,30 @@ html.dark .focus\:ring-blue-100:focus {
   color: #242C1D !important;
 }
 
-/* ── 2. Cards & Elevated Containers ── */
+/* ── 2. Cards & Elevated Containers (Replaced White with Warm Oatmeal #EAE2D6) ── */
 .main-content-section .bg-white,
 .main-content-section section.bg-white,
 .main-content-section div.bg-white:not(button):not(.theme-exempt),
 .main-content-section article.bg-white,
 .main-content-section .rounded-lg.bg-white,
 .main-content-section .rounded-xl.bg-white,
-.main-content-section .rounded-2xl.bg-white {
-  background-color: #FFFFFF !important;
-  border-color: #EAE2D6 !important;
+.main-content-section .rounded-2xl.bg-white,
+.main-content-section [class*="bg-white"] {
+  background-color: #EAE2D6 !important;
+  border-color: #D8CEBD !important;
   color: #242C1D !important;
 }
 
-/* Secondary Panels & Table Containers */
+/* Secondary Panels, Action Tiles & Table Containers (Soft Ash #EEEEEE) */
 .main-content-section .bg-slate-100,
 .main-content-section .bg-gray-100,
 .main-content-section .bg-slate-200\/60,
 .main-content-section .bg-slate-200,
-.main-content-section .bg-gray-200 {
-  background-color: #EAE2D6 !important;
-  border-color: #EAE2D6 !important;
+.main-content-section .bg-gray-200,
+.main-content-section .bg-slate-50\/70,
+.main-content-section .bg-slate-50\/80 {
+  background-color: #EEEEEE !important;
+  border-color: #D8CEBD !important;
 }
 
 /* ── 3. Primary CTAs & Buttons in Main Content ── */
@@ -954,11 +957,11 @@ html.dark .focus\:ring-blue-100:focus {
 }
 
 .main-content-section table tbody tr:nth-child(even):not(:hover) {
-  background-color: #FAF7F2 !important;
+  background-color: #EAE2D6 !important;
 }
 
 .main-content-section table tbody tr:nth-child(odd):not(:hover) {
-  background-color: #FFFFFF !important;
+  background-color: #F7F2EB !important;
 }
 
 .main-content-section table tbody tr:hover,

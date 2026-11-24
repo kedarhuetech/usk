@@ -192,7 +192,7 @@ export function ConfirmModal({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-150">
+      <div className="w-full max-w-sm rounded-2xl bg-[#EAE2D6] p-5 shadow-2xl border border-[#D8CEBD] text-[#242C1D] animate-in zoom-in-95 duration-150">
         <div className="flex items-start gap-3.5">
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${toneIconStyles[tone] || toneIconStyles.primary}`}
@@ -200,18 +200,18 @@ export function ConfirmModal({
             <FiAlertTriangle className="h-5 w-5" />
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-            <p className="mt-1 text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+            <h3 className="text-sm font-bold text-[#242C1D]">{title}</h3>
+            <p className="mt-1 text-xs text-[#546048] leading-relaxed whitespace-pre-line">
               {message}
             </p>
           </div>
         </div>
 
-        <div className="mt-5 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+        <div className="mt-5 flex items-center justify-end gap-2 border-t border-[#D8CEBD] pt-3">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50 transition"
+            className="rounded-lg border border-[#D8CEBD] bg-[#EEEEEE] px-3.5 py-1.5 text-xs font-semibold text-[#242C1D] shadow-xs hover:bg-[#8B9A6E]/15 transition cursor-pointer"
           >
             {cancelText}
           </button>
