@@ -79,7 +79,7 @@ export const partiesDb = {
    * Fetches all parties (for lookups and local cache refresh)
    * MySQL is the primary source of truth. Empty DB result is preserved.
    */
-  async listAll() {
+  async listAll({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/parties?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
@@ -89,6 +89,7 @@ export const partiesDb = {
       }
       return [];
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn("[MySQL] Parties fetch notice:", err.message);
       return [];
     }
@@ -168,7 +169,7 @@ export const itemsDb = {
    * Fetches all items (for POS, autocomplete, and local cache)
    * MySQL is the primary source of truth. Empty DB result is preserved.
    */
-  async listAll() {
+  async listAll({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/items?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
@@ -180,6 +181,7 @@ export const itemsDb = {
       }
       return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to scoped local cache for items:", err.message);
       return readLocal(getScopedStorageKey(INVENTORY_ITEMS_KEY), null) || readLocal(INVENTORY_ITEMS_KEY, []);
     }
@@ -289,7 +291,7 @@ export const transactionsDb = {
   /**
    * Fetches all transactions from MySQL and updates corresponding client stores
    */
-  async listAll() {
+  async listAll({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/transactions?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
@@ -326,6 +328,7 @@ export const transactionsDb = {
       }
       return [];
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn("[MySQL] Transactions fetch notice:", err.message);
       return [];
     }
@@ -686,7 +689,7 @@ export const serviceRemindersDb = {
     return apiRequest(`/service-reminders?${params.toString()}`);
   },
 
-  async listAll() {
+  async listAll({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/service-reminders?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
@@ -696,6 +699,7 @@ export const serviceRemindersDb = {
       }
       return readLocal(SERVICE_REMINDERS_KEY, []);
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to local cache for reminders:", err.message);
       return readLocal(SERVICE_REMINDERS_KEY, []);
     }
@@ -724,18 +728,36 @@ export const serviceRemindersDb = {
 // ============================================================================
 
 export const bankAccountsDb = {
-  async listAll() {
+  async listAll({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/bank-accounts");
       const list = Array.isArray(res) ? res : (res?.data || []);
-      if (Array.isArray(list) && list.length > 0) {
+      if (Array.isArray(list)) {
         writeLocal(BANK_ACCOUNTS_KEY, list);
         return list;
       }
       return readLocal(BANK_ACCOUNTS_KEY, []);
     } catch (err) {
+      if (throwOnError) throw err;
       console.warn("[MySQL] Falling back to local cache for bank accounts:", err.message);
       return readLocal(BANK_ACCOUNTS_KEY, []);
+    }
+  },
+
+  async listTransactions(accountId = "", { throwOnError = false } = {}) {
+    try {
+      const url = accountId ? `/bank-accounts/transactions?accountId=${encodeURIComponent(accountId)}` : "/bank-accounts/transactions";
+      const res = await apiRequest(url);
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:bankTransactions.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:bankTransactions.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Falling back to local cache for bank transactions:", err.message);
+      return readLocal("ledgerly:bankTransactions.v1", []);
     }
   },
 
@@ -753,7 +775,7 @@ export const bankAccountsDb = {
 // ============================================================================
 
 export const settingsDb = {
-  async getSettings() {
+  async getSettings({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/settings");
       const data = res?.data ?? res;
@@ -763,6 +785,7 @@ export const settingsDb = {
       }
       return readLocal(SETTINGS_KEY, {});
     } catch (err) {
+      if (throwOnError) throw err;
       return readLocal(SETTINGS_KEY, {});
     }
   },
@@ -778,6 +801,7 @@ export const settingsDb = {
       if (data && typeof data === "object") {
         const scopedKey = getScopedStorageKey(COMPANY_PROFILE_KEY);
         writeLocal(scopedKey, data);
+        writeLocal(COMPANY_PROFILE_KEY, data);
         if (typeof window !== "undefined") {
           try {
             window.dispatchEvent(new CustomEvent("ledgerly:company-profile-updated", { detail: data }));
@@ -853,6 +877,66 @@ export const cashBankDb = {
       body: JSON.stringify(repayment),
     });
   },
+  async syncCashInHand({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/cash-bank/cash-in-hand");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:cashAdjustments.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:cashAdjustments.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for cash in hand:", err.message);
+      return readLocal("ledgerly:cashAdjustments.v1", []);
+    }
+  },
+  async syncCheques({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/cash-bank/cheques");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("usv.cheques.v1", list);
+        const scopedKey = getScopedStorageKey("usv.cheques.v1");
+        writeLocal(scopedKey, list);
+        return list;
+      }
+      return readLocal("usv.cheques.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for cheques:", err.message);
+      return readLocal("usv.cheques.v1", []);
+    }
+  },
+  async syncLoanAccounts({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/cash-bank/loan-accounts");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        for (const loan of list) {
+          if (loan && loan.id) {
+            try {
+              const repRes = await apiRequest(`/cash-bank/loan-accounts/${encodeURIComponent(loan.id)}/repayments`);
+              loan.repayments = Array.isArray(repRes) ? repRes : (repRes?.data || []);
+            } catch (repErr) {
+              if (throwOnError) throw repErr;
+              loan.repayments = loan.repayments || [];
+            }
+          }
+        }
+        writeLocal("usv.loanAccounts.v1", list);
+        const scopedKey = getScopedStorageKey("usv.loanAccounts.v1");
+        writeLocal(scopedKey, list);
+        return list;
+      }
+      return readLocal("usv.loanAccounts.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for loan accounts:", err.message);
+      return readLocal("usv.loanAccounts.v1", []);
+    }
+  },
 };
 
 // ============================================================================
@@ -863,6 +947,21 @@ export const expenseCategoriesDb = {
   async getAll() {
     const res = await apiRequest("/expense-categories");
     return Array.isArray(res) ? res : (res?.data || []);
+  },
+  async syncCategories({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/expense-categories");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:expenseCategories.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:expenseCategories.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for expense categories:", err.message);
+      return readLocal("ledgerly:expenseCategories.v1", []);
+    }
   },
   async save(category) {
     return apiRequest("/expense-categories", {
@@ -887,6 +986,21 @@ export const expenseItemsDb = {
       return [];
     }
   },
+  async syncItems({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/expense-items");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:expenseItems.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:expenseItems.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for expense items:", err.message);
+      return readLocal("ledgerly:expenseItems.v1", []);
+    }
+  },
   async save(item) {
     return apiRequest("/expense-items", {
       method: "POST",
@@ -908,6 +1022,36 @@ export const unitsDb = {
   async listAll() {
     const res = await apiRequest("/units");
     return res?.data || [];
+  },
+  async syncUnits({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/units");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:customUnits.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:customUnits.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for units:", err.message);
+      return readLocal("ledgerly:customUnits.v1", []);
+    }
+  },
+  async syncConversions({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/units/conversions");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:unitConversions.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:unitConversions.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for unit conversions:", err.message);
+      return readLocal("ledgerly:unitConversions.v1", []);
+    }
   },
   async save(unit) {
     return apiRequest("/units", { method: "POST", body: JSON.stringify(unit) });
@@ -972,6 +1116,21 @@ export const inventoryAdjustmentsDb = {
   async listAll() {
     const res = await apiRequest("/inventory-adjustments");
     return res?.data || [];
+  },
+  async syncAdjustments({ throwOnError = false } = {}) {
+    try {
+      const res = await apiRequest("/inventory-adjustments");
+      const list = Array.isArray(res) ? res : (res?.data || []);
+      if (Array.isArray(list)) {
+        writeLocal("ledgerly:inventoryAdjustments.v1", list);
+        return list;
+      }
+      return readLocal("ledgerly:inventoryAdjustments.v1", []);
+    } catch (err) {
+      if (throwOnError) throw err;
+      console.warn("[MySQL] Sync notice for inventory adjustments:", err.message);
+      return readLocal("ledgerly:inventoryAdjustments.v1", []);
+    }
   },
   async save(adjustment) {
     return apiRequest("/inventory-adjustments", { method: "POST", body: JSON.stringify(adjustment) });
@@ -1173,29 +1332,57 @@ export async function autoMigrateLocalDataToMySQL() {
   }
 }
 
+export const SYNCHRONIZED_DATASETS = [
+  { name: "Parties", sync: () => partiesDb.listAll({ throwOnError: true }) },
+  { name: "Inventory items", sync: () => itemsDb.listAll({ throwOnError: true }) },
+  { name: "Transactions", sync: () => transactionsDb.listAll({ throwOnError: true }) },
+  { name: "Service reminders", sync: () => serviceRemindersDb.listAll({ throwOnError: true }) },
+  { name: "Bank accounts", sync: () => bankAccountsDb.listAll({ throwOnError: true }) },
+  { name: "Bank transactions", sync: () => bankAccountsDb.listTransactions("", { throwOnError: true }) },
+  { name: "Settings", sync: () => settingsDb.getSettings({ throwOnError: true }) },
+  { name: "Company profile", sync: () => settingsDb.getCompanyProfile() },
+  { name: "Cash in hand", sync: () => cashBankDb.syncCashInHand({ throwOnError: true }) },
+  { name: "Cheques", sync: () => cashBankDb.syncCheques({ throwOnError: true }) },
+  { name: "Loan accounts", sync: () => cashBankDb.syncLoanAccounts({ throwOnError: true }) },
+  { name: "Units", sync: () => unitsDb.syncUnits({ throwOnError: true }) },
+  { name: "Unit conversions", sync: () => unitsDb.syncConversions({ throwOnError: true }) },
+  { name: "Inventory adjustments", sync: () => inventoryAdjustmentsDb.syncAdjustments({ throwOnError: true }) },
+  { name: "Expense categories", sync: () => expenseCategoriesDb.syncCategories({ throwOnError: true }) },
+  { name: "Expense items", sync: () => expenseItemsDb.syncItems({ throwOnError: true }) },
+];
+
 /**
- * Actively syncs and hydrates all client stores directly from MySQL
+ * Actively syncs and hydrates all client stores directly from MySQL.
+ * Inspects all settled results and rejects if any required business-data synchronization fails.
  */
 export async function syncAllFromDatabase() {
-  if (typeof window === "undefined") return;
-  try {
-    console.log("[MySQL Live Engine] Actively fetching live collections from MySQL database...");
-    const results = await Promise.allSettled([
-      partiesDb.listAll(),
-      itemsDb.listAll(),
-      transactionsDb.listAll(),
-      serviceRemindersDb.listAll(),
-      bankAccountsDb.listAll(),
-      settingsDb.getSettings(),
-      settingsDb.getCompanyProfile(),
-    ]);
+  if (typeof window === "undefined") return [];
+  console.log("[MySQL Live Engine] Actively fetching live collections from MySQL database...");
+  const results = await Promise.allSettled(SYNCHRONIZED_DATASETS.map((ds) => ds.sync()));
 
-    console.log("[MySQL Live Engine] ✓ Synchronized fresh state from MySQL backend.");
-    notifyBusinessDataChanged();
-    return results;
-  } catch (err) {
-    console.warn("[MySQL Live Engine] Initial hydration notice:", err.message);
+  const failures = [];
+  results.forEach((res, idx) => {
+    if (res.status === "rejected") {
+      failures.push({
+        name: SYNCHRONIZED_DATASETS[idx].name,
+        reason: res.reason?.message || String(res.reason),
+      });
+    }
+  });
+
+  if (failures.length > 0) {
+    const failedNames = failures.map((f) => f.name).join(", ");
+    const errorMessage = `Database synchronization failed for: ${failedNames}. Backup creation cannot proceed with unverified or stale data.`;
+    console.error("[MySQL Live Engine] ❌", errorMessage, failures);
+    const error = new Error(errorMessage);
+    error.failedDatasets = failures.map((f) => f.name);
+    error.failures = failures;
+    throw error;
   }
+
+  console.log("[MySQL Live Engine] ✓ Synchronized fresh state from MySQL backend.");
+  notifyBusinessDataChanged();
+  return results;
 }
 
 // Auto-run migration check and live MySQL hydration on client boot

@@ -8,6 +8,7 @@ import {
   createBackupPayload,
   downloadBackupFile,
 } from "../../services/backupToComputer.js";
+import { syncAllFromDatabase } from "../../services/databaseRepository.js";
 
 function readLastBackup() {
   try {
@@ -32,6 +33,7 @@ function BackupToComputer() {
     setBusy(true);
     setStatus(null);
     try {
+      await syncAllFromDatabase();
       const payload = createBackupPayload(collectBackupData());
       const result = await downloadBackupFile(payload);
       setLastBackupAt(payload.createdAt);
@@ -65,7 +67,7 @@ function BackupToComputer() {
           <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="font-semibold text-slate-900">Create a local data backup</h2>
-              <p className="mt-1 max-w-2xl text-sm text-slate-600">The backup includes available company profile, items, parties, sales, purchases, payments, cash adjustments, cheques, and loan records. Data saved only in the backend is not included.</p>
+              <p className="mt-1 max-w-2xl text-sm text-slate-600">The backup includes your company profile, items, parties, sales, purchases, payments, cash adjustments, cheques, and loan records.</p>
               <p className="mt-3 text-sm text-slate-500">Last backup: <strong className="font-medium text-slate-700">{lastBackupAt ? formatDate(lastBackupAt) : "Not created yet"}</strong></p>
             </div>
             <Button onClick={createBackup} disabled={busy} className="shrink-0 bg-[#1A1F71] text-white hover:bg-[#14185D] disabled:cursor-wait disabled:opacity-60">
@@ -85,7 +87,7 @@ function BackupToComputer() {
 
         <Card className="flex items-start gap-3 p-5 text-sm text-slate-600">
           <FiShield className="mt-0.5 shrink-0 text-emerald-700" />
-          <p>The backup is assembled from an explicit list of USV LocalStorage repositories. Passcodes, tokens, API secrets, and backend-only bank account data are excluded. Restore is not part of this feature.</p>
+          <p>The backup is assembled from your current business records. Passcodes, tokens, API secrets, and sensitive credentials are automatically excluded for security.</p>
         </Card>
       </div>
     </main>
