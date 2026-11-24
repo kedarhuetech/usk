@@ -41,7 +41,7 @@ function QuickActions({ actions }) {
             key={action}
             type="button"
             onClick={() => handleActionClick(action)}
-            className="rounded-lg border border-[#D8CEBD] bg-[#EEEEEE] px-3 py-3 text-sm font-semibold text-[#242C1D] hover:border-[#8B9A6E] hover:bg-[#8B9A6E]/15 active:scale-98 transition cursor-pointer text-center"
+            className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 text-sm font-semibold text-slate-700 hover:border-[#FF5A1F] hover:bg-[#FF5A1F]/10 hover:text-[#FF5A1F] dark:border-slate-700 dark:bg-[#1A1E27] dark:text-slate-200 dark:hover:border-[#FF5A1F] active:scale-98 transition cursor-pointer text-center"
           >
             {action}
           </button>

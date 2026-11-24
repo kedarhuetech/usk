@@ -804,16 +804,14 @@ html.dark .focus\:ring-blue-100:focus {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════ */
-/*       MAIN SECTIONS PALETTE: SAGE OLIVE, WARM CREAM, OATMEAL & ASH         */
-/*       Palette: #8B9A6E | #F7F2EB | #EAE2D6 | #EEEEEE                       */
+/*       OPTION 2: UNIFIED MODERN LIGHT THEME (STRIPE / LINEAR SAAS)           */
+/*       Canvas: #F8FAFC | Cards: #FFFFFF | Borders: #E2E8F0 | Accent: #FF5A1F */
 /* ══════════════════════════════════════════════════════════════════════════ */
 
 /* ── 1. Page Backgrounds & Canvas ── */
 .main-content-section,
 .main-content-section .bg-slate-50,
 .main-content-section .bg-gray-50,
-.main-content-section .bg-slate-100,
-.main-content-section .bg-gray-100,
 .main-content-section .min-h-full.bg-slate-100,
 .main-content-section .min-h-screen.bg-slate-50,
 .main-content-section .bg-\[\#f8f9fc\],
@@ -823,37 +821,32 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .bg-\[\#fbfcfd\],
 .main-content-section .bg-\[\#e8edf5\],
 .main-content-section .bg-\[\#eaf0f6\] {
-  background-color: #F7F2EB !important;
-  color: #242C1D !important;
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
 }
 
-/* ── 2. Cards & Elevated Containers (Replaced White with Warm Oatmeal #EAE2D6) ── */
+/* ── 2. Cards & Elevated Containers ── */
 .main-content-section .bg-white,
 .main-content-section section.bg-white,
 .main-content-section div.bg-white:not(button):not(.theme-exempt),
 .main-content-section article.bg-white,
 .main-content-section .rounded-lg.bg-white,
 .main-content-section .rounded-xl.bg-white,
-.main-content-section .rounded-2xl.bg-white,
-.main-content-section [class*="bg-white"] {
-  background-color: #EAE2D6 !important;
-  border-color: #D8CEBD !important;
-  color: #242C1D !important;
+.main-content-section .rounded-2xl.bg-white {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
 }
 
-/* Secondary Panels, Action Tiles & Table Containers (Soft Ash #EEEEEE) */
+/* Secondary Panels, Filter Strips & Side Columns */
 .main-content-section .bg-slate-100,
 .main-content-section .bg-gray-100,
-.main-content-section .bg-slate-200\/60,
-.main-content-section .bg-slate-200,
-.main-content-section .bg-gray-200,
-.main-content-section .bg-slate-50\/70,
-.main-content-section .bg-slate-50\/80 {
-  background-color: #EEEEEE !important;
-  border-color: #D8CEBD !important;
+.main-content-section .bg-slate-200\/60 {
+  background-color: #F1F5F9 !important;
+  border-color: #E2E8F0 !important;
 }
 
-/* ── 3. Primary CTAs & Buttons in Main Content ── */
+/* ── 3. Primary CTAs & Buttons (Bold Orange & Charcoal Cohesive) ── */
 .main-content-section button.bg-blue-600,
 .main-content-section a.bg-blue-600,
 .main-content-section .bg-blue-600:not(.theme-exempt),
@@ -863,10 +856,10 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section button.bg-\[\#27308f\],
 .main-content-section button.bg-indigo-600,
 .main-content-section .bg-indigo-600:not(.theme-exempt) {
-  background-color: #8B9A6E !important;
+  background-color: #FF5A1F !important;
   color: #FFFFFF !important;
-  border-color: #8B9A6E !important;
-  box-shadow: 0 2px 8px rgba(139, 154, 110, 0.35) !important;
+  border-color: #FF5A1F !important;
+  box-shadow: 0 2px 8px rgba(255, 90, 31, 0.28) !important;
   transition: all 0.15s ease-in-out !important;
 }
 
@@ -877,29 +870,29 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section button.bg-\[\#1A1F71\]:hover,
 .main-content-section button.bg-\[\#27308F\]:hover,
 .main-content-section button.bg-indigo-600:hover {
-  background-color: #7A895F !important;
-  box-shadow: 0 4px 14px rgba(139, 154, 110, 0.45) !important;
+  background-color: #E84E0F !important;
+  box-shadow: 0 4px 14px rgba(255, 90, 31, 0.38) !important;
 }
 
 .main-content-section button.bg-blue-600:active,
 .main-content-section a.bg-blue-600:active {
-  background-color: #6C7A53 !important;
+  background-color: #D4430B !important;
 }
 
 /* Secondary outline buttons */
 .main-content-section .hover\:border-blue-500:hover,
 .main-content-section .hover\:border-blue-600:hover,
 .main-content-section .border-blue-600 {
-  border-color: #8B9A6E !important;
+  border-color: #FF5A1F !important;
 }
 
 /* ── 4. Form Inputs, Selects & Textareas ── */
 .main-content-section input:not([type="checkbox"]):not([type="radio"]),
 .main-content-section select,
 .main-content-section textarea {
-  background-color: #EEEEEE !important;
-  border-color: #EAE2D6 !important;
-  color: #242C1D !important;
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
 }
 
 .main-content-section input:focus,
@@ -909,78 +902,78 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .focus\:border-blue-500:focus,
 .main-content-section .focus\:border-blue-600:focus,
 .main-content-section .focus\:border-blue-400:focus {
-  border-color: #8B9A6E !important;
+  border-color: #FF5A1F !important;
   outline: none !important;
-  box-shadow: 0 0 0 2px rgba(139, 154, 110, 0.25) !important;
+  box-shadow: 0 0 0 2px rgba(255, 90, 31, 0.20) !important;
 }
 
 .main-content-section input::placeholder,
 .main-content-section textarea::placeholder {
-  color: #8C9881 !important;
+  color: #94A3B8 !important;
 }
 
 .main-content-section input[type="checkbox"],
 .main-content-section input[type="radio"],
 .main-content-section .accent-blue-600 {
-  accent-color: #8B9A6E !important;
+  accent-color: #FF5A1F !important;
 }
 
 /* ── 5. Active Tabs & Highlights ── */
 .main-content-section .border-b-2.border-blue-600,
 .main-content-section .border-blue-600:not(table) {
-  border-color: #8B9A6E !important;
+  border-color: #FF5A1F !important;
 }
 
 .main-content-section .text-blue-600:not(.theme-exempt),
 .main-content-section .hover\:text-blue-600:hover,
 .main-content-section .hover\:text-blue-700:hover {
-  color: #8B9A6E !important;
+  color: #FF5A1F !important;
 }
 
 /* ── 6. Tables & Headers ── */
 .main-content-section table {
-  color: #242C1D !important;
+  color: #0F172A !important;
 }
 
 .main-content-section table thead,
 .main-content-section table thead tr,
 .main-content-section table thead th {
-  background-color: #EAE2D6 !important;
-  color: #242C1D !important;
-  border-color: #DCD3C5 !important;
+  background-color: #F8FAFC !important;
+  color: #334155 !important;
+  border-color: #E2E8F0 !important;
   font-weight: 600 !important;
 }
 
 .main-content-section table tbody tr td {
-  border-color: #EAE2D6 !important;
-  color: #242C1D !important;
+  border-color: #E2E8F0 !important;
+  color: #0F172A !important;
 }
 
 .main-content-section table tbody tr:nth-child(even):not(:hover) {
-  background-color: #EAE2D6 !important;
+  background-color: #F8FAFC !important;
 }
 
 .main-content-section table tbody tr:nth-child(odd):not(:hover) {
-  background-color: #F7F2EB !important;
+  background-color: #FFFFFF !important;
 }
 
 .main-content-section table tbody tr:hover,
 .main-content-section .hover\:bg-slate-50:hover,
 .main-content-section .hover\:bg-gray-50:hover,
 .main-content-section .hover\:bg-blue-50:hover {
-  background-color: #EEEEEE !important;
+  background-color: rgba(255, 90, 31, 0.06) !important;
 }
 
 /* ── 7. Subtle Row Tints & Badges ── */
 .main-content-section .bg-blue-50:not(.theme-exempt),
 .main-content-section .bg-sky-50:not(.theme-exempt) {
-  background-color: rgba(139, 154, 110, 0.12) !important;
-  color: #242C1D !important;
+  background-color: rgba(255, 90, 31, 0.08) !important;
+  color: #C2410C !important;
 }
 
 .main-content-section .bg-blue-100:not(.theme-exempt) {
-  background-color: rgba(139, 154, 110, 0.20) !important;
-  color: #435132 !important;
+  background-color: rgba(255, 90, 31, 0.16) !important;
+  color: #9A3412 !important;
 }
 
 /* ── 8. Borders & Dividers ── */
@@ -991,7 +984,7 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .border-gray-200,
 .main-content-section .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
 .main-content-section .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #EAE2D6 !important;
+  border-color: #E2E8F0 !important;
 }
 
 /* ── 9. Text Readability & Contrast ── */
@@ -1000,18 +993,18 @@ html.dark .focus\:ring-blue-100:focus {
 .main-content-section .text-slate-800,
 .main-content-section .text-gray-900,
 .main-content-section .text-black {
-  color: #242C1D !important;
+  color: #0F172A !important;
 }
 
 .main-content-section .text-slate-700,
 .main-content-section .text-slate-600,
 .main-content-section .text-gray-700 {
-  color: #4B5740 !important;
+  color: #334155 !important;
 }
 
 .main-content-section .text-slate-500,
 .main-content-section .text-slate-400 {
-  color: #6D7A62 !important;
+  color: #64748B !important;
 }
 
 /* ── 10. Scrollbars inside Main Section ── */
@@ -1020,14 +1013,14 @@ html.dark .focus\:ring-blue-100:focus {
   height: 7px;
 }
 .main-content-section::-webkit-scrollbar-track {
-  background: #F7F2EB;
+  background: #F8FAFC;
 }
 .main-content-section::-webkit-scrollbar-thumb {
-  background: #D8CEBE;
+  background: #CBD5E1;
   border-radius: 4px;
 }
 .main-content-section::-webkit-scrollbar-thumb:hover {
-  background: #8B9A6E;
+  background: #94A3B8;
 }
 
 /* ── Additional hex backgrounds found in page scan ── */
