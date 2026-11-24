@@ -49,10 +49,22 @@ function normalizeExpense(item) {
   };
 }
 
+function extractName(val) {
+  if (typeof val === "string") return val.trim();
+  if (val && typeof val === "object") {
+    return String(val.categoryName || val.name || val.item || val.title || "").trim();
+  }
+  return "";
+}
+
 function read(key, fallback) {
   try {
     const data = JSON.parse(localStorage.getItem(key) || "null");
     if (key === RECORDS_KEY && Array.isArray(data)) return data.map(normalizeExpense);
+    if (key === CATEGORIES_KEY && Array.isArray(data)) {
+      const normalized = data.map(extractName).filter(Boolean);
+      return normalized.length > 0 ? normalized : fallback;
+    }
     return data ?? fallback;
   } catch {
     return fallback;
@@ -160,18 +172,47 @@ export default function Expenses() {
   const saveRecords = (next) => { setRecords(next); localStorage.setItem(RECORDS_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
   const saveCategories = (next) => { setCategories(next); localStorage.setItem(CATEGORIES_KEY, JSON.stringify(next)); notifyBusinessDataChanged(); };
   const startNew = () => setEditor({ mode: "new", entry: blankEntry(records.length + 1) });
-  const entriesFor = (name) => records.filter(record => tab === "Category" ? record.category === name : record.rows.some(row => row.item === name));
+  const entriesFor = (name) => {
+    const target = String(name || "").trim().toLowerCase();
+    return records.filter(record => {
+      if (tab === "Category") {
+        return String(record.category || "").trim().toLowerCase() === target;
+      }
+      return (record.rows || []).some(row => String(row.item || "").trim().toLowerCase() === target);
+    });
+  };
   const items = useMemo(() => {
     const set = new Set();
-    records.forEach(rec => (rec.rows || []).forEach(r => { if (r.item?.trim()) set.add(r.item.trim()); }));
-    expenseItems.forEach(exp => { if (exp.item?.trim()) set.add(exp.item.trim()); });
+    records.forEach(rec => (rec.rows || []).forEach(r => {
+      const itemStr = extractName(r.item);
+      if (itemStr) set.add(itemStr);
+    }));
+    expenseItems.forEach(exp => {
+      const itemStr = extractName(exp.item);
+      if (itemStr) set.add(itemStr);
+    });
     return [...set];
   }, [records, expenseItems]);
-  const names = tab === "Category" ? categories : items;
-  const shownNames = names.filter(name => name.toLowerCase().includes(leftSearch.toLowerCase()));
+  const names = useMemo(() => {
+    const raw = tab === "Category" ? categories : items;
+    if (!Array.isArray(raw)) return [];
+    return raw.map(extractName).filter(Boolean);
+  }, [tab, categories, items]);
+  const shownNames = useMemo(() => {
+    const q = String(leftSearch || "").trim().toLowerCase();
+    if (!q) return names;
+    return names.filter(name => String(name || "").toLowerCase().includes(q));
+  }, [names, leftSearch]);
   const activeName = selected || shownNames[0] || "";
   const selectedRecords = entriesFor(activeName);
-  const visible = selectedRecords.filter(record => (!dateFrom || record.date >= dateFrom) && (!dateTo || record.date <= dateTo) && `${record.number} ${record.category} ${record.party} ${record.rows.map(row => row.item).join(" ")}`.toLowerCase().includes(search.toLowerCase()));
+  const visible = selectedRecords.filter(record => {
+    if (dateFrom && record.date < dateFrom) return false;
+    if (dateTo && record.date > dateTo) return false;
+    const q = String(search || "").trim().toLowerCase();
+    if (!q) return true;
+    const rowsText = (record.rows || []).map(row => row.item || "").join(" ");
+    return `${record.number || ""} ${record.category || ""} ${record.party || ""} ${rowsText}`.toLowerCase().includes(q);
+  });
 
   const availableExpenseItems = useMemo(() => {
     const map = new Map();
@@ -179,7 +220,7 @@ export default function Expenses() {
     // 1. All items from historical expense transactions in this business
     for (const rec of (records || [])) {
       for (const row of (rec.rows || [])) {
-        const name = (row.item || row.name || row.itemName || "").trim();
+        const name = String(row.item || row.name || row.itemName || "").trim();
         if (!name) continue;
         const lower = name.toLowerCase();
         map.set(lower, {
@@ -195,7 +236,7 @@ export default function Expenses() {
 
     // 2. Dedicated Expense Items from MySQL expense_items and localStorage
     for (const exp of (expenseItems || [])) {
-      const name = (exp.item || exp.name || exp.itemName || "").trim();
+      const name = String(exp.item || exp.name || exp.itemName || "").trim();
       if (!name) continue;
       const lower = name.toLowerCase();
       const existing = map.get(lower);
@@ -216,16 +257,21 @@ export default function Expenses() {
     const query = itemSearch.trim().toLowerCase();
     if (!query) return availableExpenseItems;
     return availableExpenseItems.filter(item =>
-      item.item.toLowerCase().includes(query) ||
-      (item.category && item.category.toLowerCase().includes(query)) ||
+      String(item.item || "").toLowerCase().includes(query) ||
+      (item.category && String(item.category).toLowerCase().includes(query)) ||
       (item.hsn && String(item.hsn).toLowerCase().includes(query)) ||
-      (item.description && item.description.toLowerCase().includes(query))
+      (item.description && String(item.description).toLowerCase().includes(query))
     );
   }, [availableExpenseItems, itemSearch]);
   const summary = useMemo(() => {
-    const selectedRecords = records.filter(record => tab === "Category" ? record.category === activeName : record.rows.some(row => row.item === activeName));
-    return selectedRecords.reduce((acc, record) => {
-      const total = Number(record.amount ?? record.rows.reduce((sum, row) => sum + rowAmount(row, record.gst), 0));
+    const target = String(activeName || "").trim().toLowerCase();
+    const sel = records.filter(record =>
+      tab === "Category"
+        ? String(record.category || "").trim().toLowerCase() === target
+        : (record.rows || []).some(row => String(row.item || "").trim().toLowerCase() === target)
+    );
+    return sel.reduce((acc, record) => {
+      const total = Number(record.amount ?? (record.rows || []).reduce((sum, row) => sum + rowAmount(row, record.gst), 0));
       const enteredPayments = (record.payments || []).reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
       const paid = Number(record.paid ?? (enteredPayments || (record.status === "Paid" ? total : 0)));
       acc.total += total;
@@ -262,7 +308,7 @@ export default function Expenses() {
           const catRes = await expenseCategoriesDb.getAll();
           const list = Array.isArray(catRes) ? catRes : (catRes?.data || []);
           if (isMounted && list.length > 0) {
-            const catNames = list.map((c) => c.categoryName || c.name).filter(Boolean);
+            const catNames = list.map(extractName).filter(Boolean);
             if (catNames.length > 0) {
               setCategories(catNames);
               localStorage.setItem(CATEGORIES_KEY, JSON.stringify(catNames));
@@ -278,9 +324,12 @@ export default function Expenses() {
         const list = await expenseItemsDb.getAll();
         if (isMounted && Array.isArray(list) && list.length > 0) {
           setExpenseItems(prev => {
-            const map = new Map((prev || []).map(i => [i.item.toLowerCase(), i]));
+            const map = new Map((prev || []).map(i => [String(i?.item || "").toLowerCase(), i]));
             for (const item of list) {
-              map.set(item.item.toLowerCase(), item);
+              const name = String(item?.item || item?.name || item?.itemName || "").trim();
+              if (name) {
+                map.set(name.toLowerCase(), { ...item, item: name });
+              }
             }
             const combined = Array.from(map.values());
             localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(combined));
@@ -407,10 +456,11 @@ export default function Expenses() {
         category: clean.category || "Expenses",
       }));
       setExpenseItems(prev => {
-        const map = new Map((prev || []).map(i => [i.item.toLowerCase(), i]));
+        const map = new Map((prev || []).map(i => [String(i?.item || "").toLowerCase(), i]));
         for (const ni of newItemsToStore) {
-          if (!map.has(ni.item.toLowerCase())) {
-            map.set(ni.item.toLowerCase(), ni);
+          const key = String(ni.item || "").toLowerCase();
+          if (key && !map.has(key)) {
+            map.set(key, ni);
           }
         }
         const combined = Array.from(map.values());
@@ -454,7 +504,7 @@ export default function Expenses() {
     if (!draft?.item.trim()) { toast.error("Enter an item name first."); return; }
     const updatedRow = { ...currentRows.find(row => row.id === itemModal.rowId), ...draft };
     setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, ...draft } : row) } }));
-    const nextItems = [updatedRow, ...expenseItems.filter(item => item.item.toLowerCase() !== updatedRow.item.toLowerCase())];
+    const nextItems = [updatedRow, ...expenseItems.filter(item => String(item?.item || "").toLowerCase() !== String(updatedRow.item || "").toLowerCase())];
     setExpenseItems(nextItems);
     localStorage.setItem(EXPENSE_ITEMS_KEY, JSON.stringify(nextItems));
 
@@ -480,11 +530,11 @@ export default function Expenses() {
   const addCategory = async () => {
     const name = categoryName.trim();
     if (!name) return;
-    if (categories.some(value => value.toLowerCase() === name.toLowerCase())) {
+    if (categories.some(value => extractName(value).toLowerCase() === name.toLowerCase())) {
       toast.error("This category already exists.");
       return;
     }
-    const updated = [...categories, name];
+    const updated = [...categories.map(extractName).filter(Boolean), name];
     saveCategories(updated);
     if (isDatabaseMode()) {
       try {
@@ -509,7 +559,7 @@ export default function Expenses() {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5"><Card className="flex min-h-[118px] items-center justify-between px-5 py-4 shadow-md"><div><h2 className="text-lg font-bold uppercase">{activeName || tab}</h2><p className="mt-2 text-sm text-slate-500">{tab === "Category" ? "Expense Category" : "Expense Items"}</p></div><div className="space-y-2 text-right"><p>Total: <span className="text-rose-500">{money(summary.total)}</span></p><p>Balance: <span className="text-rose-500">{money(summary.balance)}</span></p></div></Card><Card className="flex min-h-0 flex-1 flex-col overflow-hidden"><div className="flex min-h-[86px] items-center justify-between gap-4 px-4"><div className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search expenses" className="h-11 w-64 rounded border border-slate-300 pl-10 pr-3 outline-none focus:border-blue-500"/></div><h2 className="mr-auto text-lg font-semibold">Transactions</h2><div className="flex gap-2"><label className="flex items-center gap-2 text-sm text-slate-500">From <input type="date" value={dateFrom} onChange={event => setDateFrom(event.target.value)} className="rounded border px-2 py-2"/></label><label className="flex items-center gap-2 text-sm text-slate-500">To <input type="date" value={dateTo} onChange={event => setDateTo(event.target.value)} className="rounded border px-2 py-2"/></label></div></div>{visible.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[850px] border-collapse text-left text-sm"><thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold uppercase text-slate-500"><tr>{["Date", "Exp No.", "Party", "Payment Type", "Amount", "Balance", "Status", "Actions"].map(name => <th key={name} className="border-y border-slate-200 px-3 py-4">{name}{name !== "Actions" && <FiFilter className="ml-2 inline"/>}</th>)}</tr></thead><tbody>{visible.map(entry => <tr key={entry.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white"><td className="px-3 py-4">{fmtDate(entry.date)}</td><td className="px-3 py-4">{entry.number}</td><td className="px-3 py-4">{entry.party || "—"}</td><td className="px-3 py-4">{entry.payments.map(payment => payment.type).join(", ")}</td><td className="px-3 py-4">{money(entry.amount)}</td><td className="px-3 py-4">{money(Math.max(0, entry.amount - entry.paid))}</td><td className={`px-3 py-4 ${entry.status === "Paid" ? "text-emerald-600" : "text-rose-500"}`}>{entry.status}</td><td className="relative px-3 py-3"><button aria-label="Expense actions" aria-expanded={menuId === entry.id} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); const menuHeight = 340; const spaceBelow = window.innerHeight - rect.bottom; const spaceAbove = rect.top; const shouldFlipUp = spaceBelow < menuHeight + 16 && spaceAbove > spaceBelow; setMenuPosition({ ...(shouldFlipUp ? { bottom: Math.max(8, window.innerHeight - rect.top + 4), maxHeight: Math.min(560, Math.max(100, spaceAbove - 16)) } : { top: Math.max(8, rect.bottom + 4), maxHeight: Math.min(560, Math.max(100, spaceBelow - 16)) }), right: Math.max(8, window.innerWidth - rect.right) }); setMenuId(menuId === entry.id ? "" : entry.id); }}><FiMoreVertical className="h-5 w-5"/></button>{menuId === entry.id && <><div className="fixed inset-0 z-[90] cursor-default bg-transparent" onClick={() => setMenuId("")} /><div style={{ ...(menuPosition.bottom != null ? { bottom: menuPosition.bottom } : { top: menuPosition.top }), right: menuPosition.right, maxHeight: menuPosition.maxHeight }} className="fixed z-[100] w-48 overflow-y-auto rounded-lg bg-white p-1 shadow-xl ring-1 ring-slate-200">{["View/Edit", "Payment History", "Delete", "Open PDF", "Preview", "Print", "View History"].map(action => <button key={action} onClick={() => { setMenuId(""); if (action === "View/Edit") editEntry(entry); else if (action === "Delete") remove(entry); else if (action === "Payment History" || action === "View History") setHistoryEntry(entry); else { setPreviewEntry(entry); if (action === "Print") setTimeout(() => window.print(), 250); } }} className={`block w-full rounded px-3 py-2.5 text-left hover:bg-blue-50 ${action === "Delete" ? "text-rose-600" : ""}`}>{action}</button>)}</div></>}</td></tr>)}</tbody></table></div> : <div className="flex min-h-0 flex-1 items-center justify-center text-slate-400">No transactions to show</div>}</Card></div>
     </section>}
 
-    {editor && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-3"><div className="flex h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"><div className="flex h-12 items-center gap-2 bg-slate-100 px-5"><span className="rounded-t bg-white px-5 py-3">Expense #{editor.entry.number}</span><div className="ml-auto flex items-center gap-2"><button type="button" title="Settings" aria-label="Settings" onClick={() => navigate("/settings?tab=transaction")} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition cursor-pointer"><FiSettings className="h-5 w-5"/></button><button type="button" onClick={() => setEditor(null)} title="Close" aria-label="Close" className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition cursor-pointer"><FiX className="h-5 w-5"/></button></div></div><div className="flex min-h-[70px] items-center justify-between border-b px-8"><div className="flex items-center gap-4"><h2 className="text-2xl font-bold">Expense</h2><label className="flex items-center gap-2 font-medium">GST<input type="checkbox" checked={editor.entry.gst} onChange={event => updateEntry("gst", event.target.checked)} className="h-5 w-5 accent-blue-500"/></label></div><span className="text-slate-400">Expense</span></div><div className="min-h-0 flex-1 overflow-auto bg-[#f4f4f4]"><div className="grid min-h-[345px] grid-cols-[1fr_420px] gap-8 px-8 py-7"><div className="space-y-4"><label className="relative block max-w-[345px]"><span className="absolute -top-2 left-4 bg-[#f4f4f4] px-1 text-sm text-blue-500">Expense Category*</span><select value={editor.entry.category} onChange={event => updateEntry("category", event.target.value)} className="h-14 w-full rounded-md border border-slate-300 bg-transparent px-4 outline-none focus:border-blue-500"><option value="">Select category</option>{categories.map(category => <option key={category}>{category}</option>)}</select></label><button onClick={() => setCategoryModal(true)} className="ml-4 text-blue-500"><FiPlus className="mr-1 inline"/>Add Expense Category</button>{editor.entry.gst && <div className="grid max-w-[720px] grid-cols-2 gap-4"><input value={editor.entry.party} onChange={event => updateEntry("party", event.target.value)} placeholder="Search by Name/Phone" className="h-14 rounded-md border bg-transparent px-4"/><select className="h-14 rounded-md border bg-transparent px-4"><option>State of supply</option>{["Maharashtra", "Karnataka", "Gujarat", "Delhi", "Other"].map(state => <option key={state}>{state}</option>)}</select></div>}</div><div className="space-y-5 pt-4"><label className="flex items-center justify-between gap-4"><span>Expense No</span><input value={editor.entry.number} onChange={event => updateEntry("number", event.target.value)} className="w-44 border-b bg-transparent px-2 py-2"/></label><label className="flex items-center justify-between gap-4"><span>Date</span><input type="date" value={editor.entry.date} onChange={event => updateEntry("date", event.target.value)} className="w-44 bg-transparent px-2 py-2"/></label></div></div>
+    {editor && <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-3"><div className="flex h-[94vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"><div className="flex h-12 items-center gap-2 bg-slate-100 px-5"><span className="rounded-t bg-white px-5 py-3">Expense #{editor.entry.number}</span><div className="ml-auto flex items-center gap-2"><button type="button" title="Settings" aria-label="Settings" onClick={() => navigate("/settings?tab=transaction")} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition cursor-pointer"><FiSettings className="h-5 w-5"/></button><button type="button" onClick={() => setEditor(null)} title="Close" aria-label="Close" className="rounded-md p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition cursor-pointer"><FiX className="h-5 w-5"/></button></div></div><div className="flex min-h-[70px] items-center justify-between border-b px-8"><div className="flex items-center gap-4"><h2 className="text-2xl font-bold">Expense</h2><label className="flex items-center gap-2 font-medium">GST<input type="checkbox" checked={editor.entry.gst} onChange={event => updateEntry("gst", event.target.checked)} className="h-5 w-5 accent-blue-500"/></label></div><span className="text-slate-400">Expense</span></div><div className="min-h-0 flex-1 overflow-auto bg-[#f4f4f4]"><div className="grid min-h-[345px] grid-cols-[1fr_420px] gap-8 px-8 py-7"><div className="space-y-4"><label className="relative block max-w-[345px]"><span className="absolute -top-2 left-4 bg-[#f4f4f4] px-1 text-sm text-blue-500">Expense Category*</span><select value={editor.entry.category} onChange={event => updateEntry("category", event.target.value)} className="h-14 w-full rounded-md border border-slate-300 bg-transparent px-4 outline-none focus:border-blue-500"><option value="">Select category</option>{categories.map((category, idx) => { const cName = extractName(category); return <option key={cName || idx} value={cName}>{cName}</option>; })}</select></label><button onClick={() => setCategoryModal(true)} className="ml-4 text-blue-500"><FiPlus className="mr-1 inline"/>Add Expense Category</button>{editor.entry.gst && <div className="grid max-w-[720px] grid-cols-2 gap-4"><input value={editor.entry.party} onChange={event => updateEntry("party", event.target.value)} placeholder="Search by Name/Phone" className="h-14 rounded-md border bg-transparent px-4"/><select className="h-14 rounded-md border bg-transparent px-4"><option>State of supply</option>{["Maharashtra", "Karnataka", "Gujarat", "Delhi", "Other"].map(state => <option key={state}>{state}</option>)}</select></div>}</div><div className="space-y-5 pt-4"><label className="flex items-center justify-between gap-4"><span>Expense No</span><input value={editor.entry.number} onChange={event => updateEntry("number", event.target.value)} className="w-44 border-b bg-transparent px-2 py-2"/></label><label className="flex items-center justify-between gap-4"><span>Date</span><input type="date" value={editor.entry.date} onChange={event => updateEntry("date", event.target.value)} className="w-44 bg-transparent px-2 py-2"/></label></div></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[1100px] border-collapse bg-white text-sm"><thead className="text-slate-700"><tr>{["#", "Item", "Description", "Qty", "Price/Unit", ...(editor.entry.gst ? ["Discount %", "Tax %"] : ["Tax %"]), "Amount"].map(label => <th key={label} className="border border-slate-300 px-3 py-3 text-left uppercase">{label}</th>)}</tr></thead><tbody>{currentRows.map((row, index) => <tr key={row.id} className={index % 2 ? "bg-slate-50" : "bg-slate-100"}><td className="border px-3 py-4 text-center">{index + 1}</td><td className="border p-1"><button type="button" onClick={() => { setItemSearch(""); setItemModal({ mode: "picker", rowId: row.id, draft: { item: row.item, hsn: row.hsn || "", description: row.description, price: row.price, tax: row.tax || "" } }); }} className="min-h-11 w-full px-3 py-2 text-left outline-none hover:bg-blue-50">{row.item || <span className="text-slate-400">Select or add item</span>}</button></td><td className="border p-1"><input value={row.description} onChange={event => updateRow(row.id, "description", event.target.value)} className="w-full bg-transparent p-3 outline-none"/></td><td className="border p-1"><input type="number" min="0" value={row.qty} onChange={event => updateRow(row.id, "qty", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td><td className="border p-1"><input type="number" min="0" value={row.price} onChange={event => updateRow(row.id, "price", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td>{editor.entry.gst && <td className="border p-1"><input type="number" min="0" value={row.discount} onChange={event => updateRow(row.id, "discount", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td>}<td className="border p-1"><input type="number" min="0" value={row.tax} onChange={event => updateRow(row.id, "tax", event.target.value)} className="w-full bg-transparent p-3 text-center outline-none"/></td><td className="border px-4 py-3 text-right">{money(rowAmount(row, editor.entry.gst))}</td></tr>)}</tbody><tfoot><tr><td colSpan={3} className="border p-2"><Button onClick={() => updateEntry("rows", [...currentRows, makeRow()])} className="border border-blue-400 px-4 text-blue-500">ADD ROW</Button></td><td className="border px-3 py-3 text-right font-semibold">TOTAL</td><td className="border px-3 py-3 text-center font-semibold">{currentRows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0)}</td><td colSpan={editor.entry.gst ? 2 : 1} className="border"/><td className="border px-4 py-3 text-right font-semibold">{money(total)}</td></tr></tfoot></table></div>
       <div className="grid grid-cols-[1fr_1fr] gap-8 px-8 py-8"><div><div className="max-w-[620px] rounded border border-slate-200 bg-white/50 p-5"><div className="grid grid-cols-1 gap-4">{editor.entry.payments.map(payment => <div key={payment.id}><label className="relative block"><span className="absolute -top-2 left-3 bg-[#f4f4f4] px-1 text-slate-500">Payment Type</span><select value={payment.type} onChange={event => updatePayment(payment.id, "type", event.target.value)} className="h-14 w-full rounded border border-slate-300 bg-transparent px-3"><option>Cash</option><option>Cheque</option><option>Bank Transfer</option><option>UPI</option><option>Card</option></select></label>{["Bank Transfer", "Cheque", "UPI", "Card"].includes(payment.type) && bankAccounts.length > 0 && (<label className="relative block mt-2"><span className="absolute -top-2 left-3 bg-[#f4f4f4] px-1 text-xs text-blue-600 font-semibold">Bank Account *</span><select value={payment.bankAccountId || ""} onChange={event => updatePayment(payment.id, "bankAccountId", event.target.value)} className="h-12 w-full rounded border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500"><option value="">Select bank account</option>{bankAccounts.map(b => <option key={b.id} value={b.id}>{b.accountName || b.bankName} ({b.accountNumber ? `...${String(b.accountNumber).slice(-4)}` : ""})</option>)}</select></label>)}</div>)}</div><div className="mt-4 flex items-center justify-between"><button onClick={() => updateEntry("payments", [...editor.entry.payments, makePayment()])} className="text-blue-500"><FiPlus className="inline"/> Add Payment type</button><strong>Total payment: {money(paid)}</strong></div></div><textarea value={editor.entry.description} onChange={event => updateEntry("description", event.target.value)} placeholder="Description" className="mt-5 h-28 w-full max-w-[345px] resize-y rounded border border-slate-300 bg-transparent p-4"/></div><div className="flex items-start justify-end gap-5 pt-10"><label className="flex items-center gap-2"><input type="checkbox" checked={editor.entry.roundOff} onChange={event => updateEntry("roundOff", event.target.checked)} className="h-5 w-5 accent-blue-500"/>Round Off</label><label className="flex items-center gap-3 text-lg font-semibold">Total<input readOnly value={money(editor.entry.roundOff ? Math.round(total) : total)} className="w-56 rounded-md border border-slate-300 bg-white p-3 text-right"/></label></div></div></div><footer className="flex min-h-[76px] items-center justify-end gap-3 border-t bg-white px-8"><Button onClick={persistEditor} className="rounded-md bg-blue-600 px-10 py-3 font-semibold text-white hover:bg-blue-700">Save</Button></footer></div></div>}
     {itemModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/50 p-4" onMouseDown={() => setItemModal(null)}><div className="w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="flex items-center justify-between border-b px-6 py-5"><h2 className="text-xl font-bold text-slate-700">{itemModal.mode === "picker" ? "Select Expense Item" : "Add Expense Item"}</h2><button onClick={() => setItemModal(null)} aria-label="Close item picker"><FiX className="h-6 w-6 text-slate-400"/></button></div>{itemModal.mode === "picker" ? <><div className="flex gap-3 border-b p-5"><label className="relative min-w-0 flex-1"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input autoFocus value={itemSearch} onChange={event => setItemSearch(event.target.value)} placeholder="Search items" className="h-11 w-full rounded-md border border-slate-300 pl-10 pr-3 outline-none focus:border-blue-500"/></label><Button onClick={() => setItemModal(current => ({ ...current, mode: "form", draft: { item: "", hsn: "", description: "", price: "", tax: "" } }))} className="shrink-0 bg-blue-600 px-5 text-white"><FiPlus/> Add Item</Button></div><div className="max-h-[55vh] min-h-36 overflow-y-auto p-3">{filteredExpenseItems.length ? filteredExpenseItems.map(item => <button key={item.item} type="button" onClick={() => { setEditor(current => ({ ...current, entry: { ...current.entry, rows: current.entry.rows.map(row => row.id === itemModal.rowId ? { ...row, item: item.item, description: item.description || row.description || "", price: item.price !== "" && item.price !== undefined ? item.price : row.price, tax: item.tax !== "" && item.tax !== undefined ? item.tax : row.tax, hsn: item.hsn || row.hsn || "" } : row) } })); setItemModal(null); }} className="flex w-full items-center justify-between rounded-md px-4 py-3 text-left hover:bg-sky-50"><div><span className="block font-medium text-slate-700">{item.item}</span><div className="mt-1 flex items-center gap-2 text-xs text-slate-400">{item.category && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{item.category}</span>}{item.hsn && <span>HSN/SAC: {item.hsn}</span>}{item.description && <span className="truncate max-w-[220px] text-slate-400">{item.description}</span>}</div></div><span className="font-semibold text-slate-600">{item.price !== "" ? money(item.price) : "—"}</span></button>) : <div className="grid min-h-36 place-items-center text-slate-400">{itemSearch ? "No matching items" : "No saved expense items yet"}</div>}</div></> : <div className="p-6"><div className="grid grid-cols-2 gap-5"><label className="relative"><span className="absolute -top-2 left-4 bg-white px-1 text-sm text-blue-500">Item Name *</span><input autoFocus value={itemModal.draft.item} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, item: event.target.value } }))} className="h-14 w-full rounded-md border-2 border-blue-500 px-3 outline-none"/></label><input value={itemModal.draft.hsn} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, hsn: event.target.value } }))} placeholder="Item HSN / SAC" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><input value={itemModal.draft.description} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, description: event.target.value } }))} placeholder="Description" className="h-14 rounded-md border border-slate-300 px-3 outline-none focus:border-blue-500"/><div className="flex items-center px-3 text-blue-500">Pricing</div><div className="flex h-14 overflow-hidden rounded-md border border-slate-300"><input type="number" min="0" value={itemModal.draft.price} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, price: event.target.value } }))} placeholder="Price" className="min-w-0 flex-1 px-3 outline-none"/><select className="border-l px-3"><option>Tax Excluded</option><option>Tax Included</option></select></div><select value={itemModal.draft.tax} onChange={event => setItemModal(current => ({ ...current, draft: { ...current.draft, tax: event.target.value } }))} className="h-14 rounded-md border border-slate-300 px-3 text-slate-500 outline-none focus:border-blue-500"><option value="">Tax Rate</option><option value="0">None (0%)</option><option value="5">GST 5%</option><option value="12">GST 12%</option><option value="18">GST 18%</option><option value="28">GST 28%</option></select></div><div className="mt-8 flex justify-end gap-3"><Button onClick={() => setItemModal(current => ({ ...current, mode: "picker" }))} className="border px-5">Back</Button><Button onClick={saveExpenseItem} className="bg-blue-600 px-7 py-3 font-semibold text-white">Save</Button></div></div>}</div></div>}    {categoryModal && <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/40 p-4"><div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"><div className="mb-5 flex justify-between"><h2 className="text-lg font-semibold">Add Expense Category</h2><button onClick={() => setCategoryModal(false)}><FiX/></button></div><input autoFocus value={categoryName} onChange={event => setCategoryName(event.target.value)} onKeyDown={event => event.key === "Enter" && addCategory()} placeholder="Category name" className="h-12 w-full rounded border px-3"/><div className="mt-5 flex justify-end gap-3"><Button onClick={() => setCategoryModal(false)} className="border px-4">Cancel</Button><Button onClick={addCategory} className="bg-blue-600 px-5 text-white">Save</Button></div></div></div>}
