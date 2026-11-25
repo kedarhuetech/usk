@@ -40,6 +40,37 @@ export function addCustomUnit(value) {
   return getUnits();
 }
 
+export async function loadAuthoritativeUnits() {
+  if (isDatabaseMode()) {
+    const remote = await unitsDb.listAll();
+    if (Array.isArray(remote)) {
+      const names = remote
+        .map((u) => String(u?.shortName || u?.name || u || "").trim().toUpperCase())
+        .filter(Boolean);
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem(getCustomUnitsKey(), JSON.stringify([...new Set(names)]));
+      }
+    }
+  }
+  return getUnits();
+}
+
+export async function addCustomUnitAuthoritative(value) {
+  const name = String(value || "").trim().toUpperCase();
+  if (!name) return getUnits();
+  if (getUnits().some((unit) => unit.toLowerCase() === name.toLowerCase())) {
+    throw new Error(`Unit "${name}" already exists.`);
+  }
+  if (isDatabaseMode()) {
+    await unitsDb.save({ name, shortName: name });
+  }
+  const current = readList(getCustomUnitsKey());
+  if (typeof window !== "undefined" && window.localStorage) {
+    window.localStorage.setItem(getCustomUnitsKey(), JSON.stringify([...current, name]));
+  }
+  return getUnits();
+}
+
 // Gets unit conversions.
 export function getUnitConversions(unit) {
   const conversions = readList(getUnitConversionsKey());

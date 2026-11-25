@@ -130,13 +130,14 @@ router.post("/", async (req, res) => {
     const body = req.body || {};
 
     for (const [key, val] of Object.entries(body)) {
+      if (val === undefined) continue;
       let textVal;
       if (typeof val === "string" && val.startsWith("data:image/")) {
         const assetType = key === "companyLogo" ? "company-logo" : (key === "signatureImage" ? "company-signature" : "app-setting");
         const persistedUrl = await persistBase64Asset(val, assetType, businessId);
-        textVal = persistedUrl || "";
+        textVal = JSON.stringify(persistedUrl || "");
       } else {
-        textVal = typeof val === "object" ? JSON.stringify(val) : String(val ?? "");
+        textVal = JSON.stringify(val);
       }
 
       await pool.query(
@@ -286,8 +287,8 @@ router.get("/company-profile/assets/:id", async (req, res) => {
     let bgRows;
     try {
       [bgRows] = await pool.execute(
-        "SELECT mime_type, original_filename, size_bytes, data FROM business_growth_assets WHERE id = ?",
-        [req.params.id]
+        "SELECT mime_type, original_filename, size_bytes, data FROM business_growth_assets WHERE id = ? AND business_id = ?",
+        [req.params.id, businessId]
       );
     } catch {}
 

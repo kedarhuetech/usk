@@ -4,7 +4,6 @@ import GraphPlaceholder from "../../components/Dashboard/GraphPlaceholder";
 import QuickActions from "../../components/Dashboard/QuickActions";
 import ReportsSection from "../../components/Dashboard/ReportsSection";
 import StatCard from "../../components/Dashboard/StatCard";
-import WidgetCard from "../../components/Dashboard/WidgetCard";
 import { dashboardData } from "../../constants/dashboardData";
 import { formatCurrency } from "../../services/appSettingsStorage";
 import { loadBusinessSummary } from "../../services/businessRecords";
@@ -77,24 +76,22 @@ function Dashboard() {
 
   return (
     <div className="bg-slate-200 p-3 sm:p-5">
-      <div className="grid gap-4 sm:gap-5 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-4 sm:space-y-5">
-          {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">Dashboard totals could not be loaded: {error}</p>}
+      <div className="space-y-4 sm:space-y-5">
+        {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">Dashboard totals could not be loaded: {error}</p>}
+        <div className="grid gap-4 sm:gap-5 xl:grid-cols-[1fr_360px]">
           <div className="grid gap-3 sm:gap-5 md:grid-cols-2">
             {stats.map((stat) => (
               <StatCard key={stat.id} stat={stat} />
             ))}
           </div>
-          <GraphPlaceholder summary={summary} loading={loading} />
-          <ReportsSection reports={dashboardData.reports} />
+
+          <aside>
+            <QuickActions actions={dashboardData.actions} />
+          </aside>
         </div>
 
-        <aside className="space-y-4 sm:space-y-5">
-          <QuickActions actions={dashboardData.actions} />
-          {dashboardData.widgets.map((widget) => (
-            <WidgetCard key={widget.id} widget={widget} />
-          ))}
-        </aside>
+        <GraphPlaceholder summary={summary} loading={loading} />
+        <ReportsSection reports={dashboardData.reports} />
       </div>
     </div>
   );

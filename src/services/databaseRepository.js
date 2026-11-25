@@ -129,12 +129,22 @@ export const partiesDb = {
   },
 
   /**
-   * Deletes a party from MySQL
+   * Deletes or deactivates a party in MySQL
    */
   async remove(id) {
     const res = await apiRequest(`/parties/${encodeURIComponent(id)}`, { method: "DELETE" });
-    const current = readLocal(getScopedStorageKey(PARTIES_KEY), []);
-    writeLocal(getScopedStorageKey(PARTIES_KEY), current.filter((p) => String(p.id) !== String(id)));
+    const scopedKey = getScopedStorageKey(PARTIES_KEY);
+    const current = readLocal(scopedKey, []);
+    if (res?.action === "deactivated") {
+      writeLocal(
+        scopedKey,
+        current.map((p) =>
+          String(p.id) === String(id) ? { ...p, isActive: false, status: "inactive" } : p
+        )
+      );
+    } else {
+      writeLocal(scopedKey, current.filter((p) => String(p.id) !== String(id)));
+    }
     return res;
   },
 };
@@ -246,6 +256,75 @@ export const itemsDb = {
 // 3. TRANSACTIONS DATABASE API (Sales, Purchases, Payments, Expenses)
 // ============================================================================
 
+export function normalizeTransactionTypeKey(rawType) {
+  return String(rawType || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+const TRANSACTION_BUCKET_MAP = Object.freeze({
+  sale: "sales",
+  pos: "sales",
+  sale_invoice: "sales",
+  pos_sale: "sales",
+  purchase: "purchases",
+  purchase_bill: "purchases",
+  payment_in: "paymentIns",
+  paymentin: "paymentIns",
+  payment_out: "paymentOuts",
+  paymentout: "paymentOuts",
+  expense: "expenses",
+  expenses: "expenses",
+  estimate: "estimates",
+  quotation: "estimates",
+  estimate_quotation: "estimates",
+  proforma: "proformas",
+  proforma_invoice: "proformas",
+  delivery_challan: "challans",
+  challan: "challans",
+  debit_note: "debitNotes",
+  purchase_return: "debitNotes",
+  credit_note: "creditNotes",
+  sale_return: "creditNotes",
+  sale_order: "saleOrders",
+  purchase_order: "purchaseOrders",
+});
+
+export function partitionTransactionsByStore(list = []) {
+  const buckets = {
+    sales: [],
+    purchases: [],
+    paymentIns: [],
+    paymentOuts: [],
+    expenses: [],
+    estimates: [],
+    proformas: [],
+    challans: [],
+    debitNotes: [],
+    creditNotes: [],
+    saleOrders: [],
+    purchaseOrders: [],
+  };
+  const seenIds = new Set();
+
+  for (const txn of Array.isArray(list) ? list : []) {
+    if (!txn) continue;
+    const txnId = txn.id != null ? String(txn.id).trim() : "";
+    if (txnId) {
+      if (seenIds.has(txnId)) continue;
+      seenIds.add(txnId);
+    }
+    const normType = normalizeTransactionTypeKey(txn.transactionType || txn.type);
+    const bucketKey = TRANSACTION_BUCKET_MAP[normType];
+    if (bucketKey && buckets[bucketKey]) {
+      buckets[bucketKey].push(txn);
+    }
+  }
+
+  return buckets;
+}
+
 export const transactionsDb = {
   /**
    * Fetches paginated slice of transactions for lazy loading
@@ -285,18 +364,20 @@ export const transactionsDb = {
     try {
       const res = await apiRequest("/transactions?limit=all");
       const list = Array.isArray(res) ? res : (res?.data || []);
-      const sales = list.filter((t) => t.transactionType === "sale" || t.transactionType === "pos" || t.type === "sale" || t.type === "pos");
-      const purchases = list.filter((t) => t.transactionType === "purchase" || t.type === "purchase");
-      const paymentIns = list.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in");
-      const paymentOuts = list.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out");
-      const expenses = list.filter((t) => t.transactionType === "expense" || t.type === "expense");
-      const estimates = list.filter((t) => t.transactionType === "estimate" || t.type === "estimate");
-      const proformas = list.filter((t) => t.transactionType === "proforma" || t.type === "proforma");
-      const challans = list.filter((t) => t.transactionType === "delivery_challan" || t.type === "delivery_challan");
-      const debitNotes = list.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note");
-      const creditNotes = list.filter((t) => t.transactionType === "credit_note" || t.transactionType === "sale_return" || t.type === "sale_return" || t.type === "credit_note");
-      const saleOrders = list.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order");
-      const purchaseOrders = list.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order");
+      const {
+        sales,
+        purchases,
+        paymentIns,
+        paymentOuts,
+        expenses,
+        estimates,
+        proformas,
+        challans,
+        debitNotes,
+        creditNotes,
+        saleOrders,
+        purchaseOrders,
+      } = partitionTransactionsByStore(list);
 
       // ALWAYS set scoped memory collections (clears old business data if list is empty)
       setMemoryCollection(SALE_INVOICES_KEY, sales);
@@ -767,13 +848,15 @@ export const settingsDb = {
       const data = res?.data ?? res;
       if (data && typeof data === "object") {
         writeLocal(scopedKey, data);
-        writeLocal(SETTINGS_KEY, data);
         return data;
       }
-      return readLocal(scopedKey, null) || readLocal(SETTINGS_KEY, {});
+      if (throwOnError) {
+        throw new Error("Invalid settings payload received from server.");
+      }
+      return readLocal(scopedKey, {});
     } catch (err) {
       if (throwOnError) throw err;
-      return readLocal(scopedKey, null) || readLocal(SETTINGS_KEY, {});
+      return readLocal(scopedKey, {});
     }
   },
 
@@ -788,7 +871,6 @@ export const settingsDb = {
       if (data && typeof data === "object") {
         const scopedKey = getScopedStorageKey(COMPANY_PROFILE_KEY);
         writeLocal(scopedKey, data);
-        writeLocal(COMPANY_PROFILE_KEY, data);
         if (typeof window !== "undefined") {
           try {
             window.dispatchEvent(new CustomEvent("ledgerly:company-profile-updated", { detail: data }));

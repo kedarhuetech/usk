@@ -592,3 +592,409 @@ test("restoreUsvToDatabase: handles cross-business ID collisions by allocating n
   const histInsert = executed.find((q) => q.sql.includes("INSERT INTO service_reminder_history"));
   assert.equal(histInsert.params[1], newSrvId, "Service reminder history must reference remapped reminder_id");
 });
+
+/**
+ * Stateful in-memory transactional mock connection for expense_categories and expense_items.
+ * Supports BEGIN, COMMIT, ROLLBACK, DELETE (scoped by business_id), SELECT id collision checks, and INSERT.
+ */
+function createStatefulExpenseMockConnection(initialState = {}) {
+  const cloneState = (s) => ({
+    expense_categories: (s.expense_categories || []).map((r) => ({ ...r })),
+    expense_items: (s.expense_items || []).map((r) => ({ ...r })),
+  });
+
+  let state = cloneState(initialState);
+  let snapshot = null;
+  let failOnSqlSubstring = null;
+  const executed = [];
+
+  return {
+    executed,
+    getState: () => cloneState(state),
+    setFailOnSql(substring) {
+      failOnSqlSubstring = substring;
+    },
+    async beginTransaction() {
+      snapshot = cloneState(state);
+      executed.push({ sql: "BEGIN", params: [] });
+    },
+    async commit() {
+      snapshot = null;
+      executed.push({ sql: "COMMIT", params: [] });
+    },
+    async rollback() {
+      if (snapshot) {
+        state = snapshot;
+        snapshot = null;
+      }
+      executed.push({ sql: "ROLLBACK", params: [] });
+    },
+    async query(sql, params = []) {
+      const trimmed = sql.trim();
+      executed.push({ sql: trimmed, params });
+
+      if (failOnSqlSubstring && trimmed.includes(failOnSqlSubstring)) {
+        const err = new Error(`Simulated DB failure on ${failOnSqlSubstring}`);
+        err.code = "ER_SIMULATED_FAILURE";
+        throw err;
+      }
+
+      if (trimmed.startsWith("DELETE FROM expense_categories WHERE business_id = ?")) {
+        const bizId = params[0];
+        state.expense_categories = state.expense_categories.filter((r) => r.business_id !== bizId);
+        return [{ affectedRows: 1 }];
+      }
+
+      if (trimmed.startsWith("DELETE FROM expense_items WHERE business_id = ?")) {
+        const bizId = params[0];
+        state.expense_items = state.expense_items.filter((r) => r.business_id !== bizId);
+        return [{ affectedRows: 1 }];
+      }
+
+      const selectMatch = trimmed.match(/^SELECT id FROM `(expense_categories|expense_items)` WHERE id IN \((.+)\)$/);
+      if (selectMatch) {
+        const table = selectMatch[1];
+        const idSet = new Set(params.map(String));
+        const rows = state[table].filter((r) => idSet.has(String(r.id))).map((r) => ({ id: r.id }));
+        return [rows];
+      }
+
+      if (trimmed.startsWith("INSERT INTO expense_categories")) {
+        const [id, business_id, category_name, expense_type, created_at] = params;
+        if (state.expense_categories.some((r) => r.id === id)) {
+          const err = new Error(`Duplicate entry '${id}' for key 'expense_categories.PRIMARY'`);
+          err.code = "ER_DUP_ENTRY";
+          throw err;
+        }
+        state.expense_categories.push({
+          id,
+          business_id,
+          category_name,
+          expense_type,
+          created_at: created_at || "CURRENT_TIMESTAMP(3)",
+        });
+        return [{ affectedRows: 1 }];
+      }
+
+      if (trimmed.startsWith("INSERT INTO expense_items")) {
+        const [id, business_id, item_name, price, tax_rate, hsn_code, description, category, created_at, updated_at] = params;
+        if (state.expense_items.some((r) => r.id === id)) {
+          const err = new Error(`Duplicate entry '${id}' for key 'expense_items.PRIMARY'`);
+          err.code = "ER_DUP_ENTRY";
+          throw err;
+        }
+        state.expense_items.push({
+          id,
+          business_id,
+          item_name,
+          price,
+          tax_rate,
+          hsn_code,
+          description,
+          category,
+          created_at: created_at || "CURRENT_TIMESTAMP(3)",
+          updated_at: updated_at || "CURRENT_TIMESTAMP(3)",
+        });
+        return [{ affectedRows: 1 }];
+      }
+
+      return [[]];
+    },
+    release() {},
+  };
+}
+
+test("restoreUsvToDatabase: restores expense items using item, name, itemName, hsn, hsnCode, tax, and taxRate aliases", async () => {
+  const conn = createStatefulExpenseMockConnection();
+  const payload = {
+    format: SUPPORTED_BACKUP_FORMAT,
+    formatVersion: SUPPORTED_BACKUP_VERSION,
+    data: {
+      "ledgerly:expenseItems.v1": [
+        {
+          id: "exp_item_1",
+          item: "ethanol",
+          name: "ethanol",
+          price: 80,
+          tax: "0.00",
+          taxRate: 0,
+          hsn: "",
+          description: "",
+          category: "Expenses",
+          createdAt: "2026-11-19 18:03:58.641",
+          updatedAt: "2026-11-19 18:03:58.641",
+        },
+        {
+          id: "exp_item_2",
+          name: "rice india",
+          price: "85.50",
+          tax: "5.00",
+          hsn: "1006",
+          description: "Basmati",
+          category: "Raw Material",
+        },
+        {
+          id: "exp_item_3",
+          itemName: "Office Rent",
+          unitPrice: 12000,
+          taxRate: 18,
+          hsnCode: "9972",
+          description: "Monthly rent",
+          category: "Rent",
+        },
+      ],
+    },
+  };
+
+  const result = await restoreUsvToDatabase(conn, "target-biz", payload);
+  assert.equal(result.stats.expenseItems, 3);
+  assert.ok(result.replacedStores.includes("Expense items"));
+
+  const items = conn.getState().expense_items;
+  assert.equal(items.length, 3);
+
+  assert.deepEqual(items[0], {
+    id: "exp_item_1",
+    business_id: "target-biz",
+    item_name: "ethanol",
+    price: 80,
+    tax_rate: 0,
+    hsn_code: null,
+    description: null,
+    category: "Expenses",
+    created_at: "2026-11-19 18:03:58.641",
+    updated_at: "2026-11-19 18:03:58.641",
+  });
+
+  assert.equal(items[1].item_name, "rice india");
+  assert.equal(items[1].price, 85.5);
+  assert.equal(items[1].tax_rate, 5);
+  assert.equal(items[1].hsn_code, "1006");
+  assert.equal(items[1].description, "Basmati");
+  assert.equal(items[1].category, "Raw Material");
+
+  assert.equal(items[2].item_name, "Office Rent");
+  assert.equal(items[2].price, 12000);
+  assert.equal(items[2].tax_rate, 18);
+  assert.equal(items[2].hsn_code, "9972");
+});
+
+test("restoreUsvToDatabase: restores expense categories with categoryName/expenseType and name/type aliases and deduplicates case-insensitively", async () => {
+  const conn = createStatefulExpenseMockConnection();
+  const payload = {
+    format: SUPPORTED_BACKUP_FORMAT,
+    formatVersion: SUPPORTED_BACKUP_VERSION,
+    data: {
+      "ledgerly:expenseCategories.v1": [
+        { id: "exp_cat_1", categoryName: "Cash Sale", expenseType: "indirect", createdAt: "2026-11-19 11:27:57" },
+        { id: "exp_cat_2", categoryName: "Office Supplies", expenseType: "indirect", createdAt: "2026-11-20 12:50:19" },
+        { id: "exp_cat_3", categoryName: " office supplies ", expenseType: "direct", createdAt: "2026-11-20 12:50:25" },
+        { id: "exp_cat_4", name: "Tea", type: "indirect" },
+        { id: "exp_cat_5", categoryName: "TEA", expenseType: "indirect" },
+        { id: "exp_cat_6", name: "Travel", type: "direct" },
+      ],
+    },
+  };
+
+  const result = await restoreUsvToDatabase(conn, "target-biz", payload);
+  assert.equal(result.stats.expenseCategories, 4);
+  assert.ok(result.replacedStores.includes("Expense categories"));
+
+  const cats = conn.getState().expense_categories;
+  assert.equal(cats.length, 4);
+  assert.deepEqual(
+    cats.map((c) => ({ id: c.id, name: c.category_name, type: c.expense_type, created_at: c.created_at })),
+    [
+      { id: "exp_cat_1", name: "Cash Sale", type: "indirect", created_at: "2026-11-19 11:27:57" },
+      { id: "exp_cat_2", name: "Office Supplies", type: "indirect", created_at: "2026-11-20 12:50:19" },
+      { id: "exp_cat_4", name: "Tea", type: "indirect", created_at: "CURRENT_TIMESTAMP(3)" },
+      { id: "exp_cat_6", name: "Travel", type: "direct", created_at: "CURRENT_TIMESTAMP(3)" },
+    ]
+  );
+});
+
+test("restoreUsvToDatabase: handles empty expense datasets by clearing target business and preserving other businesses", async () => {
+  const conn = createStatefulExpenseMockConnection({
+    expense_categories: [
+      { id: "cat-target", business_id: "target-biz", category_name: "Rent", expense_type: "indirect" },
+      { id: "cat-other", business_id: "other-biz", category_name: "Rent", expense_type: "indirect" },
+    ],
+    expense_items: [
+      { id: "item-target", business_id: "target-biz", item_name: "Old Item", price: 10 },
+      { id: "item-other", business_id: "other-biz", item_name: "Other Item", price: 20 },
+    ],
+  });
+
+  const payload = {
+    format: SUPPORTED_BACKUP_FORMAT,
+    formatVersion: SUPPORTED_BACKUP_VERSION,
+    data: {
+      "ledgerly:expenseCategories.v1": [],
+      "ledgerly:expenseItems.v1": [],
+    },
+  };
+
+  const result = await restoreUsvToDatabase(conn, "target-biz", payload);
+  assert.equal(result.stats.expenseCategories, 0);
+  assert.equal(result.stats.expenseItems, 0);
+
+  const state = conn.getState();
+  assert.deepEqual(state.expense_categories.map((c) => c.id), ["cat-other"]);
+  assert.deepEqual(state.expense_items.map((i) => i.id), ["item-other"]);
+});
+
+test("restoreUsvToDatabase: rejects invalid expense records before deleting existing records", async () => {
+  const initial = {
+    expense_categories: [
+      { id: "cat-existing", business_id: "target-biz", category_name: "Existing Cat", expense_type: "indirect" },
+    ],
+    expense_items: [
+      { id: "item-existing", business_id: "target-biz", item_name: "Existing Item", price: 50 },
+    ],
+  };
+
+  // Invalid expense category (missing name)
+  {
+    const conn = createStatefulExpenseMockConnection(initial);
+    const payload = {
+      format: SUPPORTED_BACKUP_FORMAT,
+      formatVersion: SUPPORTED_BACKUP_VERSION,
+      data: {
+        "ledgerly:expenseCategories.v1": [{ id: "bad-cat-1", expenseType: "indirect" }],
+        "ledgerly:expenseItems.v1": [{ id: "good-item", item: "Paper", price: 10 }],
+      },
+    };
+    await assert.rejects(
+      restoreUsvToDatabase(conn, "target-biz", payload),
+      (err) => err.status === 400 && /Invalid expense category at index 0 \(id: bad-cat-1\): category name is required\./.test(err.message)
+    );
+    assert.equal(conn.executed.some((q) => q.sql.startsWith("DELETE")), false, "Must NOT delete before validation");
+    assert.deepEqual(conn.getState(), initial);
+  }
+
+  // Invalid expense item (missing name)
+  {
+    const conn = createStatefulExpenseMockConnection(initial);
+    const payload = {
+      format: SUPPORTED_BACKUP_FORMAT,
+      formatVersion: SUPPORTED_BACKUP_VERSION,
+      data: {
+        "ledgerly:expenseCategories.v1": [{ id: "good-cat", categoryName: "Utilities" }],
+        "ledgerly:expenseItems.v1": [{ id: "bad-item-1", price: 10 }],
+      },
+    };
+    await assert.rejects(
+      restoreUsvToDatabase(conn, "target-biz", payload),
+      (err) => err.status === 400 && /Invalid expense item at index 0 \(id: bad-item-1\): item name is required\./.test(err.message)
+    );
+    assert.equal(conn.executed.some((q) => q.sql.startsWith("DELETE")), false, "Must NOT delete before validation");
+    assert.deepEqual(conn.getState(), initial);
+  }
+
+  // Invalid expense item (negative/non-numeric price)
+  {
+    const conn = createStatefulExpenseMockConnection(initial);
+    const payload = {
+      format: SUPPORTED_BACKUP_FORMAT,
+      formatVersion: SUPPORTED_BACKUP_VERSION,
+      data: {
+        "ledgerly:expenseItems.v1": [{ id: "bad-price-1", name: "Fuel", price: "not-a-number" }],
+      },
+    };
+    await assert.rejects(
+      restoreUsvToDatabase(conn, "target-biz", payload),
+      (err) => err.status === 400 && /Invalid expense item at index 0 \(id: bad-price-1\): price must be a non-negative number\./.test(err.message)
+    );
+    assert.equal(conn.executed.some((q) => q.sql.startsWith("DELETE")), false);
+    assert.deepEqual(conn.getState(), initial);
+  }
+});
+
+test("restoreUsvToDatabase: remaps primary-key collisions for expense categories and items across businesses without touching other business", async () => {
+  const conn = createStatefulExpenseMockConnection({
+    expense_categories: [
+      { id: "exp_cat_shared", business_id: "source-biz", category_name: "Rent", expense_type: "indirect" },
+      { id: "exp_cat_target_old", business_id: "target-biz", category_name: "Old", expense_type: "indirect" },
+    ],
+    expense_items: [
+      { id: "exp_item_shared", business_id: "source-biz", item_name: "Ethanol", price: 80 },
+      { id: "exp_item_target_old", business_id: "target-biz", item_name: "Old Item", price: 10 },
+    ],
+  });
+
+  const payload = {
+    format: SUPPORTED_BACKUP_FORMAT,
+    formatVersion: SUPPORTED_BACKUP_VERSION,
+    data: {
+      "ledgerly:expenseCategories.v1": [
+        { id: "exp_cat_shared", categoryName: "Rent", expenseType: "indirect" },
+        { id: "exp_cat_unique", categoryName: "Cash Sale", expenseType: "indirect" },
+      ],
+      "ledgerly:expenseItems.v1": [
+        { id: "exp_item_shared", item: "Ethanol", price: 80 },
+        { id: "exp_item_unique", name: "Wheat", price: 30 },
+      ],
+    },
+  };
+
+  const result = await restoreUsvToDatabase(conn, "target-biz", payload);
+  assert.equal(result.stats.expenseCategories, 2);
+  assert.equal(result.stats.expenseItems, 2);
+
+  const state = conn.getState();
+
+  // Source business records must remain completely untouched
+  assert.ok(state.expense_categories.some((c) => c.id === "exp_cat_shared" && c.business_id === "source-biz"));
+  assert.ok(state.expense_items.some((i) => i.id === "exp_item_shared" && i.business_id === "source-biz"));
+
+  // Target business must have remapped colliding IDs and preserved non-colliding IDs
+  const targetCats = state.expense_categories.filter((c) => c.business_id === "target-biz");
+  assert.equal(targetCats.length, 2);
+  const remappedCat = targetCats.find((c) => c.category_name === "Rent");
+  const cleanCat = targetCats.find((c) => c.category_name === "Cash Sale");
+  assert.notEqual(remappedCat.id, "exp_cat_shared");
+  assert.equal(cleanCat.id, "exp_cat_unique");
+
+  const targetItems = state.expense_items.filter((i) => i.business_id === "target-biz");
+  assert.equal(targetItems.length, 2);
+  const remappedItem = targetItems.find((i) => i.item_name === "Ethanol");
+  const cleanItem = targetItems.find((i) => i.item_name === "Wheat");
+  assert.notEqual(remappedItem.id, "exp_item_shared");
+  assert.equal(cleanItem.id, "exp_item_unique");
+});
+
+test("restoreUsvToDatabase: rolls back expense deletions and inserts when a simulated DB insertion failure occurs", async () => {
+  const initial = {
+    expense_categories: [
+      { id: "cat-target-keep", business_id: "target-biz", category_name: "Keep Cat", expense_type: "indirect" },
+      { id: "cat-other-keep", business_id: "other-biz", category_name: "Other Cat", expense_type: "indirect" },
+    ],
+    expense_items: [
+      { id: "item-target-keep", business_id: "target-biz", item_name: "Keep Item", price: 99 },
+    ],
+  };
+
+  const conn = createStatefulExpenseMockConnection(initial);
+  conn.setFailOnSql("INSERT INTO expense_items");
+
+  const payload = {
+    format: SUPPORTED_BACKUP_FORMAT,
+    formatVersion: SUPPORTED_BACKUP_VERSION,
+    data: {
+      "ledgerly:expenseCategories.v1": [{ id: "new-cat", categoryName: "New Cat" }],
+      "ledgerly:expenseItems.v1": [{ id: "new-item", item: "New Item", price: 25 }],
+    },
+  };
+
+  await conn.beginTransaction();
+  try {
+    await restoreUsvToDatabase(conn, "target-biz", payload);
+    await conn.commit();
+    assert.fail("Expected restoreUsvToDatabase to reject on simulated DB failure");
+  } catch (err) {
+    await conn.rollback();
+    assert.match(err.message, /Simulated DB failure on INSERT INTO expense_items/);
+  }
+
+  assert.deepEqual(conn.getState(), initial, "Rollback must restore target business and other business records intact");
+});

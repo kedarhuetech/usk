@@ -2,11 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getAppSettings,
+  getAppSettingsStorageKey,
   saveAppSettings,
-  APP_SETTINGS_KEY,
   APP_SETTINGS_UPDATED_EVENT,
 } from "./appSettingsStorage.js";
 import {
+  clearMemoryItems,
   getInventoryItems,
   saveInventoryItem,
   inventoryItemsStorageKey,
@@ -32,6 +33,7 @@ class MockMemoryStorage {
 }
 
 function setupMockEnvironment() {
+  clearMemoryItems();
   const storage = new MockMemoryStorage();
   const dispatchedEvents = [];
   globalThis.window = {
@@ -89,7 +91,7 @@ test("Item Settings Persistence & Default Values", () => {
   assert.equal(reloaded.stopSaleOnNegativeStock, true);
 
   // 5. Raw localStorage validation
-  const raw = JSON.parse(storage.getItem(APP_SETTINGS_KEY));
+  const raw = JSON.parse(storage.getItem(getAppSettingsStorageKey()));
   assert.equal(raw.enableBatchTracking, true);
   assert.equal(raw.enableSerialTracking, true);
 

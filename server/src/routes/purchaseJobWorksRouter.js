@@ -8,6 +8,7 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { getIstDateString } from "../utils/dateUtils.js";
 
 const router = Router();
 
@@ -87,7 +88,7 @@ router.post("/", async (req, res) => {
     const orderNumber = String(body.number || body.orderNumber || "").trim();
     const partyName = String(body.party || body.partyName || "").trim();
     const partyId = body.partyId || null;
-    const orderDate = body.date || body.orderDate || new Date().toISOString().slice(0, 10);
+    const orderDate = body.date || body.orderDate || getIstDateString();
     const status = body.status || "Pending";
     const charges = parseFloat(body.charges) || 0;
     const notes = body.notes || null;
@@ -168,13 +169,19 @@ router.post("/", async (req, res) => {
  * DELETE /api/purchase-job-works/:id
  */
 router.delete("/:id", async (req, res) => {
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
     const businessId = businessIdFromRequest(req);
-    await pool.query(`DELETE FROM purchase_job_work_items WHERE business_id = ? AND job_work_id = ?`, [businessId, req.params.id]);
-    await pool.query(`DELETE FROM purchase_job_works WHERE business_id = ? AND id = ?`, [businessId, req.params.id]);
+    await conn.query(`DELETE FROM purchase_job_work_items WHERE business_id = ? AND job_work_id = ?`, [businessId, req.params.id]);
+    await conn.query(`DELETE FROM purchase_job_works WHERE business_id = ? AND id = ?`, [businessId, req.params.id]);
+    await conn.commit();
     return res.json({ success: true, message: "Job work record deleted." });
   } catch (err) {
+    await conn.rollback();
     return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    conn.release();
   }
 });
 

@@ -36,6 +36,7 @@ import { gstTypes, indianStates, partyFormDefaults } from "../../constants/parti
 import { getPartyDeletionBlockReason, getParties, deduplicatePartyList } from "../../services/partiesStorage";
 import { loadBusinessParties, saveBusinessParty, deleteBusinessParty, loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords";
 import { transactionsDb } from "../../services/databaseRepository";
+import { readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository";
 import { buildUnifiedStatementHtml } from "../../services/unifiedPrintService.js";
 import { getSaleInvoices } from "../../services/salesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
@@ -415,6 +416,7 @@ function PartyDetails() {
   const [lastGmailUrl, setLastGmailUrl] = useState("");
   const [transactionSearchOpen, setTransactionSearchOpen] = useState(false);
   const [transactionSearch, setTransactionSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [importPartiesOpen, setImportPartiesOpen] = useState(false);
   const [importNotice, setImportNotice] = useState("");
@@ -424,8 +426,11 @@ function PartyDetails() {
     let existing;
     try {
       existing = await loadBusinessParties();
-    } catch {
-      existing = parties.length > 0 ? [...parties] : [...getParties()];
+    } catch (err) {
+      const msg = `Could not verify existing parties in MySQL before import: ${err.message}`;
+      setLoadError(msg);
+      toast.error(msg);
+      return;
     }
     const seenNames = new Set(
       existing.map((p) => String(p.partyName || p.name || p.party_name || "").trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean)
@@ -435,6 +440,7 @@ function PartyDetails() {
     );
     let firstSavedId = null;
     let importedCount = 0;
+    let failedCount = 0;
 
     for (const c of selectedContacts) {
       const cName = String(c.name || "").trim().replace(/\s+/g, " ");
@@ -453,7 +459,7 @@ function PartyDetails() {
       }
 
       try {
-        const saved = await saveParty({
+        const saved = await saveBusinessParty({
           ...partyFormDefaults,
           partyName: cName,
           phone: c.phone || "",
@@ -461,7 +467,7 @@ function PartyDetails() {
           billingAddress: c.address || "",
           openingBalance: "0",
           openingBalanceType: "to-receive",
-          gstType: "Unregistered/Consumer",
+          gstType: "Unregistered / Consumer",
         });
         if (saved?.id) {
           if (!firstSavedId) firstSavedId = saved.id;
@@ -471,49 +477,86 @@ function PartyDetails() {
           importedCount += 1;
         }
       } catch (e) {
+        failedCount += 1;
         console.warn("[Party Import] Error saving contact:", c.name, e);
       }
     }
 
     await fetchAllFromDatabase();
     if (firstSavedId) setSelectedPartyId(firstSavedId);
+    if (failedCount > 0 && importedCount === 0) {
+      toast.error(`Failed to import ${failedCount} selected contact${failedCount === 1 ? "" : "s"} to MySQL.`);
+      return;
+    }
     setImportNotice(
       importedCount > 0
-        ? `Successfully imported ${importedCount} ${importedCount === 1 ? "party" : "parties"}!`
+        ? `Imported ${importedCount} ${importedCount === 1 ? "party" : "parties"}${failedCount > 0 ? ` (${failedCount} failed)` : ""}!`
         : "Selected contacts already exist in Parties."
     );
     setTimeout(() => setImportNotice(""), 3500);
   };
 
   const fetchAllFromDatabase = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError("");
     try {
-      const [partiesList, salesList, purchasesList, allTxns] = await Promise.all([
-        loadBusinessParties().catch(() => []),
-        loadSalesInvoices().catch(() => []),
-        loadPurchaseBills().catch(() => []),
-        transactionsDb.listAll().catch(() => []),
+      const [partiesRes, salesRes, purchasesRes, txnsRes] = await Promise.allSettled([
+        loadBusinessParties(),
+        loadSalesInvoices(),
+        loadPurchaseBills(),
+        transactionsDb.listAll(),
       ]);
 
+      if (partiesRes.status === "rejected") {
+        throw new Error(partiesRes.reason?.message || "Failed to load parties from MySQL.");
+      }
+
+      const partiesList = partiesRes.value;
       if (Array.isArray(partiesList)) {
         setParties(deduplicatePartyList(partiesList));
       }
-      if (Array.isArray(salesList)) setInvoices(salesList);
-      if (Array.isArray(purchasesList)) setPurchases(purchasesList);
 
-      const txns = Array.isArray(allTxns) ? allTxns : [];
-      setPartyActivity({
-        estimates: txns.filter((t) => t.transactionType === "estimate" || t.type === "estimate"),
-        proformas: txns.filter((t) => t.transactionType === "proforma" || t.type === "proforma"),
-        payments: txns.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in"),
-        paymentsOut: txns.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out"),
-        creditNotes: txns.filter((t) => t.transactionType === "credit_note" || t.type === "credit_note" || t.transactionType === "sale_return"),
-        debitNotes: txns.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note" || t.transactionType === "purchase_return"),
-        saleOrders: txns.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order"),
-        purchaseOrders: txns.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order"),
-        saleUi: {},
-      });
+      const partialErrors = [];
+      if (salesRes.status === "fulfilled" && Array.isArray(salesRes.value)) {
+        setInvoices(salesRes.value);
+      } else if (salesRes.status === "rejected") {
+        partialErrors.push(`Sales (${salesRes.reason?.message || "error"})`);
+      }
+
+      if (purchasesRes.status === "fulfilled" && Array.isArray(purchasesRes.value)) {
+        setPurchases(purchasesRes.value);
+      } else if (purchasesRes.status === "rejected") {
+        partialErrors.push(`Purchases (${purchasesRes.reason?.message || "error"})`);
+      }
+
+      if (txnsRes.status === "fulfilled") {
+        const txns = Array.isArray(txnsRes.value) ? txnsRes.value : [];
+        let saleUi = {};
+        try {
+          saleUi = readTransactionValue(transactionStorageKeys.saleInvoiceUi, {}) || {};
+        } catch {}
+        setPartyActivity({
+          estimates: txns.filter((t) => t.transactionType === "estimate" || t.type === "estimate"),
+          proformas: txns.filter((t) => t.transactionType === "proforma" || t.type === "proforma"),
+          payments: txns.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in"),
+          paymentsOut: txns.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out"),
+          creditNotes: txns.filter((t) => t.transactionType === "credit_note" || t.type === "credit_note" || t.transactionType === "sale_return"),
+          debitNotes: txns.filter((t) => t.transactionType === "debit_note" || t.type === "debit_note" || t.transactionType === "purchase_return"),
+          saleOrders: txns.filter((t) => t.transactionType === "sale_order" || t.type === "sale_order"),
+          purchaseOrders: txns.filter((t) => t.transactionType === "purchase_order" || t.type === "purchase_order"),
+          saleUi,
+        });
+      } else if (txnsRes.status === "rejected") {
+        partialErrors.push(`Transactions (${txnsRes.reason?.message || "error"})`);
+      }
+
+      if (partialErrors.length > 0) {
+        setLoadError(`Some related transaction data could not be loaded: ${partialErrors.join("; ")}`);
+      }
     } catch (error) {
       setLoadError(error.message || "Could not load data from database.");
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -576,20 +619,13 @@ function PartyDetails() {
     if (!selectedParty) return;
     const balanceInfo = getPartyBalanceInfo(selectedParty);
     const hasOutstanding = (balanceInfo?.receivable > 0) || (balanceInfo?.payable > 0) || (Math.abs(balanceInfo?.net || 0) > 0.01) || (Number(selectedParty.openingBalance || 0) !== 0);
-    if (hasOutstanding) {
-      const msg = `Cannot delete ${selectedParty.partyName}. This party has an outstanding balance (${balanceInfo?.receivable > 0 ? `Receivable: ₹${balanceInfo.receivable}` : `Payable: ₹${balanceInfo.payable}`}). Please settle the outstanding balance before deleting.`;
-      setLoadError(msg);
-      toast.error(msg);
-      return;
-    }
-    const blockReason = getPartyDeletionBlockReason(selectedParty);
-    if (blockReason) {
-      const msg = `Cannot delete ${selectedParty.partyName}. ${blockReason}`;
-      setLoadError(msg);
-      toast.error(msg);
-      return;
-    }
-    setDeletePartyConfirm(selectedParty);
+    const hasHistory = partyTransactions.length > 0 || Boolean(getPartyDeletionBlockReason(selectedParty));
+    setDeletePartyConfirm({
+      ...selectedParty,
+      willDeactivate: hasOutstanding || hasHistory,
+      hasOutstanding,
+      hasHistory,
+    });
   };
 
   const partyBalanceResult = useMemo(() => calculatePartyBalances({
@@ -614,8 +650,13 @@ function PartyDetails() {
   }, [parties]);
 
   const filteredParties = parties.filter((party) => {
-    const matchesSearch = String(party.partyName || "").toLowerCase().includes(search.toLowerCase());
-    if (!matchesSearch) return false;
+    const q = search.trim().toLowerCase().replace(/\s+/g, " ");
+    if (q) {
+      const normName = String(party.partyName || party.name || "").trim().toLowerCase().replace(/\s+/g, " ");
+      const phone = String(party.phone || party.mobile || "").toLowerCase();
+      const gstin = String(party.gstin || "").toLowerCase();
+      if (!normName.includes(q) && !phone.includes(q) && !gstin.includes(q)) return false;
+    }
 
     // Party Grouping setting check
     if ((appSettings.enablePartyGrouping ?? true) && groupFilter !== "all") {
@@ -679,7 +720,7 @@ function PartyDetails() {
   const selectedBalanceType = selectedParty?.openingBalanceType || "to-receive";
 
   const statementRows = useMemo(() => [
-    ...(selectedParty && selectedOpeningBalance > 0 ? [{
+    ...(selectedParty && selectedOpeningBalance > 0 && !transactionSearch.trim() ? [{
       id: "opening",
       date: selectedParty.asOfDate || "",
       source: `${selectedBalanceType === "to-pay" ? "Payable" : "Receivable"} Opening Balance`,
@@ -703,7 +744,7 @@ function PartyDetails() {
       receivableBalance: Number(entry.receivableBalance || 0),
       payableBalance: Number(entry.payableBalance || 0),
     })),
-  ], [selectedParty, selectedOpeningBalance, selectedBalanceType, visiblePartyTransactions]);
+  ], [selectedParty, selectedOpeningBalance, selectedBalanceType, visiblePartyTransactions, transactionSearch]);
 
   const statementTotals = useMemo(() => ({
     totalAmount: statementRows.reduce((sum, r) => sum + Number(r.total || 0), 0),
@@ -941,7 +982,23 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
         <h1 className="flex items-center gap-2 text-xl font-bold text-slate-700">Parties</h1>
         <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700 text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
       </div>
-      {loadError && <p className="bg-white px-5 py-2 text-sm text-red-600">{loadError}</p>}
+      {isLoading && (
+        <div className="bg-blue-50 px-5 py-2 text-xs font-semibold text-blue-700 border-b border-blue-200">
+          Loading parties from MySQL...
+        </div>
+      )}
+      {loadError && (
+        <div className="flex items-center justify-between bg-rose-50 px-5 py-2 text-sm text-rose-700 border-b border-rose-200">
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={fetchAllFromDatabase}
+            className="ml-4 rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* Mobile Master-Detail View Switcher (< md) */}
       <div className="flex md:hidden border-b border-slate-200 bg-white p-1.5 gap-1.5 shrink-0 z-10 shadow-xs">
         <button
@@ -1921,7 +1978,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
       {/* ============================================================ */}
       {reminderModalOpen && selectedParty && (() => {
         const company = getCompanyProfile();
-        const companyName = company.businessName || company.companyName || "Sai Kirana Stores";
+        const companyName = company.businessName || company.companyName || "My Business";
         const amount = selectedPartyBalance?.receivable > 0
           ? selectedPartyBalance.receivable
           : (selectedBalanceType === "to-receive" ? selectedOpeningBalance : 0);
@@ -2046,20 +2103,37 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
       {deletePartyConfirm && (
         <ConfirmModal
           isOpen={Boolean(deletePartyConfirm)}
-          title="Delete Party"
-          message={`Are you sure you want to delete party "${deletePartyConfirm.partyName}"? This party has no linked transactions.`}
-          confirmText="Delete Party"
+          title={deletePartyConfirm.willDeactivate ? "Deactivate Party" : "Delete Party"}
+          message={
+            deletePartyConfirm.willDeactivate
+              ? `Party "${deletePartyConfirm.partyName}" has ${deletePartyConfirm.hasOutstanding ? "an outstanding balance" : "historical transaction records"} and will be marked Inactive instead of being permanently deleted. Historical records will be preserved.`
+              : `Are you sure you want to permanently delete party "${deletePartyConfirm.partyName}"? Only parties with no linked records and zero balance are permanently deleted.`
+          }
+          confirmText={deletePartyConfirm.willDeactivate ? "Deactivate Party" : "Delete Party"}
           cancelText="Cancel"
           danger={true}
           onConfirm={async () => {
             try {
-              await deleteBusinessParty(deletePartyConfirm.id);
-              setParties((current) => current.filter((party) => String(party.id) !== String(deletePartyConfirm.id)));
-              setSelectedPartyId("cash-sale");
+              const res = await deleteBusinessParty(deletePartyConfirm.id);
+              if (res?.action === "deactivated") {
+                setParties((current) =>
+                  current.map((party) =>
+                    String(party.id) === String(deletePartyConfirm.id)
+                      ? { ...party, isActive: false, status: "inactive" }
+                      : party
+                  )
+                );
+                toast.success(res.message || `Party "${deletePartyConfirm.partyName}" has been deactivated.`);
+              } else {
+                setParties((current) => current.filter((party) => String(party.id) !== String(deletePartyConfirm.id)));
+                setSelectedPartyId("cash-sale");
+                toast.success(res?.message || `Party "${deletePartyConfirm.partyName}" deleted.`);
+              }
               setLoadError("");
-              toast.success(`Party "${deletePartyConfirm.partyName}" deleted.`);
             } catch (err) {
-              toast.error(err.message || "Failed to delete party.");
+              const msg = err.message || "Failed to delete party.";
+              setLoadError(msg);
+              toast.error(msg);
             } finally {
               setDeletePartyConfirm(null);
             }

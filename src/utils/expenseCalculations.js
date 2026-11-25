@@ -134,8 +134,16 @@ export function normalizeExpense(record, index = 0) {
 
   const balance = Math.max(0, amount - paidAmount);
 
+  const pStatus = String(record.paymentStatus || record.payment_status || "").trim().toLowerCase();
+  const sStatus = String(record.status || "").trim().toLowerCase();
+  const isCancelled =
+    Boolean(record.cancelled) ||
+    Boolean(record.deleted) ||
+    ["cancelled", "canceled", "void", "deleted"].includes(pStatus) ||
+    ["cancelled", "canceled", "void", "deleted"].includes(sStatus);
+
   let status;
-  if (record.status === "Cancelled" || record.cancelled) {
+  if (isCancelled) {
     status = "Cancelled";
   } else if (balance === 0) {
     status = "Paid";
@@ -298,7 +306,15 @@ export function calculateExpenseMetrics(filteredExpenses = []) {
   const partyMap = new Map();
 
   safeFilteredExpenses.forEach((exp) => {
-    if (!exp || exp.status === "Cancelled" || exp.cancelled || exp.deleted) {
+    const expStatus = String(exp?.status || "").trim().toLowerCase();
+    const expPayStatus = String(exp?.paymentStatus || exp?.payment_status || "").trim().toLowerCase();
+    if (
+      !exp ||
+      exp.cancelled ||
+      exp.deleted ||
+      ["cancelled", "canceled", "void", "deleted"].includes(expStatus) ||
+      ["cancelled", "canceled", "void", "deleted"].includes(expPayStatus)
+    ) {
       return;
     }
 

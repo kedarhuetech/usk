@@ -342,6 +342,7 @@ export default function ProfitAndLossReport() {
     // ── Cost of Goods Sold (COGS) & Stocks ──
     // Calculate cost of items sold from active sales
     let totalCogsFromSales = 0;
+    let missingCostCount = 0;
     activeSales.forEach((sale) => {
       (sale.rows || []).forEach((row) => {
         const qty = Number(row.qty ?? row.quantity ?? 1) || 1;
@@ -354,37 +355,26 @@ export default function ProfitAndLossReport() {
             (rowName && String(it.itemName || it.name || "").trim().toLowerCase() === rowName)
         );
 
-        let unitCost;
+        let unitCost = 0;
         if (matchedItem) {
-          unitCost = Number(matchedItem.purchasePrice || matchedItem.atPrice || 0);
-          if (!unitCost) {
-            const sp = Number(matchedItem.salePrice || matchedItem.price || row.price || 0);
-            unitCost = sp > 0 ? sp * 0.7268 : 0;
-          }
+          unitCost = Number(matchedItem.purchasePrice || matchedItem.atPrice || 0) || 0;
         } else {
-          const sp = Number(row.price || row.rate || 0);
-          unitCost = sp > 0 ? sp * 0.7268 : 0;
+          unitCost = Number(row.purchasePrice || 0) || 0;
+        }
+        if (unitCost <= 0 && qty > 0) {
+          missingCostCount += 1;
         }
         totalCogsFromSales += qty * unitCost;
       });
     });
 
-    // If sale exists but items didn't have purchase prices, calculate COGS based on typical gross margin
-    if (totalCogsFromSales === 0 && saleTotal > 0) {
-      totalCogsFromSales = Math.round(saleTotal * 0.7268 * 100) / 100;
-    }
-
-    // Opening stock from items list
+    // Opening stock from items list (use actual purchasePrice/atPrice; never fabricate fallback values)
     let openingStock = 0;
     rawItems.forEach((item) => {
       const qty = Number(item.openingQuantity || item.stock || item.quantity || 0) || 0;
-      const unitCost = Number(item.purchasePrice || item.atPrice || item.salePrice || item.price || 0) || 0;
+      const unitCost = Number(item.purchasePrice || item.atPrice || 0) || 0;
       openingStock += qty * unitCost;
     });
-
-    if (openingStock === 0 && rawItems.length > 0) {
-      openingStock = 2160;
-    }
 
     // Cost of Goods Sold = Cost of items sold during period + net purchases
     const costOfGoodsSold = totalCogsFromSales > 0 ? totalCogsFromSales : Math.max(0, netPurchase);

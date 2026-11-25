@@ -151,15 +151,7 @@ function ImportParties() {
     setSaving(true);
     setStatus({ type: "", message: "" });
     try {
-      let existing = [];
-      try {
-        existing = await loadBusinessParties();
-      } catch {
-        existing = getParties();
-      }
-      if (!Array.isArray(existing) || existing.length === 0) {
-        existing = getParties();
-      }
+      const existing = await loadBusinessParties();
       const existingNames = new Set(
         existing
           .map((p) => normalized(p.partyName || p.name || p.party_name).toLowerCase().replace(/\s+/g, " "))

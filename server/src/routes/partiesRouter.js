@@ -8,9 +8,17 @@
  */
 
 import { Router } from "express";
-import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 
 const router = Router();
+
+export function normalizePartyName(raw = "") {
+  return String(raw || "").trim().replace(/\s+/g, " ");
+}
+
+export function normalizePartyNameKey(raw = "") {
+  return normalizePartyName(raw).toLowerCase();
+}
 
 // In-memory OTP store for phone verification with 5 min TTL
 const otpStore = new Map();
@@ -124,7 +132,8 @@ router.get("/", async (req, res) => {
     // Query 2: Fetch parties (pure columns)
     let querySql = `SELECT id, business_id, party_name, phone, email, gstin, pan,
               party_type, opening_balance, current_balance, balance_type,
-              credit_limit, billing_street, billing_city, billing_state,
+              credit_limit, credit_limit_type, party_group, gst_type, as_of_date,
+              additional_fields, billing_street, billing_city, billing_state,
               billing_pincode, shipping_street, shipping_city, shipping_state,
               shipping_pincode, is_active, created_at, updated_at
        FROM parties
@@ -194,6 +203,8 @@ router.get("/:id/statement", async (req, res) => {
               total_amount, paid_amount, balance_amount, payment_mode
        FROM transactions
        WHERE business_id = ? AND party_id = ?
+         AND LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')
+         AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')
        ORDER BY transaction_date ASC, created_at ASC`,
       [businessId, partyId]
     );
@@ -214,59 +225,139 @@ const savePartyHandler = async (req, res) => {
     const body = req.body || {};
 
     const rawPartyName = (body.partyName || body.name || body.party_name || "").trim();
-    const partyName = rawPartyName.replace(/\s+/g, " ");
+    const partyName = normalizePartyName(rawPartyName);
     if (!partyName) {
       return res.status(400).json({ success: false, message: "Party name is required." });
     }
 
     const targetId = req.params?.id || body.id;
+    const normKey = normalizePartyNameKey(partyName);
 
-    // Strict uniqueness check: verify whether another party already uses this name in this business
-    const [existingByName] = await pool.query(
-      `SELECT id, party_name FROM parties WHERE business_id = ? AND LOWER(TRIM(party_name)) = LOWER(TRIM(?)) LIMIT 1`,
-      [businessId, partyName]
+    // Strict uniqueness check: normalize case + internal whitespace across all parties in this business
+    const [allBizParties] = await pool.query(
+      `SELECT id, party_name FROM parties WHERE business_id = ?`,
+      [businessId]
+    );
+    const duplicate = allBizParties.find(
+      (p) =>
+        (!targetId || String(targetId) !== String(p.id)) &&
+        normalizePartyNameKey(p.party_name) === normKey
     );
 
-    if (existingByName.length > 0) {
-      const existing = existingByName[0];
-      // If creating a new party or updating with a different ID, reject duplicate name
-      if (!targetId || String(targetId) !== String(existing.id)) {
-        return res.status(400).json({
-          success: false,
-          message: `A party named "${existing.party_name}" already exists. Please choose a different party name.`,
-          existingPartyId: existing.id,
-        });
-      }
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message: `A party named "${duplicate.party_name}" already exists. Please choose a different party name.`,
+        existingPartyId: duplicate.id,
+      });
     }
 
     const id = targetId || `party_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    const phone = body.phone || body.mobile || null;
-    const email = body.email || null;
-    const gstin = body.gstin || body.gstNumber || null;
-    const pan = body.pan || null;
-    const partyType = (body.partyType || body.party_type || "customer").toLowerCase();
-    const openingBalance = parseFloat(body.openingBalance ?? body.opening_balance ?? 0) || 0;
-    const currentBalance = parseFloat(body.currentBalance ?? body.balance ?? body.current_balance ?? openingBalance) || 0;
+    let existingParty = null;
+    if (targetId) {
+      const [existingRows] = await pool.query(
+        `SELECT *
+         FROM parties
+         WHERE business_id = ? AND id = ?
+         LIMIT 1`,
+        [businessId, targetId]
+      );
+      existingParty = existingRows[0] || null;
+    }
+
+    const hasOwn = (k) => Object.prototype.hasOwnProperty.call(body, k);
+    const pickText = (aliases, existingVal) => {
+      const present = aliases.filter((k) => hasOwn(k));
+      if (present.length > 0) {
+        for (const k of present) {
+          const v = body[k];
+          if (v !== undefined && v !== null && String(v).trim() !== "") {
+            return String(v).trim();
+          }
+        }
+        return null;
+      }
+      return existingVal ?? null;
+    };
+
+    const phone = pickText(["phone", "mobile", "phoneNumber"], existingParty?.phone);
+    const email = pickText(["email"], existingParty?.email);
+    const gstin = pickText(["gstin", "gstNumber"], existingParty?.gstin);
+    const pan = pickText(["pan"], existingParty?.pan);
+
+    const rawPartyType = body.partyType ?? body.party_type;
+    let partyType;
+    if (rawPartyType !== undefined && rawPartyType !== null && String(rawPartyType).trim() !== "") {
+      const normType = String(rawPartyType).trim().toLowerCase();
+      if (!["customer", "supplier", "both"].includes(normType)) {
+        return res.status(400).json({ success: false, message: "Party type must be customer, supplier, or both." });
+      }
+      partyType = normType;
+    } else {
+      partyType = existingParty?.party_type || "customer";
+    }
+
+    const hasOpeningBalance = body.openingBalance !== undefined || body.opening_balance !== undefined;
+    const openingBalance = hasOpeningBalance
+      ? (parseFloat(body.openingBalance ?? body.opening_balance) || 0)
+      : (existingParty ? (parseFloat(existingParty.opening_balance) || 0) : 0);
+
+    const hasCurrentBalance =
+      body.currentBalance !== undefined ||
+      body.balance !== undefined ||
+      body.current_balance !== undefined;
+    let currentBalance;
+    if (hasCurrentBalance) {
+      currentBalance = parseFloat(body.currentBalance ?? body.balance ?? body.current_balance) || 0;
+    } else if (existingParty) {
+      const prevOpening = parseFloat(existingParty.opening_balance) || 0;
+      const prevCurrent = parseFloat(existingParty.current_balance) || 0;
+      currentBalance = hasOpeningBalance ? prevCurrent + (openingBalance - prevOpening) : prevCurrent;
+    } else {
+      currentBalance = openingBalance;
+    }
+
     const rawBalanceType = String(body.balanceType || body.balance_type || body.openingBalanceType || body.opening_balance_type || "").trim().toLowerCase().replace("-", "_");
     const balanceType = rawBalanceType === "to_pay" || rawBalanceType === "to_receive"
       ? rawBalanceType
-      : (partyType === "supplier" ? "to_pay" : (currentBalance >= 0 ? "to_receive" : "to_pay"));
-    const creditLimit = parseFloat(body.creditLimit ?? body.credit_limit ?? 0) || 0;
+      : (existingParty?.balance_type || (partyType === "supplier" ? "to_pay" : (currentBalance >= 0 ? "to_receive" : "to_pay")));
+    const creditLimit = hasOwn("creditLimit") || hasOwn("credit_limit")
+      ? (parseFloat(body.creditLimit ?? body.credit_limit ?? 0) || 0)
+      : (existingParty ? (parseFloat(existingParty.credit_limit) || 0) : 0);
 
-    const billingStreet = body.billingStreet || (typeof body.billingAddress === "string" ? body.billingAddress : (body.address || null));
-    const billingCity = body.billingCity || body.city || null;
-    const billingState = body.billingState || body.state || null;
-    const billingPincode = body.billingPincode || body.pincode || null;
+    const partyGroup = pickText(["group", "partyGroup", "party_group"], existingParty?.party_group) || "General";
+    const gstType = pickText(["gstType", "gst_type"], existingParty?.gst_type) || "Unregistered / Consumer";
+    const asOfDate = hasOwn("asOfDate") || hasOwn("as_of_date")
+      ? toSqlDate(body.asOfDate ?? body.as_of_date)
+      : (existingParty?.as_of_date ? toSqlDate(existingParty.as_of_date) : null);
+    const creditLimitType = pickText(["creditLimitType", "credit_limit_type"], existingParty?.credit_limit_type) || "no-limit";
 
-    const shippingStreet = body.shippingStreet || (typeof body.shippingAddress === "string" ? body.shippingAddress : null);
-    const shippingCity = body.shippingCity || null;
-    const shippingState = body.shippingState || null;
-    const shippingPincode = body.shippingPincode || null;
+    let additionalFieldsJson = existingParty?.additional_fields ?? null;
+    if (hasOwn("additionalFields") || hasOwn("additional_fields")) {
+      const rawAf = body.additionalFields ?? body.additional_fields;
+      if (Array.isArray(rawAf)) {
+        additionalFieldsJson = JSON.stringify(rawAf);
+      } else if (typeof rawAf === "string") {
+        additionalFieldsJson = rawAf;
+      } else if (rawAf == null) {
+        additionalFieldsJson = null;
+      }
+    }
+
+    const billingStreet = pickText(["billingStreet", "billingAddress", "address"], existingParty?.billing_street);
+    const billingCity = pickText(["billingCity", "city"], existingParty?.billing_city);
+    const billingState = pickText(["billingState", "state"], existingParty?.billing_state);
+    const billingPincode = pickText(["billingPincode", "pincode"], existingParty?.billing_pincode);
+
+    const shippingStreet = pickText(["shippingStreet", "shippingAddress"], existingParty?.shipping_street);
+    const shippingCity = pickText(["shippingCity"], existingParty?.shipping_city);
+    const shippingState = pickText(["shippingState"], existingParty?.shipping_state);
+    const shippingPincode = pickText(["shippingPincode"], existingParty?.shipping_pincode);
 
     const rawActive = body.status !== undefined
       ? (String(body.status).toLowerCase() !== "inactive")
-      : (body.isActive !== undefined ? Boolean(body.isActive) : true);
+      : (body.isActive !== undefined ? Boolean(body.isActive) : (existingParty ? Boolean(existingParty.is_active) : true));
     const isActive = rawActive ? 1 : 0;
 
     // Pure SQL UPSERT
@@ -274,10 +365,11 @@ const savePartyHandler = async (req, res) => {
       `INSERT INTO parties (
         id, business_id, party_name, phone, email, gstin, pan, party_type,
         opening_balance, current_balance, balance_type, credit_limit,
+        credit_limit_type, party_group, gst_type, as_of_date, additional_fields,
         billing_street, billing_city, billing_state, billing_pincode,
         shipping_street, shipping_city, shipping_state, shipping_pincode,
         is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         party_name = VALUES(party_name),
         phone = VALUES(phone),
@@ -285,9 +377,15 @@ const savePartyHandler = async (req, res) => {
         gstin = VALUES(gstin),
         pan = VALUES(pan),
         party_type = VALUES(party_type),
+        opening_balance = VALUES(opening_balance),
         current_balance = VALUES(current_balance),
         balance_type = VALUES(balance_type),
         credit_limit = VALUES(credit_limit),
+        credit_limit_type = VALUES(credit_limit_type),
+        party_group = VALUES(party_group),
+        gst_type = VALUES(gst_type),
+        as_of_date = VALUES(as_of_date),
+        additional_fields = VALUES(additional_fields),
         billing_street = VALUES(billing_street),
         billing_city = VALUES(billing_city),
         billing_state = VALUES(billing_state),
@@ -301,26 +399,33 @@ const savePartyHandler = async (req, res) => {
       [
         id, businessId, partyName, phone, email, gstin, pan, partyType,
         openingBalance, currentBalance, balanceType, creditLimit,
+        creditLimitType, partyGroup, gstType, asOfDate, additionalFieldsJson,
         billingStreet, billingCity, billingState, billingPincode,
         shippingStreet, shippingCity, shippingState, shippingPincode,
         isActive
       ]
     );
 
+    const [savedRows] = await pool.query(
+      `SELECT * FROM parties WHERE business_id = ? AND id = ? LIMIT 1`,
+      [businessId, id]
+    );
+    const savedPartyData = savedRows.length > 0 ? mapPartyRow(savedRows[0]) : {
+      id,
+      partyName,
+      phone,
+      email,
+      gstin,
+      partyType,
+      currentBalance,
+      isActive: isActive === 1,
+      status: isActive === 1 ? "active" : "inactive",
+    };
+
     return res.json({
       success: true,
       message: "Party saved successfully in pure relational rows and columns.",
-      data: {
-        id,
-        partyName,
-        phone,
-        email,
-        gstin,
-        partyType,
-        currentBalance,
-        isActive: isActive === 1,
-        status: isActive === 1 ? "active" : "inactive",
-      },
+      data: savedPartyData,
     });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY" || err.errno === 1062) {
@@ -337,25 +442,119 @@ const savePartyHandler = async (req, res) => {
 router.post("/", savePartyHandler);
 router.put("/:id", savePartyHandler);
 
-/**
- * DELETE /api/parties/:id
- * Removes a party
- */
-router.delete("/:id", async (req, res) => {
-  try {
-    const businessId = businessIdFromRequest(req);
-    const partyId = req.params.id;
+export async function executePartyDeletionPolicy(conn, businessId, partyId) {
+  const [partyRows] = await conn.query(
+    `SELECT id, party_name, opening_balance, current_balance, is_active
+     FROM parties
+     WHERE business_id = ? AND id = ?
+     LIMIT 1
+     FOR UPDATE`,
+    [businessId, partyId]
+  );
 
-    await pool.query(
-      `DELETE FROM parties WHERE business_id = ? AND id = ?`,
+  if (!partyRows.length) {
+    return { notFound: true };
+  }
+
+  const party = partyRows[0];
+  const dependentChecks = [
+    { table: "transactions", label: "transactions" },
+    { table: "cash_in_hand", label: "cash ledger entries" },
+    { table: "cheques", label: "cheques" },
+    { table: "service_reminders", label: "service reminders" },
+    { table: "purchase_job_works", label: "purchase job works" },
+  ];
+
+  const referencedIn = [];
+  for (const check of dependentChecks) {
+    const [refRows] = await conn.query(
+      `SELECT COUNT(*) AS cnt FROM ${check.table} WHERE business_id = ? AND party_id = ?`,
       [businessId, partyId]
     );
+    if ((Number(refRows[0]?.cnt) || 0) > 0) {
+      referencedIn.push(check.label);
+    }
+  }
 
-    return res.json({ success: true, message: "Party deleted successfully." });
+  const hasOutstandingBalance =
+    Math.abs(parseFloat(party.current_balance) || 0) > 0.001 ||
+    Math.abs(parseFloat(party.opening_balance) || 0) > 0.001;
+
+  if (referencedIn.length > 0 || hasOutstandingBalance) {
+    await conn.query(
+      `UPDATE parties SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND id = ?`,
+      [businessId, partyId]
+    );
+    const reason = referencedIn.length > 0
+      ? `Party "${party.party_name}" has historical records (${referencedIn.join(", ")}) and has been marked inactive instead of being permanently deleted.`
+      : `Party "${party.party_name}" has an outstanding balance and has been marked inactive instead of being permanently deleted.`;
+    return {
+      notFound: false,
+      action: "deactivated",
+      referencedIn,
+      hasOutstandingBalance,
+      message: reason,
+    };
+  }
+
+  await conn.query(
+    `DELETE FROM parties WHERE business_id = ? AND id = ?`,
+    [businessId, partyId]
+  );
+
+  return {
+    notFound: false,
+    action: "deleted",
+    referencedIn: [],
+    hasOutstandingBalance: false,
+    message: `Party "${party.party_name}" permanently deleted.`,
+  };
+}
+
+/**
+ * DELETE /api/parties/:id
+ * Enforces safe party deletion policy: deactivates parties with references or non-zero balance,
+ * permanently deletes only when confirmed unreferenced and zero-balance.
+ */
+router.delete("/:id", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const businessId = businessIdFromRequest(req);
+    const partyId = req.params.id;
+    const outcome = await executePartyDeletionPolicy(conn, businessId, partyId);
+    if (outcome.notFound) {
+      await conn.rollback();
+      return res.status(404).json({ success: false, message: "Party not found." });
+    }
+    await conn.commit();
+    return res.json({
+      success: true,
+      action: outcome.action,
+      referencedIn: outcome.referencedIn,
+      hasOutstandingBalance: outcome.hasOutstandingBalance,
+      message: outcome.message,
+    });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    try { await conn.rollback(); } catch {}
+    return res.status(500).json({ success: false, message: err.message || "Failed to verify or delete party." });
+  } finally {
+    conn.release();
   }
 });
+
+function parseAdditionalFields(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 function mapPartyRow(row) {
   return {
@@ -369,6 +568,12 @@ function mapPartyRow(row) {
     gstNumber: row.gstin || "",
     pan: row.pan || "",
     partyType: row.party_type || "customer",
+    group: row.party_group || "General",
+    partyGroup: row.party_group || "General",
+    gstType: row.gst_type || "Unregistered / Consumer",
+    asOfDate: row.as_of_date ? String(row.as_of_date).slice(0, 10) : "",
+    creditLimitType: row.credit_limit_type || "no-limit",
+    additionalFields: parseAdditionalFields(row.additional_fields),
     openingBalance: parseFloat(row.opening_balance) || 0,
     openingBalanceType: (row.balance_type || (row.party_type === "supplier" ? "to_pay" : "to_receive")).replace("_", "-"),
     currentBalance: parseFloat(row.current_balance) || 0,

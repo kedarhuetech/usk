@@ -8,6 +8,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
+import { toast as toastNotification } from "../../components/Common/Toast.jsx";
 
 const PRINT_THEMES = [
   { id: "theme-1", name: "GST Theme 1", desc: "Classic Bordered Grid" },
@@ -82,41 +83,33 @@ export default function PrintTab({ settings, update }) {
 
   const handleLogoUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const res = await companyProfileApi.uploadAsset(file, "company-logo");
-        if (res?.data?.url || res?.url) {
-          update("companyLogo", res.data?.url || res.url);
-          return;
-        }
-      } catch (uploadErr) {
-        console.warn("Direct upload error, falling back to data URL:", uploadErr.message);
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const res = await companyProfileApi.uploadAsset(file, "company-logo");
+      const uploadedUrl = res?.data?.url || res?.url;
+      if (!uploadedUrl) {
+        throw new Error("Server did not return an uploaded logo URL.");
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        update("companyLogo", reader.result);
-      };
-      reader.readAsDataURL(file);
+      await update("companyLogo", uploadedUrl);
+    } catch (uploadErr) {
+      toastNotification.error(uploadErr?.message || "Failed to upload company logo.");
     }
   };
 
   const handleSignatureUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      try {
-        const res = await companyProfileApi.uploadAsset(file, "company-signature");
-        if (res?.data?.url || res?.url) {
-          update("signatureImage", res.data?.url || res.url);
-          return;
-        }
-      } catch (uploadErr) {
-        console.warn("Direct upload error, falling back to data URL:", uploadErr.message);
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const res = await companyProfileApi.uploadAsset(file, "company-signature");
+      const uploadedUrl = res?.data?.url || res?.url;
+      if (!uploadedUrl) {
+        throw new Error("Server did not return an uploaded signature URL.");
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        update("signatureImage", reader.result);
-      };
-      reader.readAsDataURL(file);
+      await update("signatureImage", uploadedUrl);
+    } catch (uploadErr) {
+      toastNotification.error(uploadErr?.message || "Failed to upload signature image.");
     }
   };
 
