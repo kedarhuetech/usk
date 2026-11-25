@@ -180,13 +180,19 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
   const deletedSales = new Set(Array.isArray(saleUi.deleted) ? saleUi.deleted.map(String) : []);
   const saleEdits = saleUi.edits && typeof saleUi.edits === "object" ? saleUi.edits : {};
   const saleCancelled = saleUi.cancelled && typeof saleUi.cancelled === "object" ? saleUi.cancelled : {};
+  const isRecordCancelled = (record) => {
+    if (isVoided(record)) return true;
+    const pStatus = String(record?.paymentStatus || record?.payment_status || "").trim().toLowerCase();
+    const sStatus = String(record?.status || "").trim().toLowerCase();
+    return ["cancelled", "canceled", "void", "deleted"].includes(pStatus) || ["cancelled", "canceled", "void", "deleted"].includes(sStatus);
+  };
   const saleRecords = uniqueRecords([...sales.map((record) => saleEdits[record.id] ? { ...record, ...saleEdits[record.id] } : record), ...(Array.isArray(saleUi.duplicates) ? saleUi.duplicates : [])]
-    .filter((record) => !deletedSales.has(recordId(record)) && !saleCancelled[recordId(record)]));
-  const purchaseRecords = uniqueRecords(purchases);
-  const liveReceipts = uniquePayments(paymentIns);
-  const livePayments = uniquePayments(paymentOuts);
-  const liveCredits = creditNotes.filter((record) => !isVoided(record));
-  const liveDebits = debitNotes.filter((record) => !isVoided(record));
+    .filter((record) => !deletedSales.has(recordId(record)) && !saleCancelled[recordId(record)] && !isRecordCancelled(record)));
+  const purchaseRecords = uniqueRecords(purchases).filter((record) => !isRecordCancelled(record));
+  const liveReceipts = uniquePayments(paymentIns).filter((record) => !isRecordCancelled(record));
+  const livePayments = uniquePayments(paymentOuts).filter((record) => !isRecordCancelled(record));
+  const liveCredits = creditNotes.filter((record) => !isRecordCancelled(record));
+  const liveDebits = debitNotes.filter((record) => !isRecordCancelled(record));
   const allRecords = [...saleRecords, ...purchaseRecords, ...liveReceipts, ...livePayments, ...liveCredits, ...liveDebits];
   const { map: partyMap, idToKey, nameToKey } = makePartyKeyedMap(parties, allRecords);
   const resolveKey = (record) => resolveRecordPartyKey(record, idToKey, nameToKey);
@@ -197,11 +203,15 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
     if (!value) return true;
     return (!from || value >= from) && (!to || value <= to);
   };
+  const rangedReceipts = liveReceipts.filter(inRange);
+  const rangedPayments = livePayments.filter(inRange);
+  const rangedCredits = liveCredits.filter(inRange);
+  const rangedDebits = liveDebits.filter(inRange);
   const results = [...partyMap.entries()].map(([key, party]) => {
     const partySales = saleRecords.filter((record) => inRange(record) && resolveKey(record) === key);
     const partyPurchases = purchaseRecords.filter((record) => inRange(record) && resolveKey(record) === key);
-    const receivableInvoices = partySales.map((invoice) => ({ invoice, settlement: calculateInvoiceSettlement(invoice, { kind: "sale", payments: liveReceipts, adjustments: liveCredits }) }));
-    const payableInvoices = partyPurchases.map((invoice) => ({ invoice, settlement: calculateInvoiceSettlement(invoice, { kind: "purchase", payments: livePayments, adjustments: liveDebits }) }));
+    const receivableInvoices = partySales.map((invoice) => ({ invoice, settlement: calculateInvoiceSettlement(invoice, { kind: "sale", payments: rangedReceipts, adjustments: rangedCredits }) }));
+    const payableInvoices = partyPurchases.map((invoice) => ({ invoice, settlement: calculateInvoiceSettlement(invoice, { kind: "purchase", payments: rangedPayments, adjustments: rangedDebits }) }));
     const ob = amount(party.openingBalance);
     const partyType = String(party.partyType || "").trim().toLowerCase();
     const obType = String(party.openingBalanceType || ((partyType === "supplier" || partyType === "vendor") ? "to-pay" : "to-receive")).toLowerCase();
@@ -218,10 +228,10 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
     const purchasesPayable = payableInvoices.reduce((sum, row) => sum + row.settlement.outstanding, 0);
     const customerOverpayments = receivableInvoices.reduce((sum, row) => sum + row.settlement.overpayment, 0);
     const supplierOverpayments = payableInvoices.reduce((sum, row) => sum + row.settlement.overpayment, 0);
-    const customerAdvances = liveReceipts.filter((payment) => (resolveKey(payment) === key) && !payment.linkedInvoiceId && !payment.invoiceId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.received), 0) + customerOverpayments;
-    const supplierAdvances = livePayments.filter((payment) => (resolveKey(payment) === key) && !payment.linkedInvoiceId && !payment.linkedBillId && !payment.invoiceId && !payment.billId && !payment.purchaseId && !payment.linkedCreditNoteId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.paid), 0) + supplierOverpayments;
-    const customerCredits = liveCredits.filter((note) => resolveKey(note) === key).reduce((sum, note) => sum + amount(note.customerCreditAmount ?? Math.max(0, invoiceTotal(note) - amount(note.adjustedAmount) - amount(note.received))), 0);
-    const supplierCredits = liveDebits.filter((note) => resolveKey(note) === key).filter((note) => !note.billId && !note.purchaseId && !note.linkedInvoiceId).reduce((sum, note) => sum + amount(note.balance ?? Math.max(0, invoiceTotal(note) - amount(note.received))), 0);
+    const customerAdvances = rangedReceipts.filter((payment) => (resolveKey(payment) === key) && !payment.linkedInvoiceId && !payment.invoiceId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.received), 0) + customerOverpayments;
+    const supplierAdvances = rangedPayments.filter((payment) => (resolveKey(payment) === key) && !payment.linkedInvoiceId && !payment.linkedBillId && !payment.invoiceId && !payment.billId && !payment.purchaseId && !payment.linkedCreditNoteId && !(Array.isArray(payment.allocations) && payment.allocations.length)).reduce((sum, payment) => sum + amount(payment.amount ?? payment.total ?? payment.paid), 0) + supplierOverpayments;
+    const customerCredits = rangedCredits.filter((note) => resolveKey(note) === key).reduce((sum, note) => sum + amount(note.customerCreditAmount ?? Math.max(0, invoiceTotal(note) - amount(note.adjustedAmount) - amount(note.received))), 0);
+    const supplierCredits = rangedDebits.filter((note) => resolveKey(note) === key).filter((note) => !note.billId && !note.purchaseId && !note.linkedInvoiceId).reduce((sum, note) => sum + amount(note.balance ?? Math.max(0, invoiceTotal(note) - amount(note.received))), 0);
     const receivable = openingReceivable + salesReceivable + supplierAdvances + supplierCredits;
     const payable = openingPayable + purchasesPayable + customerAdvances + customerCredits;
     return { ...party, openingReceivable, openingPayable, salesReceivable, purchasesPayable, customerAdvances: customerAdvances + customerCredits, supplierAdvances: supplierAdvances + supplierCredits, receivable, payable, net: receivable - payable, sales: receivableInvoices, purchases: payableInvoices };
@@ -229,9 +239,9 @@ export function calculatePartyBalances({ parties = [], sales = [], purchases = [
   const transactionReceivable = results.reduce((sum, party) => sum + party.salesReceivable + party.supplierAdvances, 0);
   const transactionPayable = results.reduce((sum, party) => sum + party.purchasesPayable + party.customerAdvances, 0);
   const unassignedSalesReceivable = saleRecords.filter((record) => !resolveKey(record) && inRange(record))
-    .reduce((sum, invoice) => sum + calculateInvoiceSettlement(invoice, { kind: "sale", payments: liveReceipts, adjustments: liveCredits }).outstanding, 0);
+    .reduce((sum, invoice) => sum + calculateInvoiceSettlement(invoice, { kind: "sale", payments: rangedReceipts, adjustments: rangedCredits }).outstanding, 0);
   const unassignedPurchasesPayable = purchaseRecords.filter((record) => !resolveKey(record) && inRange(record))
-    .reduce((sum, invoice) => sum + calculateInvoiceSettlement(invoice, { kind: "purchase", payments: livePayments, adjustments: liveDebits }).outstanding, 0);
+    .reduce((sum, invoice) => sum + calculateInvoiceSettlement(invoice, { kind: "purchase", payments: rangedPayments, adjustments: rangedDebits }).outstanding, 0);
   const openingReceivable = results.reduce((sum, party) => sum + party.openingReceivable, 0);
   const openingPayable = results.reduce((sum, party) => sum + party.openingPayable, 0);
   return { parties: results, receivable: transactionReceivable + unassignedSalesReceivable + openingReceivable, payable: transactionPayable + unassignedPurchasesPayable + openingPayable, transactionReceivable: transactionReceivable + unassignedSalesReceivable, transactionPayable: transactionPayable + unassignedPurchasesPayable, salesReceivable: results.reduce((sum, party) => sum + party.salesReceivable, 0) + unassignedSalesReceivable, purchasesPayable: results.reduce((sum, party) => sum + party.purchasesPayable, 0) + unassignedPurchasesPayable, openingReceivable, openingPayable };

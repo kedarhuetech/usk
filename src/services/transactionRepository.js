@@ -85,22 +85,25 @@ export function writeTransactionCollection(key, records) {
 }
 
 export function readTransactionValue(key, fallback = null) {
+  const scopedKey = getScopedStorageKey(key);
+  if (memoryStore.has(scopedKey)) return memoryStore.get(scopedKey);
   if (memoryStore.has(key)) return memoryStore.get(key);
   if (typeof window === "undefined" || !window.localStorage) return fallback;
-  const raw = window.localStorage.getItem(key);
+  const raw = window.localStorage.getItem(scopedKey) ?? window.localStorage.getItem(key);
   if (raw == null) return fallback;
   try {
     const value = JSON.parse(raw);
-    memoryStore.set(key, value);
+    memoryStore.set(scopedKey, value);
     return value;
   }
   catch (error) { throw new Error(`Saved transaction data (${key}) is corrupted: ${error.message}`, { cause: error }); }
 }
 
 export function writeTransactionValue(key, value) {
-  memoryStore.set(key, value);
+  const scopedKey = getScopedStorageKey(key);
+  memoryStore.set(scopedKey, value);
   if (!isDatabaseMode()) {
-    try { storage().setItem(key, JSON.stringify(value)); } catch {}
+    try { storage().setItem(scopedKey, JSON.stringify(value)); } catch {}
   }
   return value;
 }

@@ -24,7 +24,7 @@ import {
 } from "react-icons/fi";
 import {
   getReminderSettings,
-  saveReminderSettings,
+  saveReminderSettingsAuthoritative,
   getReminderRecords,
   saveReminderRecord,
   deleteReminderRecord,
@@ -96,9 +96,9 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
   const company = useMemo(() => {
     try {
       const p = getCompanyProfile();
-      return p?.businessName || p?.companyName || "Sai Kirana Stores";
+      return p?.businessName || p?.companyName || "My Business";
     } catch {
-      return "Sai Kirana Stores";
+      return "My Business";
     }
   }, []);
 
@@ -188,27 +188,36 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
     setTimeout(() => setNotice(""), 3500);
   };
 
-  const handleToggleEnable = (e) => {
+  const handleToggleEnable = async (e) => {
     const val = e.target.checked;
-    const updated = saveReminderSettings({ enabled: val });
-    setSettings(updated);
-    if (parentUpdate) parentUpdate("serviceRemindersEnabled", val);
-    showNotice(val ? "Service reminders enabled" : "Service reminders disabled");
+    try {
+      const updated = await saveReminderSettingsAuthoritative({ enabled: val });
+      setSettings(updated);
+      showNotice(val ? "Service reminders enabled" : "Service reminders disabled");
+    } catch (err) {
+      toast.error(err?.message || "Failed to update service reminder settings in MySQL.");
+    }
   };
 
-  const handleChangeDays = (e) => {
+  const handleChangeDays = async (e) => {
     const val = Math.max(1, Math.min(60, Number(e.target.value) || 1));
-    const updated = saveReminderSettings({ reminderDaysBefore: val });
-    setSettings(updated);
-    if (parentUpdate) parentUpdate("reminderDaysBefore", val);
+    try {
+      const updated = await saveReminderSettingsAuthoritative({ reminderDaysBefore: val });
+      setSettings(updated);
+    } catch (err) {
+      toast.error(err?.message || "Failed to update reminder days in MySQL.");
+    }
   };
 
-  const handleToggleAutoNotify = (e) => {
+  const handleToggleAutoNotify = async (e) => {
     const val = e.target.checked;
-    const updated = saveReminderSettings({ autoNotifyWhatsApp: val });
-    setSettings(updated);
-    if (parentUpdate) parentUpdate("serviceRemindersAutoWhatsApp", val);
-    showNotice(val ? "⚡ Auto-send enabled: Due reminders will be sent automatically" : "Auto-send disabled");
+    try {
+      const updated = await saveReminderSettingsAuthoritative({ autoNotifyWhatsApp: val });
+      setSettings(updated);
+      showNotice(val ? "⚡ Auto-send enabled: Due reminders will be sent automatically" : "Auto-send disabled");
+    } catch (err) {
+      toast.error(err?.message || "Failed to update auto-send setting in MySQL.");
+    }
   };
 
   const openAddModal = (record = null) => {

@@ -27,7 +27,8 @@ export async function loadBusinessItems() {
         return normalized;
       }
     } catch (e) {
-      console.warn("[MySQL] Falling back to local items:", e.message);
+      console.warn("[MySQL] Failed to load items:", e.message);
+      throw e;
     }
   }
   return getInventoryItems();
@@ -112,7 +113,8 @@ export async function loadBusinessParties() {
         return deduplicated;
       }
     } catch (e) {
-      console.warn("[MySQL] Falling back to local parties:", e.message);
+      console.warn("[MySQL] Failed to load parties:", e.message);
+      throw e;
     }
   }
   return deduplicatePartyList(getParties());
@@ -139,7 +141,8 @@ export async function loadBusinessSummary() {
         };
       }
     } catch (e) {
-      console.warn("[MySQL] Falling back to local summary:", e.message);
+      console.warn("[MySQL] Failed to load dashboard summary:", e.message);
+      throw e;
     }
   }
   return loadLocalDashboardSummary();
@@ -174,18 +177,25 @@ export async function saveBusinessParty(value) {
   return saveParty(party);
 }
 
-// Deletes business party with backend confirmation
+// Deletes or deactivates business party with backend confirmation
 export async function deleteBusinessParty(partyId) {
+  let result = { success: true, action: "deleted" };
   if (isDatabaseMode()) {
     try {
-      await partiesDb.remove(partyId);
+      result = await partiesDb.remove(partyId);
     } catch (e) {
       console.warn("[MySQL] Party delete failure:", e.message);
       throw e;
     }
   }
-  deleteParty(partyId, { skipRemoteSync: true });
+  if (result?.action === "deactivated") {
+    const existing = getParties().find((p) => String(p.id) === String(partyId)) || { id: partyId };
+    saveParty({ ...existing, isActive: false, status: "inactive" }, { skipRemoteSync: true });
+  } else {
+    deleteParty(partyId, { skipRemoteSync: true });
+  }
   notifyBusinessDataChanged();
+  return result;
 }
 
 // Loads sales invoices directly from MySQL database transactions table
@@ -204,7 +214,8 @@ export async function loadSalesInvoices() {
         return normalized;
       }
     } catch (e) {
-      console.warn("[MySQL] Falling back to local sales invoices:", e.message);
+      console.warn("[MySQL] Failed to load sales invoices:", e.message);
+      throw e;
     }
   }
   return getSaleInvoices();

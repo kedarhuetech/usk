@@ -12,7 +12,7 @@ async function syncFromTransactionItems(businessId) {
     const [txItems] = await pool.query(
       `SELECT DISTINCT ti.item_name, ti.unit_price, ti.tax_rate, ti.hsn_code
        FROM transaction_items ti
-       JOIN transactions t ON ti.transaction_id = t.id
+       JOIN transactions t ON ti.transaction_id = t.id AND ti.business_id = t.business_id
        WHERE t.business_id = ? AND t.transaction_type = 'expense'
          AND ti.item_name IS NOT NULL AND TRIM(ti.item_name) != ''`,
       [businessId]
@@ -45,7 +45,6 @@ async function syncFromTransactionItems(businessId) {
 router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    await syncFromTransactionItems(businessId);
 
     const [rows] = await pool.query(
       `SELECT * FROM expense_items WHERE business_id = ? ORDER BY item_name ASC`,

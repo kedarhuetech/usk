@@ -125,15 +125,8 @@ router.post(
  */
 router.get("/images/:id", async (req, res) => {
   try {
-    const rawBusinessId = req.query.businessId || req.get("x-business-id");
-    const businessId = rawBusinessId && rawBusinessId !== "local-development" ? rawBusinessId : null;
-
-    let file = null;
-    if (businessId) {
-      file = await getFileMetadataById(req.params.id, businessId);
-    } else {
-      file = await getFileMetadataById(req.params.id, null, { allowAnyBusiness: true });
-    }
+    const businessId = businessIdFromRequest(req);
+    const file = await getFileMetadataById(req.params.id, businessId);
 
     if (!file) {
       return res.status(404).json({ success: false, message: "Image not found." });
@@ -475,8 +468,7 @@ const saveItemHandler = async (req, res) => {
     const taxRate = parseFloat(body.taxRate ?? body.tax_rate ?? body.gst ?? 0) || 0;
     const cessRate = parseFloat(body.cessRate ?? body.cess_rate ?? 0) || 0;
     const rawOpeningStock = body.openingStock ?? body.opening_stock ?? body.openingQuantity ?? body.opening_quantity ?? body.initialOpeningQuantity ?? null;
-    const openingStock = rawOpeningStock !== null ? (parseFloat(rawOpeningStock) || 0) : 0;
-    const currentStock = parseFloat(body.currentStock ?? body.current_stock ?? body.stock ?? rawOpeningStock ?? 0) || 0;
+    const hasCurrentStock = body.currentStock !== undefined || body.current_stock !== undefined || body.stock !== undefined;
     const rawMinStock = body.minStock ?? body.min_stock ?? body.minimumStock ?? body.minimum_stock ?? body.minQuantity ?? body.min_quantity ?? null;
     const minStock = rawMinStock !== null ? (parseFloat(rawMinStock) || 0) : 0;
     const isBatchTracked = body.isBatchTracked || body.is_batch_tracked ? 1 : 0;
@@ -506,12 +498,28 @@ const saveItemHandler = async (req, res) => {
       imageUrl = `/api/items/images/${imageId}`;
     }
 
-    // Check for previous image cleanup if this is an update and image changed or was removed
+    // Check for previous image cleanup and existing stock values if this is an update
     const [existingItemRows] = await conn.query(
-      `SELECT image_id, image_url FROM inventory_items WHERE business_id = ? AND id = ?`,
+      `SELECT image_id, image_url, opening_stock, current_stock FROM inventory_items WHERE business_id = ? AND id = ?`,
       [businessId, id]
     );
-    const existingImageId = existingItemRows[0]?.image_id || null;
+    const existingItem = existingItemRows[0] || null;
+    const existingImageId = existingItem?.image_id || null;
+
+    const openingStock = rawOpeningStock !== null
+      ? (parseFloat(rawOpeningStock) || 0)
+      : (existingItem ? (parseFloat(existingItem.opening_stock) || 0) : 0);
+
+    let currentStock;
+    if (hasCurrentStock) {
+      currentStock = parseFloat(body.currentStock ?? body.current_stock ?? body.stock) || 0;
+    } else if (existingItem) {
+      const prevOpening = parseFloat(existingItem.opening_stock) || 0;
+      const prevCurrent = parseFloat(existingItem.current_stock) || 0;
+      currentStock = rawOpeningStock !== null ? prevCurrent + (openingStock - prevOpening) : prevCurrent;
+    } else {
+      currentStock = openingStock;
+    }
 
     let oldImageToCleanup = null;
     if (existingImageId && existingImageId !== imageId) {

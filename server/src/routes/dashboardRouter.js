@@ -8,6 +8,7 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { getIstDateString } from "../utils/dateUtils.js";
 
 const router = Router();
 
@@ -19,7 +20,10 @@ const getSummary = async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
     const bizClause = "business_id = ?";
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getIstDateString();
+
+    const activeTxnFilter = `LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')
+       AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')`;
 
     // 1. Sales & Purchases totals
     const [salesSummary] = await pool.query(
@@ -27,9 +31,10 @@ const getSummary = async (req, res) => {
          COUNT(*) AS totalSalesCount,
          COALESCE(SUM(total_amount), 0) AS totalSalesAmount,
          COALESCE(SUM(paid_amount), 0) AS totalSalesReceived,
-         COALESCE(SUM(balance_amount), 0) AS totalSalesPending
+         COALESCE(SUM(balance_amount), 0) AS totalSalesPending,
+         COALESCE(SUM(CASE WHEN party_id IS NULL THEN balance_amount ELSE 0 END), 0) AS unassignedSalesPending
        FROM transactions 
-       WHERE ${bizClause} AND transaction_type IN ('sale', 'pos')`,
+       WHERE ${bizClause} AND transaction_type IN ('sale', 'pos') AND ${activeTxnFilter}`,
       [businessId]
     );
 
@@ -38,24 +43,18 @@ const getSummary = async (req, res) => {
          COUNT(*) AS totalPurchaseCount,
          COALESCE(SUM(total_amount), 0) AS totalPurchaseAmount,
          COALESCE(SUM(paid_amount), 0) AS totalPurchasePaid,
-         COALESCE(SUM(balance_amount), 0) AS totalPurchasePending
+         COALESCE(SUM(balance_amount), 0) AS totalPurchasePending,
+         COALESCE(SUM(CASE WHEN party_id IS NULL THEN balance_amount ELSE 0 END), 0) AS unassignedPurchasePending
        FROM transactions 
-       WHERE ${bizClause} AND transaction_type = 'purchase'`,
+       WHERE ${bizClause} AND transaction_type = 'purchase' AND ${activeTxnFilter}`,
       [businessId]
     );
 
-    // 2. Receivables & Payables from parties
+    // 2. Authoritative Receivables & Payables from parties.current_balance + unassigned invoices
     const [partyBalances] = await pool.query(
       `SELECT 
-         COALESCE(SUM(CASE 
-           WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN 0
-           WHEN balance_type IN ('to_receive', 'to-receive') OR (party_type = 'customer' AND balance_type NOT IN ('to_pay', 'to-pay')) THEN ABS(opening_balance)
-           ELSE 0
-         END), 0) AS totalReceivable,
-         COALESCE(SUM(CASE 
-           WHEN balance_type IN ('to_pay', 'to-pay') OR (party_type = 'supplier' AND balance_type NOT IN ('to_receive', 'to-receive')) THEN ABS(opening_balance)
-           ELSE 0
-         END), 0) AS totalPayable,
+         COALESCE(SUM(CASE WHEN COALESCE(current_balance, 0) > 0 THEN current_balance ELSE 0 END), 0) AS totalReceivable,
+         COALESCE(SUM(CASE WHEN COALESCE(current_balance, 0) < 0 THEN ABS(current_balance) ELSE 0 END), 0) AS totalPayable,
          COUNT(CASE WHEN party_type = 'customer' THEN 1 END) AS customerCount,
          COUNT(CASE WHEN party_type = 'supplier' THEN 1 END) AS supplierCount
        FROM parties
@@ -63,8 +62,8 @@ const getSummary = async (req, res) => {
       [businessId]
     );
 
-    const totalReceivable = (parseFloat(partyBalances[0]?.totalReceivable) || 0) + (parseFloat(salesSummary[0]?.totalSalesPending) || 0);
-    const totalPayable = (parseFloat(partyBalances[0]?.totalPayable) || 0) + (parseFloat(purchaseSummary[0]?.totalPurchasePending) || 0);
+    const totalReceivable = (parseFloat(partyBalances[0]?.totalReceivable) || 0) + (parseFloat(salesSummary[0]?.unassignedSalesPending) || 0);
+    const totalPayable = (parseFloat(partyBalances[0]?.totalPayable) || 0) + (parseFloat(purchaseSummary[0]?.unassignedPurchasePending) || 0);
 
     // 3. Stock value and low stock alert count
     const [stockSummary] = await pool.query(
@@ -90,7 +89,7 @@ const getSummary = async (req, res) => {
       `SELECT id, transaction_type, document_number, transaction_date,
               party_name, total_amount, paid_amount, balance_amount, payment_mode
        FROM transactions
-       WHERE ${bizClause}
+       WHERE ${bizClause} AND ${activeTxnFilter}
        ORDER BY transaction_date DESC, created_at DESC
        LIMIT 5`,
       [businessId]
@@ -117,7 +116,7 @@ const getSummary = async (req, res) => {
        FROM transactions
        WHERE ${bizClause}
          AND transaction_type IN ('sale', 'pos') 
-         AND status NOT IN ('cancelled', 'canceled', 'void', 'deleted')
+         AND ${activeTxnFilter}
        ORDER BY transaction_date ASC`,
       [businessId]
     );

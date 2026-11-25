@@ -1,15 +1,22 @@
 // Implements the Item Settings Tab interface matching the USK desktop settings.
-import { useState } from "react";
-import { addCustomUnit, getUnits } from "../../services/unitsStorage.js";
+import { useEffect, useState } from "react";
+import { addCustomUnitAuthoritative, getUnits, loadAuthoritativeUnits } from "../../services/unitsStorage.js";
 
 export default function ItemTab({ settings, update }) {
   const [units, setUnits] = useState(getUnits);
   const [newUnit, setNewUnit] = useState("");
   const [unitError, setUnitError] = useState("");
+  const [savingUnit, setSavingUnit] = useState(false);
 
-  const handleSaveUnit = () => {
+  useEffect(() => {
+    loadAuthoritativeUnits()
+      .then((loaded) => setUnits(loaded))
+      .catch((err) => setUnitError(err?.message || "Failed to load units from MySQL."));
+  }, []);
+
+  const handleSaveUnit = async () => {
     const value = newUnit.trim().toUpperCase();
-    if (!value) return;
+    if (!value || savingUnit) return;
 
     if (units.some((u) => u.toLowerCase() === value.toLowerCase())) {
       setUnitError(`Unit "${value}" already exists.`);
@@ -17,9 +24,16 @@ export default function ItemTab({ settings, update }) {
     }
 
     setUnitError("");
-    const updated = addCustomUnit(value);
-    setUnits(updated);
-    setNewUnit("");
+    setSavingUnit(true);
+    try {
+      const updated = await addCustomUnitAuthoritative(value);
+      setUnits(updated);
+      setNewUnit("");
+    } catch (err) {
+      setUnitError(err?.message || "Failed to save custom unit to MySQL.");
+    } finally {
+      setSavingUnit(false);
+    }
   };
 
   return (
@@ -238,10 +252,10 @@ export default function ItemTab({ settings, update }) {
                 <button
                   type="button"
                   onClick={handleSaveUnit}
-                  disabled={!newUnit.trim()}
+                  disabled={!newUnit.trim() || savingUnit}
                   className="rounded-md bg-blue-600 px-4 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 disabled:opacity-50 transition cursor-pointer"
                 >
-                  Add Unit
+                  {savingUnit ? "Saving..." : "Add Unit"}
                 </button>
               </div>
               {unitError && (

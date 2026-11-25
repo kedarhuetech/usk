@@ -162,7 +162,7 @@ router.post("/migrate-local-data", async (req, res) => {
         await logMigration("unit_conversion", id, "unit_conversions", existing[0].id, "skipped", `Conversion already exists`);
       } else {
         await conn.query(
-          `INSERT INTO unit_conversions (id, business_id, unit, to_unit, conversion_factor)
+          `INSERT INTO unit_conversions (id, business_id, unit, to_unit, factor)
            VALUES (?, ?, ?, ?, ?)`,
           [id, businessId, unit, toUnit, factor]
         );

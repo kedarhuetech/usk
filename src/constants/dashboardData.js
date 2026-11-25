@@ -22,13 +22,5 @@ export const dashboardData = {
     "Party Statement",
   ],
   actions: ["Add Sale", "Add Purchase", "Add Party", "Add Item"],
-  widgets: [
-   
-    {
-      id: "google",
-      title: "Google Profile Manager",
-      status: "No Reviews",
-      text: "Businesses that respond to reviews earn more revenue",
-    },
-  ],
+  widgets: [],
 };

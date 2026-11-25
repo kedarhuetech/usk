@@ -7,6 +7,7 @@
 
 import crypto from "node:crypto";
 import { toSqlDate } from "../db/mysql.js";
+import { CASH_PROVENANCE } from "../utils/cashTransactionTypes.js";
 
 export const SUPPORTED_BACKUP_FORMAT = "usv-backup";
 export const SUPPORTED_BACKUP_VERSION = 1;
@@ -59,6 +60,149 @@ function allocateRecordId(rawId, conflictSet, idMap) {
   return strId;
 }
 
+function toSqlTimestamp(val) {
+  if (!val) return null;
+  if (val instanceof Date) {
+    if (Number.isNaN(val.getTime())) return null;
+    return val.toISOString().slice(0, 23).replace("T", " ");
+  }
+  const str = String(val).trim();
+  if (!str) return null;
+  const sqlMatch = str.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)/);
+  if (sqlMatch) {
+    return `${sqlMatch[1]} ${sqlMatch[2]}`;
+  }
+  const parsed = new Date(str);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 23).replace("T", " ");
+  }
+  return null;
+}
+
+function makeValidationError(message) {
+  return Object.assign(new Error(message), { status: 400 });
+}
+
+function normalizeExpenseCategories(rawCategories) {
+  if (rawCategories === undefined || rawCategories === null) {
+    return null;
+  }
+  if (!Array.isArray(rawCategories)) {
+    throw makeValidationError("Invalid expense categories dataset: expected an array.");
+  }
+
+  const normalized = [];
+  const seenNames = new Set();
+
+  for (let i = 0; i < rawCategories.length; i += 1) {
+    const ec = rawCategories[i];
+    if (!ec || typeof ec !== "object" || Array.isArray(ec)) {
+      throw makeValidationError(`Invalid expense category at index ${i}: expected an object.`);
+    }
+
+    const rawId = ec.id != null ? String(ec.id).trim() : "";
+    const idLabel = rawId ? ` (id: ${rawId})` : "";
+    const rawName = ec.categoryName ?? ec.name;
+    const name = rawName != null ? String(rawName).trim() : "";
+    if (!name) {
+      throw makeValidationError(`Invalid expense category at index ${i}${idLabel}: category name is required.`);
+    }
+    if (name.length > 100) {
+      throw makeValidationError(`Invalid expense category at index ${i}${idLabel}: category name exceeds 100 characters.`);
+    }
+
+    const dedupeKey = name.toLowerCase();
+    if (seenNames.has(dedupeKey)) {
+      continue;
+    }
+    seenNames.add(dedupeKey);
+
+    const expenseType = String(ec.expenseType ?? ec.type ?? "indirect").trim() || "indirect";
+    const createdAt = toSqlTimestamp(ec.createdAt ?? ec.created_at);
+
+    normalized.push({
+      rawId,
+      name,
+      expenseType: expenseType.slice(0, 50),
+      createdAt,
+    });
+  }
+
+  return normalized;
+}
+
+function normalizeExpenseItems(rawItems) {
+  if (rawItems === undefined || rawItems === null) {
+    return null;
+  }
+  if (!Array.isArray(rawItems)) {
+    throw makeValidationError("Invalid expense items dataset: expected an array.");
+  }
+
+  const normalized = [];
+
+  for (let i = 0; i < rawItems.length; i += 1) {
+    const ei = rawItems[i];
+    if (!ei || typeof ei !== "object" || Array.isArray(ei)) {
+      throw makeValidationError(`Invalid expense item at index ${i}: expected an object.`);
+    }
+
+    const rawId = ei.id != null ? String(ei.id).trim() : "";
+    const idLabel = rawId ? ` (id: ${rawId})` : "";
+    const rawName = ei.itemName ?? ei.item ?? ei.name;
+    const itemName = rawName != null ? String(rawName).trim() : "";
+    if (!itemName) {
+      throw makeValidationError(`Invalid expense item at index ${i}${idLabel}: item name is required.`);
+    }
+    if (itemName.length > 255) {
+      throw makeValidationError(`Invalid expense item at index ${i}${idLabel}: item name exceeds 255 characters.`);
+    }
+
+    const rawPrice = ei.price ?? ei.unitPrice;
+    let price = 0;
+    if (rawPrice !== undefined && rawPrice !== null && String(rawPrice).trim() !== "") {
+      const parsedPrice = Number(rawPrice);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        throw makeValidationError(`Invalid expense item at index ${i}${idLabel}: price must be a non-negative number.`);
+      }
+      price = parsedPrice;
+    }
+
+    const rawTax = ei.taxRate ?? ei.tax;
+    let taxRate = 0;
+    if (rawTax !== undefined && rawTax !== null && String(rawTax).trim() !== "") {
+      const parsedTax = Number(rawTax);
+      if (!Number.isFinite(parsedTax) || parsedTax < 0) {
+        throw makeValidationError(`Invalid expense item at index ${i}${idLabel}: tax rate must be a non-negative number.`);
+      }
+      taxRate = parsedTax;
+    }
+
+    const rawHsn = ei.hsnCode ?? ei.hsn;
+    const hsnCode = rawHsn != null && String(rawHsn).trim() !== "" ? String(rawHsn).trim().slice(0, 20) : null;
+    const rawDesc = ei.description;
+    const description = rawDesc != null && String(rawDesc).trim() !== "" ? String(rawDesc).trim() : null;
+    const rawCat = ei.category;
+    const category = rawCat != null && String(rawCat).trim() !== "" ? String(rawCat).trim().slice(0, 100) : "Expenses";
+    const createdAt = toSqlTimestamp(ei.createdAt ?? ei.created_at);
+    const updatedAt = toSqlTimestamp(ei.updatedAt ?? ei.updated_at);
+
+    normalized.push({
+      rawId,
+      itemName,
+      price,
+      taxRate,
+      hsnCode,
+      description,
+      category,
+      createdAt,
+      updatedAt,
+    });
+  }
+
+  return normalized;
+}
+
 /**
  * Validates the core structure of a USV backup payload.
  */
@@ -95,6 +239,9 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   }
 
   const data = payload.data;
+  const normalizedExpenseCategories = normalizeExpenseCategories(data["ledgerly:expenseCategories.v1"]);
+  const normalizedExpenseItems = normalizeExpenseItems(data["ledgerly:expenseItems.v1"]);
+
   const stats = {
     parties: 0,
     items: 0,
@@ -234,17 +381,26 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       const shippingState = p.shippingState || null;
       const shippingPincode = p.shippingPincode || null;
       const isActive = p.isActive !== false ? 1 : 0;
+      const partyGroup = p.group || p.partyGroup || p.party_group || "General";
+      const gstType = p.gstType || p.gst_type || "Unregistered / Consumer";
+      const asOfDate = toSqlDate(p.asOfDate || p.as_of_date);
+      const creditLimitType = p.creditLimitType || p.credit_limit_type || "no-limit";
+      const additionalFields = Array.isArray(p.additionalFields)
+        ? JSON.stringify(p.additionalFields)
+        : (typeof p.additionalFields === "string" ? p.additionalFields : null);
 
       await conn.query(
         `INSERT INTO parties (
           id, business_id, party_name, phone, email, gstin, pan, party_type,
           opening_balance, current_balance, balance_type, credit_limit,
+          credit_limit_type, party_group, gst_type, as_of_date, additional_fields,
           billing_street, billing_city, billing_state, billing_pincode,
           shipping_street, shipping_city, shipping_state, shipping_pincode, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, businessId, partyName, phone, email, gstin, pan, partyType,
           openingBalance, currentBalance, balanceType, creditLimit,
+          creditLimitType, partyGroup, gstType, asOfDate, additionalFields,
           billingStreet, billingCity, billingState, billingPincode,
           shippingStreet, shippingCity, shippingState, shippingPincode, isActive,
         ]
@@ -422,26 +578,29 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   // 6. FINANCIAL TRANSACTIONS (Sales, Purchases, Payments, Expenses, Orders, Challans)
   // ==========================================================================
   const TXN_STORE_MAPPINGS = [
-    { key: "ledgerly:saleInvoices.v1", defaultType: "sale", label: "Sales" },
-    { key: "ledgerly:purchaseBills.v1", defaultType: "purchase", label: "Purchases" },
-    { key: "ledgerly:paymentIns.v1", defaultType: "payment_in", label: "Payment In" },
-    { key: "ledgerly:paymentOuts.v1", defaultType: "payment_out", label: "Payment Out" },
-    { key: "ledgerly:estimateQuotations.v1", defaultType: "estimate", label: "Estimates" },
-    { key: "ledgerly:proformaInvoices.v1", defaultType: "proforma", label: "Proforma" },
-    { key: "ledgerly:deliveryChallans.v1", defaultType: "delivery_challan", label: "Delivery challans" },
-    { key: "ledgerly:expenses.v1", defaultType: "expense", label: "Expenses" },
-    { key: "ledgerly:saleReturns.v1", defaultType: "sale_return", label: "Sale returns" },
-    { key: "ledgerly:purchaseReturns.v1", defaultType: "purchase_return", label: "Purchase returns" },
-    { key: "ledgerly:saleOrders.v1", defaultType: "sale_order", label: "Sale orders" },
-    { key: "ledgerly:purchaseOrders.v1", defaultType: "purchase_order", label: "Purchase orders" },
+    { key: "ledgerly:saleInvoices.v1", defaultType: "sale", deleteTypes: ["sale", "pos"], label: "Sales" },
+    { key: "ledgerly:purchaseBills.v1", defaultType: "purchase", deleteTypes: ["purchase"], label: "Purchases" },
+    { key: "ledgerly:paymentIns.v1", defaultType: "payment_in", deleteTypes: ["payment_in", "payment-in"], label: "Payment In" },
+    { key: "ledgerly:paymentOuts.v1", defaultType: "payment_out", deleteTypes: ["payment_out", "payment-out"], label: "Payment Out" },
+    { key: "ledgerly:estimateQuotations.v1", defaultType: "estimate", deleteTypes: ["estimate"], label: "Estimates" },
+    { key: "ledgerly:proformaInvoices.v1", defaultType: "proforma", deleteTypes: ["proforma"], label: "Proforma" },
+    { key: "ledgerly:deliveryChallans.v1", defaultType: "delivery_challan", deleteTypes: ["delivery_challan"], label: "Delivery challans" },
+    { key: "ledgerly:expenses.v1", defaultType: "expense", deleteTypes: ["expense"], label: "Expenses" },
+    { key: "ledgerly:saleReturns.v1", defaultType: "sale_return", deleteTypes: ["sale_return", "credit_note", "credit note"], label: "Sale returns" },
+    { key: "ledgerly:purchaseReturns.v1", defaultType: "purchase_return", deleteTypes: ["purchase_return", "debit_note", "debit note"], label: "Purchase returns" },
+    { key: "ledgerly:saleOrders.v1", defaultType: "sale_order", deleteTypes: ["sale_order"], label: "Sale orders" },
+    { key: "ledgerly:purchaseOrders.v1", defaultType: "purchase_order", deleteTypes: ["purchase_order"], label: "Purchase orders" },
   ];
 
   const includedTxnTypes = [];
   const transactionsToInsert = [];
+  const restoredTxnIds = new Set();
 
   for (const mapping of TXN_STORE_MAPPINGS) {
     if (Array.isArray(data[mapping.key])) {
-      includedTxnTypes.push(mapping.defaultType);
+      for (const dt of mapping.deleteTypes) {
+        if (!includedTxnTypes.includes(dt)) includedTxnTypes.push(dt);
+      }
       if (!replacedStores.includes(mapping.label)) replacedStores.push(mapping.label);
       for (const t of data[mapping.key]) {
         transactionsToInsert.push({ ...t, effectiveType: t.transactionType || t.type || mapping.defaultType });
@@ -507,7 +666,11 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
       const paidAmount = parseFloat(t.paidAmount ?? t.totals?.received ?? t.receivedAmount ?? (transactionType === "payment_in" || transactionType === "payment_out" ? totalAmount : 0)) || 0;
       const balanceAmount = parseFloat(t.balanceAmount ?? t.totals?.balance ?? Math.max(0, totalAmount - paidAmount)) || 0;
       const paymentMode = t.paymentMode || t.form?.paymentType || "Cash";
-      const paymentStatus = t.paymentStatus || (balanceAmount <= 0 ? "Completed" : "Pending");
+      const isCancelled =
+        String(t.paymentStatus || t.status || "").trim().toLowerCase() === "cancelled";
+      const paymentStatus = isCancelled
+        ? "Cancelled"
+        : (t.paymentStatus || (balanceAmount <= 0 ? "Completed" : "Pending"));
       const paymentRefNo = t.paymentRefNo || t.form?.paymentReference || null;
       const notes = t.notes || t.form?.description || null;
       const terms = t.terms || t.form?.terms || null;
@@ -534,6 +697,7 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
         ]
       );
       stats.transactions += 1;
+      restoredTxnIds.add(id);
 
       // Restore transaction line items
       const rawRows = Array.isArray(t.rows) && t.rows.length ? t.rows : (Array.isArray(t.items) ? t.items : []);
@@ -676,23 +840,44 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
 
     for (const c of cashAdjustments) {
       if (!c) continue;
-      const id = allocateRecordId(c.id, cashConflicts);
+      const rawId = c.id != null ? String(c.id).trim() : "";
+      const referenceType = c.referenceType || c.reference_type || null;
+      const isManualAdjustment = String(referenceType || "").trim().toLowerCase() === "adjustment";
+      const mappedTxnId = !isManualAdjustment && rawId && txnIdMap.has(rawId) ? txnIdMap.get(rawId) : null;
+
+      let id;
+      if (mappedTxnId && !cashConflicts.has(mappedTxnId)) {
+        id = mappedTxnId;
+        cashConflicts.add(id);
+      } else if (!isManualAdjustment && rawId && restoredTxnIds.has(rawId) && !cashConflicts.has(rawId)) {
+        id = rawId;
+        cashConflicts.add(id);
+      } else {
+        id = allocateRecordId(c.id, cashConflicts);
+      }
+
+      const hasRestoredParent = !isManualAdjustment && restoredTxnIds.has(id);
+      const provenance = isManualAdjustment
+        ? CASH_PROVENANCE.MANUAL_ADJUSTMENT
+        : hasRestoredParent
+          ? CASH_PROVENANCE.TRANSACTION
+          : CASH_PROVENANCE.RESTORED_HISTORY;
+
       const entryDate = toSqlDate(c.entryDate || c.date) || new Date().toISOString().slice(0, 10);
       const entryType = String(c.entryType || c.type || "in").toLowerCase() === "out" ? "out" : "in";
       const amount = parseFloat(c.amount ?? 0) || 0;
       const rawPartyId = c.partyId || null;
       const partyId = (rawPartyId && partyIdMap.has(rawPartyId)) ? partyIdMap.get(rawPartyId) : rawPartyId;
       const partyName = c.partyName || null;
-      const referenceType = c.referenceType || null;
-      const referenceNo = c.referenceNo || null;
+      const referenceNo = c.referenceNo || c.reference_no || null;
       const description = c.description || null;
 
       await conn.query(
         `INSERT INTO cash_in_hand (
           id, business_id, entry_date, entry_type, amount,
-          party_id, party_name, reference_type, reference_no, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, businessId, entryDate, entryType, amount, partyId, partyName, referenceType, referenceNo, description]
+          party_id, party_name, reference_type, reference_no, description, provenance
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, businessId, entryDate, entryType, amount, partyId, partyName, referenceType, referenceNo, description, provenance]
       );
       stats.cashAdjustments += 1;
     }
@@ -919,43 +1104,54 @@ export async function restoreUsvToDatabase(conn, businessId, payload) {
   // ==========================================================================
   // 11. EXPENSE CATEGORIES & ITEMS
   // ==========================================================================
-  if (Array.isArray(data["ledgerly:expenseCategories.v1"])) {
+  if (normalizedExpenseCategories !== null) {
     await conn.query("DELETE FROM expense_categories WHERE business_id = ?", [businessId]);
-    const expCats = data["ledgerly:expenseCategories.v1"];
-    const ecConflicts = await getConflictingIds(conn, "expense_categories", expCats.map((ec) => ec?.id));
-    for (const ec of expCats) {
-      if (!ec || !ec.name) continue;
-      const id = allocateRecordId(ec.id, ecConflicts);
-      const name = String(ec.name).trim();
-      const type = ec.type || "indirect";
+    const ecConflicts = await getConflictingIds(
+      conn,
+      "expense_categories",
+      normalizedExpenseCategories.map((ec) => ec.rawId)
+    );
+    for (const ec of normalizedExpenseCategories) {
+      const id = allocateRecordId(ec.rawId, ecConflicts);
       await conn.query(
-        `INSERT INTO expense_categories (id, business_id, category_name, expense_type) VALUES (?, ?, ?, ?)`,
-        [id, businessId, name, type]
+        `INSERT INTO expense_categories (id, business_id, category_name, expense_type, created_at)
+         VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP(3)))`,
+        [id, businessId, ec.name, ec.expenseType, ec.createdAt]
       );
       stats.expenseCategories += 1;
     }
+    replacedStores.push("Expense categories");
   }
 
-  if (Array.isArray(data["ledgerly:expenseItems.v1"])) {
+  if (normalizedExpenseItems !== null) {
     await conn.query("DELETE FROM expense_items WHERE business_id = ?", [businessId]);
-    const expItems = data["ledgerly:expenseItems.v1"];
-    const eiConflicts = await getConflictingIds(conn, "expense_items", expItems.map((ei) => ei?.id));
-    for (const ei of expItems) {
-      if (!ei || !ei.itemName) continue;
-      const id = allocateRecordId(ei.id, eiConflicts);
-      const name = String(ei.itemName).trim();
-      const price = parseFloat(ei.price ?? 0) || 0;
-      const taxRate = parseFloat(ei.taxRate ?? 0) || 0;
-      const hsn = ei.hsnCode || null;
-      const desc = ei.description || null;
-      const cat = ei.category || "Expenses";
+    const eiConflicts = await getConflictingIds(
+      conn,
+      "expense_items",
+      normalizedExpenseItems.map((ei) => ei.rawId)
+    );
+    for (const ei of normalizedExpenseItems) {
+      const id = allocateRecordId(ei.rawId, eiConflicts);
       await conn.query(
-        `INSERT INTO expense_items (id, business_id, item_name, price, tax_rate, hsn_code, description, category)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, businessId, name, price, taxRate, hsn, desc, cat]
+        `INSERT INTO expense_items (
+          id, business_id, item_name, price, tax_rate, hsn_code, description, category, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP(3)), COALESCE(?, CURRENT_TIMESTAMP(3)))`,
+        [
+          id,
+          businessId,
+          ei.itemName,
+          ei.price,
+          ei.taxRate,
+          ei.hsnCode,
+          ei.description,
+          ei.category,
+          ei.createdAt,
+          ei.updatedAt,
+        ]
       );
       stats.expenseItems += 1;
     }
+    replacedStores.push("Expense items");
   }
 
   // ==========================================================================

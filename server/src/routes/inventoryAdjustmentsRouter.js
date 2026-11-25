@@ -6,6 +6,7 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
+import { getIstDateString } from "../utils/dateUtils.js";
 
 const router = Router();
 
@@ -64,15 +65,17 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ success: false, message: "Valid item ID is required." });
     }
 
-    // Lookup actual item name from inventory_items if missing or placeholder "Item"
+    // Verify item exists in this business (reject invalid or cross-business item_id)
+    const [itemRows] = await conn.query(
+      `SELECT id, name FROM inventory_items WHERE business_id = ? AND id = ? LIMIT 1`,
+      [businessId, itemId]
+    );
+    if (itemRows.length === 0) {
+      await conn.rollback();
+      return res.status(400).json({ success: false, message: "Item not found for this business." });
+    }
     if (!itemName || itemName.toLowerCase() === "item") {
-      const [itemRows] = await conn.query(
-        `SELECT name FROM inventory_items WHERE business_id = ? AND id = ?`,
-        [businessId, itemId]
-      );
-      if (itemRows.length > 0 && itemRows[0].name) {
-        itemName = itemRows[0].name.trim();
-      }
+      itemName = (itemRows[0].name || "Item").trim();
     }
     if (!itemName) itemName = "Item";
 
@@ -81,11 +84,29 @@ router.post("/", async (req, res) => {
     const unitPrice = parseFloat(body.unitPrice ?? 0) || 0;
     const totalValue = parseFloat(body.totalValue ?? (quantity * unitPrice)) || 0;
     const reason = body.reason || null;
-    const adjustmentDate = toSqlDate(body.adjustmentDate) || new Date().toISOString().slice(0, 10);
+    const batchNo = body.batchNo || body.batch_no || null;
+    const adjustmentDate = toSqlDate(body.adjustmentDate) || getIstDateString();
 
     if (quantity <= 0) {
       await conn.rollback();
       return res.status(400).json({ success: false, message: "Positive quantity is required." });
+    }
+
+    // Check existing adjustment for delta-safe idempotent updates
+    const [existingAdjRows] = await conn.query(
+      `SELECT item_id, adjustment_type, quantity FROM inventory_adjustments WHERE business_id = ? AND id = ? FOR UPDATE`,
+      [businessId, id]
+    );
+    if (existingAdjRows.length > 0) {
+      const oldAdj = existingAdjRows[0];
+      const oldQty = parseFloat(oldAdj.quantity) || 0;
+      const revertDelta = String(oldAdj.adjustment_type || "").toLowerCase() === "add" ? -oldQty : oldQty;
+      if (revertDelta !== 0) {
+        await conn.query(
+          `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
+          [revertDelta, businessId, oldAdj.item_id]
+        );
+      }
     }
 
     // 1. Insert adjustment row
@@ -106,7 +127,7 @@ router.post("/", async (req, res) => {
       [id, businessId, itemId, itemName, adjustmentType, quantity, unitPrice, totalValue, reason, adjustmentDate]
     );
 
-    // 2. Adjust inventory item current stock
+    // 2. Adjust inventory item current stock (and batch if specified)
     const stockDelta = adjustmentType === "add" ? quantity : -quantity;
     await conn.query(
       `UPDATE inventory_items
@@ -114,6 +135,14 @@ router.post("/", async (req, res) => {
        WHERE business_id = ? AND id = ?`,
       [stockDelta, businessId, itemId]
     );
+    if (batchNo) {
+      await conn.query(
+        `UPDATE item_batches
+         SET current_qty = current_qty + ?
+         WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
+        [stockDelta, businessId, itemId, batchNo]
+      );
+    }
 
     await conn.commit();
     return res.json({ success: true, message: "Adjustment recorded and stock updated.", data: { id, stockDelta } });
