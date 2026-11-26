@@ -394,7 +394,7 @@ export default function AuthPage({ initialMode = "login" }) {
                 U
               </div>
               <div>
-                <span className="text-xl font-bold tracking-tight text-white">USK <span className="text-[#FF5A1F]">Vyapaar</span></span>
+                <span className="text-xl font-bold tracking-tight text-white">USK</span>
                 <p className="text-xs text-slate-400">Business ERP & Billing Suite</p>
               </div>
             </div>
@@ -642,11 +642,14 @@ export default function AuthPage({ initialMode = "login" }) {
                     </div>
                   </div>
 
-                  <div className="p-3 bg-[#111319] border border-slate-800 rounded-lg text-xs text-slate-400 space-y-1">
+                  <div className="p-3 bg-[#111319] border border-slate-800 rounded-lg text-xs text-slate-400 space-y-1.5">
                     <div className="flex items-center gap-1.5 text-slate-300 font-medium">
                       <FiShield className="w-3.5 h-3.5 text-[#FF5A1F]" /> Rate Limiting & Protection
                     </div>
                     <p>Password reset requests are rate-limited to 3 attempts per 10 minutes to protect your business account against automated attacks.</p>
+                    <p className="text-slate-400/90 border-t border-slate-800/80 pt-1.5">
+                      <span className="text-slate-300 font-medium">Notice:</span> Verification emails may be filtered into your Spam or Junk folder—please check there if it doesn&apos;t appear in your inbox.
+                    </p>
                   </div>
 
                   <div className="pt-2">
@@ -690,6 +693,9 @@ export default function AuthPage({ initialMode = "login" }) {
                     <h3 className="text-xl font-bold text-white">Enter Verification Code</h3>
                     <p className="text-xs sm:text-sm text-slate-400 mt-1">
                       We sent a 6-digit code to <strong className="text-white">{forgotEmail}</strong>. Please enter it below to verify your identity.
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      Didn&apos;t receive it in your inbox? Please check your <span className="text-slate-300 font-medium">Spam / Junk</span> folder.
                     </p>
                   </div>
 
@@ -930,6 +936,9 @@ export default function AuthPage({ initialMode = "login" }) {
                           Resend Code
                         </button>
                       </div>
+                      <p className="text-[11px] text-slate-400 mt-1.5">
+                        If the code isn&apos;t in your inbox, please check your <span className="text-slate-300 font-medium">Spam / Junk</span> folder.
+                      </p>
 
                       <div className="pt-4">
                         <button

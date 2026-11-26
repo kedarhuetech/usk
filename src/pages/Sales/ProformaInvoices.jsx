@@ -17,8 +17,13 @@ import {
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { getScopedStorageKey } from "../../config/businessConfig.js";
 
 const STORAGE_KEY = "ledgerly:proformaInvoices.v1";
+
+function proformaStorageKey() {
+  return getScopedStorageKey(STORAGE_KEY);
+}
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 const iso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const startOfMonth = (date) => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -55,7 +60,7 @@ function normalizeProforma(item) {
 
 function readProformas() {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "[]");
+    const saved = JSON.parse(window.localStorage.getItem(proformaStorageKey()) || "[]");
     return Array.isArray(saved) ? saved.map(normalizeProforma) : [];
   } catch { return []; }
 }
@@ -108,20 +113,26 @@ export default function ProformaInvoices() {
     async function fetchProformas() {
       try {
         const list = await transactionsDb.listByType("proforma");
-        if (isMounted && Array.isArray(list) && list.length > 0) {
-          setProformas(list.map(normalizeProforma));
+        if (isMounted && Array.isArray(list)) {
+          const normalized = list.map(normalizeProforma);
+          setProformas(normalized);
+          try {
+            window.localStorage.setItem(proformaStorageKey(), JSON.stringify(normalized));
+          } catch {}
         }
       } catch {}
     }
     fetchProformas();
     const onDataChanged = () => fetchProformas();
-    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
-      return () => {
-        isMounted = false;
-        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
-      };
-    }
+    window.addEventListener("focus", onDataChanged);
+    window.addEventListener("storage", onDataChanged);
+    window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", onDataChanged);
+      window.removeEventListener("storage", onDataChanged);
+      window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+    };
   }, []);
 
   // Handle incoming edit or view state from reports or other pages
@@ -134,7 +145,7 @@ export default function ProformaInvoices() {
 
   const persist = (next) => {
     setProformas(next);
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.localStorage.setItem(proformaStorageKey(), JSON.stringify(next));
     notifyBusinessDataChanged();
   };
   const setDatePreset = (value) => {
@@ -167,13 +178,26 @@ export default function ProformaInvoices() {
         billingAddress: saved.billingAddress || "",
         shippingAddress: saved.shippingAddress || saved.billingAddress || "",
         stateOfSupply: saved.state || "",
-        items: (saved.rows || []).map((r) => ({
-          itemName: r.item,
-          description: r.description,
-          quantity: Number(r.qty || 1),
-          unitPrice: Number(r.price || 0),
-          totalAmount: Number(r.qty || 1) * Number(r.price || 0),
-        })),
+        items: (saved.rows || []).map((r) => {
+          const gross = Math.max(Number(r.qty || 1), 0) * Math.max(Number(r.price || 0), 0);
+          const discount = Math.max(Number(r.discountAmount) || gross * (Number(r.discountPercent) || 0) / 100, 0);
+          const taxable = Math.max(gross - discount, 0);
+          const rateMatch = String(r.taxRate || "").match(/(\d+(?:\.\d+)?)/);
+          const taxRateNum = rateMatch ? Number(rateMatch[1]) : 0;
+          const lineTotal = taxable + (taxable * taxRateNum) / 100;
+          return {
+            itemName: r.item,
+            description: r.description,
+            size: r.size || "",
+            unit: r.unit || "NONE",
+            quantity: Number(r.qty || 1),
+            unitPrice: Number(r.price || 0),
+            discountPercent: r.discountPercent || "",
+            discountAmount: r.discountAmount || "",
+            taxRate: r.taxRate || "NONE",
+            totalAmount: Number(lineTotal.toFixed(2)),
+          };
+        }),
       });
 
       persist(editor.mode === "edit" ? proformas.map((entry) => entry.id === saved.id ? saved : entry) : [saved, ...proformas]);

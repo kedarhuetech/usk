@@ -18,9 +18,8 @@ import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage.js";
 import {
   loadBusinessParties,
-  loadSalesInvoices,
-  loadPurchaseBills,
 } from "../../services/businessRecords.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 import {
   readTransactionCollection,
   readTransactionValue,
@@ -56,9 +55,16 @@ export default function PartyStatementReport() {
   // Refresh trigger for business data changes
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   useEffect(() => {
-    loadBusinessParties().catch(() => {});
-    loadSalesInvoices().catch(() => {});
-    loadPurchaseBills().catch(() => {});
+    let active = true;
+    Promise.allSettled([
+      loadBusinessParties(),
+      transactionsDb.listAll(),
+    ]).then(() => {
+      if (active) setRefreshTrigger((k) => k + 1);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -179,7 +185,7 @@ export default function PartyStatementReport() {
     } else if (t === "Credit Note" || t?.toLowerCase().includes("credit note")) {
       navigate("/sales/sale-return-credit-note", { state: { editInvoice: rawDoc, editReturn: rawDoc } });
     } else if (t === "Debit Note" || t?.toLowerCase().includes("debit note")) {
-      navigate("/purchase-expense/purchase-return", { state: { editBill: rawDoc, editReturn: rawDoc, editPurchase: rawDoc } });
+      navigate("/purchase-expense/purchase-return-debit-note", { state: { editBill: rawDoc, editReturn: rawDoc, editPurchase: rawDoc } });
     }
   };
 

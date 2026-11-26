@@ -58,6 +58,7 @@ import {
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
+import { getScopedStorageKey } from "../../config/businessConfig.js";
 
 const termsAppliesTo = [
   "Sale Invoice",
@@ -896,9 +897,10 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
                 else if (value === "Net 45") days = 45;
                 else if (value === "Net 60") days = 60;
                 if (value !== "Custom") {
-                  const invDate = form.invoiceDate ? new Date(form.invoiceDate) : new Date();
+                  const invDate = form.invoiceDate ? new Date(`${form.invoiceDate}T00:00:00`) : new Date();
                   invDate.setDate(invDate.getDate() + days);
-                  setField("dueDate", invDate.toISOString().slice(0, 10));
+                  const dueYmd = `${invDate.getFullYear()}-${String(invDate.getMonth() + 1).padStart(2, "0")}-${String(invDate.getDate()).padStart(2, "0")}`;
+                  setField("dueDate", dueYmd);
                 }
               }}
               options={["Due on Receipt", "Net 7", "Net 15", "Net 30", "Net 45", "Net 60", "Custom"]}
@@ -3353,8 +3355,22 @@ function AddSale({ mode = "sale", localOnly = false }) {
     if (quotationConversion) {
       try {
         const savedInvoice = await saveBusinessSaleInvoice({ ...invoice, quotationId: quotationConversion.id, proformaId: location.state?.proformaConversion?.id || "" });
-        const sourceDocuments = JSON.parse(window.localStorage.getItem(conversionStorageKey) || "[]");
-        window.localStorage.setItem(conversionStorageKey, JSON.stringify(sourceDocuments.map((document) => document.id === quotationConversion.id ? { ...document, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id } : document)));
+        const convertedAt = new Date().toISOString();
+        const scopedConversionKey = getScopedStorageKey(conversionStorageKey);
+        [scopedConversionKey, conversionStorageKey].forEach((storageKey) => {
+          try {
+            const sourceDocuments = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+            window.localStorage.setItem(storageKey, JSON.stringify(sourceDocuments.map((document) => document.id === quotationConversion.id ? { ...document, status: "Converted to Sale", convertedAt, convertedSaleId: savedInvoice.id } : document)));
+          } catch {}
+        });
+        await transactionsDb.save({
+          id: quotationConversion.id,
+          status: "Converted to Sale",
+          convertedAt,
+          conversionType: "Sale",
+          convertedSaleId: savedInvoice.id,
+        }).catch(() => {});
+        notifyBusinessDataChanged();
         setToast("Sale invoice created from this quotation.");
         navigate(returnPath);
       } catch (error) {
@@ -3377,10 +3393,26 @@ function AddSale({ mode = "sale", localOnly = false }) {
       try {
         const savedInvoice = await saveBusinessSaleInvoice({ ...invoice, deliveryChallanIds: deliveryChallanConversions.map((challan) => challan.id) });
         const key = "ledgerly:deliveryChallans.v1";
-        const sourceChallans = JSON.parse(window.localStorage.getItem(key) || "[]");
-        window.localStorage.setItem(key, JSON.stringify(sourceChallans.map((challan) => deliveryChallanConversions.some((source) => source.id === challan.id)
-          ? { ...challan, status: "Converted to Sale", convertedAt: new Date().toISOString(), convertedSaleId: savedInvoice.id, history: [...(challan.history || []), { action: "Converted to Sale", at: new Date().toISOString(), saleInvoiceId: savedInvoice.id }] }
-          : challan)));
+        const convertedAt = new Date().toISOString();
+        [getScopedStorageKey(key), key].forEach((storageKey) => {
+          try {
+            const sourceChallans = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+            window.localStorage.setItem(storageKey, JSON.stringify(sourceChallans.map((challan) => deliveryChallanConversions.some((source) => source.id === challan.id)
+              ? { ...challan, status: "Converted to Sale", convertedAt, convertedSaleId: savedInvoice.id, history: [...(challan.history || []), { action: "Converted to Sale", at: convertedAt, saleInvoiceId: savedInvoice.id }] }
+              : challan)));
+          } catch {}
+        });
+        await Promise.all(
+          deliveryChallanConversions.map((challan) =>
+            transactionsDb.save({
+              id: challan.id,
+              status: "Converted to Sale",
+              convertedAt,
+              convertedSaleId: savedInvoice.id,
+            }).catch(() => {})
+          )
+        );
+        notifyBusinessDataChanged();
         setToast("Sale invoice created from the selected delivery challan(s).");
         navigate(returnPath);
       } catch (error) {
@@ -3512,6 +3544,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
           itemName: row.item,
           labels: Math.max(Math.round(toNumber(row.qty)), 1),
           itemCode: row.itemCode || "",
+          barcode: row.barcode || row.itemCode || "",
           companyName: business.name,
           salePrice: row.salePrice || "",
           purchasePrice: row.price || "",

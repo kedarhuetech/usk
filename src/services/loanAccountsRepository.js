@@ -52,6 +52,8 @@ function normalizeLoan(loan) {
         amountPaid: Number(r.amountPaid || 0),
         principalPaid: Number(r.principalPaid || 0),
         interestPaid: Number(r.interestPaid || 0),
+        paymentMode: String(r.paymentMode || r.payment_mode || r.paymentType || r.paymentMethod || ""),
+        paymentType: String(r.paymentType || r.paymentMode || r.payment_mode || r.paymentMethod || ""),
         reference: String(r.reference || ""),
         notes: String(r.notes || ""),
       }))
@@ -278,11 +280,7 @@ export async function recordRepayment(loanId, repayment) {
   normalized.createdAt = new Date().toISOString();
 
   if (isDatabaseMode()) {
-    try {
-      await cashBankDb.saveRepayment(loanId, normalized);
-    } catch (err) {
-      console.warn("[LoanRepayments] Failed to record repayment in MySQL, using local storage fallback:", err.message);
-    }
+    await cashBankDb.saveRepayment(loanId, normalized);
   }
 
   loans[index] = { ...loan, repayments: [normalized, ...(loan.repayments || [])], updatedAt: new Date().toISOString() };

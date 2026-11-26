@@ -27,7 +27,7 @@ import GSTRateReport from "./GSTRateReport";
 import GSTReport from "./GSTReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
-import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent } from "../../services/businessDataChanged.js";
@@ -399,17 +399,19 @@ function Reports({ defaultReport }) {
   const [purchases, setPurchases] = useState(() => readLocal(transactionStorageKeys.purchases));
   const [paymentIns, setPaymentIns] = useState(() => readLocal(transactionStorageKeys.paymentIns));
   const [paymentOuts, setPaymentOuts] = useState(() => readLocal(transactionStorageKeys.paymentOuts));
+  const [saleUi, setSaleUi] = useState(() => readTransactionValue(transactionStorageKeys.saleInvoiceUi, {}));
   const [allDbTransactions, setAllDbTransactions] = useState([]);
 
   useEffect(() => {
     let active = true;
     const reload = () => {
+      if (active) {
+        setSaleUi(readTransactionValue(transactionStorageKeys.saleInvoiceUi, {}));
+      }
       transactionsDb.listAll()
         .then((records) => {
-          if (active && Array.isArray(records) && records.length) {
+          if (active && Array.isArray(records)) {
             setAllDbTransactions(records);
-            setSales(records.filter((t) => t.transactionType === "sale" || t.type === "sale" || t.transactionType === "pos"));
-            setPurchases(records.filter((t) => t.transactionType === "purchase" || t.type === "purchase"));
             setPaymentIns(records.filter((t) => t.transactionType === "payment_in" || t.type === "payment_in"));
             setPaymentOuts(records.filter((t) => t.transactionType === "payment_out" || t.type === "payment_out"));
           }
@@ -417,22 +419,24 @@ function Reports({ defaultReport }) {
         .catch(() => {});
       loadSalesInvoices()
         .then((records) => {
-          if (active && Array.isArray(records) && records.length) setSales(records);
+          if (active && Array.isArray(records)) setSales(records);
         })
         .catch(() => {});
       loadPurchaseBills()
         .then((records) => {
-          if (active && Array.isArray(records) && records.length) setPurchases(records);
+          if (active && Array.isArray(records)) setPurchases(records);
         })
         .catch(() => {});
     };
 
     reload();
 
+    window.addEventListener("focus", reload);
     window.addEventListener(businessDataChangedEvent, reload);
     window.addEventListener("storage", reload);
     return () => {
       active = false;
+      window.removeEventListener("focus", reload);
       window.removeEventListener(businessDataChangedEvent, reload);
       window.removeEventListener("storage", reload);
     };
@@ -475,10 +479,25 @@ function Reports({ defaultReport }) {
     }
 
     if (["Sale", "Sale Invoices"].includes(activeReport)) {
-      return sales.map((row) => ({
-        ...row,
-        reportType: "Sale",
-      }));
+      const deleted = new Set(Array.isArray(saleUi?.deleted) ? saleUi.deleted.map(String) : []);
+      const cancelled = saleUi?.cancelled && typeof saleUi.cancelled === "object" ? saleUi.cancelled : {};
+      const edits = saleUi?.edits && typeof saleUi.edits === "object" ? saleUi.edits : {};
+      return sales
+        .filter((row) => !row.isReturn && !deleted.has(String(row.id)) && !row.deleted && !row.isDeleted)
+        .map((row) => {
+          const localEdits = edits[row.id];
+          const hasValidEdits = localEdits && (
+            (Array.isArray(localEdits.rows) && localEdits.rows.length > 0) ||
+            (Array.isArray(localEdits.items) && localEdits.items.length > 0) ||
+            Boolean(localEdits.partyName || localEdits.customer)
+          );
+          return {
+            ...row,
+            ...(hasValidEdits ? localEdits : {}),
+            cancelled: Boolean(cancelled[row.id] || row.cancelled),
+            reportType: "Sale",
+          };
+        });
     }
 
     if (
@@ -530,7 +549,7 @@ function Reports({ defaultReport }) {
     }
 
     return [];
-  }, [activeReport, purchases, sales, allLocalTransactions]);
+  }, [activeReport, purchases, sales, allLocalTransactions, saleUi]);
 
   const storeOptions = useMemo(
     () => [...new Set(records.map(storeOf).filter(Boolean))],
@@ -588,14 +607,36 @@ function Reports({ defaultReport }) {
     ]
   );
 
+  const getRowAmounts = (row) => {
+    if (["Sale", "Purchase"].includes(row.reportType)) {
+      const settlement = calculateInvoiceSettlement(row, {
+        kind: row.reportType === "Purchase" ? "purchase" : "sale",
+        payments: row.reportType === "Purchase" ? paymentOuts : paymentIns,
+      });
+      return {
+        amount: settlement.total,
+        received: settlement.paid,
+        balance: settlement.outstanding,
+        status: settlement.paymentStatus,
+      };
+    }
+    const amount = amountOf(row);
+    const received = receivedOf(row);
+    return {
+      amount,
+      received,
+      balance: Math.max(0, amount - received),
+      status: getStatus(row, amount, received),
+    };
+  };
+
   const totals = visible.reduce(
     (sum, row) => {
-      const amount = amountOf(row);
-      const received = receivedOf(row);
+      const { amount, received, balance } = getRowAmounts(row);
 
       sum.amount += amount;
       sum.received += received;
-      sum.balance += Math.max(0, amount - received);
+      sum.balance += balance;
 
       return sum;
     },
@@ -603,12 +644,15 @@ function Reports({ defaultReport }) {
   );
 
   const paidTotal = visible.reduce(
-    (sum, row) => sum + Math.min(amountOf(row), receivedOf(row)),
+    (sum, row) => {
+      const { amount, received } = getRowAmounts(row);
+      return sum + Math.min(amount, received);
+    },
     0
   );
 
   const unpaidTotal = visible.reduce(
-    (sum, row) => sum + Math.max(0, amountOf(row) - receivedOf(row)),
+    (sum, row) => sum + getRowAmounts(row).balance,
     0
   );
 
@@ -625,8 +669,7 @@ function Reports({ defaultReport }) {
     ];
 
     const lines = visible.map((row) => {
-      const amount = amountOf(row);
-      const received = receivedOf(row);
+      const { amount, balance, status } = getRowAmounts(row);
 
       return [
         dateOf(row),
@@ -635,8 +678,8 @@ function Reports({ defaultReport }) {
         row.reportType || activeReport,
         paymentTypeOf(row),
         amount,
-        Math.max(0, amount - received),
-        received >= amount ? "Paid" : "Partial",
+        balance,
+        status,
       ];
     });
 
@@ -734,10 +777,10 @@ function Reports({ defaultReport }) {
   };
 
   const statusClass = (status) => {
-    if (status === "Paid") return "text-emerald-600";
+    if (status === "Paid" || status === "Overpaid / Advance") return "text-emerald-600";
     if (status === "Cancelled") return "text-rose-500";
     if (status === "Unused") return "text-sky-600";
-    if (status === "Partial") return "text-blue-600";
+    if (status === "Partial" || status === "Partially Paid") return "text-blue-600";
     return "text-orange-500";
   };
 
@@ -1337,11 +1380,9 @@ function Reports({ defaultReport }) {
 
                 <tbody>
                   {visible.map((row, index) => {
-                    const amount = amountOf(row);
-                    const received = receivedOf(row);
+                    const { amount, received, balance, status } = getRowAmounts(row);
                     const party = partyOf(row);
                     const invoiceNo = referenceOf(row) || index + 1;
-                    const balance = Math.max(0, amount - received);
                     const type = row.reportType || activeReport;
 
                     const isIncoming = [
@@ -1376,8 +1417,6 @@ function Reports({ defaultReport }) {
                         ? amount
                         : received
                       : 0;
-
-                    const status = getStatus(row, amount, received);
 
                     return (
                       <tr

@@ -8,11 +8,14 @@ import {
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
+import { loadBusinessParties } from "../../services/businessRecords.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
     try {
-      const val = JSON.parse(window.localStorage.getItem(key) || "[]");
+      const val = readTransactionCollection(key);
       if (Array.isArray(val) && val.length > 0) return val;
     } catch {}
   }
@@ -79,6 +82,20 @@ export default function SalePurchaseByPartyReport() {
   const [selectedRowIndex, setSelectedRowIndex] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Fetch latest parties & transactions from MySQL on mount
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      loadBusinessParties(),
+      transactionsDb.listAll(),
+    ]).then(() => {
+      if (active) setRefreshTrigger((k) => k + 1);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Listen to business data updates
   useEffect(() => {
     const handleUpdate = () => setRefreshTrigger((k) => k + 1);
@@ -132,13 +149,13 @@ export default function SalePurchaseByPartyReport() {
     }
   };
 
-  // Raw data from localStorage
+  // Raw data from scoped transaction collections
   const sales = useMemo(
-    () => readLocal("ledgerly:saleInvoices.v1", "ledgerly:sales.v1"),
+    () => readLocal(transactionStorageKeys.sales),
     [refreshTrigger]
   );
   const purchases = useMemo(
-    () => readLocal("ledgerly:purchaseBills.v1", "ledgerly:purchases.v1"),
+    () => readLocal(transactionStorageKeys.purchases),
     [refreshTrigger]
   );
   const parties = useMemo(() => {

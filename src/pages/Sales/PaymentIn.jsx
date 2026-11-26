@@ -21,7 +21,8 @@ import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewM
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
 
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-const today = () => new Date().toISOString().slice(0, 10);
+const toIsoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const today = () => toIsoDate(new Date());
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const blankPayment = () => ({ id: crypto.randomUUID(), type: "Cash", amount: "", reference: "", chequeDate: "" });
 
@@ -125,8 +126,8 @@ export default function PaymentIn() {
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [preset, setPreset] = useState("This Month");
-  const [dateFrom, setDateFrom] = useState(() => { const date = new Date(); return new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10); });
-  const [dateTo, setDateTo] = useState(() => { const date = new Date(); return new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().slice(0, 10); });
+  const [dateFrom, setDateFrom] = useState(() => { const date = new Date(); return toIsoDate(new Date(date.getFullYear(), date.getMonth(), 1)); });
+  const [dateTo, setDateTo] = useState(() => { const date = new Date(); return toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0)); });
   const [firm, setFirm] = useState("All Firms");
   const [user, setUser] = useState("All Users");
   const [openMenu, setOpenMenu] = useState("");
@@ -151,7 +152,7 @@ export default function PaymentIn() {
     const fetchRemote = async () => {
       try {
         const remote = await transactionsDb.listByType("payment_in");
-        if (active && Array.isArray(remote) && remote.length > 0) {
+        if (active && Array.isArray(remote)) {
           const normalized = remote.map(normalizePayment);
           setRecords(normalized);
           savePaymentIns(normalized);
@@ -165,10 +166,12 @@ export default function PaymentIn() {
     const handleSync = () => {
       setRecords(readPayments());
     };
+    window.addEventListener("focus", fetchRemote);
     window.addEventListener("ledgerly:business-data-changed", handleSync);
     window.addEventListener("storage", handleSync);
     return () => {
       active = false;
+      window.removeEventListener("focus", fetchRemote);
       window.removeEventListener("ledgerly:business-data-changed", handleSync);
       window.removeEventListener("storage", handleSync);
     };
@@ -345,8 +348,8 @@ export default function PaymentIn() {
   };
   const datePreset = (value) => {
     setPreset(value); const date = new Date();
-    if (value === "This Month") { setDateFrom(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10)); setDateTo(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().slice(0, 10)); }
-    else if (value === "This Quarter") { const month = Math.floor(date.getMonth() / 3) * 3; setDateFrom(new Date(date.getFullYear(), month, 1).toISOString().slice(0, 10)); setDateTo(new Date(date.getFullYear(), month + 3, 0).toISOString().slice(0, 10)); }
+    if (value === "This Month") { setDateFrom(toIsoDate(new Date(date.getFullYear(), date.getMonth(), 1))); setDateTo(toIsoDate(new Date(date.getFullYear(), date.getMonth() + 1, 0))); }
+    else if (value === "This Quarter") { const month = Math.floor(date.getMonth() / 3) * 3; setDateFrom(toIsoDate(new Date(date.getFullYear(), month, 1))); setDateTo(toIsoDate(new Date(date.getFullYear(), month + 3, 0))); }
     else if (value === "This Year") { setDateFrom(`${date.getFullYear()}-01-01`); setDateTo(`${date.getFullYear()}-12-31`); }
     else if (value === "All Time") { setDateFrom(""); setDateTo(""); }
   };

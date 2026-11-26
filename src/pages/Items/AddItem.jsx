@@ -8,6 +8,7 @@ import Input from "../../components/Common/Input";
 import HsnAutocomplete from "../../components/Common/HsnAutocomplete";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
+import BarcodeScanModal from "../../components/items/BarcodeScanModal";
 import { defaultCategories, defaultSubCategories, discountTypes, itemDefaults, taxModes, taxOptions } from "../../constants/itemsData";
 import { matchGstRateToOption } from "../../services/hsnService.js";
 import { saveBusinessItem } from "../../services/businessRecords";
@@ -381,10 +382,12 @@ function createEditableItemForm(initialItem, defaultUnit = "PCS", defaultTaxRate
     purchaseTaxMode: initialItem.purchaseTaxMode || itemDefaults.purchaseTaxMode,
     discount: initialItem.discount || "",
     discountType: initialItem.discountType || itemDefaults.discountType,
-    taxRate: initialItem.taxRate || defaultTaxRate || itemDefaults.taxRate,
+    taxRate: (initialItem.taxRate !== undefined && initialItem.taxRate !== null && initialItem.taxRate !== "")
+      ? (matchGstRateToOption(initialItem.taxRate, taxOptions) || String(initialItem.taxRate))
+      : (defaultTaxRate || itemDefaults.taxRate),
     openingQuantity,
     atPrice: initialItem.atPrice || "",
-    asOfDate: initialItem.asOfDate || itemDefaults.asOfDate,
+    asOfDate: (initialItem.asOfDate || "").slice(0, 10) || (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })(),
     location: initialItem.location || "",
     minimumStock: initialItem.minimumStock || "",
     description: initialItem.description || "",
@@ -579,113 +582,6 @@ function SerialModal({ serials, onSave, onClose }) {
         <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
           <Button onClick={onClose} className="bg-slate-100 text-slate-700 hover:bg-slate-200">Cancel</Button>
           <Button onClick={handleSave} className="bg-blue-600 text-white hover:bg-blue-700">Save</Button>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-// Renders the barcode camera scanner modal interface.
-function BarcodeScanModal({ onScan, onClose }) {
-  const [manualCode, setManualCode] = useState("");
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [scanStatus, setScanStatus] = useState("");
-  const videoRef = useRef(null);
-  const controlsRef = useRef(null);
-  const streamRef = useRef(null);
-
-  const stopCamera = () => {
-    controlsRef.current?.stop();
-    controlsRef.current = null;
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setCameraOpen(false);
-  };
-
-  const startCamera = async () => {
-    setCameraOpen(true);
-    setScanStatus("Requesting camera...");
-    try {
-      const { BrowserMultiFormatReader } = await import("@zxing/browser");
-      const reader = new BrowserMultiFormatReader();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: "environment" } },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setScanStatus("Scanning barcode...");
-        controlsRef.current = await reader.decodeFromVideoElement(videoRef.current, (result) => {
-          if (result) {
-            const text = result.getText();
-            stopCamera();
-            onScan(text);
-          }
-        });
-      }
-    } catch (err) {
-      setScanStatus(err.message || "Could not access camera.");
-    }
-  };
-
-  useEffect(() => {
-    return () => stopCamera();
-  }, []);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
-      <Card className="w-full max-w-md overflow-hidden shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-800">Scan or Enter Barcode</h2>
-          <button type="button" onClick={() => { stopCamera(); onClose(); }} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
-            <FiX />
-          </button>
-        </div>
-        <div className="p-5 space-y-4">
-          <p className="text-xs text-slate-500">
-            Scan using a USB barcode scanner, use your camera, or enter the code manually.
-          </p>
-          <div className="flex gap-2">
-            <input
-              autoFocus
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && manualCode.trim()) {
-                  stopCamera();
-                  onScan(manualCode.trim());
-                }
-              }}
-              placeholder="Scan barcode or enter code"
-              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
-            />
-            <Button
-              onClick={() => {
-                if (manualCode.trim()) {
-                  stopCamera();
-                  onScan(manualCode.trim());
-                }
-              }}
-              className="bg-blue-600 text-white hover:bg-blue-700"
-            >
-              Apply
-            </Button>
-          </div>
-          {cameraOpen ? (
-            <div className="space-y-2">
-              <video ref={videoRef} className="h-44 w-full rounded-md bg-black object-cover" />
-              <p className="text-xs text-center text-slate-600 font-medium">{scanStatus}</p>
-              <Button onClick={stopCamera} className="w-full bg-slate-100 text-slate-700 hover:bg-slate-200">
-                Stop Camera
-              </Button>
-            </div>
-          ) : (
-            <Button onClick={startCamera} className="w-full border border-slate-300 text-slate-700 hover:bg-slate-50">
-              <FiCamera className="mr-2 inline" /> Scan with Camera
-            </Button>
-          )}
         </div>
       </Card>
     </div>
@@ -1209,6 +1105,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
                     value={form.barcode}
                     onChange={(event) => setField("barcode", event.target.value)}
                     placeholder="Barcode / Scan"
+                    className="pr-20"
                   />
                   <button
                     type="button"
