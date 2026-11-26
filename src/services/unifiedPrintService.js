@@ -87,7 +87,7 @@ export function getEffectiveCompanyInfo(settings = null) {
       : "";
 
   const gstin =
-    appSettings.printGstinOnSale !== false
+    appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false
       ? profile.gstin || appSettings.companyGstin || ""
       : "";
 
@@ -165,7 +165,12 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   const partyPhone = opts.partyPhone || "";
   const partyBillingAddress = opts.partyBillingAddress || opts.billToAddress || "";
   const partyShippingAddress = opts.partyShippingAddress || opts.shipToAddress || "";
-  const partyGstin = opts.partyGstin || "";
+  const defaultCompany = getEffectiveCompanyInfo();
+  const company = opts.company
+    ? { ...defaultCompany, ...opts.company, appSettings: { ...(defaultCompany.appSettings || {}), ...(opts.company.appSettings || {}) } }
+    : defaultCompany;
+  const isGstinEnabled = (company.appSettings?.enableGstin !== false) && (getAppSettings().enableGstin !== false);
+  const partyGstin = isGstinEnabled ? (opts.partyGstin || "") : "";
   const metadataRows = opts.metadataRows || [];
   const columns = opts.columns || [
     { key: "index", label: "#", align: "center", width: "40px" },
@@ -180,11 +185,6 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   const terms = opts.terms || "";
   const notes = opts.notes || "";
   const autoPrint = Boolean(opts.autoPrint);
-
-  const defaultCompany = getEffectiveCompanyInfo();
-  const company = opts.company
-    ? { ...defaultCompany, ...opts.company, appSettings: { ...(defaultCompany.appSettings || {}), ...(opts.company.appSettings || {}) } }
-    : defaultCompany;
 
   // Issue #27: Check if terms apply to this document type
   let effectiveTerms = terms;
@@ -691,7 +691,7 @@ export function buildUnifiedStatementHtml({
           <h1 style="margin:0;font-size:22px;font-weight:800;color:#0f172a;">${escapeHtml(company.name || "My Business")}</h1>
           ${company.phone ? `<p style="margin:2px 0;font-size:12px;color:#475569;">Ph: ${escapeHtml(company.phone)}</p>` : ""}
           ${company.address ? `<p style="margin:2px 0;font-size:11px;color:#64748b;">${escapeHtml(company.address)}</p>` : ""}
-          ${company.gstin ? `<p style="margin:2px 0;font-size:11px;font-weight:700;">GSTIN: ${escapeHtml(company.gstin)}</p>` : ""}
+          ${(company.appSettings?.enableGstin !== false && getAppSettings().enableGstin !== false && company.gstin) ? `<p style="margin:2px 0;font-size:11px;font-weight:700;">GSTIN: ${escapeHtml(company.gstin)}</p>` : ""}
         </div>
       </div>
       <div style="text-align:right;">
@@ -705,7 +705,7 @@ export function buildUnifiedStatementHtml({
       <div>
         <div style="font-size:14px;font-weight:700;color:#0f172a;">${escapeHtml(party?.partyName || "Cash Sale")}</div>
         ${party?.phone ? `<div style="color:#475569;margin-top:2px;">Contact: ${escapeHtml(party.phone)}</div>` : ""}
-        ${party?.gstin ? `<div style="color:#334155;margin-top:2px;font-weight:600;">GSTIN: ${escapeHtml(party.gstin)}</div>` : ""}
+        ${(company.appSettings?.enableGstin !== false && getAppSettings().enableGstin !== false && party?.gstin) ? `<div style="color:#334155;margin-top:2px;font-weight:600;">GSTIN: ${escapeHtml(party.gstin)}</div>` : ""}
         ${party?.billingAddress ? `<div style="color:#64748b;margin-top:2px;">Billing: ${escapeHtml(party.billingAddress)}</div>` : ""}
         ${printableFields.map((f) => `<div style="color:#334155;margin-top:2px;"><b>${escapeHtml(f.fieldName || f.name)}:</b> ${escapeHtml(f.value)}</div>`).join("")}
       </div>

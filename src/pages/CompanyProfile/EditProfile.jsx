@@ -19,6 +19,7 @@ import {
 } from "../../services/companyProfileStorage";
 import { companyProfileApi } from "../../services/apiClient";
 import { getActiveBusinessId } from "../../config/businessConfig";
+import { useAppSettings } from "../../hooks/useAppSettings";
 import { validateGstin, cleanGstin } from "../../utils/gstinUtils";
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -101,6 +102,8 @@ const BUSINESS_CATEGORIES = [
 
 export default function EditProfile() {
   const navigate = useNavigate();
+  const appSettings = useAppSettings() || {};
+  const isGstinEnabled = appSettings.enableGstin !== false;
   const [formData, setFormData] = useState(getCompanyProfile);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -296,7 +299,7 @@ export default function EditProfile() {
     setErrorMessage("");
 
     const trimmedGstin = cleanGstin(formData.gstin);
-    if (trimmedGstin) {
+    if (isGstinEnabled && trimmedGstin) {
       const gstinResult = validateGstin(trimmedGstin, { required: false });
       if (!gstinResult.valid) {
         setErrorMessage(gstinResult.error);
@@ -588,53 +591,55 @@ export default function EditProfile() {
                 />
               </div>
 
-              <div>
-                <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-600">
-                  <span className="flex items-center gap-1.5">
-                    GSTIN{" "}
-                    <FiInfo
-                      className="cursor-pointer text-xs text-slate-400"
-                      title="Goods and Services Tax Identification Number (15 alphanumeric characters)"
-                    />
-                  </span>
-                  {cleanGstin(formData.gstin).length > 0 && cleanGstin(formData.gstin).length < 15 && (
-                    <span className="text-[11px] font-medium text-slate-400">
-                      {cleanGstin(formData.gstin).length}/15
+              {isGstinEnabled && (
+                <div>
+                  <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      GSTIN{" "}
+                      <FiInfo
+                        className="cursor-pointer text-xs text-slate-400"
+                        title="Goods and Services Tax Identification Number (15 alphanumeric characters)"
+                      />
                     </span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  name="gstin"
-                  value={formData.gstin || ""}
-                  onChange={handleChange}
-                  maxLength={15}
-                  placeholder="e.g. 27ABCDE1234F1Z5"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm uppercase font-mono text-slate-800 placeholder:text-slate-400 placeholder:normal-case transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                {(() => {
-                  const clean = cleanGstin(formData.gstin);
-                  if (!clean) return null;
-                  const res = validateGstin(clean);
-                  if (res.valid) {
-                    return (
-                      <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                        <FiCheck className="w-3.5 h-3.5 stroke-[2.5]" />
-                        <span>Valid GSTIN · {res.stateName} · PAN: {res.pan}</span>
-                      </p>
-                    );
-                  }
-                  if (clean.length === 15) {
-                    return (
-                      <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-500">
-                        <FiAlertCircle className="w-3.5 h-3.5" />
-                        <span>{res.error}</span>
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
+                    {cleanGstin(formData.gstin).length > 0 && cleanGstin(formData.gstin).length < 15 && (
+                      <span className="text-[11px] font-medium text-slate-400">
+                        {cleanGstin(formData.gstin).length}/15
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    name="gstin"
+                    value={formData.gstin || ""}
+                    onChange={handleChange}
+                    maxLength={15}
+                    placeholder="e.g. 27ABCDE1234F1Z5"
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm uppercase font-mono text-slate-800 placeholder:text-slate-400 placeholder:normal-case transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  {(() => {
+                    const clean = cleanGstin(formData.gstin);
+                    if (!clean) return null;
+                    const res = validateGstin(clean);
+                    if (res.valid) {
+                      return (
+                        <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                          <FiCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Valid GSTIN · {res.stateName} · PAN: {res.pan}</span>
+                        </p>
+                      );
+                    }
+                    if (clean.length === 15) {
+                      return (
+                        <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-500">
+                          <FiAlertCircle className="w-3.5 h-3.5" />
+                          <span>{res.error}</span>
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">

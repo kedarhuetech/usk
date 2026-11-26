@@ -38,6 +38,7 @@ import {
   buildUnifiedStatementHtml,
   openPrintWindow,
 } from "../../services/unifiedPrintService.js";
+import { useAppSettings } from "../../hooks/useAppSettings.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
@@ -52,6 +53,7 @@ function readLocal(...keys) {
 export default function PartyStatementReport() {
   const navigate = useNavigate();
   const location = useLocation();
+  const appSettings = useAppSettings() || {};
 
   // Refresh trigger for business data changes
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -190,7 +192,7 @@ export default function PartyStatementReport() {
     const data = [
       { "#": "PARTY NAME", Date: selectedParty.partyName, "Txn Type": "", "Ref No.": "", "Payment Type": "", Debit: "", Credit: "", "Running Balance": "" },
       { "#": "PHONE", Date: selectedParty.phone || "—", "Txn Type": "", "Ref No.": "", "Payment Type": "", Debit: "", Credit: "", "Running Balance": "" },
-      { "#": "GSTIN", Date: selectedParty.gstin || "—", "Txn Type": "", "Ref No.": "", "Payment Type": "", Debit: "", Credit: "", "Running Balance": "" },
+      ...(appSettings.enableGstin !== false ? [{ "#": "GSTIN", Date: selectedParty.gstin || "—", "Txn Type": "", "Ref No.": "", "Payment Type": "", Debit: "", Credit: "", "Running Balance": "" }] : []),
       { "#": "PERIOD", Date: `${statement.from ? formatDateDMY(statement.from) : "Start"} To ${statement.to ? formatDateDMY(statement.to) : "End"}`, "Txn Type": "", "Ref No.": "", "Payment Type": "", Debit: "", Credit: "", "Running Balance": "" },
       { "#": "", Date: "", "Txn Type": "", "Ref No.": "", "Payment Type": "", Debit: "", Credit: "", "Running Balance": "" },
       // Opening Balance Row
@@ -385,7 +387,7 @@ export default function PartyStatementReport() {
                           <p className="font-semibold text-slate-900 truncate">{party.partyName}</p>
                           <p className="text-[11px] text-slate-400">
                             {party.phone ? `Ph: ${party.phone}` : "No phone"}
-                            {party.gstin ? ` • GST: ${party.gstin}` : ""}
+                            {appSettings.enableGstin !== false && party.gstin ? ` • GST: ${party.gstin}` : ""}
                           </p>
                         </div>
                         <span
@@ -545,7 +547,7 @@ export default function PartyStatementReport() {
                     <FiMail className="text-slate-400" /> {selectedParty.email}
                   </span>
                 )}
-                {selectedParty.gstin && (
+                {appSettings.enableGstin !== false && selectedParty.gstin && (
                   <span className="rounded bg-slate-200/80 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700">
                     GSTIN: {selectedParty.gstin}
                   </span>

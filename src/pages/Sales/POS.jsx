@@ -166,7 +166,7 @@ function printPosBill(draft, calculations) {
   const companyName = settings.companyNamePrint || profile.companyName || profile.businessName || "Sai Kirana Stores";
   const phone = settings.phoneNumberPrint || profile.phoneNumber || "";
   const address = settings.addressPrint || profile.address || "";
-  const gstin = settings.printGstinOnSale ? (profile.gstin || "") : "";
+  const gstin = (settings.enableGstin !== false && settings.printGstinOnSale) ? (profile.gstin || "") : "";
   const invoiceNo = draft?.invoiceNo || "POS-001";
   const dateStr = draft?.savedAt ? new Date(draft.savedAt).toLocaleDateString("en-IN") : new Date().toLocaleDateString("en-IN");
   const timeStr = draft?.savedAt ? new Date(draft.savedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }) : new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });

@@ -2115,7 +2115,9 @@ function TransactionTab({ settings, update, showToast }) {
                   <div className="text-center space-y-0.5">
                     <h4 className="text-base font-bold text-slate-900">{firmName}</h4>
                     {firmPhone && <p className="text-[11px] text-slate-500">Phone no: {firmPhone}</p>}
-                    {firmGstin && <p className="text-[11px] text-slate-500">GSTIN: {firmGstin}</p>}
+                    {settings.enableGstin !== false && settings.printGstinOnSale !== false && firmGstin && (
+                      <p className="text-[11px] text-slate-500">GSTIN: {firmGstin}</p>
+                    )}
                     {/* Dynamic Firm Additional Fields */}
                     {["firmField1", "firmField2"].map((k) => {
                       const f = settings.additionalFieldsSetup?.[k];

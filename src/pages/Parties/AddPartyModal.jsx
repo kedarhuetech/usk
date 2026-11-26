@@ -6,6 +6,7 @@ import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { getParties } from "../../services/partiesStorage";
+import { getAppSettings } from "../../services/appSettingsStorage";
 import { validateGstin, cleanGstin, getPanFromGstin } from "../../utils/gstinUtils";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
@@ -49,14 +50,16 @@ function TextareaField({ label, value, onChange, placeholder }) {
 }
 
 // Renders the gst address tab interface.
-function GstAddressTab({ form, setField, showShipping, setShowShipping, enableShippingAddress = true }) {
+function GstAddressTab({ form, setField, showShipping, setShowShipping, enableShippingAddress = true, enableGstin = true }) {
   const [showDetailedBilling, setShowDetailedBilling] = useState(Boolean(form.billingStreet || form.billingCity || form.billingPincode));
   const [showDetailedShipping, setShowDetailedShipping] = useState(Boolean(form.shippingStreet || form.shippingCity || form.shippingPincode));
 
   return (
     <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       <div className="space-y-4">
-        <SelectField label="GST Type" value={form.gstType} onChange={(value) => setField("gstType", value)} options={gstTypes} />
+        {enableGstin && (
+          <SelectField label="GST Type" value={form.gstType} onChange={(value) => setField("gstType", value)} options={gstTypes} />
+        )}
         <SelectField label="State" value={form.state} onChange={(value) => setField("state", value)} options={indianStates} />
         <Input label="Email" value={form.email} onChange={(event) => setField("email", event.target.value)} placeholder="Email ID" />
       </div>
@@ -237,12 +240,25 @@ export default function AddPartyModal({
   onClose,
   onSave,
   initialParty = null,
-  appSettings = {},
+  appSettings: propAppSettings = {},
   embedded = false,
   parties: externalParties = null,
 }) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState(tabs[0]);
+  const currentSettings = useMemo(() => {
+    const fromStorage = getAppSettings();
+    return { ...fromStorage, ...(propAppSettings || {}) };
+  }, [propAppSettings]);
+  const appSettings = currentSettings;
+  const isGstinEnabled = currentSettings.enableGstin !== false;
+
+  const dynamicTabs = useMemo(() => [
+    isGstinEnabled ? "GST & Address" : "Address",
+    "Credit & Balance",
+    "Additional Fields",
+  ], [isGstinEnabled]);
+
+  const [activeTab, setActiveTab] = useState(dynamicTabs[0]);
   const [showShipping, setShowShipping] = useState(Boolean(initialParty?.shippingAddress));
   const [form, setForm] = useState(() => ({
     ...partyFormDefaults,
@@ -275,6 +291,7 @@ export default function AddPartyModal({
   }, [form.partyName, initialParty?.id, allParties]);
 
   const duplicateGstinParty = useMemo(() => {
+    if (!isGstinEnabled) return null;
     const trimmed = (form.gstin || "").trim().toUpperCase();
     if (!trimmed || trimmed.length < 5) return null;
     return allParties.find(
@@ -282,7 +299,7 @@ export default function AddPartyModal({
         String(p.id || "") !== String(initialParty?.id || "") &&
         (p.gstin || "").trim().toUpperCase() === trimmed
     );
-  }, [form.gstin, initialParty?.id, allParties]);
+  }, [form.gstin, initialParty?.id, allParties, isGstinEnabled]);
 
   const duplicatePhoneParty = useMemo(() => {
     const rawDigits = (form.phone || "").replace(/\D/g, "");
@@ -339,14 +356,14 @@ export default function AddPartyModal({
       setError("Please enter a valid 10-digit mobile number.");
       return;
     }
-    if (form.gstin && form.gstin.trim()) {
+    if (isGstinEnabled && form.gstin && form.gstin.trim()) {
       const gstinResult = validateGstin(form.gstin, { required: false });
       if (!gstinResult.valid) {
         setError(gstinResult.error);
         return;
       }
     }
-    if (duplicateGstinParty) {
+    if (isGstinEnabled && duplicateGstinParty) {
       const confirmSave = typeof window !== "undefined" && window.confirm
         ? window.confirm(`A party named "${duplicateGstinParty.partyName || duplicateGstinParty.name}" already has GSTIN "${form.gstin.trim().toUpperCase()}". Do you still want to proceed?`)
         : true;
@@ -362,7 +379,7 @@ export default function AddPartyModal({
     setError("");
     try {
       const isInactive = isPartyInactive(form);
-      const cleanedGstin = form.gstin ? cleanGstin(form.gstin) : "";
+      const cleanedGstin = isGstinEnabled && form.gstin ? cleanGstin(form.gstin) : "";
       const derivedPan = cleanedGstin ? getPanFromGstin(cleanedGstin) : "";
       const partyData = {
         ...form,
@@ -434,7 +451,13 @@ export default function AddPartyModal({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className={`grid gap-4 md:grid-cols-2 ${(appSettings.enablePartyGrouping ?? true) ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
+        <div className={`grid gap-4 md:grid-cols-2 ${
+          isGstinEnabled && (currentSettings.enablePartyGrouping ?? true)
+            ? "lg:grid-cols-5"
+            : isGstinEnabled || (currentSettings.enablePartyGrouping ?? true)
+            ? "lg:grid-cols-4"
+            : "lg:grid-cols-3"
+        }`}>
           <div>
             <Input
               label="Party Name *"
@@ -464,71 +487,73 @@ export default function AddPartyModal({
               <option value="both">Both (Customer &amp; Supplier)</option>
             </select>
           </label>
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <span className="block text-sm font-medium text-slate-600">GSTIN</span>
-              {cleanGstin(form.gstin).length > 0 && cleanGstin(form.gstin).length < 15 && (
-                <span className="text-[11px] font-medium text-slate-400">
-                  {cleanGstin(form.gstin).length}/15
-                </span>
-              )}
-            </div>
-            <Input
-              value={form.gstin || ""}
-              onChange={(event) => {
-                const clean = cleanGstin(event.target.value);
-                setField("gstin", clean);
-                if (clean.length === 15) {
-                  const meta = validateGstin(clean);
-                  if (meta.valid) {
-                    if (!form.state && meta.stateName) {
-                      setField("state", meta.stateName);
-                    }
-                    if (form.gstType === "Unregistered / Consumer" || !form.gstType) {
-                      setField("gstType", "Registered - Regular");
+          {isGstinEnabled && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="block text-sm font-medium text-slate-600">GSTIN</span>
+                {cleanGstin(form.gstin).length > 0 && cleanGstin(form.gstin).length < 15 && (
+                  <span className="text-[11px] font-medium text-slate-400">
+                    {cleanGstin(form.gstin).length}/15
+                  </span>
+                )}
+              </div>
+              <Input
+                value={form.gstin || ""}
+                onChange={(event) => {
+                  const clean = cleanGstin(event.target.value);
+                  setField("gstin", clean);
+                  if (clean.length === 15) {
+                    const meta = validateGstin(clean);
+                    if (meta.valid) {
+                      if (!form.state && meta.stateName) {
+                        setField("state", meta.stateName);
+                      }
+                      if (form.gstType === "Unregistered / Consumer" || !form.gstType) {
+                        setField("gstType", "Registered - Regular");
+                      }
                     }
                   }
+                }}
+                maxLength={15}
+                placeholder="e.g. 27ABCDE1234F1Z5"
+                className="font-mono uppercase"
+              />
+              {(() => {
+                const clean = cleanGstin(form.gstin);
+                if (!clean) return null;
+                const res = validateGstin(clean);
+                if (res.valid) {
+                  return (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                      <span>✓ Valid GSTIN · {res.stateName} · PAN: {res.pan}</span>
+                    </p>
+                  );
                 }
-              }}
-              maxLength={15}
-              placeholder="e.g. 27ABCDE1234F1Z5"
-              className="font-mono uppercase"
-            />
-            {(() => {
-              const clean = cleanGstin(form.gstin);
-              if (!clean) return null;
-              const res = validateGstin(clean);
-              if (res.valid) {
-                return (
-                  <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-600">
-                    <span>✓ Valid GSTIN · {res.stateName} · PAN: {res.pan}</span>
-                  </p>
-                );
-              }
-              if (clean.length === 15) {
-                return (
-                  <p className="mt-1 text-xs font-medium text-rose-500">
-                    {res.error}
-                  </p>
-                );
-              }
-              return null;
-            })()}
-            {duplicateGstinParty && (
-              <p className="mt-1 text-xs font-semibold text-amber-700 bg-amber-50 rounded px-2 py-1 border border-amber-200">
-                Warning: GSTIN already used by "{duplicateGstinParty.partyName || duplicateGstinParty.name}".
-              </p>
-            )}
-          </div>
+                if (clean.length === 15) {
+                  return (
+                    <p className="mt-1 text-xs font-medium text-rose-500">
+                      {res.error}
+                    </p>
+                  );
+                }
+                return null;
+              })()}
+              {duplicateGstinParty && (
+                <p className="mt-1 text-xs font-semibold text-amber-700 bg-amber-50 rounded px-2 py-1 border border-amber-200">
+                  Warning: GSTIN already used by "{duplicateGstinParty.partyName || duplicateGstinParty.name}".
+                </p>
+              )}
+            </div>
+          )}
           <Input label="Phone Number" value={form.phone} onChange={(event) => setField("phone", event.target.value)} placeholder="Phone Number" />
-          {(appSettings.enablePartyGrouping ?? true) && (
+          {(currentSettings.enablePartyGrouping ?? true) && (
             <Input label="Party Group" value={form.group || ""} onChange={(event) => setField("group", event.target.value)} placeholder="e.g. General, Retailers, Wholesalers" />
           )}
         </div>
 
         <div className="mt-8 border-b border-slate-200">
           <div className="flex gap-8 overflow-x-auto">
-            {tabs.map((tab) => (
+            {dynamicTabs.map((tab) => (
               <button
                 key={tab}
                 type="button"
@@ -542,13 +567,14 @@ export default function AddPartyModal({
         </div>
 
         <div className="mt-6">
-          {activeTab === "GST & Address" && (
+          {(activeTab === "GST & Address" || activeTab === "Address") && (
             <GstAddressTab
               form={form}
               setField={setField}
               showShipping={showShipping}
               setShowShipping={setShowShipping}
-              enableShippingAddress={appSettings.enableShippingAddress ?? true}
+              enableShippingAddress={currentSettings.enableShippingAddress ?? true}
+              enableGstin={isGstinEnabled}
             />
           )}
           {activeTab === "Credit & Balance" && <CreditBalanceTab form={form} setField={setField} />}
@@ -556,7 +582,7 @@ export default function AddPartyModal({
             <AdditionalFieldsTab
               form={form}
               setAdditionalField={setAdditionalField}
-              customFieldSettings={appSettings.partyCustomFields}
+              customFieldSettings={currentSettings.partyCustomFields}
             />
           )}
         </div>

@@ -342,7 +342,7 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {appSettings.printAddress !== false && companyAddress && (
             <p className="text-slate-500 text-[11px]">{companyAddress}</p>
           )}
-          {appSettings.printGstinOnSale !== false && companyGstin && (
+          {appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false && companyGstin && (
             <p className="text-slate-600 text-[11px] font-semibold mt-0.5">GSTIN : {companyGstin}</p>
           )}
           {["firmField1", "firmField2"].map((k) => {
@@ -555,7 +555,7 @@ export function GSTTheme1({ companyName, companyPhone, companyGstin, companyAddr
           <h1 className="text-2xl font-black tracking-wide" style={{ color: hex }}>{companyName}</h1>
           {appSettings.printAddress !== false && companyAddress && <p className="text-slate-600 mt-0.5">{companyAddress}</p>}
           {appSettings.printPhoneNumber !== false && companyPhone && <p className="text-slate-600">Ph: {companyPhone}</p>}
-          {appSettings.printGstinOnSale !== false && companyGstin && <p className="font-bold text-slate-900 mt-0.5">GSTIN: {companyGstin}</p>}
+          {appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false && companyGstin && <p className="font-bold text-slate-900 mt-0.5">GSTIN: {companyGstin}</p>}
         </div>
         <div className="text-right">
           <span className="inline-block px-3 py-1 text-white font-bold rounded text-xs uppercase" style={{ backgroundColor: hex }}>
@@ -630,7 +630,7 @@ export function GSTTheme2({ companyName, companyPhone, companyGstin, companyAddr
         <div>
           <h1 className="text-xl font-extrabold uppercase">{companyName}</h1>
           <p className="text-xs opacity-90">{companyAddress}</p>
-          <p className="text-xs opacity-90">Ph: {companyPhone} | GSTIN: {companyGstin}</p>
+          <p className="text-xs opacity-90">Ph: {companyPhone}{appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false && companyGstin ? ` | GSTIN: ${companyGstin}` : ""}</p>
         </div>
         <div className="text-right">
           <span className="bg-white/20 px-3 py-1 rounded text-xs font-bold uppercase">{docTitle}</span>
@@ -1321,7 +1321,7 @@ function SalePreview() {
       <div style="text-align:center;">
         <h3 style="margin:0;font-size:14px;text-transform:uppercase;">${compName}</h3>
         <p style="margin:2px 0;font-size:10px;">${companyPhone || ""}</p>
-        <p style="margin:2px 0;font-size:10px;font-weight:bold;">${companyGstin ? `GSTIN: ${companyGstin}` : ""}</p>
+        <p style="margin:2px 0;font-size:10px;font-weight:bold;">${appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false && companyGstin ? `GSTIN: ${companyGstin}` : ""}</p>
         <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:3px 0;margin:5px 0;font-weight:bold;">TAX INVOICE</div>
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px;">
@@ -1425,7 +1425,7 @@ function SalePreview() {
             <ThemeComponent
               companyName={appSettings.printCompanyName !== false ? (appSettings.companyNamePrint || companyName) : ""}
               companyPhone={appSettings.printPhoneNumber !== false ? (appSettings.phoneNumberPrint || companyPhone) : ""}
-              companyGstin={appSettings.printGstinOnSale !== false ? companyGstin : ""}
+              companyGstin={appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false ? companyGstin : ""}
               companyAddress={appSettings.printAddress !== false ? (appSettings.addressPrint || companyAddress) : ""}
               companyLogo={appSettings.printCompanyLogo !== false ? companyLogo : ""}
               companySignature={companySignature}

@@ -64,7 +64,34 @@ export function writeItems(items, { skipEvent = false } = {}) {
   }
   if (!canUseStorage()) return;
   const scopedKey = getItemsStorageKey();
-  window.localStorage.setItem(scopedKey, JSON.stringify(items));
+  try {
+    window.localStorage.setItem(scopedKey, JSON.stringify(items));
+  } catch (err) {
+    if (err?.name === "QuotaExceededError" || err?.code === 22 || err?.message?.includes("quota")) {
+      console.warn("[Storage] localStorage quota exceeded while saving items. Pruning bloated data...");
+      try {
+        // Strip heavy base64 images from cached items in localStorage
+        const leanItems = items.map((it) => {
+          if (typeof it.image === "string" && it.image.startsWith("data:image")) {
+            return { ...it, image: it.imageUrl || "" };
+          }
+          return it;
+        });
+        window.localStorage.setItem(scopedKey, JSON.stringify(leanItems));
+      } catch {
+        // Prune old snapshots if quota is still full
+        try {
+          const snapshotKey = "ledgerly:snapshots.v1";
+          window.localStorage.removeItem(snapshotKey);
+          window.localStorage.setItem(scopedKey, JSON.stringify(items));
+        } catch {
+          console.warn("[Storage] Preserved items in in-memory session cache.");
+        }
+      }
+    } else {
+      console.warn("[Storage] Error writing items:", err);
+    }
+  }
   if (!skipEvent) {
     try {
       window.dispatchEvent(new CustomEvent("inventory-items-changed", { detail: items }));

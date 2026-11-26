@@ -2457,14 +2457,17 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
 
   // Saves result.
   const save = () => {
+    const isGstinEnabled = getAppSettings().enableGstin !== false;
     const nextErrors = {};
     if (!business.name.trim()) nextErrors.name = "Business Name is required";
-    if (!business.gstin.trim()) {
-      nextErrors.gstin = "Please Enter GSTIN";
-    } else {
-      const gstinVal = validateGstin(business.gstin);
-      if (!gstinVal.valid) {
-        nextErrors.gstin = gstinVal.error;
+    if (isGstinEnabled) {
+      if (!business.gstin.trim()) {
+        nextErrors.gstin = "Please Enter GSTIN";
+      } else {
+        const gstinVal = validateGstin(business.gstin);
+        if (!gstinVal.valid) {
+          nextErrors.gstin = gstinVal.error;
+        }
       }
     }
     setErrors(nextErrors);
@@ -2497,9 +2500,11 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
           <h2 className="text-lg font-bold text-slate-800">{mode === "Generate E-Way Bill" ? "E-Way Bill Details" : "Edit Firm"}</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100"><FiX className="h-5 w-5" /></button>
         </header>
-        <div className="mb-5 rounded-md border border-rose-300 bg-rose-50 px-3 py-2.5 text-[13px] font-medium text-rose-700">
-          Please fill in the GSTIN to continue generating the e-Invoice/E-Way Bill.
-        </div>
+        {isGstinEnabled && (
+          <div className="mb-5 rounded-md border border-rose-300 bg-rose-50 px-3 py-2.5 text-[13px] font-medium text-rose-700">
+            Please fill in the GSTIN to continue generating the e-Invoice/E-Way Bill.
+          </div>
+        )}
         {success && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] font-semibold text-emerald-700">{success}</div>}
         <div className="grid gap-5 md:grid-cols-[260px_1fr]">
           <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
@@ -2508,7 +2513,9 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
           </button>
           <div className="grid gap-3">
             <label><span className="mb-1 block text-xs text-slate-500">Business Name *</span><TextInput error={errors.name} value={business.name} onChange={(event) => setBusinessField("name", event.target.value)} /></label>
-            <label><span className="mb-1 block text-xs text-blue-600">GSTIN</span><TextInput error={errors.gstin} value={business.gstin} onChange={(event) => setBusinessField("gstin", event.target.value)} />{errors.gstin && <span className="mt-1 block text-xs text-rose-600">{errors.gstin}</span>}</label>
+            {isGstinEnabled && (
+              <label><span className="mb-1 block text-xs text-blue-600">GSTIN</span><TextInput error={errors.gstin} value={business.gstin} onChange={(event) => setBusinessField("gstin", event.target.value)} />{errors.gstin && <span className="mt-1 block text-xs text-rose-600">{errors.gstin}</span>}</label>
+            )}
             <label><span className="mb-1 block text-xs text-slate-500">Phone No.</span><TextInput value={business.phone} onChange={(event) => setBusinessField("phone", event.target.value.slice(0, 30))} /></label>
             <TextInput value={business.email} onChange={(event) => setBusinessField("email", event.target.value)} placeholder="Email ID" />
           </div>
