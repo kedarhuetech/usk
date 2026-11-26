@@ -6,6 +6,7 @@ import Button from "../../components/Common/Button";
 import Input from "../../components/Common/Input";
 import { gstTypes, indianStates, partyFormDefaults } from "../../constants/partiesData";
 import { getParties } from "../../services/partiesStorage";
+import { validateGstin, cleanGstin, getPanFromGstin } from "../../utils/gstinUtils";
 
 const tabs = ["GST & Address", "Credit & Balance", "Additional Fields"];
 
@@ -338,6 +339,13 @@ export default function AddPartyModal({
       setError("Please enter a valid 10-digit mobile number.");
       return;
     }
+    if (form.gstin && form.gstin.trim()) {
+      const gstinResult = validateGstin(form.gstin, { required: false });
+      if (!gstinResult.valid) {
+        setError(gstinResult.error);
+        return;
+      }
+    }
     if (duplicateGstinParty) {
       const confirmSave = typeof window !== "undefined" && window.confirm
         ? window.confirm(`A party named "${duplicateGstinParty.partyName || duplicateGstinParty.name}" already has GSTIN "${form.gstin.trim().toUpperCase()}". Do you still want to proceed?`)
@@ -354,10 +362,14 @@ export default function AddPartyModal({
     setError("");
     try {
       const isInactive = isPartyInactive(form);
+      const cleanedGstin = form.gstin ? cleanGstin(form.gstin) : "";
+      const derivedPan = cleanedGstin ? getPanFromGstin(cleanedGstin) : "";
       const partyData = {
         ...form,
         partyName: trimmedName,
         name: trimmedName,
+        gstin: cleanedGstin,
+        pan: form.pan || derivedPan || "",
         phone: form.phone?.trim() || "",
         phoneNumber: form.phone?.trim() || "",
         status: isInactive ? "inactive" : "active",
@@ -453,7 +465,55 @@ export default function AddPartyModal({
             </select>
           </label>
           <div>
-            <Input label="GSTIN" value={form.gstin} onChange={(event) => setField("gstin", event.target.value)} placeholder="GSTIN" />
+            <div className="flex items-center justify-between mb-1">
+              <span className="block text-sm font-medium text-slate-600">GSTIN</span>
+              {cleanGstin(form.gstin).length > 0 && cleanGstin(form.gstin).length < 15 && (
+                <span className="text-[11px] font-medium text-slate-400">
+                  {cleanGstin(form.gstin).length}/15
+                </span>
+              )}
+            </div>
+            <Input
+              value={form.gstin || ""}
+              onChange={(event) => {
+                const clean = cleanGstin(event.target.value);
+                setField("gstin", clean);
+                if (clean.length === 15) {
+                  const meta = validateGstin(clean);
+                  if (meta.valid) {
+                    if (!form.state && meta.stateName) {
+                      setField("state", meta.stateName);
+                    }
+                    if (form.gstType === "Unregistered / Consumer" || !form.gstType) {
+                      setField("gstType", "Registered - Regular");
+                    }
+                  }
+                }
+              }}
+              maxLength={15}
+              placeholder="e.g. 27ABCDE1234F1Z5"
+              className="font-mono uppercase"
+            />
+            {(() => {
+              const clean = cleanGstin(form.gstin);
+              if (!clean) return null;
+              const res = validateGstin(clean);
+              if (res.valid) {
+                return (
+                  <p className="mt-1 flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                    <span>✓ Valid GSTIN · {res.stateName} · PAN: {res.pan}</span>
+                  </p>
+                );
+              }
+              if (clean.length === 15) {
+                return (
+                  <p className="mt-1 text-xs font-medium text-rose-500">
+                    {res.error}
+                  </p>
+                );
+              }
+              return null;
+            })()}
             {duplicateGstinParty && (
               <p className="mt-1 text-xs font-semibold text-amber-700 bg-amber-50 rounded px-2 py-1 border border-amber-200">
                 Warning: GSTIN already used by "{duplicateGstinParty.partyName || duplicateGstinParty.name}".

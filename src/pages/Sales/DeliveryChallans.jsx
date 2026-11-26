@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
-import { getInventoryItems } from "../../services/itemsStorage";
+import { getInventoryItems, saveInventoryItem } from "../../services/itemsStorage";
 import { getParties } from "../../services/partiesStorage";
 import { getCompanyProfile } from "../../services/companyProfileStorage";
 import {
@@ -42,6 +42,7 @@ function normalizeChallan(item) {
         description: r.description || "",
         size: r.size || "",
         qty: String(r.qty ?? r.quantity ?? 1),
+        returnedQty: Number(r.returnedQty || 0),
         unit: r.unit || "NONE",
         price: String(r.price ?? r.unitPrice ?? 0),
         discount: String(r.discount ?? 0),
@@ -69,6 +70,7 @@ function normalizeChallan(item) {
     vehicleNumber: item.vehicleNumber || item.vehicleNo || item.vehicle_no || "",
     driverName: item.driverName || item.driver_name || "",
     ewayBillNo: item.ewayBillNo || item.eWayBillNo || item.e_way_bill_no || "",
+    returnHistory: Array.isArray(item.returnHistory) ? item.returnHistory : [],
     rows,
   };
 }
@@ -110,6 +112,16 @@ export default function DeliveryChallans() {
   const business = useMemo(() => getCompanyProfile(), []);
   const companyDisplayName = business.companyName || business.businessName || "Sai Kirana Stores";
   const companyPhone = business.phoneNumber || business.phone || "";
+  const appSettings = getAppSettings();
+  const goodsReturnEnabled = Boolean(appSettings.goodsReturnOnDeliveryChallan);
+
+  const [returnModal, setReturnModal] = useState({
+    isOpen: false,
+    challan: null,
+    returnDate: today(),
+    returnNotes: "",
+    returnItems: [],
+  });
 
   const [previewChallan, setPreviewChallan] = useState(() => {
     if (location.state?.previewChallan) return location.state.previewChallan;
@@ -217,8 +229,8 @@ export default function DeliveryChallans() {
 
   const printChallan = (challan, autoPrint = false) => {
     if (!challan) return;
-    const appSettings = getAppSettings();
     const showAmount = Boolean(appSettings.printAmountInDeliveryChallan);
+    const hasAnyReturned = goodsReturnEnabled && (challan.rows || []).some((r) => Number(r.returnedQty || 0) > 0);
     const totalQty = (challan.rows || []).reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
 
     const partyObj = parties.find(
@@ -233,6 +245,12 @@ export default function DeliveryChallans() {
       item: row.item || "Item",
       hsn: row.hsn || row.sac || "—",
       qty: `${row.qty || 1} ${row.unit || ""}`.trim(),
+      ...(hasAnyReturned
+        ? {
+            returnedQty: `${Number(row.returnedQty || 0)} ${row.unit || ""}`.trim(),
+            netQty: `${Math.max(0, Number(row.qty || 0) - Number(row.returnedQty || 0))} ${row.unit || ""}`.trim(),
+          }
+        : {}),
       price: row.price || 0,
       discount: row.discount ? `${row.discount}%` : "—",
       amount: rowAmount(row),
@@ -242,7 +260,13 @@ export default function DeliveryChallans() {
       { key: "index", label: "#", align: "center", width: "40px" },
       { key: "item", label: "Item Description", align: "left" },
       { key: "hsn", label: "HSN/SAC", align: "center", width: "90px" },
-      { key: "qty", label: "Qty", align: "center", width: "90px" },
+      { key: "qty", label: hasAnyReturned ? "Dispatched" : "Qty", align: "center", width: "90px" },
+      ...(hasAnyReturned
+        ? [
+            { key: "returnedQty", label: "Returned", align: "center", width: "90px" },
+            { key: "netQty", label: "Net Delivered", align: "center", width: "90px" },
+          ]
+        : []),
       ...(showAmount
         ? [
             { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
@@ -284,7 +308,163 @@ export default function DeliveryChallans() {
     openPrintWindow(html, autoPrint);
   };
 
-  const convertOne = (challan) => navigate("/sales/sale-invoices/new", { state: { from: "/sales/delivery-challan", deliveryChallansConversion: [challan] } });
+  const getNetChallanForConversion = (challan) => {
+    if (!goodsReturnEnabled) return challan;
+    const netRows = (challan.rows || [])
+      .map((row) => {
+        const returned = Number(row.returnedQty || 0);
+        const origQty = Number(row.qty || 0);
+        const netQty = Math.max(0, origQty - returned);
+        return {
+          ...row,
+          qty: String(netQty),
+        };
+      })
+      .filter((r) => Number(r.qty) > 0);
+    return {
+      ...challan,
+      rows: netRows,
+    };
+  };
+
+  const openReturnGoodsModal = (challan) => {
+    if (!challan) return;
+    const items = (challan.rows || [])
+      .map((row) => {
+        const dispatched = Number(row.qty || 0);
+        const alreadyReturned = Number(row.returnedQty || 0);
+        const remaining = Math.max(0, dispatched - alreadyReturned);
+        return {
+          rowId: row.id,
+          item: row.item,
+          unit: row.unit || "Units",
+          dispatched,
+          alreadyReturned,
+          remaining,
+          returnQty: remaining > 0 ? remaining : 0,
+        };
+      })
+      .filter((r) => r.remaining > 0);
+
+    if (items.length === 0) {
+      toast.error("All items on this delivery challan have already been returned.");
+      return;
+    }
+
+    setReturnModal({
+      isOpen: true,
+      challan,
+      returnDate: today(),
+      returnNotes: "",
+      returnItems: items,
+    });
+  };
+
+  const handleConfirmReturn = async () => {
+    const { challan, returnDate, returnNotes, returnItems } = returnModal;
+    if (!challan) return;
+
+    const activeReturns = returnItems.filter((item) => Number(item.returnQty) > 0);
+    if (activeReturns.length === 0) {
+      toast.error("Please specify a return quantity greater than 0.");
+      return;
+    }
+
+    for (const item of activeReturns) {
+      if (Number(item.returnQty) > item.remaining) {
+        toast.error(`Return quantity for "${item.item}" cannot exceed remaining quantity (${item.remaining}).`);
+        return;
+      }
+    }
+
+    const returnMap = new Map(activeReturns.map((r) => [r.rowId, Number(r.returnQty)]));
+
+    const updatedRows = (challan.rows || []).map((row) => {
+      const addReturned = returnMap.get(row.id) || 0;
+      const currentReturned = Number(row.returnedQty || 0);
+      return {
+        ...row,
+        returnedQty: currentReturned + addReturned,
+      };
+    });
+
+    const totalDelivered = updatedRows.reduce((sum, r) => sum + (Number(r.qty) || 0), 0);
+    const totalReturned = updatedRows.reduce((sum, r) => sum + (Number(r.returnedQty) || 0), 0);
+    const newStatus = totalReturned >= totalDelivered && totalDelivered > 0
+      ? "Fully Returned"
+      : totalReturned > 0
+      ? "Partially Returned"
+      : (challan.status || "Open");
+
+    const newHistoryEntry = {
+      id: crypto.randomUUID(),
+      returnNumber: `GR-${Date.now().toString().slice(-6)}`,
+      returnDate: returnDate || today(),
+      notes: returnNotes || "",
+      returnedAt: new Date().toISOString(),
+      items: activeReturns.map((r) => ({
+        item: r.item,
+        returnedQty: Number(r.returnQty),
+        unit: r.unit,
+      })),
+    };
+
+    const updatedChallan = {
+      ...challan,
+      rows: updatedRows,
+      status: newStatus,
+      returnHistory: [...(challan.returnHistory || []), newHistoryEntry],
+    };
+
+    // Restore inventory stock for returned goods
+    try {
+      const allInventory = getInventoryItems();
+      activeReturns.forEach((ret) => {
+        const match = allInventory.find(
+          (it) => String(it.itemName || it.name || "").trim().toLowerCase() === String(ret.item || "").trim().toLowerCase()
+        );
+        if (match) {
+          const prevStock = Number(match.currentStock ?? match.stock ?? 0);
+          const updatedStock = prevStock + Number(ret.returnQty || 0);
+          saveInventoryItem({
+            ...match,
+            stock: updatedStock,
+            currentStock: updatedStock,
+            current_stock: updatedStock,
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("Inventory restore notice on goods return:", e);
+    }
+
+    try {
+      await transactionsDb.save({
+        ...updatedChallan,
+        transactionType: "delivery_challan",
+        type: "delivery_challan",
+      });
+    } catch (err) {
+      console.warn("DB save warning on goods return:", err.message);
+    }
+
+    persist(challans.map((c) => (c.id === updatedChallan.id ? updatedChallan : c)));
+    if (previewChallan && previewChallan.id === updatedChallan.id) {
+      setPreviewChallan(updatedChallan);
+    }
+    setReturnModal({ isOpen: false, challan: null, returnDate: today(), returnNotes: "", returnItems: [] });
+    toast.success("Goods return recorded. Inventory stock restored.");
+  };
+
+  const convertOne = (challan) => {
+    const netChallan = getNetChallanForConversion(challan);
+    if (!netChallan.rows || netChallan.rows.length === 0) {
+      toast.error("This challan has no remaining delivered items to bill.");
+      return;
+    }
+    navigate("/sales/sale-invoices/new", { state: { from: "/sales/delivery-challan", deliveryChallansConversion: [netChallan] } });
+  };
+
   const openBulkConvert = () => { setSelectedIds([]); setSelectorSearch(""); setSelectorParty(""); setSelectorPreset("This Month"); setSelectorFrom(`${today().slice(0, 7)}-01`); setSelectorTo(today()); setSelectorOpen(true); };
   const changeSelectorPreset = (preset) => {
     setSelectorPreset(preset);
@@ -293,8 +473,15 @@ export default function DeliveryChallans() {
     else { setSelectorFrom(`${today().slice(0, 7)}-01`); setSelectorTo(today()); }
   };
   const convertSelected = () => {
-    const selected = conversionCandidates.filter((challan) => selectedIds.includes(challan.id));
-    if (!selected.length) return;
+    const selected = conversionCandidates
+      .filter((challan) => selectedIds.includes(challan.id))
+      .map(getNetChallanForConversion)
+      .filter((c) => c.rows && c.rows.length > 0);
+
+    if (!selected.length) {
+      toast.error("Selected challans have no remaining items to convert.");
+      return;
+    }
     const partiesInSelected = new Set(selected.map((c) => (c.party || "").trim().toLowerCase()).filter(Boolean));
     if (partiesInSelected.size > 1) {
       toast.error("Please select delivery challans belonging to the same customer for bulk conversion.");
@@ -391,6 +578,7 @@ export default function DeliveryChallans() {
   const act = (action, challan) => {
     setMenuId("");
     if (action === "View/Edit") setEditor({ mode: "edit", value: normalizeChallan(challan) });
+    if (action === "Return Goods") openReturnGoodsModal(challan);
     if (action === "Delete") {
       setConfirmModal({
         isOpen: true,
@@ -419,7 +607,118 @@ export default function DeliveryChallans() {
       <div className="ml-auto flex gap-6"><button type="button" onClick={exportExcel} className="flex flex-col items-center gap-1 text-sm"><span className="text-2xl text-emerald-700">▦</span>Excel Report</button><button type="button" onClick={() => setPrintModalOpen(true)} className="flex flex-col items-center gap-1 text-sm"><FiPrinter className="text-2xl" />Print</button></div>
     </section>
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden p-4"><div className="flex flex-wrap items-center justify-between gap-3 py-2"><h2 className="text-lg font-semibold">TRANSACTIONS</h2><div className="flex flex-wrap items-center gap-3"><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search challans" className="h-10 w-56 rounded border border-slate-300 pl-9 pr-3 outline-none" /></label><Button onClick={openBulkConvert} className="border border-rose-500 text-rose-600">Bulk Convert To Sale</Button><Button onClick={startNew} className="rounded-md bg-blue-600 text-white"><FiPlus /> Add Delivery Challan</Button></div></div>
-      {filtered.length ? <div className="min-h-0 flex-1 overflow-auto"><table className="w-full min-w-[950px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["DATE", "PARTY", "CHALLAN NO.", "DUE DATE", "TOTAL AMOUNT", "STATUS", "ACTION"].map((heading) => <th key={heading} className="border-y border-slate-200 px-3 py-4">{heading}{heading !== "ACTION" && <FiFilter className="ml-2 inline" />}</th>)}</tr></thead><tbody>{filtered.map((challan) => <tr key={challan.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white"><td className="px-3 py-4">{dateLabel(challan.date)}</td><td className="px-3 py-4 font-medium">{challan.party}</td><td className="px-3 py-4">{challan.number}</td><td className="px-3 py-4">{dateLabel(challan.dueDate)} Due: {challan.dueDate === today() ? "Today" : "—"}</td><td className="px-3 py-4 text-right">{money(challan.total)}</td><td className={`px-3 py-4 ${challan.status === "Converted to Sale" ? "text-emerald-600" : "text-blue-600"}`}>{challan.status}</td><td className="relative px-3 py-2"><div className="flex items-center gap-2"><Button disabled={challan.status === "Converted to Sale"} onClick={() => convertOne(challan)} className="h-8 rounded-sm bg-slate-100 px-3 text-xs text-blue-600 shadow">Convert to Sale</Button><button aria-label="Challan actions" onClick={() => setMenuId(menuId === challan.id ? "" : challan.id)} className="p-2 text-slate-500"><FiMoreVertical /></button></div>{menuId === challan.id && <div className="absolute right-3 top-10 z-20 w-48 rounded-lg bg-white p-1 shadow-xl">{["View/Edit", "Delete", "Open PDF", "Preview", "Print"].map((action) => <button key={action} onClick={() => act(action, challan)} className="block w-full rounded px-3 py-2.5 text-left hover:bg-blue-50">{action}</button>)}</div>}</td></tr>)}</tbody></table></div> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center"><div className="mb-5 grid h-36 w-36 place-items-center rounded-full bg-blue-50 text-6xl text-sky-500">▤</div><h3 className="text-lg font-semibold">No Transactions to show</h3><p className="mt-2 text-slate-400">You haven't added any delivery challans yet.</p><Button onClick={startNew} className="mt-7 rounded-full bg-rose-600 px-6 py-3 text-base text-white"><FiPlus /> Add Delivery Challan</Button></div>}</Card>
+      {filtered.length ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[950px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500">
+              <tr>
+                {["DATE", "PARTY", "CHALLAN NO.", "DUE DATE", "TOTAL AMOUNT", "STATUS", "ACTION"].map((heading) => (
+                  <th key={heading} className="border-y border-slate-200 px-3 py-4">
+                    {heading}
+                    {heading !== "ACTION" && <FiFilter className="ml-2 inline" />}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((challan) => (
+                <tr key={challan.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white">
+                  <td className="px-3 py-4">{dateLabel(challan.date)}</td>
+                  <td className="px-3 py-4 font-medium">{challan.party}</td>
+                  <td className="px-3 py-4">{challan.number}</td>
+                  <td className="px-3 py-4">
+                    {dateLabel(challan.dueDate)} Due: {challan.dueDate === today() ? "Today" : "—"}
+                  </td>
+                  <td className="px-3 py-4 text-right">{money(challan.total)}</td>
+                  <td className="px-3 py-4">
+                    {challan.status === "Converted to Sale" && (
+                      <span className="inline-block rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700">
+                        Converted to Sale
+                      </span>
+                    )}
+                    {challan.status === "Fully Returned" && (
+                      <span className="inline-block rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-700">
+                        Fully Returned
+                      </span>
+                    )}
+                    {challan.status === "Partially Returned" && (
+                      <span className="inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                        Partially Returned
+                      </span>
+                    )}
+                    {!["Converted to Sale", "Fully Returned", "Partially Returned"].includes(challan.status) && (
+                      <span className="font-semibold text-blue-600">
+                        {challan.status || "Open"}
+                      </span>
+                    )}
+                  </td>
+                  <td className="relative px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        disabled={challan.status === "Converted to Sale" || challan.status === "Fully Returned"}
+                        onClick={() => convertOne(challan)}
+                        className="h-8 rounded-sm bg-slate-100 px-3 text-xs text-blue-600 shadow disabled:opacity-40"
+                      >
+                        Convert to Sale
+                      </Button>
+                      {goodsReturnEnabled && challan.status !== "Converted to Sale" && challan.status !== "Fully Returned" && (
+                        <button
+                          type="button"
+                          onClick={() => openReturnGoodsModal(challan)}
+                          className="h-8 rounded-sm bg-amber-50 border border-amber-300 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100 shadow transition cursor-pointer"
+                          title="Record returned goods for this challan"
+                        >
+                          Return Goods
+                        </button>
+                      )}
+                      <button
+                        aria-label="Challan actions"
+                        onClick={() => setMenuId(menuId === challan.id ? "" : challan.id)}
+                        className="p-2 text-slate-500 hover:text-slate-800 cursor-pointer"
+                      >
+                        <FiMoreVertical />
+                      </button>
+                    </div>
+                    {menuId === challan.id && (
+                      <div className="absolute right-3 top-10 z-20 w-48 rounded-lg bg-white p-1 shadow-xl border border-slate-200">
+                        {["View/Edit", "Delete", "Open PDF", "Preview", "Print"].map((action) => (
+                          <button
+                            key={action}
+                            onClick={() => act(action, challan)}
+                            className="block w-full rounded px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-blue-50"
+                          >
+                            {action}
+                          </button>
+                        ))}
+                        {goodsReturnEnabled && challan.status !== "Converted to Sale" && challan.status !== "Fully Returned" && (
+                          <button
+                            onClick={() => act("Return Goods", challan)}
+                            className="block w-full rounded px-3 py-2 text-left text-xs font-bold text-amber-700 hover:bg-amber-50 border-t border-slate-100"
+                          >
+                            Return Goods
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
+          <div className="mb-5 grid h-36 w-36 place-items-center rounded-full bg-blue-50 text-6xl text-sky-500">
+            ▤
+          </div>
+          <h3 className="text-lg font-semibold">No Transactions to show</h3>
+          <p className="mt-2 text-slate-400">You haven't added any delivery challans yet.</p>
+          <Button onClick={startNew} className="mt-7 rounded-full bg-rose-600 px-6 py-3 text-base text-white">
+            <FiPlus /> Add Delivery Challan
+          </Button>
+        </div>
+      )}
+    </Card>
 
     {previewChallan && (
       <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-3 sm:p-6 backdrop-blur-sm">
@@ -495,7 +794,13 @@ export default function DeliveryChallans() {
                       <th className="px-3 py-3 w-12 text-center">#</th>
                       <th className="px-3 py-3">Item Name</th>
                       <th className="px-3 py-3 text-center">HSN / SAC</th>
-                      <th className="px-3 py-3 text-center">Qty</th>
+                      <th className="px-3 py-3 text-center">{goodsReturnEnabled ? "Dispatched" : "Qty"}</th>
+                      {goodsReturnEnabled && (
+                        <>
+                          <th className="px-3 py-3 text-center text-amber-700">Returned</th>
+                          <th className="px-3 py-3 text-center text-emerald-700">Net Retained</th>
+                        </>
+                      )}
                       <th className="px-3 py-3 text-center">Unit</th>
                       {Boolean(getAppSettings().printAmountInDeliveryChallan) && (
                         <>
@@ -513,6 +818,16 @@ export default function DeliveryChallans() {
                         <td className="px-3 py-3 font-semibold text-slate-800">{row.item || "—"}</td>
                         <td className="px-3 py-3 text-center text-slate-600">{row.hsn || row.sac || "—"}</td>
                         <td className="px-3 py-3 text-center font-medium text-slate-800">{row.qty || "0"}</td>
+                        {goodsReturnEnabled && (
+                          <>
+                            <td className="px-3 py-3 text-center font-medium text-amber-700">
+                              {row.returnedQty ? `${row.returnedQty}` : "0"}
+                            </td>
+                            <td className="px-3 py-3 text-center font-bold text-emerald-700">
+                              {Math.max(0, Number(row.qty || 0) - Number(row.returnedQty || 0))}
+                            </td>
+                          </>
+                        )}
                         <td className="px-3 py-3 text-center text-slate-600">{row.unit || "—"}</td>
                         {Boolean(getAppSettings().printAmountInDeliveryChallan) && (
                           <>
@@ -528,6 +843,31 @@ export default function DeliveryChallans() {
                   </tbody>
                 </table>
               </div>
+
+              {goodsReturnEnabled && previewChallan.returnHistory && previewChallan.returnHistory.length > 0 && (
+                <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-900 mb-2">
+                    Goods Return History
+                  </h4>
+                  <div className="space-y-2">
+                    {previewChallan.returnHistory.map((ret, i) => (
+                      <div
+                        key={ret.id || i}
+                        className="flex flex-wrap items-center justify-between border-b border-amber-200/60 pb-1.5 last:border-b-0 text-xs"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-800">{ret.returnNumber || `Return #${i + 1}`}</span>
+                          <span className="text-slate-500 ml-2">({dateLabel(ret.returnDate)})</span>
+                          {ret.notes && <span className="text-slate-600 ml-2 italic">— "{ret.notes}"</span>}
+                        </div>
+                        <div className="font-semibold text-amber-800">
+                          {(ret.items || []).map((it) => `${it.item}: ${it.returnedQty} ${it.unit || ""}`).join(", ")}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-6 flex justify-end">
                 <div className="w-80 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm space-y-2">
@@ -583,6 +923,19 @@ export default function DeliveryChallans() {
             >
               Email PDF
             </button>
+            {goodsReturnEnabled && previewChallan.status !== "Converted to Sale" && previewChallan.status !== "Fully Returned" && (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = previewChallan;
+                  closePreview();
+                  openReturnGoodsModal(target);
+                }}
+                className="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-amber-700 shadow"
+              >
+                Return Goods
+              </button>
+            )}
             <button
               onClick={closePreview}
               className="rounded-lg bg-rose-600 px-6 py-2.5 text-sm font-bold text-white shadow hover:bg-rose-700"
@@ -629,6 +982,124 @@ export default function DeliveryChallans() {
       totalLabel="Total Challan Amount:"
       totalAmount={filtered.reduce((sum, c) => sum + Number(c.total || 0), 0)}
     />
+    {returnModal.isOpen && returnModal.challan && (
+      <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+        <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-slate-300 bg-white shadow-2xl">
+          <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4 bg-amber-50/70">
+            <div>
+              <h3 className="text-base font-bold text-amber-900">Record Goods Return</h3>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Delivery Challan #{returnModal.challan.number} · {returnModal.challan.party}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReturnModal({ isOpen: false, challan: null, returnDate: today(), returnNotes: "", returnItems: [] })}
+              className="text-slate-400 hover:text-slate-700 p-1 rounded-md text-xl cursor-pointer"
+            >
+              <FiX />
+            </button>
+          </header>
+
+          <div className="flex-1 overflow-auto p-6 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Return Date</label>
+                <input
+                  type="date"
+                  value={returnModal.returnDate}
+                  onChange={(e) => setReturnModal((prev) => ({ ...prev, returnDate: e.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-800 outline-none focus:border-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Return Reason / Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Returned after trial / rejected"
+                  value={returnModal.returnNotes}
+                  onChange={(e) => setReturnModal((prev) => ({ ...prev, returnNotes: e.target.value }))}
+                  className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-800 outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Items to Return</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReturnModal((prev) => ({
+                      ...prev,
+                      returnItems: prev.returnItems.map((it) => ({ ...it, returnQty: it.remaining })),
+                    }));
+                  }}
+                  className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:underline cursor-pointer"
+                >
+                  Return All Remaining Items
+                </button>
+              </div>
+
+              <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100 font-bold text-slate-600 uppercase">
+                    <tr>
+                      <th className="p-2.5">Item</th>
+                      <th className="p-2.5 text-center">Dispatched</th>
+                      <th className="p-2.5 text-center">Already Returned</th>
+                      <th className="p-2.5 text-center">Remaining</th>
+                      <th className="p-2.5 text-right w-36">Qty to Return</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {returnModal.returnItems.map((item, idx) => (
+                      <tr key={item.rowId} className="hover:bg-amber-50/30">
+                        <td className="p-2.5 font-semibold text-slate-800">{item.item}</td>
+                        <td className="p-2.5 text-center text-slate-600">{item.dispatchedQty} {item.unit}</td>
+                        <td className="p-2.5 text-center text-amber-600">{item.alreadyReturned} {item.unit}</td>
+                        <td className="p-2.5 text-center font-bold text-slate-700">{item.remaining} {item.unit}</td>
+                        <td className="p-2.5 text-right">
+                          <input
+                            type="number"
+                            min="0"
+                            max={item.remaining}
+                            value={item.returnQty}
+                            onChange={(e) => {
+                              const val = Math.max(0, Math.min(item.remaining, Number(e.target.value) || 0));
+                              setReturnModal((prev) => ({
+                                ...prev,
+                                returnItems: prev.returnItems.map((it, i) => (i === idx ? { ...it, returnQty: val } : it)),
+                              }));
+                            }}
+                            className="h-8 w-24 rounded border border-amber-300 px-2 text-right text-xs font-bold text-amber-900 focus:border-amber-500 outline-none"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <footer className="flex justify-end gap-3 border-t border-slate-200 px-6 py-4 bg-slate-50">
+            <Button
+              onClick={() => setReturnModal({ isOpen: false, challan: null, returnDate: today(), returnNotes: "", returnItems: [] })}
+              className="bg-slate-200 text-slate-700 hover:bg-slate-300"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmReturn}
+              className="bg-amber-600 text-white font-bold hover:bg-amber-700"
+            >
+              Confirm Goods Return
+            </Button>
+          </footer>
+        </div>
+      </div>
+    )}
     <ConfirmModal
       isOpen={confirmModal.isOpen}
       title={confirmModal.title}

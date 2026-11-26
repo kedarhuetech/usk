@@ -22,6 +22,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import HsnAutocomplete from "../../components/Common/HsnAutocomplete";
 import { matchGstRateToOption } from "../../services/hsnService.js";
+import { validateGstin, cleanGstin } from "../../utils/gstinUtils";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
 import AddItem from "../Items/AddItem";
@@ -2458,7 +2459,14 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
   const save = () => {
     const nextErrors = {};
     if (!business.name.trim()) nextErrors.name = "Business Name is required";
-    if (!business.gstin.trim()) nextErrors.gstin = "Please Enter GSTIN";
+    if (!business.gstin.trim()) {
+      nextErrors.gstin = "Please Enter GSTIN";
+    } else {
+      const gstinVal = validateGstin(business.gstin);
+      if (!gstinVal.valid) {
+        nextErrors.gstin = gstinVal.error;
+      }
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setSuccess(`${mode} details saved for demo.`);

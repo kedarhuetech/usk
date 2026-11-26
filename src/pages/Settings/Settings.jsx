@@ -951,28 +951,6 @@ function GeneralTab({
               <InfoTooltip text="Track open Sales and Purchase Orders." />
             </label>
 
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={settings.enableOtherIncome || false}
-                onChange={(e) => update("enableOtherIncome", e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
-              />
-              Other Income
-              <InfoTooltip text="Record direct other income entries." />
-            </label>
-
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={settings.enableFixedAssets || false}
-                onChange={(e) => update("enableFixedAssets", e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
-              />
-              Fixed Assets (FA)
-              <InfoTooltip text="Manage depreciation and fixed asset transactions." />
-            </label>
-
             {/* Delivery Challan with Nested options */}
             <div className="pt-1">
               <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">

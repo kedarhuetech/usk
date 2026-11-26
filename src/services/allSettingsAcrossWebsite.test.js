@@ -36,6 +36,7 @@ import {
   TRANSACTION_TYPES_CONFIG,
 } from "./transactionMessageService.js";
 import { saveSaleInvoice } from "./salesStorage.js";
+import { getPartiesStorageKey } from "./partiesStorage.js";
 import {
   getReminderSettings,
   saveReminderSettings,
@@ -117,12 +118,11 @@ test("4. GENERAL SETTINGS: Block new items from transaction blocks unregistered 
 });
 
 test("5. GENERAL SETTINGS: Block new parties from transaction blocks unregistered parties", () => {
-  window.localStorage.setItem(
-    "ledgerly:parties.v1",
-    JSON.stringify([
-      { id: "party-known-1", partyName: "Registered Retailer", phone: "9999999999" },
-    ])
-  );
+  const partyData = JSON.stringify([
+    { id: "party-known-1", partyName: "Registered Retailer", phone: "9999999999" },
+  ]);
+  window.localStorage.setItem("ledgerly:parties.v1", partyData);
+  window.localStorage.setItem(getPartiesStorageKey(), partyData);
 
   saveAppSettings({ blockNewPartiesFromTxn: true, blockNewItemsFromTxn: false, stopSaleOnNegativeStock: false });
 
