@@ -97,8 +97,27 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ success: false, message: "Category name is required." });
     }
 
-    const id = body.id || `exp_cat_${crypto.randomUUID().slice(0, 8)}`;
     const expenseType = body.expenseType || body.type || "indirect";
+
+    const [existing] = await pool.query(
+      `SELECT id FROM expense_categories WHERE business_id = ? AND LOWER(category_name) = LOWER(?) LIMIT 1`,
+      [businessId, categoryName]
+    );
+
+    if (existing.length > 0) {
+      const existingId = existing[0].id;
+      await pool.query(
+        `UPDATE expense_categories SET expense_type = ? WHERE id = ? AND business_id = ?`,
+        [expenseType, existingId, businessId]
+      );
+      return res.json({
+        success: true,
+        message: "Expense category updated.",
+        data: { id: existingId, categoryName, expenseType },
+      });
+    }
+
+    const id = body.id || `exp_cat_${crypto.randomUUID().slice(0, 8)}`;
 
     await pool.query(
       `INSERT INTO expense_categories (id, business_id, category_name, expense_type)

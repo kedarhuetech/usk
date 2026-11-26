@@ -85,6 +85,7 @@ export async function initializeDatabaseSchema() {
       await addCol("company_profile_assets", "storage_key VARCHAR(500) NULL");
       await addCol("company_profile_assets", "file_id VARCHAR(64) NULL");
       await addCol("business_files", "public_url VARCHAR(500) NULL AFTER storage_key");
+      await addCol("users", "token_version INT NOT NULL DEFAULT 1");
       try {
         await pool.query("ALTER TABLE company_profile_assets MODIFY COLUMN data MEDIUMBLOB NULL");
       } catch {}
@@ -586,7 +587,8 @@ export async function initializeDatabaseSchema() {
       category_name VARCHAR(100) NOT NULL,
       expense_type VARCHAR(50) DEFAULT 'indirect',
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
-      INDEX idx_expcat_biz (business_id)
+      INDEX idx_expcat_biz (business_id),
+      UNIQUE KEY idx_biz_cat_unique (business_id, category_name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
 
     // 17b. Expense Items Table
@@ -856,6 +858,17 @@ export async function initializeDatabaseSchema() {
       is_verified TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_email_verif (email, is_verified)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
+
+    // 34. Password Resets Table
+    `CREATE TABLE IF NOT EXISTS password_resets (
+      id VARCHAR(64) PRIMARY KEY,
+      email VARCHAR(191) NOT NULL,
+      token_hash VARCHAR(255) NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      is_used TINYINT(1) NOT NULL DEFAULT 0,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_pwd_resets_email (email, is_used)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`
   ];
 

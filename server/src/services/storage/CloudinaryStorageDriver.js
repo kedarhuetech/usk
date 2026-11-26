@@ -164,8 +164,15 @@ export class CloudinaryStorageDriver {
    * @param {boolean} [options.isSensitive=false]
    * @returns {string}
    */
-  getSecureUrl(storageKey, { isSensitive = false, resourceType = "image" } = {}) {
+  getSecureUrl(storageKey, { isSensitive = false, resourceType = "image", format = null } = {}) {
     this._ensureConfigured();
+    const isPdf = format === "pdf" || storageKey.toLowerCase().endsWith(".pdf");
+    if (isPdf) {
+      return cloudinary.utils.private_download_url(storageKey, "pdf", {
+        resource_type: resourceType,
+        type: isSensitive ? "authenticated" : "upload",
+      });
+    }
     if (isSensitive) {
       return cloudinary.url(storageKey, {
         type: "authenticated",
@@ -197,6 +204,15 @@ export class CloudinaryStorageDriver {
         client.get(targetUrl, (res) => {
           if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
             return getWithRedirect(res.headers.location, depth + 1);
+          }
+          if (res.statusCode === 401 && !targetUrl.includes("/download?")) {
+            try {
+              const fallbackUrl = cloudinary.utils.private_download_url(storageKey, "pdf", {
+                resource_type: "image",
+                type: "upload",
+              });
+              return getWithRedirect(fallbackUrl, depth + 1);
+            } catch {}
           }
           if (res.statusCode >= 400) {
             return reject(new Error(`Failed to read asset from Cloudinary: HTTP ${res.statusCode}`));
@@ -232,6 +248,19 @@ export class CloudinaryStorageDriver {
       client.get(targetUrl, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           return streamWithRedirect(res.headers.location, depth + 1);
+        }
+        if (res.statusCode === 401 && !targetUrl.includes("/download?")) {
+          try {
+            const ext = options.format || (storageKey.includes(".") ? storageKey.split(".").pop() : "pdf");
+            const fallbackUrl = cloudinary.utils.private_download_url(storageKey, ext, {
+              resource_type: options.resourceType || "image",
+              type: options.isSensitive ? "authenticated" : "upload",
+            });
+            return streamWithRedirect(fallbackUrl, depth + 1);
+          } catch {
+            passThrough.destroy(new Error(`Cloudinary stream error: HTTP ${res.statusCode}`));
+            return;
+          }
         }
         if (res.statusCode >= 400) {
           passThrough.destroy(new Error(`Cloudinary stream error: HTTP ${res.statusCode}`));

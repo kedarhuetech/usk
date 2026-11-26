@@ -49,17 +49,22 @@ async function persistBase64Asset(val, entityType, businessId) {
     // De-duplication check: if a file with identical SHA-256 hash already exists for this business
     const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
     const [existingFiles] = await pool.query(
-      `SELECT id, storage_key FROM business_files WHERE business_id = ? AND sha256_hash = ? AND is_deleted = 0 LIMIT 1`,
+      `SELECT id, storage_key FROM business_files WHERE business_id = ? AND sha256_hash = ? AND is_deleted = 0 ORDER BY created_at DESC LIMIT 5`,
       [businessId, sha256]
     );
 
     let fileId;
     let storageKey;
 
-    if (existingFiles.length > 0 && (await storageService.fileExists(existingFiles[0].storage_key))) {
-      fileId = existingFiles[0].id;
-      storageKey = existingFiles[0].storage_key;
-    } else {
+    for (const file of existingFiles) {
+      if (await storageService.fileExists(file.storage_key)) {
+        fileId = file.id;
+        storageKey = file.storage_key;
+        break;
+      }
+    }
+
+    if (!fileId) {
       // 1. Save to filesystem storage foundation (saves file to disk + business_files metadata)
       const fileResult = await storageService.saveFileAndMetadata({
         businessId,
@@ -135,7 +140,7 @@ router.post("/", async (req, res) => {
       if (typeof val === "string" && val.startsWith("data:image/")) {
         const assetType = key === "companyLogo" ? "company-logo" : (key === "signatureImage" ? "company-signature" : "app-setting");
         const persistedUrl = await persistBase64Asset(val, assetType, businessId);
-        textVal = JSON.stringify(persistedUrl || "");
+        textVal = persistedUrl || "";
       } else {
         textVal = JSON.stringify(val);
       }

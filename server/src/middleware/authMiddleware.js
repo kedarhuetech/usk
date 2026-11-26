@@ -16,6 +16,31 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env"), quiet: true });
 export const JWT_SECRET = process.env.JWT_SECRET || "usk_production_jwt_secret_key_99882233_secure_auth_token";
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
+// In-memory revocation tracking: userId -> revokedTimestampMs
+const userRevocationMap = new Map();
+
+/**
+ * Invalidates all existing active sessions/tokens for a given user.
+ */
+export function invalidateUserSessions(userId) {
+  if (userId) {
+    userRevocationMap.set(String(userId), Date.now());
+  }
+}
+
+/**
+ * Checks if a session token is revoked by checking its issued timestamp against user revocation.
+ */
+export function isUserSessionRevoked(userId, tokenIssuedAtSeconds) {
+  if (!userId) return false;
+  const revokedAt = userRevocationMap.get(String(userId));
+  if (!revokedAt) return false;
+  if (tokenIssuedAtSeconds && (tokenIssuedAtSeconds * 1000) <= revokedAt) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Signs a new JWT token for an authenticated user.
  */
@@ -59,6 +84,13 @@ export function requireAuth(req, res, next) {
     return res.status(401).json({
       success: false,
       message: "Invalid or expired session. Please sign in again.",
+    });
+  }
+
+  if (decoded.userId && isUserSessionRevoked(decoded.userId, decoded.iat)) {
+    return res.status(401).json({
+      success: false,
+      message: "Session invalidated due to password change. Please sign in again.",
     });
   }
 

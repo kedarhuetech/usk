@@ -225,3 +225,29 @@ export function logoutUser() {
     window.location.href = "/login";
   }
 }
+
+/**
+ * Send password reset 6-digit OTP code to email
+ */
+export async function sendForgotPasswordOtp({ email }) {
+  return await callAuthApi("/forgot-password/send-otp", { email });
+}
+
+/**
+ * Verify password reset OTP and obtain secure reset token
+ */
+export async function verifyForgotPasswordOtp({ email, otp }) {
+  return await callAuthApi("/forgot-password/verify-otp", { email, otp });
+}
+
+/**
+ * Reset password using single-use reset token and invalidate active sessions
+ */
+export async function resetPasswordWithToken({ email, resetToken, newPassword, confirmPassword }) {
+  return await callAuthApi("/forgot-password/reset", {
+    email,
+    resetToken,
+    newPassword,
+    confirmPassword,
+  });
+}
