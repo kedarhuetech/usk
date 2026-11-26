@@ -140,7 +140,7 @@ router.post("/", async (req, res) => {
       if (typeof val === "string" && val.startsWith("data:image/")) {
         const assetType = key === "companyLogo" ? "company-logo" : (key === "signatureImage" ? "company-signature" : "app-setting");
         const persistedUrl = await persistBase64Asset(val, assetType, businessId);
-        textVal = JSON.stringify(persistedUrl || "");
+        textVal = persistedUrl || "";
       } else {
         textVal = JSON.stringify(val);
       }
