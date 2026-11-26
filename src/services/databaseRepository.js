@@ -934,16 +934,30 @@ export const cashBankDb = {
 export const expenseCategoriesDb = {
   async getAll() {
     const res = await apiRequest("/expense-categories");
-    return Array.isArray(res) ? res : (res?.data || []);
+    const list = Array.isArray(res) ? res : (res?.data || []);
+    const seen = new Set();
+    return list.filter(item => {
+      const name = String(item?.categoryName || item?.name || item || "").trim().toLowerCase();
+      if (!name || seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    });
   },
   async syncCategories({ throwOnError = false } = {}) {
     try {
       const res = await apiRequest("/expense-categories");
       const list = Array.isArray(res) ? res : (res?.data || []);
       if (Array.isArray(list)) {
-        writeLocal("ledgerly:expenseCategories.v1", list);
-        writeLocal(getScopedStorageKey("ledgerly:expenseCategories.v1"), list);
-        return list;
+        const seen = new Set();
+        const dedupedList = list.filter(item => {
+          const name = String(item?.categoryName || item?.name || item || "").trim().toLowerCase();
+          if (!name || seen.has(name)) return false;
+          seen.add(name);
+          return true;
+        });
+        writeLocal("ledgerly:expenseCategories.v1", dedupedList);
+        writeLocal(getScopedStorageKey("ledgerly:expenseCategories.v1"), dedupedList);
+        return dedupedList;
       }
       return readLocal(getScopedStorageKey("ledgerly:expenseCategories.v1"), null) || readLocal("ledgerly:expenseCategories.v1", []);
     } catch (err) {
