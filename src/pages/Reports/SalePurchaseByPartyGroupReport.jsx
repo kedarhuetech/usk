@@ -7,11 +7,14 @@ import {
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import { getParties } from "../../services/partiesStorage";
+import { loadBusinessParties } from "../../services/businessRecords.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
     try {
-      const val = JSON.parse(window.localStorage.getItem(key) || "[]");
+      const val = readTransactionCollection(key);
       if (Array.isArray(val) && val.length > 0) return val;
     } catch {}
   }
@@ -76,6 +79,19 @@ export default function SalePurchaseByPartyGroupReport() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      loadBusinessParties(),
+      transactionsDb.listAll(),
+    ]).then(() => {
+      if (active) setRefreshTrigger((k) => k + 1);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const handleUpdate = () => setRefreshTrigger((k) => k + 1);
     window.addEventListener("ledgerly:business-data-changed", handleUpdate);
     window.addEventListener("storage", handleUpdate);
@@ -129,11 +145,11 @@ export default function SalePurchaseByPartyGroupReport() {
 
   // Raw data
   const sales = useMemo(
-    () => readLocal("ledgerly:saleInvoices.v1", "ledgerly:sales.v1"),
+    () => readLocal(transactionStorageKeys.sales),
     [refreshTrigger]
   );
   const purchases = useMemo(
-    () => readLocal("ledgerly:purchaseBills.v1", "ledgerly:purchases.v1"),
+    () => readLocal(transactionStorageKeys.purchases),
     [refreshTrigger]
   );
   const parties = useMemo(() => {
@@ -150,7 +166,7 @@ export default function SalePurchaseByPartyGroupReport() {
     parties.forEach((p) => {
       const name = (p.partyName || "").trim();
       if (name) {
-        map.set(name.toLowerCase(), p.group || "General");
+        map.set(name.toLowerCase(), p.group || p.partyGroup || p.party_group || "General");
       }
     });
     return map;

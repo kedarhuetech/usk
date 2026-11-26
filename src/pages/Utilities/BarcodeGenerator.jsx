@@ -1,5 +1,6 @@
 // Implements the barcode generator page.
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   FiAlertCircle,
   FiDownload,
@@ -24,6 +25,36 @@ const maxLabels = 100;
 // This helper handles form logic.
 function initialForm() {
   return { itemName: "", sku: "", barcodeValue: "", format: "CODE128", quantity: "1" };
+}
+
+function getItemBarcodeValue(item) {
+  return String(item?.barcode || item?.barCode || item?.itemBarcode || item?.itemCode || "").trim();
+}
+
+function readInitialPurchasePayload(locationState) {
+  if (Array.isArray(locationState?.items) && locationState.items.length > 0) {
+    return locationState.items;
+  }
+  try {
+    const raw = sessionStorage.getItem("ledgerly:barcodePurchaseItems");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.items) && parsed.items.length > 0) return parsed.items;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
+
+function buildFormFromItem(item, matched) {
+  return {
+    ...initialForm(),
+    itemName: item.itemName || matched?.itemName || "",
+    sku: item.itemCode || matched?.itemCode || "",
+    barcodeValue: getItemBarcodeValue(item) || getItemBarcodeValue(matched),
+    quantity: String(Math.min(maxLabels, Math.max(1, Number(item.labels) || 1))),
+  };
 }
 
 // Validates form.
@@ -87,6 +118,7 @@ function BarcodeLabel({ form, barcode }) {
 // Renders the barcode generator interface.
 function BarcodeGenerator() {
   const { enableBarcodeScanning } = useAppSettings();
+  const location = useLocation();
 
   const [inventory, setInventory] = useState(() => {
     const items = getInventoryItems().filter(
@@ -126,10 +158,34 @@ function BarcodeGenerator() {
     }).catch(() => {});
   }, []);
 
-  const [form, setForm] = useState(initialForm);
+  const [purchaseItems] = useState(() => readInitialPurchasePayload(location.state));
+  const [form, setForm] = useState(() => {
+    if (purchaseItems.length === 0) return initialForm();
+    const first = purchaseItems[0];
+    const matched = inventory.find(
+      (candidate) =>
+        (first.itemCode && candidate.itemCode === first.itemCode) ||
+        (first.itemName && candidate.itemName?.toLowerCase() === first.itemName.toLowerCase())
+    );
+    return buildFormFromItem(first, matched);
+  });
   const [generated, setGenerated] = useState(null);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState(() =>
+    purchaseItems.length > 0
+      ? `Loaded ${purchaseItems.length} item${purchaseItems.length > 1 ? "s" : ""} from purchase bill.`
+      : ""
+  );
+
+  useEffect(() => {
+    if (purchaseItems.length > 0) {
+      try {
+        sessionStorage.removeItem("ledgerly:barcodePurchaseItems");
+      } catch {
+        // Ignore storage cleanup errors
+      }
+    }
+  }, [purchaseItems.length]);
 
   const selectedFormat = formats.find((format) => format.id === form.format);
 
@@ -144,12 +200,30 @@ function BarcodeGenerator() {
   const chooseInventoryItem = (event) => {
     const item = inventory.find((candidate) => candidate.id === event.target.value);
     if (!item) return;
-    updateForm("itemName", item.itemName);
+    setError("");
+    setNotice("");
     setForm((current) => ({
       ...current,
       itemName: item.itemName,
       sku: item.itemCode || "",
-      barcodeValue: item.itemCode || "",
+      barcodeValue: getItemBarcodeValue(item),
+    }));
+  };
+
+  const choosePurchaseItem = (event) => {
+    const idx = Number(event.target.value);
+    const item = purchaseItems[idx];
+    if (!item) return;
+    const matched = inventory.find(
+      (candidate) =>
+        (item.itemCode && candidate.itemCode === item.itemCode) ||
+        (item.itemName && candidate.itemName?.toLowerCase() === item.itemName.toLowerCase())
+    );
+    setError("");
+    setNotice("");
+    setForm((current) => ({
+      ...current,
+      ...buildFormFromItem(item, matched),
     }));
   };
 
@@ -237,12 +311,30 @@ function BarcodeGenerator() {
               <p>Code 128 is suitable for internal product codes. EAN-13 and UPC-A require numeric retail identifiers with valid check digits.</p>
             </div>
 
+            {purchaseItems.length > 0 && (
+              <div className="mt-5">
+                <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="purchase-barcode-item">
+                  Purchase bill items ({purchaseItems.length})
+                </label>
+                <select id="purchase-barcode-item" defaultValue="0" onChange={choosePurchaseItem} className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                  {purchaseItems.map((item, idx) => (
+                    <option key={`${item.id || item.itemName}-${idx}`} value={idx}>
+                      {item.itemName}{item.labels ? ` (${item.labels} labels)` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {inventory.length > 0 && (
               <div className="mt-5">
                 <label className="mb-2 block text-sm font-semibold text-slate-700" htmlFor="inventory-item">Use an existing item</label>
                 <select id="inventory-item" defaultValue="" onChange={chooseInventoryItem} className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
                   <option value="">Select an inventory item</option>
-                  {inventory.map((item) => <option key={item.id} value={item.id}>{item.itemName}{item.itemCode ? ` (${item.itemCode})` : ""}</option>)}
+                  {inventory.map((item) => {
+                    const codeOrBarcode = getItemBarcodeValue(item);
+                    return <option key={item.id} value={item.id}>{item.itemName}{codeOrBarcode ? ` (${codeOrBarcode})` : ""}</option>;
+                  })}
                 </select>
               </div>
             )}

@@ -109,7 +109,7 @@ export function buildLoanStatementEntries(loans = [], loanIdFilter = "All") {
         rawDate: repayment.paymentDate || repayment.createdAt,
         reference: repayment.reference || `REP-${repayment.id.slice(0, 6)}`,
         transactionType: "Principal Repayment",
-        paymentType: repayment.paymentType || repayment.paymentMethod || "Bank Transfer",
+        paymentType: repayment.paymentType || repayment.paymentMode || repayment.payment_mode || repayment.paymentMethod || "Bank Transfer",
         principalAmount: principalPaid,
         interestAmount: interestPaid,
         charges: charges,

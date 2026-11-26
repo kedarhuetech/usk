@@ -3512,6 +3512,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
           itemName: row.item,
           labels: Math.max(Math.round(toNumber(row.qty)), 1),
           itemCode: row.itemCode || "",
+          barcode: row.barcode || row.itemCode || "",
           companyName: business.name,
           salePrice: row.salePrice || "",
           purchasePrice: row.price || "",

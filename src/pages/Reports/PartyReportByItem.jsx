@@ -8,16 +8,18 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
-import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
+import { loadBusinessItems } from "../../services/businessRecords.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
+import { readTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
   for (const key of keys) {
     try {
-      const val = JSON.parse(window.localStorage.getItem(key) || "[]");
-      if (Array.isArray(val)) return val;
+      const val = readTransactionCollection(key);
+      if (Array.isArray(val) && val.length > 0) return val;
     } catch {}
   }
   return [];
@@ -86,6 +88,20 @@ export default function PartyReportByItem() {
   const [selectedRowIndex, setSelectedRowIndex] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Fetch latest items & transactions from MySQL on mount
+  useEffect(() => {
+    let active = true;
+    Promise.allSettled([
+      loadBusinessItems(),
+      transactionsDb.listAll(),
+    ]).then(() => {
+      if (active) setRefreshTrigger((k) => k + 1);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Listen to business data updates
   useEffect(() => {
     const handleUpdate = () => setRefreshTrigger((k) => k + 1);
@@ -125,9 +141,9 @@ export default function PartyReportByItem() {
 
   // Raw data from storage
   const inventoryItems = useMemo(() => getInventoryItems(), [refreshTrigger]);
-  const sales = useMemo(() => readLocal("ledgerly:saleInvoices.v1"), [refreshTrigger]);
+  const sales = useMemo(() => readLocal(transactionStorageKeys.sales), [refreshTrigger]);
   const saleReturns = useMemo(() => readLocal("ledgerly:saleReturns.v1"), [refreshTrigger]);
-  const purchases = useMemo(() => readLocal("ledgerly:purchaseBills.v1"), [refreshTrigger]);
+  const purchases = useMemo(() => readLocal(transactionStorageKeys.purchases), [refreshTrigger]);
 
   // Inventory lookup map for category resolution
   const itemCategoryMap = useMemo(() => {
@@ -165,12 +181,14 @@ export default function PartyReportByItem() {
     });
     sales.forEach((s) => {
       (s.rows || []).forEach((r) => {
-        if (r.item && r.item.trim()) set.add(r.item.trim());
+        const name = r.item || r.itemName;
+        if (name && name.trim()) set.add(name.trim());
       });
     });
     purchases.forEach((p) => {
       (p.rows || []).forEach((r) => {
-        if (r.item && r.item.trim()) set.add(r.item.trim());
+        const name = r.item || r.itemName;
+        if (name && name.trim()) set.add(name.trim());
       });
     });
     return ["All Items", ...Array.from(set).sort()];
@@ -214,7 +232,7 @@ export default function PartyReportByItem() {
         }
       } else {
         rows.forEach((r) => {
-          const itemName = (r.item || "").trim();
+          const itemName = (r.item || r.itemName || "").trim();
           if (selectedItem !== "All Items" && itemName.toLowerCase() !== selectedItem.toLowerCase()) {
             return;
           }
@@ -253,7 +271,7 @@ export default function PartyReportByItem() {
         }
       } else {
         rows.forEach((r) => {
-          const itemName = (r.item || "").trim();
+          const itemName = (r.item || r.itemName || "").trim();
           if (selectedItem !== "All Items" && itemName.toLowerCase() !== selectedItem.toLowerCase()) {
             return;
           }
@@ -281,7 +299,7 @@ export default function PartyReportByItem() {
       if (to && dateYmd && dateYmd > to) return;
       const partyName = String(creditNote.party || creditNote.customer || creditNote.partyName || "Cash Sale").trim() || "Cash Sale";
       (creditNote.rows || []).forEach((row) => {
-        const itemName = String(row.item || "").trim();
+        const itemName = String(row.item || row.itemName || "").trim();
         if (selectedItem !== "All Items" && itemName.toLowerCase() !== selectedItem.toLowerCase()) return;
         const category = row.category || itemCategoryMap.get(itemName.toLowerCase()) || "";
         if (enableItemCategory && selectedCategory !== "All Categories" && category.toLowerCase() !== selectedCategory.toLowerCase()) return;

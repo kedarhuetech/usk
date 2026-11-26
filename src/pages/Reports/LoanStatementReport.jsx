@@ -124,7 +124,15 @@ export default function LoanStatementReport() {
     loans.forEach((loan) => {
       if (selectedLoanId && selectedLoanId !== "All" && loan.id !== selectedLoanId) return;
       const loanStart = parseYMD(loan.startDate || loan.createdAt?.slice(0, 10));
-      if (loanStart && loanStart < fromYMD) {
+      if (!loanStart || loanStart >= fromYMD) return;
+      const repaidBefore = (Array.isArray(loan.repayments) ? loan.repayments : [])
+        .filter((r) => {
+          const pDate = parseYMD(r.paymentDate || r.createdAt?.slice(0, 10));
+          return pDate && pDate < fromYMD;
+        })
+        .reduce((sum, r) => sum + roundMoney(r.principalPaid), 0);
+      const openingForLoan = roundMoney(Number(loan.originalAmount || 0) - repaidBefore);
+      if (openingForLoan > 0) {
         names.push(loan.loanName || loan.lenderName || "Loan");
       }
     });
@@ -614,8 +622,13 @@ export default function LoanStatementReport() {
                   <td colSpan={5} className="py-3 px-3 uppercase text-[11px] tracking-wider">
                     Total / Summary
                   </td>
-                  <td className="py-3 px-3 text-right text-blue-800">
-                    {fmt(summary.totalLoanReceived)}
+                  <td className="py-3 px-3 text-right">
+                    <div className="text-blue-800">{fmt(summary.totalLoanReceived)}</div>
+                    {summary.totalPrincipalRepaid > 0 && (
+                      <div className="text-[11px] font-semibold text-emerald-700">
+                        − {fmt(summary.totalPrincipalRepaid)} repaid
+                      </div>
+                    )}
                   </td>
                   <td className="py-3 px-3 text-right text-amber-800">
                     {fmt(summary.totalInterestPaid)}
