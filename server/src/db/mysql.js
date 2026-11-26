@@ -33,7 +33,7 @@ export function businessIdFromRequest(req) {
     return String(req.user.businessId).trim();
   }
 
-  const mediaRead = req.method === "GET" && /(?:^|\/)(?:assets|attachments)\/[^/]+$/.test(req.path);
+  const mediaRead = req.method === "GET" && /(?:^|\/)(?:assets|attachments|images)\/[^/]+$/.test(req.path);
   const demoBusinessId = process.env.DEMO_BUSINESS_ID || "demo-business";
   let requestedId = String(
     req.get("x-business-id") ||

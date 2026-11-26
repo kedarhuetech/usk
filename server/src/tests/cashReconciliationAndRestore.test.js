@@ -32,8 +32,8 @@ test("cashTransactionTypes maps every supported transaction type and alias to co
   assert.equal(resolveCashEntryDirection("credit_note"), "out");
   assert.equal(resolveCashEntryDirection("credit note"), "out");
 
-  assert.equal(isCashProducingTransactionType("delivery_challan"), true);
-  assert.equal(isCashProducingTransactionType("proforma"), true);
+  assert.equal(isCashProducingTransactionType("delivery_challan"), false);
+  assert.equal(isCashProducingTransactionType("proforma"), false);
   assert.equal(isCashProducingTransactionType("credit note"), true);
 });
 
@@ -279,8 +279,8 @@ test("syncCashTransactions is idempotent, handles all cash types, preserves rest
   const biz1Cash = conn.getState().cash_in_hand.filter((c) => c.business_id === "biz-1");
   const ids = new Set(biz1Cash.map((c) => c.id));
   assert.equal(ids.has("t-sale"), true);
-  assert.equal(ids.has("t-dc"), true);
-  assert.equal(ids.has("t-prof"), true);
+  assert.equal(ids.has("t-dc"), false, "Delivery challan is non-posting and must not create cash row");
+  assert.equal(ids.has("t-prof"), false, "Proforma invoice is non-posting and must not create cash row");
   assert.equal(ids.has("t-cn"), true);
   assert.equal(ids.has("t-credit"), false, "Non-cash transaction must not create cash row");
   assert.equal(ids.has("hist-omitted"), true, "Historical unlinked record must survive");
