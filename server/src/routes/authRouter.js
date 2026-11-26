@@ -10,10 +10,11 @@
  */
 
 import { Router } from "express";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/mysql.js";
 import { sendOtpEmail } from "../services/emailService.js";
-import { signAuthToken, requireAuth } from "../middleware/authMiddleware.js";
+import { signAuthToken, requireAuth, invalidateUserSessions } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
@@ -32,6 +33,30 @@ function checkOtpRateLimit(email) {
   otpRateLimitMap.set(email, history);
   return true;
 }
+
+// Rate limiting map for forgot-password OTP sending: email -> array of timestamps
+const forgotOtpRateLimitMap = new Map();
+const MAX_FORGOT_OTP_PER_10_MIN = 3;
+const FORGOT_COOLDOWN_MS = 45 * 1000; // 45 seconds cooldown between OTP requests
+
+function checkForgotOtpRateLimit(email) {
+  const now = Date.now();
+  const history = (forgotOtpRateLimitMap.get(email) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (history.length > 0 && now - history[history.length - 1] < FORGOT_COOLDOWN_MS) {
+    const waitSec = Math.ceil((FORGOT_COOLDOWN_MS - (now - history[history.length - 1])) / 1000);
+    return { allowed: false, message: `Please wait ${waitSec}s before requesting another verification code.` };
+  }
+  if (history.length >= MAX_FORGOT_OTP_PER_10_MIN) {
+    return { allowed: false, message: "Too many password reset requests. Please wait 10 minutes before trying again." };
+  }
+  history.push(now);
+  forgotOtpRateLimitMap.set(email, history);
+  return { allowed: true };
+}
+
+// Failed forgot-password OTP attempts map: email -> attempt count
+const forgotOtpAttemptsMap = new Map();
+const MAX_FORGOT_OTP_ATTEMPTS = 5;
 
 // Failed OTP attempt tracking: email -> attempt count
 const otpAttemptsMap = new Map();
@@ -495,6 +520,242 @@ router.get("/me", requireAuth, async (req, res) => {
  */
 router.post("/logout", (req, res) => {
   return res.json({ success: true, message: "Logged out successfully." });
+});
+
+/**
+ * POST /api/auth/forgot-password/send-otp
+ * Verifies email exists in USK database and sends OTP.
+ * If account not found: returns 404 "There is no account for this gmail in USK".
+ */
+router.post("/forgot-password/send-otp", async (req, res) => {
+  try {
+    const rawEmail = req.body?.email || "";
+    const email = String(rawEmail).trim().toLowerCase();
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, message: "Please provide a valid email address." });
+    }
+
+    // 1. Rate Limiting Check
+    const rateCheck = checkForgotOtpRateLimit(email);
+    if (!rateCheck.allowed) {
+      return res.status(429).json({ success: false, message: rateCheck.message });
+    }
+
+    // 2. Check if account exists in USK
+    const [userRows] = await pool.query(
+      `SELECT u.id, u.email, u.business_id, b.name as business_name, cp.company_name
+       FROM users u
+       LEFT JOIN businesses b ON u.business_id = b.id
+       LEFT JOIN company_profiles cp ON u.business_id = cp.business_id
+       WHERE LOWER(u.email) = ?
+       LIMIT 1`,
+      [email]
+    );
+
+    if (userRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "There is no account for this gmail in USK",
+      });
+    }
+
+    const user = userRows[0];
+    const businessName = user.business_name || user.company_name || "USK Business";
+
+    // 3. Generate 6-digit OTP code
+    const otp = String(crypto.randomInt(100000, 999999));
+    const id = `fp_otp_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Clean up prior unverified codes for this email
+    await pool.query("DELETE FROM email_verifications WHERE LOWER(email) = ? AND is_verified = 0", [email]);
+
+    await pool.query(
+      `INSERT INTO email_verifications (id, email, otp_code, expires_at, is_verified)
+       VALUES (?, ?, ?, ?, 0)`,
+      [id, email, otp, expiresAt]
+    );
+
+    await sendOtpEmail({
+      to: email,
+      otp,
+      businessName,
+      subject: `${otp} is your USK password reset code`,
+    });
+
+    return res.json({
+      success: true,
+      message: "Verification code sent to your email.",
+    });
+  } catch (err) {
+    console.error("[Auth] Forgot password send-otp error:", err);
+    return res.status(500).json({ success: false, message: "Failed to send reset code: " + err.message });
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password/verify-otp
+ * Verifies the 6-digit OTP code and issues a secure single-use reset token.
+ */
+router.post("/forgot-password/verify-otp", async (req, res) => {
+  try {
+    const rawEmail = req.body?.email || "";
+    const email = String(rawEmail).trim().toLowerCase();
+    const otp = String(req.body?.otp || "").trim();
+
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: "Email and 6-digit verification code are required." });
+    }
+
+    // Check failed attempt rate limiting
+    const attempts = (forgotOtpAttemptsMap.get(email) || 0) + 1;
+    forgotOtpAttemptsMap.set(email, attempts);
+
+    if (attempts > MAX_FORGOT_OTP_ATTEMPTS) {
+      forgotOtpAttemptsMap.delete(email);
+      await pool.query("DELETE FROM email_verifications WHERE LOWER(email) = ? AND is_verified = 0", [email]);
+      return res.status(429).json({
+        success: false,
+        message: "Too many incorrect code attempts. Please request a new verification code.",
+      });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, otp_code, expires_at, is_verified 
+       FROM email_verifications 
+       WHERE LOWER(email) = ? AND otp_code = ? AND expires_at > NOW() AND is_verified = 0
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [email, otp]
+    );
+
+    if (rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired verification code. Please check your code or request a new one.",
+      });
+    }
+
+    const verification = rows[0];
+
+    // Mark verification as used / delete it
+    await pool.query("DELETE FROM email_verifications WHERE id = ?", [verification.id]);
+    forgotOtpAttemptsMap.delete(email);
+
+    // Generate cryptographically secure random reset token (64 hex characters)
+    const rawResetToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawResetToken).digest("hex");
+    const resetId = `reset_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minute token validity
+
+    // Invalidate existing pending tokens for this email
+    await pool.query("DELETE FROM password_resets WHERE LOWER(email) = ?", [email]);
+
+    // Store hashed token in password_resets table
+    await pool.query(
+      `INSERT INTO password_resets (id, email, token_hash, expires_at, is_used)
+       VALUES (?, ?, ?, ?, 0)`,
+      [resetId, email, tokenHash, expiresAt]
+    );
+
+    return res.json({
+      success: true,
+      message: "Verification successful! You can now set a new password.",
+      resetToken: rawResetToken,
+    });
+  } catch (err) {
+    console.error("[Auth] Forgot password verify-otp error:", err);
+    return res.status(500).json({ success: false, message: "Verification failed: " + err.message });
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password/reset
+ * Resets user password, consumes reset token, increments token_version, and invalidates active sessions.
+ */
+router.post("/forgot-password/reset", async (req, res) => {
+  try {
+    const rawEmail = req.body?.email || "";
+    const email = String(rawEmail).trim().toLowerCase();
+    const resetToken = String(req.body?.resetToken || "").trim();
+    const newPassword = String(req.body?.newPassword || "");
+    const confirmPassword = String(req.body?.confirmPassword || "");
+
+    if (!email || !resetToken || !newPassword) {
+      return res.status(400).json({ success: false, message: "Email, reset token, and new password are required." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: "Password must be at least 6 characters long." });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: "Passwords do not match." });
+    }
+
+    // Verify reset token
+    const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+    const [tokenRows] = await pool.query(
+      `SELECT id, email, expires_at, is_used 
+       FROM password_resets 
+       WHERE LOWER(email) = ? AND token_hash = ? AND expires_at > NOW() AND is_used = 0
+       LIMIT 1`,
+      [email, tokenHash]
+    );
+
+    if (tokenRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid, expired, or already used reset session. Please request a new verification code.",
+      });
+    }
+
+    const resetRecord = tokenRows[0];
+
+    // Mark token as used immediately (single-use lifecycle)
+    await pool.query("UPDATE password_resets SET is_used = 1 WHERE id = ?", [resetRecord.id]);
+
+    // Check user exists
+    const [userRows] = await pool.query(
+      "SELECT id, business_id FROM users WHERE LOWER(email) = ? LIMIT 1",
+      [email]
+    );
+
+    if (userRows.length === 0) {
+      return res.status(404).json({ success: false, message: "There is no account for this gmail in USK" });
+    }
+
+    const user = userRows[0];
+
+    // Hash new password with bcrypt
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update user password and increment token_version for session invalidation
+    await pool.query(
+      `UPDATE users 
+       SET password_hash = ?, token_version = token_version + 1, updated_at = CURRENT_TIMESTAMP(3) 
+       WHERE id = ?`,
+      [passwordHash, user.id]
+    );
+
+    // Invalidate active user sessions in memory
+    invalidateUserSessions(user.id);
+
+    // Clear failed login attempts / lockouts
+    clearFailedLogin(email);
+
+    // Clean up used reset records for this email
+    await pool.query("DELETE FROM password_resets WHERE LOWER(email) = ?", [email]);
+
+    return res.json({
+      success: true,
+      message: "Password reset successful! Please sign in with your new password.",
+    });
+  } catch (err) {
+    console.error("[Auth] Forgot password reset error:", err);
+    return res.status(500).json({ success: false, message: "Failed to reset password: " + err.message });
+  }
 });
 
 export default router;
