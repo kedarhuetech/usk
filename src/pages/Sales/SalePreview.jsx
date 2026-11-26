@@ -155,6 +155,7 @@ function normalizeInvoiceData(raw) {
       const item = r.item || r.itemName || r.name || `Item ${idx + 1}`;
       const hsn = r.hsn || r.sac || "";
       const qty = Number(r.calculated?.qty ?? r.qty ?? r.quantity ?? 1);
+      const freeQty = Number(r.freeQty || r.calculated?.freeQty || 0);
       const unit = r.unit || "PCS";
       const price = Number(r.price ?? r.rate ?? r.salePrice ?? 0);
       const discount = Number(r.calculated?.discount ?? r.discountAmount ?? r.discount ?? 0);
@@ -167,6 +168,7 @@ function normalizeInvoiceData(raw) {
         item,
         hsn,
         qty,
+        freeQty,
         unit,
         price,
         discount,
@@ -179,6 +181,10 @@ function normalizeInvoiceData(raw) {
   // Totals normalization
   const rawTotals = raw.totals || {};
   const totalQty = Number(rawTotals.qty ?? rows.reduce((s, r) => s + r.qty, 0));
+  const totalFreeQty = Number(rawTotals.freeQty ?? rows.reduce((s, r) => s + (r.freeQty || 0), 0));
+  const txnDiscount = Number(raw.txnDiscount ?? rawTotals.txnDiscount ?? 0);
+  const txnTax = Number(raw.txnTax ?? rawTotals.txnTax ?? 0);
+  const txnTaxRate = Number(raw.txnTaxRate ?? rawTotals.txnTaxRate ?? 0);
   const totalDiscount = Number(rawTotals.discount ?? rows.reduce((s, r) => s + r.discount, 0));
   const totalTax = Number(rawTotals.tax ?? rows.reduce((s, r) => s + r.tax, 0));
   const totalCess = Number(rawTotals.cess ?? rows.reduce((s, r) => s + r.cess, 0));
@@ -215,7 +221,11 @@ function normalizeInvoiceData(raw) {
     rows: rows.length > 0 ? rows : [{ id: "empty", item: "Sample Item", hsn: "1001", qty: 1, unit: "PCS", price: finalTotal || 0, discount: 0, tax: 0, cess: 0, amount: finalTotal || 0 }],
     totals: {
       qty: totalQty || 1,
+      freeQty: totalFreeQty,
       discount: totalDiscount,
+      txnDiscount,
+      txnTax,
+      txnTaxRate,
       tax: totalTax,
       cess: totalCess,
       tcsAmount,
@@ -397,44 +407,52 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
       </div>
 
       {/* Items Table */}
-      <table className="mt-4 w-full border-collapse text-xs">
-        <thead>
-          <tr className="text-white font-bold" style={{ backgroundColor: hex }}>
-            <th className="p-2 text-center w-8">#</th>
-            <th className="p-2 text-left">Item name</th>
-            {showHsn && <th className="p-2 text-center">HSN/SAC</th>}
-            <th className="p-2 text-center">Quantity</th>
-            <th className="p-2 text-right">Price/unit</th>
-            <th className="p-2 text-right">Discount</th>
-            {showTax && <th className="p-2 text-right">GST</th>}
-            <th className="p-2 text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {data.rows.map((row, idx) => (
-            <tr key={row.id || idx}>
-              <td className="p-2 text-center">{idx + 1}</td>
-              <td className="p-2 font-semibold text-slate-900">{row.item}</td>
-              {showHsn && <td className="p-2 text-center text-slate-600">{row.hsn || "-"}</td>}
-              <td className="p-2 text-center">{row.qty} {row.unit}</td>
-              <td className="p-2 text-right">₹ {row.price.toFixed(2)}</td>
-              <td className="p-2 text-right text-slate-600">₹ {row.discount.toFixed(2)}</td>
-              {showTax && <td className="p-2 text-right text-slate-600">₹ {row.tax.toFixed(2)}</td>}
-              <td className="p-2 text-right font-bold text-slate-900">₹ {row.amount.toFixed(2)}</td>
-            </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr className="border-t-2 border-slate-300 font-bold bg-slate-50">
-            <td className="p-2" colSpan={showHsn ? 3 : 2}>Total</td>
-            <td className="p-2 text-center">{appSettings.printTotalItemQty !== false ? data.totals.qty : ""}</td>
-            <td className="p-2"></td>
-            <td className="p-2 text-right">₹ {data.totals.discount.toFixed(2)}</td>
-            {showTax && <td className="p-2 text-right">₹ {data.totals.tax.toFixed(2)}</td>}
-            <td className="p-2 text-right">₹ {data.totals.finalTotal.toFixed(2)}</td>
-          </tr>
-        </tfoot>
-      </table>
+      {(() => {
+        const showFreeQty = appSettings.enableFreeItemQuantity || data.rows.some((r) => Number(r.freeQty) > 0);
+        return (
+          <table className="mt-4 w-full border-collapse text-xs">
+            <thead>
+              <tr className="text-white font-bold" style={{ backgroundColor: hex }}>
+                <th className="p-2 text-center w-8">#</th>
+                <th className="p-2 text-left">Item name</th>
+                {showHsn && <th className="p-2 text-center">HSN/SAC</th>}
+                <th className="p-2 text-center">Quantity</th>
+                {showFreeQty && <th className="p-2 text-center">Free Qty</th>}
+                <th className="p-2 text-right">Price/unit</th>
+                <th className="p-2 text-right">Discount</th>
+                {showTax && <th className="p-2 text-right">GST</th>}
+                <th className="p-2 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.rows.map((row, idx) => (
+                <tr key={row.id || idx}>
+                  <td className="p-2 text-center">{idx + 1}</td>
+                  <td className="p-2 font-semibold text-slate-900">{row.item}</td>
+                  {showHsn && <td className="p-2 text-center text-slate-600">{row.hsn || "-"}</td>}
+                  <td className="p-2 text-center">{row.qty} {row.unit}</td>
+                  {showFreeQty && <td className="p-2 text-center text-slate-600">{row.freeQty || "-"}</td>}
+                  <td className="p-2 text-right">₹ {row.price.toFixed(2)}</td>
+                  <td className="p-2 text-right text-slate-600">₹ {row.discount.toFixed(2)}</td>
+                  {showTax && <td className="p-2 text-right text-slate-600">₹ {row.tax.toFixed(2)}</td>}
+                  <td className="p-2 text-right font-bold text-slate-900">₹ {row.amount.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-300 font-bold bg-slate-50">
+                <td className="p-2" colSpan={showHsn ? 3 : 2}>Total</td>
+                <td className="p-2 text-center">{appSettings.printTotalItemQty !== false ? data.totals.qty : ""}</td>
+                {showFreeQty && <td className="p-2 text-center text-slate-600">{data.totals.freeQty || ""}</td>}
+                <td className="p-2"></td>
+                <td className="p-2 text-right">₹ {data.totals.discount.toFixed(2)}</td>
+                {showTax && <td className="p-2 text-right">₹ {data.totals.tax.toFixed(2)}</td>}
+                <td className="p-2 text-right">₹ {data.totals.finalTotal.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        );
+      })()}
 
       {/* Tax Breakdown & Totals */}
       <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs border-t border-slate-200 pt-3">
@@ -480,6 +498,18 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
             <div className="flex justify-between text-slate-600">
               <span>Tax:</span>
               <span>₹ {data.totals.tax.toFixed(2)}</span>
+            </div>
+          )}
+          {data.totals.txnDiscount > 0 && (
+            <div className="flex justify-between text-rose-600 font-semibold">
+              <span>Invoice Discount (-):</span>
+              <span>-₹ {data.totals.txnDiscount.toFixed(2)}</span>
+            </div>
+          )}
+          {data.totals.txnTax > 0 && (
+            <div className="flex justify-between text-slate-700 font-semibold">
+              <span>Txn Tax ({data.totals.txnTaxRate}%):</span>
+              <span>+₹ {data.totals.txnTax.toFixed(2)}</span>
             </div>
           )}
           {data.totals.tcsAmount > 0 && (

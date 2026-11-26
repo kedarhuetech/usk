@@ -172,15 +172,17 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   const isGstinEnabled = (company.appSettings?.enableGstin !== false) && (getAppSettings().enableGstin !== false);
   const partyGstin = isGstinEnabled ? (opts.partyGstin || "") : "";
   const metadataRows = opts.metadataRows || [];
+  const rows = opts.rows || opts.items || [];
+  const hasFreeQty = (company.appSettings?.enableFreeItemQuantity || rows.some((r) => Number(r.freeQty) > 0));
   const columns = opts.columns || [
     { key: "index", label: "#", align: "center", width: "40px" },
     { key: "item", label: "Item Description", align: "left" },
     { key: "qty", label: "Qty", align: "center", width: "80px" },
+    ...(hasFreeQty ? [{ key: "freeQty", label: "Free Qty", align: "center", width: "70px" }] : []),
     { key: "price", label: "Rate", align: "right", width: "100px" },
     { key: "tax", label: "Tax", align: "right", width: "80px" },
     { key: "amount", label: "Amount", align: "right", width: "110px" },
   ];
-  const rows = opts.rows || opts.items || [];
   const totals = opts.totals || {};
   const terms = opts.terms || "";
   const notes = opts.notes || "";
@@ -534,6 +536,22 @@ export function buildUnifiedDocumentHtml(opts = {}) {
                   ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
                       <span>GST Tax:</span>
                       <span style="font-weight:700;color:#0f172a;">+${formatMoney(totals.tax)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.txnDiscount || totals.txnDiscount || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#be123c;">
+                      <span>Invoice Discount:</span>
+                      <span style="font-weight:700;">-${formatMoney(opts.txnDiscount || totals.txnDiscount)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.txnTax || totals.txnTax || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#0f172a;">
+                      <span>Txn Tax (${opts.txnTaxRate || totals.txnTaxRate || 0}%):</span>
+                      <span style="font-weight:700;">+${formatMoney(opts.txnTax || totals.txnTax)}</span>
                     </div>`
                   : ""
               }

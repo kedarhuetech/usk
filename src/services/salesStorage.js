@@ -6,6 +6,7 @@ import { recordAuditTrail } from "./auditTrailStorage.js";
 import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "./transactionRepository.js";
 import { transactionsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
+import { getPurchaseBills } from "./purchaseBillsStorage.js";
 import { getParties } from "./partiesStorage.js";
 
 const SALE_INVOICES_KEY = transactionStorageKeys.sales;
@@ -575,3 +576,31 @@ export function applyPaymentToSaleInvoice(invoiceId, paymentAmount = 0) {
 }
 
 export const saleInvoicesStorageKey = SALE_INVOICES_KEY;
+
+// Gets last 5 distinct prices for an item from sales or purchases
+export function getLast5PricesForItem(itemName, isPurchase = false) {
+  if (!itemName || !String(itemName).trim()) return [];
+  const normalizedTarget = String(itemName).trim().toLowerCase();
+  try {
+    const txns = isPurchase ? getPurchaseBills() : getSaleInvoices();
+    const prices = [];
+    const seen = new Set();
+    const sorted = [...(txns || [])].sort((a, b) => new Date(b.date || b.invoiceDate || b.createdAt || 0) - new Date(a.date || a.invoiceDate || a.createdAt || 0));
+    for (const txn of sorted) {
+      const rows = txn.rows || txn.items || [];
+      for (const r of rows) {
+        const rName = String(r.item || r.name || r.itemName || "").trim().toLowerCase();
+        const p = Number(r.price ?? r.unitPrice ?? r.rate ?? 0);
+        if (rName === normalizedTarget && p > 0 && !seen.has(p)) {
+          seen.add(p);
+          prices.push(p);
+          if (prices.length >= 5) return prices;
+        }
+      }
+    }
+    return prices;
+  } catch {
+    return [];
+  }
+}
+
