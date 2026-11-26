@@ -64,6 +64,7 @@ export function getEffectiveCompanyInfo(settings = null) {
   let name = "";
   if (appSettings.printCompanyName !== false) {
     name = (
+      appSettings.companyNamePrint ||
       profile.businessName ||
       profile.companyName ||
       appSettings.companyName ||
@@ -73,17 +74,17 @@ export function getEffectiveCompanyInfo(settings = null) {
 
   const phone =
     appSettings.printPhoneNumber !== false
-      ? profile.phoneNumber || appSettings.companyPhone || ""
+      ? appSettings.phoneNumberPrint || profile.phoneNumber || appSettings.companyPhone || ""
       : "";
 
   const address =
     appSettings.printAddress !== false
-      ? profile.businessAddress || appSettings.companyAddress || ""
+      ? appSettings.addressPrint || profile.businessAddress || appSettings.companyAddress || ""
       : "";
 
   const email =
     appSettings.printEmail !== false
-      ? profile.emailId || appSettings.companyEmail || ""
+      ? appSettings.emailPrint || profile.emailId || appSettings.companyEmail || ""
       : "";
 
   const gstin =
@@ -100,6 +101,8 @@ export function getEffectiveCompanyInfo(settings = null) {
     appSettings.printSignature !== false
       ? appSettings.signatureImage || profile.signature || ""
       : "";
+
+  const signatureText = appSettings.printSignatureText || "Authorized Signatory";
 
   const themeColor = appSettings.themeColor || "#881337";
 
@@ -129,6 +132,7 @@ export function getEffectiveCompanyInfo(settings = null) {
     gstin,
     logo,
     signature,
+    signatureText,
     themeColor,
     currencySymbol,
     bankDetails,
@@ -174,15 +178,34 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   const metadataRows = opts.metadataRows || [];
   const rows = opts.rows || opts.items || [];
   const hasFreeQty = (company.appSettings?.enableFreeItemQuantity || rows.some((r) => Number(r.freeQty) > 0));
-  const columns = opts.columns || [
+  const colsConfig = company.appSettings?.itemTableColumns;
+  const baseColumns = opts.columns || [
     { key: "index", label: "#", align: "center", width: "40px" },
     { key: "item", label: "Item Description", align: "left" },
+    { key: "hsn", label: "HSN/SAC", align: "center", width: "80px" },
     { key: "qty", label: "Qty", align: "center", width: "80px" },
     ...(hasFreeQty ? [{ key: "freeQty", label: "Free Qty", align: "center", width: "70px" }] : []),
     { key: "price", label: "Rate", align: "right", width: "100px" },
+    { key: "discount", label: "Discount", align: "right", width: "80px" },
     { key: "tax", label: "Tax", align: "right", width: "80px" },
     { key: "amount", label: "Amount", align: "right", width: "110px" },
   ];
+  const columns = baseColumns.filter((col) => {
+    if (!colsConfig) {
+      if (col.key === "hsn" && (!opts.columns && company.appSettings?.enableHsnSacCode === false)) return false;
+      if (col.key === "discount" && (!opts.columns && !rows.some((r) => Number(r.discount) > 0))) return false;
+      return true;
+    }
+    if (col.key === "item" && colsConfig.item === false) return false;
+    if (col.key === "hsn" && (colsConfig.hsn === false || company.appSettings?.enableHsnSacCode === false)) return false;
+    if (col.key === "qty" && colsConfig.qty === false) return false;
+    if (col.key === "freeQty" && (colsConfig.freeQty === false || (!hasFreeQty && colsConfig.freeQty === undefined))) return false;
+    if (col.key === "price" && colsConfig.price === false) return false;
+    if (col.key === "discount" && colsConfig.discount === false) return false;
+    if (col.key === "tax" && colsConfig.tax === false) return false;
+    if (col.key === "amount" && colsConfig.amount === false) return false;
+    return true;
+  });
   const totals = opts.totals || {};
   const terms = opts.terms || "";
   const notes = opts.notes || "";
@@ -212,10 +235,11 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   const themeColor = company.themeColor || "#881337";
   const rawSym = String(company.currencySymbol || "₹").trim();
   const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
+  const decimals = company.appSettings?.printAmountWithDecimal !== false ? 2 : 0;
   const formatMoney = (v) =>
     `${sym} ${Number(v || 0).toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
     })}`;
 
   const grandTotal = opts.totalAmount !== undefined
@@ -229,9 +253,21 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     company.appSettings?.printShippingAddress !== false &&
     Boolean(partyShippingAddress);
 
+  const minRows = Number(company.appSettings?.minRowsItemTable || 0);
+  const displayedRows = [...rows];
+  if (minRows > displayedRows.length) {
+    const extra = minRows - displayedRows.length;
+    for (let i = 0; i < extra; i++) {
+      displayedRows.push({ isBlank: true });
+    }
+  }
+
   // Table rows HTML
-  const tableRowsHtml = rows
+  const tableRowsHtml = displayedRows
     .map((row, idx) => {
+      if (row.isBlank) {
+        return `<tr style="${idx % 2 === 1 ? "background:#fbfcfe;" : ""}">${columns.map(() => `<td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;font-size:12px;">&nbsp;</td>`).join("")}</tr>`;
+      }
       const cells = columns
         .map((col) => {
           let val = col.render ? col.render(row) : row[col.key];
@@ -250,6 +286,10 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     })
     .join("");
 
+  const paperSize = company.appSettings?.paperSize || "A4";
+  const orientation = (company.appSettings?.orientation || "portrait").toLowerCase();
+  const extraSpaceTop = Number(company.appSettings?.extraSpaceTopPdf || 0);
+
   return `<!doctype html>
 <html>
 <head>
@@ -257,8 +297,8 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   <title>${escapeHtml(title)} - ${escapeHtml(documentNumber || "Document")}</title>
   <style>
     @page {
-      size: A4 portrait;
-      margin: 12mm 10mm;
+      size: ${paperSize} ${orientation};
+      margin: ${extraSpaceTop ? `${extraSpaceTop}mm` : "12mm"} 10mm 12mm 10mm;
     }
     * { box-sizing: border-box; }
     body {
@@ -321,7 +361,7 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     </button>
   </div>
 
-  <div style="max-width:850px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
+  <div style="max-width:850px;margin:0 auto;border:1px solid #e2e8f0;border-radius:12px;padding:28px;${extraSpaceTop ? `padding-top:${extraSpaceTop}mm;` : ""}background:#ffffff;box-shadow:0 1px 3px rgba(0,0,0,0.02);">
     
     <!-- Top Header: Logo & Company Information -->
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid ${themeColor};padding-bottom:18px;">
@@ -412,6 +452,11 @@ export function buildUnifiedDocumentHtml(opts = {}) {
         ${partyPhone ? `<div style="font-size:12px;color:#475569;margin-top:2px;">Contact: ${escapeHtml(partyPhone)}</div>` : ""}
         ${partyBillingAddress ? `<div style="font-size:12px;color:#64748b;margin-top:2px;">${escapeHtml(partyBillingAddress)}</div>` : ""}
         ${partyGstin ? `<div style="font-size:11px;font-weight:700;color:#334155;margin-top:2px;">GSTIN: ${escapeHtml(partyGstin)}</div>` : ""}
+        ${
+          company.appSettings?.printCurrentBalanceParty && (opts.partyCurrentBalance !== undefined || opts.party?.balance !== undefined || opts.currentBalance !== undefined)
+            ? `<div style="font-size:11px;font-weight:700;color:#0284c7;margin-top:4px;">Current Balance of Party: ${formatMoney(opts.partyCurrentBalance ?? opts.party?.balance ?? opts.currentBalance ?? 0)}</div>`
+            : ""
+        }
       </div>
 
       ${
@@ -445,6 +490,31 @@ export function buildUnifiedDocumentHtml(opts = {}) {
       <tbody>
         ${tableRowsHtml || `<tr><td colspan="${columns.length}" style="text-align:center;padding:24px;color:#94a3b8;font-size:12px;">No items to display</td></tr>`}
       </tbody>
+      ${
+        company.appSettings?.printTotalItemQty !== false
+          ? `<tfoot>
+              <tr style="background:#f8fafc;font-weight:700;font-size:11px;border-top:2px solid #cbd5e1;">
+                ${columns
+                  .map((c, i) => {
+                    if (i === 0) return `<td style="padding:8px 10px;">Total</td>`;
+                    if (c.key === "qty") {
+                      const totalQty = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+                      return `<td style="padding:8px 10px;text-align:${c.align || "center"};">${totalQty || ""}</td>`;
+                    }
+                    if (c.key === "freeQty") {
+                      const totalFreeQty = rows.reduce((s, r) => s + (Number(r.freeQty) || 0), 0);
+                      return `<td style="padding:8px 10px;text-align:${c.align || "center"};">${totalFreeQty || ""}</td>`;
+                    }
+                    if (c.key === "amount") {
+                      return `<td style="padding:8px 10px;text-align:right;">${formatMoney(grandTotal)}</td>`;
+                    }
+                    return `<td style="padding:8px 10px;"></td>`;
+                  })
+                  .join("")}
+              </tr>
+            </tfoot>`
+          : ""
+      }
     </table>
 
     <!-- Bottom Breakdown & Totals -->
@@ -472,6 +542,20 @@ export function buildUnifiedDocumentHtml(opts = {}) {
             ? `<div style="margin-top:8px;font-size:11px;color:#64748b;">
                 <b>Notes:</b> ${escapeHtml(notes)}
               </div>`
+            : ""
+        }
+
+        ${
+          company.appSettings?.printYouSaved !== false && ((Number(totals.discount) || 0) + (Number(opts.txnDiscount || totals.txnDiscount) || 0) > 0)
+            ? `<div style="margin-top:10px;padding:6px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:6px;font-size:11px;font-weight:700;color:#047857;display:inline-block;">
+                🎉 You Saved: ${formatMoney((Number(totals.discount) || 0) + (Number(opts.txnDiscount || totals.txnDiscount) || 0))}
+              </div>`
+            : ""
+        }
+
+        ${
+          company.appSettings?.printPaymentMode && (opts.paymentMode || opts.paymentType)
+            ? `<div style="margin-top:6px;font-size:11px;color:#475569;"><b>Payment Mode:</b> ${escapeHtml(opts.paymentMode || opts.paymentType)}</div>`
             : ""
         }
 
@@ -606,20 +690,48 @@ export function buildUnifiedDocumentHtml(opts = {}) {
       </div>
     </div>
 
+    ${
+      (company.appSettings?.printReceivedByDetails !== false || company.appSettings?.printDeliveredByDetails !== false)
+        ? `<div style="display:flex;justify-content:space-between;margin-top:20px;padding-top:12px;font-size:11px;color:#475569;border-top:1px dashed #e2e8f0;">
+            ${company.appSettings?.printReceivedByDetails !== false ? `<div>Received by: ____________________</div>` : `<div></div>`}
+            ${company.appSettings?.printDeliveredByDetails !== false ? `<div>Delivered by: ____________________</div>` : `<div></div>`}
+          </div>`
+        : ""
+    }
+
     <!-- Signature Block -->
-    <div style="margin-top:28px;padding-top:16px;border-top:1px dashed #cbd5e1;display:flex;justify-content:flex-end;">
-      <div style="text-align:center;min-width:200px;">
-        ${
-          company.signature
-            ? `<img src="${company.signature}" alt="Signature" style="max-height:50px;max-width:160px;object-fit:contain;margin-bottom:4px;"/>`
-            : `<div style="height:40px;"></div>`
-        }
-        <div style="border-top:1px solid #475569;padding-top:4px;font-size:11px;font-weight:700;color:#334155;">
-          For ${escapeHtml(company.name || "My Business")}
-        </div>
-        <div style="font-size:10px;color:#64748b;">Authorized Signatory</div>
-      </div>
-    </div>
+    ${
+      company.appSettings?.printSignature !== false
+        ? `<div style="margin-top:28px;padding-top:16px;border-top:1px dashed #cbd5e1;display:flex;justify-content:flex-end;">
+            <div style="text-align:center;min-width:200px;">
+              ${
+                company.signature
+                  ? `<img src="${company.signature}" alt="Signature" style="max-height:50px;max-width:160px;object-fit:contain;margin-bottom:4px;"/>`
+                  : `<div style="height:40px;"></div>`
+              }
+              <div style="border-top:1px solid #475569;padding-top:4px;font-size:11px;font-weight:700;color:#334155;">
+                For ${escapeHtml(company.name || "My Business")}
+              </div>
+              <div style="font-size:10px;color:#64748b;">${escapeHtml(company.appSettings?.printSignatureText || company.signatureText || "Authorized Signatory")}</div>
+            </div>
+          </div>`
+        : ""
+    }
+
+    ${
+      company.appSettings?.printAcknowledgement
+        ? `<div style="margin-top:32px;border-top:2px dashed #94a3b8;padding-top:14px;font-size:11px;color:#334155;">
+            <div style="display:flex;justify-content:space-between;align-items:center;font-weight:700;margin-bottom:6px;">
+              <span style="letter-spacing:0.5px;">--- ACKNOWLEDGEMENT SLIP (Customer Copy) ---</span>
+              <span>Doc No: ${escapeHtml(documentNumber || "-")}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span>Received with thanks from <b>${escapeHtml(partyName || "Customer")}</b> sum of <b>${formatMoney(grandTotal)}</b></span>
+              <span>Signature: ____________________</span>
+            </div>
+          </div>`
+        : ""
+    }
 
   </div>
 

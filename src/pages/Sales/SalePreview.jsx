@@ -314,11 +314,46 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
   const showBank = appSettings.printBankDetails !== false;
   const showTerms = appSettings.printTermsAndConditions !== false && Boolean(data.terms || appSettings.termsAndConditions);
   const showSign = appSettings.printSignature !== false;
-  const showHsn = appSettings.enableHsnSacCode !== false;
-  const showTax = appSettings.enableGst !== false && !appSettings.compositeScheme;
+  const cols = appSettings.itemTableColumns || {};
+  const showItem = cols.item !== false;
+  const showHsn = appSettings.enableHsnSacCode !== false && cols.hsn !== false;
+  const showQty = cols.qty !== false;
+  const showFreeQty = (appSettings.enableFreeItemQuantity || data.rows.some((r) => Number(r.freeQty) > 0)) && cols.freeQty !== false;
+  const showPrice = cols.price !== false;
+  const showDiscount = cols.discount !== false;
+  const showTax = appSettings.enableGst !== false && !appSettings.compositeScheme && cols.tax !== false;
+  const showAmount = cols.amount !== false;
+
+  const decimals = appSettings.printAmountWithDecimal !== false ? 2 : 0;
+  const fmt = (v) => Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+
+  const compNameSize = {
+    Small: "text-base",
+    Medium: "text-lg",
+    Large: "text-xl",
+    "Extra Large": "text-2xl",
+  }[appSettings.companyNameTextSize] || "text-xl";
+
+  const invoiceTextSize = {
+    Small: "text-[11px]",
+    Medium: "text-[12px]",
+    Large: "text-[13px]",
+  }[appSettings.invoiceTextSize] || "text-[12px]";
+
+  const minRows = Number(appSettings.minRowsItemTable || 0);
+  const displayedRows = [...data.rows];
+  if (minRows > displayedRows.length) {
+    const extra = minRows - displayedRows.length;
+    for (let i = 0; i < extra; i++) {
+      displayedRows.push({ id: `blank-${i}`, isBlank: true });
+    }
+  }
 
   return (
-    <div className="mx-auto min-h-[680px] w-full max-w-[920px] bg-white p-6 text-[12px] leading-tight text-slate-800 shadow-lg print:min-h-0 print:max-w-none print:p-6 print:text-xs print:shadow-none">
+    <div
+      style={{ paddingTop: appSettings.extraSpaceTopPdf ? `${appSettings.extraSpaceTopPdf}mm` : undefined }}
+      className={`mx-auto min-h-[680px] w-full max-w-[920px] bg-white p-6 leading-tight text-slate-800 shadow-lg print:min-h-0 print:max-w-none print:p-6 print:shadow-none ${invoiceTextSize}`}
+    >
       {/* Title */}
       <div className="text-center pb-2 relative">
         <h2 className="text-base font-bold uppercase tracking-wider text-slate-900">{docTitle}</h2>
@@ -353,7 +388,7 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
 
         <div className="text-right">
           {appSettings.printCompanyName !== false && (
-            <h1 className="text-xl font-bold text-slate-900">{companyName}</h1>
+            <h1 className={`font-bold text-slate-900 ${compNameSize}`}>{companyName}</h1>
           )}
           {appSettings.printPhoneNumber !== false && companyPhone && (
             <p className="text-slate-600 text-xs mt-0.5">Ph. no : {companyPhone}</p>
@@ -386,6 +421,11 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           <p className="font-semibold text-slate-900 mt-0.5">{data.customer}</p>
           {data.billingAddress && <p className="text-slate-600 text-[11px]">{data.billingAddress}</p>}
           {data.phone && <p className="text-slate-600 text-[11px]">Contact No: {data.phone}</p>}
+          {appSettings.printCurrentBalanceParty && (data.partyCurrentBalance !== undefined || data.customerBalance !== undefined) && (
+            <p className="text-sky-700 text-[11px] font-semibold mt-0.5">
+              Current Balance of Party: ₹{fmt(data.partyCurrentBalance ?? data.customerBalance ?? 0)}
+            </p>
+          )}
         </div>
         {/* Shipping Address - controlled by Party Setting printShippingAddress */}
         {appSettings?.printShippingAddress !== false && (data.shippingAddress || data.billingAddress) && (
@@ -423,46 +463,62 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
 
       {/* Items Table */}
       {(() => {
-        const showFreeQty = appSettings.enableFreeItemQuantity || data.rows.some((r) => Number(r.freeQty) > 0);
         return (
           <table className="mt-4 w-full border-collapse text-xs">
             <thead>
               <tr className="text-white font-bold" style={{ backgroundColor: hex }}>
                 <th className="p-2 text-center w-8">#</th>
-                <th className="p-2 text-left">Item name</th>
+                {showItem && <th className="p-2 text-left">Item name</th>}
                 {showHsn && <th className="p-2 text-center">HSN/SAC</th>}
-                <th className="p-2 text-center">Quantity</th>
+                {showQty && <th className="p-2 text-center">Quantity</th>}
                 {showFreeQty && <th className="p-2 text-center">Free Qty</th>}
-                <th className="p-2 text-right">Price/unit</th>
-                <th className="p-2 text-right">Discount</th>
+                {showPrice && <th className="p-2 text-right">Price/unit</th>}
+                {showDiscount && <th className="p-2 text-right">Discount</th>}
                 {showTax && <th className="p-2 text-right">GST</th>}
-                <th className="p-2 text-right">Amount</th>
+                {showAmount && <th className="p-2 text-right">Amount</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data.rows.map((row, idx) => (
-                <tr key={row.id || idx}>
-                  <td className="p-2 text-center">{idx + 1}</td>
-                  <td className="p-2 font-semibold text-slate-900">{row.item}</td>
-                  {showHsn && <td className="p-2 text-center text-slate-600">{row.hsn || "-"}</td>}
-                  <td className="p-2 text-center">{row.qty} {row.unit}</td>
-                  {showFreeQty && <td className="p-2 text-center text-slate-600">{row.freeQty || "-"}</td>}
-                  <td className="p-2 text-right">₹ {row.price.toFixed(2)}</td>
-                  <td className="p-2 text-right text-slate-600">₹ {row.discount.toFixed(2)}</td>
-                  {showTax && <td className="p-2 text-right text-slate-600">₹ {row.tax.toFixed(2)}</td>}
-                  <td className="p-2 text-right font-bold text-slate-900">₹ {row.amount.toFixed(2)}</td>
-                </tr>
-              ))}
+              {displayedRows.map((row, idx) => {
+                if (row.isBlank) {
+                  return (
+                    <tr key={row.id}>
+                      <td className="p-2 text-center text-slate-300">-</td>
+                      {showItem && <td className="p-2">&nbsp;</td>}
+                      {showHsn && <td className="p-2">&nbsp;</td>}
+                      {showQty && <td className="p-2">&nbsp;</td>}
+                      {showFreeQty && <td className="p-2">&nbsp;</td>}
+                      {showPrice && <td className="p-2">&nbsp;</td>}
+                      {showDiscount && <td className="p-2">&nbsp;</td>}
+                      {showTax && <td className="p-2">&nbsp;</td>}
+                      {showAmount && <td className="p-2">&nbsp;</td>}
+                    </tr>
+                  );
+                }
+                return (
+                  <tr key={row.id || idx}>
+                    <td className="p-2 text-center">{idx + 1}</td>
+                    {showItem && <td className="p-2 font-semibold text-slate-900">{row.item}</td>}
+                    {showHsn && <td className="p-2 text-center text-slate-600">{row.hsn || "-"}</td>}
+                    {showQty && <td className="p-2 text-center">{row.qty} {row.unit}</td>}
+                    {showFreeQty && <td className="p-2 text-center text-slate-600">{row.freeQty || "-"}</td>}
+                    {showPrice && <td className="p-2 text-right">₹ {fmt(row.price)}</td>}
+                    {showDiscount && <td className="p-2 text-right text-slate-600">₹ {fmt(row.discount)}</td>}
+                    {showTax && <td className="p-2 text-right text-slate-600">₹ {fmt(row.tax)}</td>}
+                    {showAmount && <td className="p-2 text-right font-bold text-slate-900">₹ {fmt(row.amount)}</td>}
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-300 font-bold bg-slate-50">
-                <td className="p-2" colSpan={showHsn ? 3 : 2}>Total</td>
-                <td className="p-2 text-center">{appSettings.printTotalItemQty !== false ? data.totals.qty : ""}</td>
+                <td className="p-2" colSpan={1 + (showItem ? 1 : 0) + (showHsn ? 1 : 0)}>Total</td>
+                {showQty && <td className="p-2 text-center">{appSettings.printTotalItemQty !== false ? data.totals.qty : ""}</td>}
                 {showFreeQty && <td className="p-2 text-center text-slate-600">{data.totals.freeQty || ""}</td>}
-                <td className="p-2"></td>
-                <td className="p-2 text-right">₹ {data.totals.discount.toFixed(2)}</td>
-                {showTax && <td className="p-2 text-right">₹ {data.totals.tax.toFixed(2)}</td>}
-                <td className="p-2 text-right">₹ {data.totals.finalTotal.toFixed(2)}</td>
+                {showPrice && <td className="p-2"></td>}
+                {showDiscount && <td className="p-2 text-right">₹ {fmt(data.totals.discount)}</td>}
+                {showTax && <td className="p-2 text-right">₹ {fmt(data.totals.tax)}</td>}
+                {showAmount && <td className="p-2 text-right">₹ {fmt(data.totals.finalTotal)}</td>}
               </tr>
             </tfoot>
           </table>
@@ -485,14 +541,14 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
                 <tbody className="divide-y divide-slate-100 text-slate-600">
                   <tr>
                     <td className="p-1.5">GST Summary</td>
-                    <td className="p-1.5 text-right">₹ {(data.totals.finalTotal - data.totals.tax).toFixed(2)}</td>
-                    <td className="p-1.5 text-right">₹ {data.totals.tax.toFixed(2)}</td>
+                    <td className="p-1.5 text-right">₹ {fmt(data.totals.finalTotal - data.totals.tax)}</td>
+                    <td className="p-1.5 text-right">₹ {fmt(data.totals.tax)}</td>
                   </tr>
                   {data.totals.cess > 0 && (
                     <tr>
                       <td className="p-1.5">Compensation Cess</td>
                       <td className="p-1.5 text-right">-</td>
-                      <td className="p-1.5 text-right">₹ {data.totals.cess.toFixed(2)}</td>
+                      <td className="p-1.5 text-right">₹ {fmt(data.totals.cess)}</td>
                     </tr>
                   )}
                 </tbody>
@@ -507,70 +563,82 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           </div>
           <div className="flex justify-between text-slate-600">
             <span>Sub Total:</span>
-            <span>₹ {(data.totals.finalTotal - (showTax ? data.totals.tax : 0)).toFixed(2)}</span>
+            <span>₹ {fmt(data.totals.finalTotal - (showTax ? data.totals.tax : 0))}</span>
           </div>
           {showTax && (
             <div className="flex justify-between text-slate-600">
               <span>Tax:</span>
-              <span>₹ {data.totals.tax.toFixed(2)}</span>
+              <span>₹ {fmt(data.totals.tax)}</span>
             </div>
           )}
           {data.totals.txnDiscount > 0 && (
             <div className="flex justify-between text-rose-600 font-semibold">
               <span>Invoice Discount (-):</span>
-              <span>-₹ {data.totals.txnDiscount.toFixed(2)}</span>
+              <span>-₹ {fmt(data.totals.txnDiscount)}</span>
             </div>
           )}
           {data.totals.txnTax > 0 && (
             <div className="flex justify-between text-slate-700 font-semibold">
               <span>Txn Tax ({data.totals.txnTaxRate}%):</span>
-              <span>+₹ {data.totals.txnTax.toFixed(2)}</span>
+              <span>+₹ {fmt(data.totals.txnTax)}</span>
             </div>
           )}
           {Number(data.additionalCharges?.shipping || data.shippingCharges || 0) > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>{appSettings.additionalChargesSetup?.charges?.[0]?.name || "Shipping / Freight"}:</span>
-              <span>+₹ {Number(data.additionalCharges?.shipping || data.shippingCharges || 0).toFixed(2)}</span>
+              <span>+₹ {fmt(Number(data.additionalCharges?.shipping || data.shippingCharges || 0))}</span>
             </div>
           )}
           {Number(data.additionalCharges?.packaging || data.packagingCharges || 0) > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>{appSettings.additionalChargesSetup?.charges?.[1]?.name || "Packaging"}:</span>
-              <span>+₹ {Number(data.additionalCharges?.packaging || data.packagingCharges || 0).toFixed(2)}</span>
+              <span>+₹ {fmt(Number(data.additionalCharges?.packaging || data.packagingCharges || 0))}</span>
             </div>
           )}
           {Number(data.additionalCharges?.other || data.otherCharges || 0) > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>{appSettings.additionalChargesSetup?.charges?.[2]?.name || "Other Charges"}:</span>
-              <span>+₹ {Number(data.additionalCharges?.other || data.otherCharges || 0).toFixed(2)}</span>
+              <span>+₹ {fmt(Number(data.additionalCharges?.other || data.otherCharges || 0))}</span>
             </div>
           )}
           {data.totals.tcsAmount > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>TCS (+):</span>
-              <span className="font-semibold text-slate-800">₹ {data.totals.tcsAmount.toFixed(2)}</span>
+              <span className="font-semibold text-slate-800">₹ {fmt(data.totals.tcsAmount)}</span>
             </div>
           )}
           {data.totals.tdsAmount > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>TDS Deductible (-):</span>
-              <span className="font-semibold text-rose-600">-₹ {data.totals.tdsAmount.toFixed(2)}</span>
+              <span className="font-semibold text-rose-600">-₹ {fmt(data.totals.tdsAmount)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-base text-slate-900 border-t border-slate-200 pt-1">
             <span>Total:</span>
-            <span>₹ {data.totals.finalTotal.toFixed(2)}</span>
+            <span>₹ {fmt(data.totals.finalTotal)}</span>
           </div>
+          {appSettings.printYouSaved !== false && ((data.totals.discount || 0) + (data.totals.txnDiscount || 0) > 0) && (
+            <div className="flex justify-between text-emerald-600 font-bold">
+              <span>🎉 You Saved:</span>
+              <span>₹ {fmt((data.totals.discount || 0) + (data.totals.txnDiscount || 0))}</span>
+            </div>
+          )}
+          {appSettings.printPaymentMode && (
+            <div className="flex justify-between text-slate-600">
+              <span>Payment Mode:</span>
+              <span className="font-semibold text-slate-800">{data.paymentMode || "Cash"}</span>
+            </div>
+          )}
           {appSettings.printReceivedAmount !== false && data.totals.received > 0 && (
             <div className="flex justify-between text-slate-600">
               <span>Received:</span>
-              <span>₹ {data.totals.received.toFixed(2)}</span>
+              <span>₹ {fmt(data.totals.received)}</span>
             </div>
           )}
           {appSettings.printBalanceAmount !== false && (
             <div className="flex justify-between font-bold text-rose-600">
               <span>Balance:</span>
-              <span>₹ {data.totals.balance.toFixed(2)}</span>
+              <span>₹ {fmt(data.totals.balance)}</span>
             </div>
           )}
         </div>
@@ -601,6 +669,28 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           <SignatureBlock companyName={companyName} signature={companySignature} color={color} appSettings={appSettings} />
         )}
       </div>
+
+      {/* Received By and Delivered By details */}
+      {(appSettings.printReceivedByDetails !== false || appSettings.printDeliveredByDetails !== false) && (
+        <div className="mt-4 flex justify-between border-t border-slate-200 pt-3 text-xs text-slate-600">
+          {appSettings.printReceivedByDetails !== false ? <div>Received by: ____________________</div> : <div />}
+          {appSettings.printDeliveredByDetails !== false ? <div>Delivered by: ____________________</div> : <div />}
+        </div>
+      )}
+
+      {/* Acknowledgement slip */}
+      {appSettings.printAcknowledgement && (
+        <div className="mt-5 border-t-2 border-dashed border-slate-300 pt-3 text-xs text-slate-700">
+          <div className="flex justify-between font-bold text-slate-900 mb-1">
+            <span>--- ACKNOWLEDGEMENT (Customer Copy) ---</span>
+            <span>Invoice #{data.invoiceNumber}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span>Received with thanks from <strong>{data.customer}</strong> amount of <strong>₹ {fmt(data.totals.finalTotal)}</strong></span>
+            <span>Receiver Signature: __________________</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1365,26 +1455,36 @@ function SalePreview() {
   const handlePrintThermal = () => {
     if (!normalized) return;
     const lines = normalized.rows || normalized.items || [];
-    const compName = companyName || "USK";
-    const dateStr = normalized.invoiceDate || "";
+    const compName = appSettings.companyNamePrint || companyName || "USK";
+    const dateStr = normalized.invoiceDateFormatted || normalized.invoiceDate || "";
     const invNo = normalized.invoiceNumber || "";
     const customer = normalized.customer || "Walk-in";
     const total = normalized.totalAmount ?? normalized.totals?.finalTotal ?? 0;
     const paid = normalized.receivedAmount ?? normalized.totals?.received ?? 0;
     const balance = Math.max(0, Number(total) - Number(paid));
+    const rollWidth = (appSettings.thermalPaperSize || "").includes("2") ? "56mm" : "72mm";
+    const decimals = appSettings.printAmountWithDecimal !== false ? 2 : 0;
+    const fmt = (v) => Number(v || 0).toFixed(decimals);
 
     const itemRows = lines.map((r) => `
       <div style="padding: 3px 0; border-bottom: 1px dotted #ccc; display: flex; justify-content: space-between; font-size: 11px;">
-        <span>${r.item || r.name} (${r.qty || 1} × ₹${Number(r.price || r.rate || 0).toFixed(2)})</span>
-        <b>₹${Number(r.amount || (Number(r.qty || 1) * Number(r.price || r.rate || 0))).toFixed(2)}</b>
+        <span>${r.item || r.name} (${r.qty || 1} × ₹${fmt(r.price || r.rate || 0)})</span>
+        <b>₹${fmt(r.amount || (Number(r.qty || 1) * Number(r.price || r.rate || 0)))}</b>
       </div>
     `).join("");
 
-    const thermalHtml = `<!DOCTYPE html><html><head><title>Thermal Receipt ${invNo}</title><style>@page{margin:0;}body{margin:0;padding:8px;font-family:monospace;font-size:11px;width:72mm;color:#000;}</style></head><body>
+    const showAddress = appSettings.printAddress !== false && (appSettings.addressPrint || companyAddress);
+    const showPhone = appSettings.printPhoneNumber !== false && (appSettings.phoneNumberPrint || companyPhone);
+    const showGstin = appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false && companyGstin;
+    const showTax = appSettings.printTaxDetails !== false && normalized.totals?.tax > 0;
+    const showFooter = appSettings.printThermalFooter !== false;
+
+    const thermalHtml = `<!DOCTYPE html><html><head><title>Thermal Receipt ${invNo}</title><style>@page{margin:0;}body{margin:0;padding:8px;font-family:monospace;font-size:11px;width:${rollWidth};color:#000;}</style></head><body>
       <div style="text-align:center;">
         <h3 style="margin:0;font-size:14px;text-transform:uppercase;">${compName}</h3>
-        <p style="margin:2px 0;font-size:10px;">${companyPhone || ""}</p>
-        <p style="margin:2px 0;font-size:10px;font-weight:bold;">${appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false && companyGstin ? `GSTIN: ${companyGstin}` : ""}</p>
+        ${showAddress ? `<p style="margin:2px 0;font-size:9px;">${appSettings.addressPrint || companyAddress}</p>` : ""}
+        ${showPhone ? `<p style="margin:2px 0;font-size:10px;">Ph: ${appSettings.phoneNumberPrint || companyPhone}</p>` : ""}
+        ${showGstin ? `<p style="margin:2px 0;font-size:10px;font-weight:bold;">GSTIN: ${companyGstin}</p>` : ""}
         <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:3px 0;margin:5px 0;font-weight:bold;">TAX INVOICE</div>
       </div>
       <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px;">
@@ -1396,16 +1496,25 @@ function SalePreview() {
       </div>
       <div style="border-top:1px dashed #000;margin-top:5px;padding-top:4px;font-size:11px;">
         <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:bold;">
-          <span>TOTAL:</span><span>₹${Number(total).toFixed(2)}</span>
+          <span>TOTAL:</span><span>₹${fmt(total)}</span>
         </div>
+        ${appSettings.printReceivedAmount !== false ? `
         <div style="display:flex;justify-content:space-between;">
-          <span>Paid:</span><span>₹${Number(paid).toFixed(2)}</span>
-        </div>
+          <span>Paid:</span><span>₹${fmt(paid)}</span>
+        </div>` : ""}
+        ${appSettings.printBalanceAmount !== false ? `
         <div style="display:flex;justify-content:space-between;font-weight:bold;">
-          <span>Balance:</span><span>₹${Number(balance).toFixed(2)}</span>
-        </div>
+          <span>Balance:</span><span>₹${fmt(balance)}</span>
+        </div>` : ""}
       </div>
-      <div style="text-align:center;margin-top:10px;font-size:10px;">Thank You! Visit Again</div>
+      ${showTax ? `
+      <div style="border-top:1px dashed #000;margin-top:4px;padding-top:3px;font-size:9px;">
+        <div style="display:flex;justify-content:space-between;">
+          <span>Tax Breakdown:</span>
+          <span>₹${fmt(normalized.totals.tax)}</span>
+        </div>
+      </div>` : ""}
+      ${showFooter ? `<div style="text-align:center;margin-top:10px;font-size:10px;">Thank You! Visit Again</div>` : ""}
       <script>setTimeout(function(){ window.print(); }, 250);</script>
     </body></html>`;
 
@@ -1484,7 +1593,13 @@ function SalePreview() {
 
         {/* Invoice Preview */}
         <section className="min-w-0 print:block">
-          <div ref={invoiceRef} className="bg-white rounded-lg shadow-sm">
+          <div
+            ref={invoiceRef}
+            className="bg-white rounded-lg shadow-sm"
+            style={{
+              paddingTop: appSettings.extraSpaceTopPdf ? `${appSettings.extraSpaceTopPdf}mm` : undefined,
+            }}
+          >
             <ThemeComponent
               companyName={appSettings.printCompanyName !== false ? (appSettings.companyNamePrint || companyName) : ""}
               companyPhone={appSettings.printPhoneNumber !== false ? (appSettings.phoneNumberPrint || companyPhone) : ""}
