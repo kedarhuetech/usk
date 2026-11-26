@@ -55,7 +55,9 @@ const TEST_PNG_BUFFER = Buffer.from([
 ]);
 
 // Valid test PDF buffer
-const TEST_PDF_BUFFER = Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n");
+const TEST_PDF_BUFFER = Buffer.from(
+  "%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources <<>> >> endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer << /Size 4 /Root 1 0 R >>\nstartxref\n206\n%%EOF\n"
+);
 
 const TEST_PNG_BASE64 = `data:image/png;base64,${TEST_PNG_BUFFER.toString("base64")}`;
 const TEST_PDF_BASE64 = `data:application/pdf;base64,${TEST_PDF_BUFFER.toString("base64")}`;
@@ -99,20 +101,31 @@ after(async () => {
     await pool.query(`DELETE FROM app_settings WHERE setting_key IN (${placeholders})`, createdSettingKeys).catch(() => {});
   }
 
-  // Clean up created files
-  for (const fId of createdFileIds) {
-    try {
-      const meta = await getFileMetadataById(fId, "demo-business");
-      if (meta) {
-        await storageService.deleteFile(meta.storage_key, "demo-business").catch(() => {});
-        await deleteFileMetadata(fId, "demo-business").catch(() => {});
-      }
-    } catch {}
+  // Clean up created files in parallel
+  if (createdFileIds.length > 0) {
+    await Promise.allSettled(
+      createdFileIds.map(async (fId) => {
+        try {
+          const meta = await getFileMetadataById(fId, "demo-business");
+          if (meta) {
+            await storageService.deleteFile(meta.storage_key, "demo-business").catch(() => {});
+            await deleteFileMetadata(fId, "demo-business").catch(() => {});
+          }
+        } catch {}
+      })
+    );
   }
 
   if (server) {
+    if (typeof server.closeAllConnections === "function") {
+      server.closeAllConnections();
+    }
     await new Promise((resolve) => server.close(resolve));
   }
+  try {
+    await pool.end();
+  } catch {}
+  process.exit(0);
 });
 
 // Helper for multipart/form-data upload

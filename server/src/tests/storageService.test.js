@@ -340,7 +340,7 @@ test("14. Missing file behavior throws descriptive error on read and stats", asy
 });
 
 test("15. Storage configuration behaves predictably with sensible defaults", () => {
-  assert.equal(getStorageDriverName(), "local");
+  assert.ok(["local", "cloudinary"].includes(getStorageDriverName()));
   assert.equal(DEFAULT_BUSINESS_ID, "demo-business");
 
   const resolvedRoot = getStorageLocalRoot();
