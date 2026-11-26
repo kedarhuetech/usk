@@ -218,6 +218,15 @@ function normalizeInvoiceData(raw) {
     deliveryDate: form.deliveryDate || raw.deliveryDate || form.dateField || raw.dateField || "",
     poNumber: form.poNumber || raw.poNumber || "",
     poDate: form.poDate || raw.poDate || "",
+    transporterName: form.transporterName || raw.transporterName || "",
+    additionalCharges: raw.additionalCharges || {
+      shipping: Number(raw.shippingCharges || raw.shipping_charges || 0),
+      packaging: Number(raw.packagingCharges || raw.packaging_charges || 0),
+      other: Number(raw.otherCharges || raw.other_charges || 0),
+    },
+    shippingCharges: Number(raw.shippingCharges || raw.shipping_charges || raw.additionalCharges?.shipping || 0),
+    packagingCharges: Number(raw.packagingCharges || raw.packaging_charges || raw.additionalCharges?.packaging || 0),
+    otherCharges: Number(raw.otherCharges || raw.other_charges || raw.additionalCharges?.other || 0),
     rows: rows.length > 0 ? rows : [{ id: "empty", item: "Sample Item", hsn: "1001", qty: 1, unit: "PCS", price: finalTotal || 0, discount: 0, tax: 0, cess: 0, amount: finalTotal || 0 }],
     totals: {
       qty: totalQty || 1,
@@ -392,6 +401,12 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
           {appSettings.enablePlaceOfSupply !== false && (
             <p className="text-slate-600 text-[11px]">Place of supply: {data.stateOfSupply}</p>
           )}
+          {data.transporterName && (
+            <p className="text-slate-600 text-[11px]">Transporter: {data.transporterName}</p>
+          )}
+          {data.vehicleNumber && !appSettings?.additionalFieldsSetup?.txnField1?.enabled && (
+            <p className="text-slate-600 text-[11px]">Vehicle No.: {data.vehicleNumber}</p>
+          )}
           {["txnField1", "txnField2", "txnField3", "dateField"].map((k) => {
             const f = appSettings?.additionalFieldsSetup?.[k];
             if (!f?.enabled || f.showInPrint === false) return null;
@@ -510,6 +525,24 @@ export function GSTTheme5({ companyName, companyPhone, companyGstin, companyAddr
             <div className="flex justify-between text-slate-700 font-semibold">
               <span>Txn Tax ({data.totals.txnTaxRate}%):</span>
               <span>+₹ {data.totals.txnTax.toFixed(2)}</span>
+            </div>
+          )}
+          {Number(data.additionalCharges?.shipping || data.shippingCharges || 0) > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>{appSettings.additionalChargesSetup?.charges?.[0]?.name || "Shipping / Freight"}:</span>
+              <span>+₹ {Number(data.additionalCharges?.shipping || data.shippingCharges || 0).toFixed(2)}</span>
+            </div>
+          )}
+          {Number(data.additionalCharges?.packaging || data.packagingCharges || 0) > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>{appSettings.additionalChargesSetup?.charges?.[1]?.name || "Packaging"}:</span>
+              <span>+₹ {Number(data.additionalCharges?.packaging || data.packagingCharges || 0).toFixed(2)}</span>
+            </div>
+          )}
+          {Number(data.additionalCharges?.other || data.otherCharges || 0) > 0 && (
+            <div className="flex justify-between text-slate-600">
+              <span>{appSettings.additionalChargesSetup?.charges?.[2]?.name || "Other Charges"}:</span>
+              <span>+₹ {Number(data.additionalCharges?.other || data.otherCharges || 0).toFixed(2)}</span>
             </div>
           )}
           {data.totals.tcsAmount > 0 && (

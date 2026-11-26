@@ -960,6 +960,20 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           </>
         )}
 
+        {(appSettings.transportationDetails?.transporterName || form.transporterName) && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">Transporter</span>
+            <TextInput value={form.transporterName || ""} onChange={(e) => setField("transporterName", e.target.value)} placeholder="Transporter Name" />
+          </>
+        )}
+
+        {(appSettings.transportationDetails?.vehicleNumber || form.vehicleNumber) && !appSettings.additionalFieldsSetup?.txnField1?.enabled && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">Vehicle No.</span>
+            <TextInput value={form.vehicleNumber || ""} onChange={(e) => setField("vehicleNumber", e.target.value)} placeholder="Vehicle Number" />
+          </>
+        )}
+
         {/* Enabled Transaction Additional Fields */}
         {["txnField1", "txnField2", "txnField3", "dateField"].map((fKey) => {
           const field = appSettings.additionalFieldsSetup?.[fKey];
@@ -1985,32 +1999,56 @@ function TotalsPanel({
             )}
           </div>
         )}
-        {(appSettings.additionalChargesEnabled || Number(additionalCharges?.shipping || 0) > 0) && (
-          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">Shipping / Freight:</span>
-            <input
-              type="number"
-              min="0"
-              value={additionalCharges?.shipping ?? ""}
-              onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, shipping: Math.max(0, Number(e.target.value) || 0) }))}
-              placeholder="0.00"
-              className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
-            />
-          </div>
-        )}
-        {(appSettings.additionalChargesEnabled || Number(additionalCharges?.packaging || 0) > 0) && (
-          <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">Packaging Charges:</span>
-            <input
-              type="number"
-              min="0"
-              value={additionalCharges?.packaging ?? ""}
-              onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, packaging: Math.max(0, Number(e.target.value) || 0) }))}
-              placeholder="0.00"
-              className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
-            />
-          </div>
-        )}
+        {(() => {
+          const isChargesEnabled = Boolean(appSettings.additionalChargesEnabled || appSettings.additionalChargesSetup?.enabled);
+          const charge1 = appSettings.additionalChargesSetup?.charges?.[0] || { name: "Shipping / Freight" };
+          const charge2 = appSettings.additionalChargesSetup?.charges?.[1] || { name: "Packaging Charges" };
+          const charge3 = appSettings.additionalChargesSetup?.charges?.[2] || { name: "Other Charges" };
+
+          return (
+            <>
+              {(isChargesEnabled || Number(additionalCharges?.shipping || 0) > 0) && (
+                <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">{charge1.name || "Shipping / Freight"}:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalCharges?.shipping ?? ""}
+                    onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, shipping: Math.max(0, Number(e.target.value) || 0) }))}
+                    placeholder="0.00"
+                    className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+              {(isChargesEnabled || Number(additionalCharges?.packaging || 0) > 0) && (
+                <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">{charge2.name || "Packaging Charges"}:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalCharges?.packaging ?? ""}
+                    onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, packaging: Math.max(0, Number(e.target.value) || 0) }))}
+                    placeholder="0.00"
+                    className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+              {(isChargesEnabled || Number(additionalCharges?.other || 0) > 0) && (
+                <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">{charge3.name || "Other Charges"}:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalCharges?.other ?? ""}
+                    onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, other: Math.max(0, Number(e.target.value) || 0) }))}
+                    placeholder="0.00"
+                    className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+            </>
+          );
+        })()}
         <label className="flex items-center gap-2 text-[13px] text-slate-500">
           <input type="checkbox" checked={roundOff} onChange={(event) => setRoundOff(event.target.checked)} className="h-4 w-4 accent-blue-600" />
           Round Off
@@ -2865,7 +2903,8 @@ function AddSale({ mode = "sale", localOnly = false }) {
         ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
         : ""),
       ewayBillNo: deliveryChallanConversion?.ewayBillNo || deliveryChallanConversion?.eWayBillNo || "",
-      vehicleNumber: deliveryChallanConversion?.vehicleNumber || deliveryChallanConversion?.vehicleNo || "",
+      vehicleNumber: deliveryChallanConversion?.vehicleNumber || deliveryChallanConversion?.vehicleNo || (getAppSettings().transportationDetails?.vehicleNumber || ""),
+      transporterName: deliveryChallanConversion?.transporterName || (getAppSettings().transportationDetails?.transporterName || ""),
       driverName: deliveryChallanConversion?.driverName || "",
       paymentType: "Cash",
     };
@@ -3214,6 +3253,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       description: form.description || "",
       terms: form.terms || "",
       termsTitle: form.termsTitle || "",
+      transporterName: form.transporterName || appSettings.transportationDetails?.transporterName || "",
       vehicleNumber: form.vehicleNumber || form.txnField1 || "",
       vehicleNo: form.vehicleNumber || form.txnField1 || "",
       driverName: form.driverName || form.txnField2 || "",

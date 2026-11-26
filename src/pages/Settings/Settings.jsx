@@ -2372,13 +2372,17 @@ function TransactionTab({ settings, update, showToast }) {
         };
 
         const toggleMasterEnable = () => {
-          const updatedSetup = { ...setup, enabled: !setup.enabled };
+          const nextEnabled = !setup.enabled;
+          const updatedSetup = { ...setup, enabled: nextEnabled };
           update("additionalChargesSetup", updatedSetup);
+          update("additionalChargesEnabled", nextEnabled);
         };
 
         const handleSaveDetails = () => {
           const activeCharges = (setup.charges || []).filter((c) => c.selected);
           update("additionalCharges", activeCharges);
+          update("additionalChargesSetup", setup);
+          update("additionalChargesEnabled", Boolean(setup.enabled));
           setAdditionalChargesModal(false);
           if (typeof showToast === "function") {
             showToast("Additional charges saved successfully");

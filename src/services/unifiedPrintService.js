@@ -382,6 +382,8 @@ export function buildUnifiedDocumentHtml(opts = {}) {
           ${date ? `<p style="margin:2px 0;"><b>Date:</b> ${escapeHtml(date)}</p>` : ""}
           ${dueDate ? `<p style="margin:2px 0;"><b>Due Date:</b> ${escapeHtml(dueDate)}</p>` : ""}
           ${status ? `<p style="margin:2px 0;"><b>Status:</b> <span style="font-weight:700;color:${themeColor};">${escapeHtml(status)}</span></p>` : ""}
+          ${(opts.transporterName || opts.doc?.transporterName || opts.invoice?.transporterName) ? `<p style="margin:2px 0;"><b>Transporter:</b> ${escapeHtml(opts.transporterName || opts.doc?.transporterName || opts.invoice?.transporterName)}</p>` : ""}
+          ${(opts.vehicleNumber || opts.doc?.vehicleNumber || opts.invoice?.vehicleNumber || opts.vehicleNo || opts.doc?.vehicleNo || opts.invoice?.vehicleNo) && !company.appSettings?.additionalFieldsSetup?.txnField1?.enabled ? `<p style="margin:2px 0;"><b>Vehicle No:</b> ${escapeHtml(opts.vehicleNumber || opts.doc?.vehicleNumber || opts.invoice?.vehicleNumber || opts.vehicleNo || opts.doc?.vehicleNo || opts.invoice?.vehicleNo)}</p>` : ""}
           ${[
             ...metadataRows,
             ...["txnField1", "txnField2", "txnField3", "dateField"]
@@ -552,6 +554,30 @@ export function buildUnifiedDocumentHtml(opts = {}) {
                   ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#0f172a;">
                       <span>Txn Tax (${opts.txnTaxRate || totals.txnTaxRate || 0}%):</span>
                       <span style="font-weight:700;">+${formatMoney(opts.txnTax || totals.txnTax)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.additionalCharges?.shipping || opts.doc?.shippingCharges || totals.shipping || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
+                      <span>${escapeHtml(company.appSettings?.additionalChargesSetup?.charges?.[0]?.name || "Shipping / Freight")}:</span>
+                      <span style="font-weight:700;">+${formatMoney(opts.additionalCharges?.shipping || opts.doc?.shippingCharges || totals.shipping)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.additionalCharges?.packaging || opts.doc?.packagingCharges || totals.packaging || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
+                      <span>${escapeHtml(company.appSettings?.additionalChargesSetup?.charges?.[1]?.name || "Packaging")}:</span>
+                      <span style="font-weight:700;">+${formatMoney(opts.additionalCharges?.packaging || opts.doc?.packagingCharges || totals.packaging)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.additionalCharges?.other || opts.doc?.otherCharges || totals.other || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
+                      <span>${escapeHtml(company.appSettings?.additionalChargesSetup?.charges?.[2]?.name || "Other Charges")}:</span>
+                      <span style="font-weight:700;">+${formatMoney(opts.additionalCharges?.other || opts.doc?.otherCharges || totals.other)}</span>
                     </div>`
                   : ""
               }
