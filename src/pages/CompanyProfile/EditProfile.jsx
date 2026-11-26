@@ -18,9 +18,21 @@ import {
   saveCompanyProfile,
 } from "../../services/companyProfileStorage";
 import { companyProfileApi } from "../../services/apiClient";
-import { getActiveBusinessId } from "../../config/businessConfig";
+import { getActiveBusinessId, getScopedStorageKey } from "../../config/businessConfig";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { validateGstin, cleanGstin } from "../../utils/gstinUtils";
+
+const LOGO_FIT_MODE_STORAGE_KEY = "ledgerly:companyLogoFitMode.v1";
+
+function getStoredLogoFitMode() {
+  if (typeof window === "undefined" || !window.localStorage) return "cover";
+  try {
+    const saved = window.localStorage.getItem(getScopedStorageKey(LOGO_FIT_MODE_STORAGE_KEY));
+    return saved === "contain" ? "contain" : "cover";
+  } catch {
+    return "cover";
+  }
+}
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -114,7 +126,19 @@ export default function EditProfile() {
   const [logoFile, setLogoFile] = useState(null);
   const [signatureFile, setSignatureFile] = useState(null);
   const [showLogoModal, setShowLogoModal] = useState(false);
-  const [logoFitMode, setLogoFitMode] = useState("cover");
+  const [logoFitMode, setLogoFitMode] = useState(getStoredLogoFitMode);
+
+  const handleToggleLogoFitMode = () => {
+    setLogoFitMode((prev) => {
+      const next = prev === "cover" ? "contain" : "cover";
+      try {
+        if (typeof window !== "undefined" && window.localStorage) {
+          window.localStorage.setItem(getScopedStorageKey(LOGO_FIT_MODE_STORAGE_KEY), next);
+        }
+      } catch {}
+      return next;
+    });
+  };
 
   const isDirtyRef = useRef(false);
   const [, setIsDirty] = useState(false);
@@ -486,7 +510,7 @@ export default function EditProfile() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setLogoFitMode((m) => (m === "cover" ? "contain" : "cover"))}
+                  onClick={handleToggleLogoFitMode}
                   className="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300 text-slate-600 text-xs transition cursor-pointer shadow-xs"
                   title="Toggle fit mode"
                 >

@@ -9,7 +9,8 @@ import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewM
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getSaleInvoices } from "../../services/salesStorage";
-import { calculateSaleReturnRow, cancelSaleReturn, getSaleReturns, saveSaleReturn } from "../../services/saleReturnsStorage";
+import { calculateSaleReturnRow, cancelSaleReturn, getSaleReturns, saveSaleReturn, saleReturnsStorageKey } from "../../services/saleReturnsStorage";
+import { writeTransactionCollection } from "../../services/transactionRepository.js";
 import { savePurchaseJobWork } from "../../services/purchaseJobWorkStorage";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { getAllLocalTransactions, transactionTypes } from "../../services/transactionRecordsStorage";
@@ -27,7 +28,10 @@ import {
 } from "../../services/transactionMessageService.js";
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 const money = (value) => `₹${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateLabel = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const invoiceCustomer = (invoice) => String(invoice.form?.customer || invoice.customer || invoice.partyName || invoice.party || invoice.customerName || "").trim();
@@ -446,6 +450,31 @@ export default function SaleReturns() {
     loadSalesInvoices().then((rows) => {
       if (active && Array.isArray(rows)) setRemoteInvoices(rows.filter((inv) => inv.transactionType !== "purchase"));
     }).catch(() => {});
+    transactionsDb.listByType("credit_note").then((rows) => {
+      if (!active || !Array.isArray(rows)) return;
+      const normalized = rows.map((r) => ({
+        ...r,
+        id: r.id,
+        type: "Credit Note",
+        number: r.number || r.documentNumber || "",
+        date: r.date || r.transactionDate || today(),
+        party: r.party || r.partyName || r.customerName || "Cash Sale",
+        partyId: r.partyId || "",
+        phone: r.phone || r.partyPhone || "",
+        invoiceId: r.invoiceId || r.linkedInvoiceId || "",
+        invoiceNumber: r.invoiceNumber || r.poNumber || "",
+        total: Number(r.total ?? r.totalAmount ?? 0),
+        received: Number(r.received ?? r.paidAmount ?? 0),
+        customerCreditAmount: Number(r.customerCreditAmount ?? r.balance ?? r.balanceAmount ?? 0),
+        balance: Number(r.balance ?? r.balanceAmount ?? r.customerCreditAmount ?? 0),
+        status: r.status || "Credit Available",
+        rows: Array.isArray(r.rows) && r.rows.length > 0 ? r.rows : (r.items || []),
+      }));
+      setRecords(normalized);
+      try {
+        writeTransactionCollection(saleReturnsStorageKey, normalized);
+      } catch {}
+    }).catch(() => {});
     return () => { active = false; };
   }, [refreshTrigger]);
 
@@ -584,12 +613,12 @@ export default function SaleReturns() {
           itemName: r.item || r.name || "Item",
           quantity: Number(r.qty || 1),
           unitPrice: Number(r.price || r.rate || 0),
-          totalAmount: Number(r.amount || (Number(r.qty || 1) * Number(r.price || 0))),
+          totalAmount: Number(r.amount ?? calculateSaleReturnRow(r).amount ?? (Number(r.qty || 1) * Number(r.price || 0))),
         })),
         notes: value.notes || value.description || `Credit Note for Invoice ${value.invoiceNumber || ""}`,
         description: value.description || value.notes || "",
         terms: value.terms || "",
-        linkedInvoiceId: value.invoiceNumber || value.invoiceId || null,
+        linkedInvoiceId: value.invoiceId || value.invoiceNumber || null,
         poNumber: value.invoiceNumber || value.invoiceId || null,
       });
     } catch (e) {

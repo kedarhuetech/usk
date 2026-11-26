@@ -11,9 +11,8 @@ import { getParties } from "../../services/partiesStorage";
 import { calculatePartyBalances } from "../../services/partyBalances";
 import {
   loadBusinessParties,
-  loadSalesInvoices,
-  loadPurchaseBills,
 } from "../../services/businessRecords.js";
+import { transactionsDb } from "../../services/databaseRepository.js";
 import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 
 function readLocal(...keys) {
@@ -52,9 +51,16 @@ export default function AllPartiesReport() {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
-    loadBusinessParties().catch(() => {});
-    loadSalesInvoices().catch(() => {});
-    loadPurchaseBills().catch(() => {});
+    let active = true;
+    Promise.allSettled([
+      loadBusinessParties(),
+      transactionsDb.listAll(),
+    ]).then(() => {
+      if (active) setRefreshTrigger((k) => k + 1);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Listen to business data updates

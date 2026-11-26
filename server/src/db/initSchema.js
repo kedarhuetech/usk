@@ -114,6 +114,14 @@ export async function initializeDatabaseSchema() {
       await addCol("inventory_items", "image_url VARCHAR(500) NULL");
       await addCol("inventory_items", "image_id VARCHAR(64) NULL");
       await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
+      await addCol("inventory_items", "location VARCHAR(255)");
+      await addCol("inventory_items", "sub_category VARCHAR(100)");
+      await addCol("inventory_items", "discount DECIMAL(12,2) DEFAULT 0.00");
+      await addCol("inventory_items", "discount_type VARCHAR(32) DEFAULT 'Percentage'");
+      await addCol("inventory_items", "sale_tax_mode VARCHAR(32) DEFAULT 'Without Tax'");
+      await addCol("inventory_items", "purchase_tax_mode VARCHAR(32) DEFAULT 'Without Tax'");
+      await addCol("inventory_items", "at_price DECIMAL(12,2) DEFAULT 0.00");
+      await addCol("inventory_items", "as_of_date DATE NULL");
       await addCol("transaction_items", "barcode VARCHAR(100)");
       await addCol("transaction_items", "is_active TINYINT(1) DEFAULT 1");
 
@@ -869,6 +877,25 @@ export async function initializeDatabaseSchema() {
       is_used TINYINT(1) NOT NULL DEFAULT 0,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_pwd_resets_email (email, is_used)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
+
+    // 35. Tally Import Batches Audit Table
+    `CREATE TABLE IF NOT EXISTS tally_import_batches (
+      id VARCHAR(64) PRIMARY KEY,
+      business_id VARCHAR(64) NOT NULL,
+      file_name VARCHAR(255) NOT NULL,
+      file_hash VARCHAR(64) NULL,
+      tally_company_name VARCHAR(255) NULL,
+      total_detected INT DEFAULT 0,
+      imported_count INT DEFAULT 0,
+      updated_count INT DEFAULT 0,
+      skipped_count INT DEFAULT 0,
+      failed_count INT DEFAULT 0,
+      unsupported_count INT DEFAULT 0,
+      status VARCHAR(32) DEFAULT 'completed',
+      summary_notes TEXT NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_tally_batches_biz (business_id, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`
   ];
 

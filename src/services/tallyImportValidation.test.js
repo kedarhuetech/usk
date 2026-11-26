@@ -15,7 +15,10 @@ test("maps customer ledger balances and contact fields into the supported party 
   // Check the canonical fields exactly as the database adapter will receive them.
   assert.deepEqual(record.party, {
     partyName: "Northwind Stores",
+    partyType: "customer",
+    group: "Sundry Debtors",
     gstin: "27ABCDE1234F1Z5",
+    gstType: "Registered - Regular",
     phone: "9876543210",
     email: "accounts@example.test",
     state: "Maharashtra",
@@ -83,5 +86,65 @@ test("marks existing matching records as duplicates without changing them", () =
   ]);
   const checked = markStoredDuplicates([party, item], [{ partyName: "Northwind Stores", phone: "12345" }], [{ itemName: "Other", itemCode: "B-01" }]);
   assert.deepEqual(checked.map((record) => record.status), ["duplicate", "duplicate"]);
-  assert.match(checked[0].warnings.join(" "), /will not overwrite/);
+  assert.match(checked[0].warnings.join(" "), /skipped by default unless you choose to update/);
+});
+
+test("classifies Sundry Debtors as customer, Sundry Creditors as supplier, and resolves GROUP sub-groups", () => {
+  const rows = mapAndValidateTallyRecords([
+    {
+      type: "LEDGER",
+      name: "Metro Traders",
+      parent: "North Debtors",
+      resolvedGroup: "Sundry Debtors",
+      raw: { gstin: "27AABCM1234F1Z5", pan: "AABCM1234F", gstType: "Regular", phone: "9811122233", city: "Mumbai", pincode: "400001", state: "Maharashtra", address: "Andheri East", openingBalance: "5000 Dr", creditLimit: "50000" },
+    },
+    {
+      type: "LEDGER",
+      name: "Apex Suppliers",
+      parent: "Sundry Creditors",
+      resolvedGroup: "Sundry Creditors",
+      raw: { gstin: "29AABCA5678G1Z2", phone: "9822233344", state: "Karnataka", openingBalance: "12000 Cr" },
+    },
+  ]);
+
+  assert.equal(rows[0].status, "ready");
+  assert.equal(rows[0].partyType, "customer");
+  assert.equal(rows[0].party.partyType, "customer");
+  assert.equal(rows[0].party.pan, "AABCM1234F");
+  assert.equal(rows[0].party.gstType, "Registered - Regular");
+  assert.equal(rows[0].party.billingCity, "Mumbai");
+  assert.equal(rows[0].party.billingPincode, "400001");
+  assert.equal(rows[0].party.openingBalanceType, "to-receive");
+
+  assert.equal(rows[1].status, "ready");
+  assert.equal(rows[1].partyType, "supplier");
+  assert.equal(rows[1].party.partyType, "supplier");
+  assert.equal(rows[1].party.openingBalanceType, "to-pay");
+});
+
+test("maps stock item GST rate, opening rate, sale price, and Unicode names safely", () => {
+  const [item] = mapAndValidateTallyRecords([
+    {
+      type: "STOCKITEM",
+      name: "तांबा तार (Copper Wire)",
+      parent: "Electrical",
+      raw: {
+        unit: "Mtr",
+        code: "CW-99",
+        hsn: "740811",
+        gstRate: "18",
+        taxability: "Taxable",
+        openingQuantity: "25 Mtr",
+        openingRate: "120.50/Mtr",
+        salePrice: "160",
+      },
+    },
+  ]);
+
+  assert.equal(item.status, "ready");
+  assert.equal(item.item.itemName, "तांबा तार (Copper Wire)");
+  assert.equal(item.item.taxRate, "GST 18%");
+  assert.equal(item.item.purchasePrice, "120.5");
+  assert.equal(item.item.salePrice, "160");
+  assert.equal(item.item.openingQuantity, "25");
 });

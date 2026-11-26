@@ -187,12 +187,57 @@ router.delete("/images/:id", async (req, res) => {
   }
 });
 
+let extraItemColsPromise = null;
+async function ensureExtraItemColumns() {
+  if (!extraItemColsPromise) {
+    extraItemColsPromise = (async () => {
+      const cols = [
+        ["location", "VARCHAR(255)"],
+        ["sub_category", "VARCHAR(100)"],
+        ["discount", "DECIMAL(12,2) DEFAULT 0.00"],
+        ["discount_type", "VARCHAR(32) DEFAULT 'Percentage'"],
+        ["sale_tax_mode", "VARCHAR(32) DEFAULT 'Without Tax'"],
+        ["purchase_tax_mode", "VARCHAR(32) DEFAULT 'Without Tax'"],
+        ["at_price", "DECIMAL(12,2) DEFAULT 0.00"],
+        ["as_of_date", "DATE NULL"],
+      ];
+      for (const [col, def] of cols) {
+        try {
+          const [rows] = await pool.query(
+            `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'inventory_items' AND COLUMN_NAME = ? LIMIT 1`,
+            [col]
+          );
+          if (!rows.length) {
+            await pool.query(`ALTER TABLE inventory_items ADD COLUMN ${col} ${def}`);
+          }
+        } catch {}
+      }
+    })();
+  }
+  return extraItemColsPromise;
+}
+
+function parseRateNumber(raw) {
+  if (raw == null || raw === "") return 0;
+  const match = String(raw).match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function formatDateOnly(val) {
+  if (!val) return "";
+  if (val instanceof Date) {
+    return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, "0")}-${String(val.getDate()).padStart(2, "0")}`;
+  }
+  return String(val).slice(0, 10);
+}
+
 /**
  * GET /api/items
  * Retrieves paginated list of inventory items with normalized batches.
  */
 router.get("/", async (req, res) => {
   try {
+    await ensureExtraItemColumns();
     const businessId = businessIdFromRequest(req);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limitParam = req.query.limit;
@@ -245,14 +290,15 @@ router.get("/", async (req, res) => {
     const total = countRows[0]?.total || 0;
 
     // Query 2: Fetch items
-    let querySql = `SELECT id, business_id, name, item_code, barcode, category, hsn_code, unit,
+    let querySql = `SELECT id, business_id, name, item_code, barcode, category, sub_category, hsn_code, unit,
               item_type, sale_price, purchase_price, tax_rate, cess_rate,
-              opening_stock, current_stock, min_stock, is_batch_tracked,
-              is_serial_tracked, description, is_active, image_url, image_id,
+              discount, discount_type, sale_tax_mode, purchase_tax_mode,
+              opening_stock, current_stock, min_stock, at_price, as_of_date, location,
+              is_batch_tracked, is_serial_tracked, description, is_active, image_url, image_id,
               created_at, updated_at
        FROM inventory_items
        WHERE ${whereClause}
-       ORDER BY name ASC`;
+       ORDER BY created_at DESC, name ASC`;
     let queryParams = [...params];
 
     if (!isAll) {
@@ -306,6 +352,7 @@ router.get("/", async (req, res) => {
       itemCode: row.item_code || "",
       barcode: row.barcode || row.item_code || "",
       category: row.category || "General",
+      subCategory: row.sub_category || "",
       hsnCode: row.hsn_code || "",
       hsn: row.hsn_code || "",
       hsn_code: row.hsn_code || "",
@@ -316,6 +363,10 @@ router.get("/", async (req, res) => {
       purchasePrice: parseFloat(row.purchase_price) || 0,
       taxRate: parseFloat(row.tax_rate) || 0,
       cessRate: parseFloat(row.cess_rate) || 0,
+      discount: row.discount != null && Number(row.discount) !== 0 ? String(parseFloat(row.discount)) : "",
+      discountType: row.discount_type || "Percentage",
+      saleTaxMode: row.sale_tax_mode || "Without Tax",
+      purchaseTaxMode: row.purchase_tax_mode || "Without Tax",
       openingStock: parseFloat(row.opening_stock) || 0,
       openingQuantity: parseFloat(row.opening_stock) || 0,
       opening_stock: parseFloat(row.opening_stock) || 0,
@@ -324,6 +375,9 @@ router.get("/", async (req, res) => {
       minStock: parseFloat(row.min_stock) || 0,
       minimumStock: parseFloat(row.min_stock) || 0,
       min_stock: parseFloat(row.min_stock) || 0,
+      atPrice: row.at_price != null && Number(row.at_price) !== 0 ? String(parseFloat(row.at_price)) : "",
+      asOfDate: formatDateOnly(row.as_of_date),
+      location: row.location || "",
       isBatchTracked: Boolean(row.is_batch_tracked),
       isSerialTracked: Boolean(row.is_serial_tracked),
       description: row.description || "",
@@ -403,6 +457,7 @@ router.get("/:id", async (req, res) => {
         itemCode: row.item_code || "",
         barcode: row.barcode || row.item_code || "",
         category: row.category || "General",
+        subCategory: row.sub_category || "",
         hsnCode: row.hsn_code || "",
         hsn: row.hsn_code || "",
         hsn_code: row.hsn_code || "",
@@ -413,6 +468,10 @@ router.get("/:id", async (req, res) => {
         purchasePrice: parseFloat(row.purchase_price) || 0,
         taxRate: parseFloat(row.tax_rate) || 0,
         cessRate: parseFloat(row.cess_rate) || 0,
+        discount: row.discount != null && Number(row.discount) !== 0 ? String(parseFloat(row.discount)) : "",
+        discountType: row.discount_type || "Percentage",
+        saleTaxMode: row.sale_tax_mode || "Without Tax",
+        purchaseTaxMode: row.purchase_tax_mode || "Without Tax",
         openingStock: parseFloat(row.opening_stock) || 0,
         openingQuantity: parseFloat(row.opening_stock) || 0,
         opening_stock: parseFloat(row.opening_stock) || 0,
@@ -421,6 +480,9 @@ router.get("/:id", async (req, res) => {
         minStock: parseFloat(row.min_stock) || 0,
         minimumStock: parseFloat(row.min_stock) || 0,
         min_stock: parseFloat(row.min_stock) || 0,
+        atPrice: row.at_price != null && Number(row.at_price) !== 0 ? String(parseFloat(row.at_price)) : "",
+        asOfDate: formatDateOnly(row.as_of_date),
+        location: row.location || "",
         isBatchTracked: Boolean(row.is_batch_tracked),
         isSerialTracked: Boolean(row.is_serial_tracked),
         isActive: row.is_active !== 0,
@@ -460,13 +522,22 @@ const saveItemHandler = async (req, res) => {
     const itemCode = (body.itemCode || body.item_code || body.code || "").trim() || null;
     const barcode = (body.barcode || body.barCode || body.itemBarcode || itemCode || "").trim() || null;
     const category = body.category || "General";
+    const subCategory = (body.subCategory || body.sub_category || "").trim() || null;
     const hsnCode = (body.hsnCode || body.hsn_code || body.hsn || body.sac || "").toString().trim() || null;
     const unit = body.unit || "PCS";
     const itemType = body.itemType || body.type || "product";
     const salePrice = parseFloat(body.salePrice ?? body.sale_price ?? body.price ?? 0) || 0;
     const purchasePrice = parseFloat(body.purchasePrice ?? body.purchase_price ?? 0) || 0;
-    const taxRate = parseFloat(body.taxRate ?? body.tax_rate ?? body.gst ?? 0) || 0;
-    const cessRate = parseFloat(body.cessRate ?? body.cess_rate ?? 0) || 0;
+    const taxRate = parseRateNumber(body.taxRate ?? body.tax_rate ?? body.gst ?? 0);
+    const cessRate = parseRateNumber(body.cessRate ?? body.cess_rate ?? 0);
+    const discount = parseFloat(body.discount ?? body.discountValue ?? 0) || 0;
+    const discountType = body.discountType || "Percentage";
+    const saleTaxMode = body.saleTaxMode || "Without Tax";
+    const purchaseTaxMode = body.purchaseTaxMode || "Without Tax";
+    const atPrice = parseFloat(body.atPrice ?? body.at_price ?? 0) || 0;
+    const rawAsOfDate = (body.asOfDate || body.as_of_date || "").toString().trim().slice(0, 10);
+    const asOfDate = /^\d{4}-\d{2}-\d{2}$/.test(rawAsOfDate) ? rawAsOfDate : null;
+    const location = (body.location || "").toString().trim() || null;
     const rawOpeningStock = body.openingStock ?? body.opening_stock ?? body.openingQuantity ?? body.opening_quantity ?? body.initialOpeningQuantity ?? null;
     const hasCurrentStock = body.currentStock !== undefined || body.current_stock !== undefined || body.stock !== undefined;
     const rawMinStock = body.minStock ?? body.min_stock ?? body.minimumStock ?? body.minimum_stock ?? body.minQuantity ?? body.min_quantity ?? null;
@@ -532,19 +603,22 @@ const saveItemHandler = async (req, res) => {
       }
     }
 
+    await ensureExtraItemColumns();
     // 1. Upsert Item Header (Pure columns)
     await conn.query(
       `INSERT INTO inventory_items (
-        id, business_id, name, item_code, barcode, category, hsn_code, unit,
+        id, business_id, name, item_code, barcode, category, sub_category, hsn_code, unit,
         item_type, sale_price, purchase_price, tax_rate, cess_rate,
-        opening_stock, current_stock, min_stock, is_batch_tracked,
-        is_serial_tracked, description, is_active, image_url, image_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        discount, discount_type, sale_tax_mode, purchase_tax_mode,
+        opening_stock, current_stock, min_stock, at_price, as_of_date, location,
+        is_batch_tracked, is_serial_tracked, description, is_active, image_url, image_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         name = VALUES(name),
         item_code = VALUES(item_code),
         barcode = VALUES(barcode),
         category = VALUES(category),
+        sub_category = VALUES(sub_category),
         hsn_code = VALUES(hsn_code),
         unit = VALUES(unit),
         item_type = VALUES(item_type),
@@ -552,9 +626,16 @@ const saveItemHandler = async (req, res) => {
         purchase_price = VALUES(purchase_price),
         tax_rate = VALUES(tax_rate),
         cess_rate = VALUES(cess_rate),
+        discount = VALUES(discount),
+        discount_type = VALUES(discount_type),
+        sale_tax_mode = VALUES(sale_tax_mode),
+        purchase_tax_mode = VALUES(purchase_tax_mode),
         opening_stock = VALUES(opening_stock),
         current_stock = VALUES(current_stock),
         min_stock = VALUES(min_stock),
+        at_price = VALUES(at_price),
+        as_of_date = VALUES(as_of_date),
+        location = VALUES(location),
         is_batch_tracked = VALUES(is_batch_tracked),
         is_serial_tracked = VALUES(is_serial_tracked),
         description = VALUES(description),
@@ -563,10 +644,11 @@ const saveItemHandler = async (req, res) => {
         image_id = VALUES(image_id),
         updated_at = CURRENT_TIMESTAMP`,
       [
-        id, businessId, name, itemCode, barcode, category, hsnCode, unit,
+        id, businessId, name, itemCode, barcode, category, subCategory, hsnCode, unit,
         itemType, salePrice, purchasePrice, taxRate, cessRate,
-        openingStock, currentStock, minStock, isBatchTracked,
-        isSerialTracked, description, isActive, imageUrl, imageId
+        discount, discountType, saleTaxMode, purchaseTaxMode,
+        openingStock, currentStock, minStock, atPrice, asOfDate, location,
+        isBatchTracked, isSerialTracked, description, isActive, imageUrl, imageId
       ]
     );
 
@@ -624,6 +706,7 @@ const saveItemHandler = async (req, res) => {
         itemName: name,
         itemCode,
         category,
+        subCategory: subCategory || "",
         hsnCode,
         hsn: hsnCode,
         hsn_code: hsnCode,
@@ -635,6 +718,10 @@ const saveItemHandler = async (req, res) => {
         purchasePrice,
         taxRate,
         cessRate,
+        discount: discount ? String(discount) : "",
+        discountType,
+        saleTaxMode,
+        purchaseTaxMode,
         openingStock,
         openingQuantity: openingStock,
         opening_stock: openingStock,
@@ -644,6 +731,9 @@ const saveItemHandler = async (req, res) => {
         minStock,
         minimumStock: minStock,
         min_stock: minStock,
+        atPrice: atPrice ? String(atPrice) : "",
+        asOfDate: asOfDate || "",
+        location: location || "",
         isBatchTracked: Boolean(isBatchTracked),
         description: description || "",
         imageUrl: imageUrl || "",
@@ -662,6 +752,131 @@ const saveItemHandler = async (req, res) => {
 
 router.post("/", saveItemHandler);
 router.put("/:id", saveItemHandler);
+
+async function getReferencedItemIds(conn, businessId) {
+  const referenced = new Set();
+  const tables = [
+    "transaction_items",
+    "inventory_adjustments",
+    "purchase_job_work_items",
+    "online_store_order_items",
+  ];
+  for (const table of tables) {
+    try {
+      const [rows] = await conn.query(
+        `SELECT DISTINCT item_id FROM ${table} WHERE business_id = ? AND item_id IS NOT NULL AND item_id != ''`,
+        [businessId]
+      );
+      for (const r of rows) {
+        if (r.item_id) referenced.add(String(r.item_id));
+      }
+    } catch {}
+  }
+  return referenced;
+}
+
+/**
+ * GET /api/items/unused/preview
+ * Counts items that have zero references in transactions/adjustments/orders.
+ */
+router.get("/unused/preview", async (req, res) => {
+  try {
+    const businessId = businessIdFromRequest(req);
+    const [allItems] = await pool.query(
+      `SELECT id FROM inventory_items WHERE business_id = ?`,
+      [businessId]
+    );
+    const referenced = await getReferencedItemIds(pool, businessId);
+    const unusedIds = allItems.map((r) => String(r.id)).filter((id) => !referenced.has(id));
+    return res.json({
+      success: true,
+      data: {
+        totalItems: allItems.length,
+        unusedCount: unusedIds.length,
+        protectedCount: allItems.length - unusedIds.length,
+        unusedIds,
+      },
+    });
+  } catch (err) {
+    console.error("[Items Unused Preview Error]", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to preview unused items." });
+  }
+});
+
+/**
+ * DELETE /api/items/unused
+ * Deletes only items that have zero references in historical records.
+ */
+router.delete("/unused", async (req, res) => {
+  const conn = await pool.getConnection();
+  try {
+    const businessId = businessIdFromRequest(req);
+    const [allItems] = await conn.query(
+      `SELECT id, image_id FROM inventory_items WHERE business_id = ?`,
+      [businessId]
+    );
+    const referenced = await getReferencedItemIds(conn, businessId);
+    const toDelete = allItems.filter((r) => !referenced.has(String(r.id)));
+    const deletedIds = toDelete.map((r) => r.id);
+    const protectedCount = allItems.length - deletedIds.length;
+
+    if (deletedIds.length === 0) {
+      return res.json({
+        success: true,
+        data: { deletedCount: 0, protectedCount, deletedIds: [] },
+        message: "No unused items to delete. All items are referenced in historical records.",
+      });
+    }
+
+    await conn.beginTransaction();
+    for (let i = 0; i < deletedIds.length; i += 500) {
+      const chunk = deletedIds.slice(i, i + 500);
+      const placeholders = chunk.map(() => "?").join(",");
+      await conn.query(
+        `DELETE FROM item_batches WHERE business_id = ? AND item_id IN (${placeholders})`,
+        [businessId, ...chunk]
+      );
+      await conn.query(
+        `DELETE FROM inventory_items WHERE business_id = ? AND id IN (${placeholders})`,
+        [businessId, ...chunk]
+      );
+    }
+    await conn.commit();
+
+    const imageIdsToCheck = [...new Set(toDelete.map((r) => r.image_id).filter(Boolean))];
+    for (const imageId of imageIdsToCheck) {
+      try {
+        const [shares] = await pool.query(
+          `SELECT COUNT(*) AS count FROM inventory_items WHERE business_id = ? AND image_id = ?`,
+          [businessId, imageId]
+        );
+        if ((shares[0]?.count || 0) === 0) {
+          const fileMeta = await getFileMetadataById(imageId, businessId);
+          if (fileMeta) {
+            await storageService.deleteFile(fileMeta.storage_key, businessId).catch(() => {});
+            await deleteFileMetadata(imageId, businessId).catch(() => {});
+          }
+        }
+      } catch {}
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        deletedCount: deletedIds.length,
+        protectedCount,
+        deletedIds,
+      },
+      message: `Deleted ${deletedIds.length} unused item(s). ${protectedCount} item(s) with historical records were preserved.`,
+    });
+  } catch (err) {
+    await conn.rollback();
+    console.error("[Items Unused Delete Error]", err);
+    return res.status(500).json({ success: false, message: err.message || "Failed to delete unused items." });
+  } finally {
+    conn.release();
+  }
+});
 
 /**
  * DELETE /api/items/:id

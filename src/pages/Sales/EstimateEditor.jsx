@@ -9,6 +9,17 @@ const STATES = ["Select", "Andhra Pradesh", "Delhi", "Gujarat", "Karnataka", "Ma
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const makeRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discountPercent: "", discountAmount: "", taxRate: "NONE" });
 
+function parseTaxPercent(raw) {
+  if (raw == null || raw === "" || String(raw).trim().toUpperCase() === "NONE") return 0;
+  const match = String(raw).match(/(\d+(?:\.\d+)?)/);
+  return match ? Number(match[1]) : 0;
+}
+
+function normalizeTaxSelectValue(raw) {
+  const num = parseTaxPercent(raw);
+  return num > 0 ? String(num) : "NONE";
+}
+
 function normalizeEstimateRows(inputRows = [], inputItems = []) {
   const source = (Array.isArray(inputRows) && inputRows.length > 0)
     ? inputRows
@@ -30,7 +41,7 @@ function normalizeEstimateRows(inputRows = [], inputItems = []) {
     price: r.price != null ? String(r.price) : r.unitPrice != null ? String(r.unitPrice) : "",
     discountPercent: r.discountPercent != null ? String(r.discountPercent) : r.discount != null ? String(r.discount) : "",
     discountAmount: r.discountAmount != null ? String(r.discountAmount) : "",
-    taxRate: r.taxRate != null ? String(r.taxRate) : r.tax != null ? String(r.tax) : "NONE",
+    taxRate: normalizeTaxSelectValue(r.taxRate ?? r.tax ?? "NONE"),
   }));
 }
 
@@ -38,7 +49,7 @@ function lineTotals(row) {
   const gross = Math.max(Number(row.qty) || 0, 0) * Math.max(Number(row.price) || 0, 0);
   const discount = Math.max(Number(row.discountAmount) || gross * (Number(row.discountPercent) || 0) / 100, 0);
   const taxable = Math.max(gross - discount, 0);
-  const rate = row.taxRate === "NONE" ? 0 : Number(row.taxRate) || 0;
+  const rate = parseTaxPercent(row.taxRate);
   const tax = taxable * rate / 100;
   return { discount, tax, amount: taxable + tax };
 }
@@ -94,7 +105,7 @@ export default function EstimateEditor({ estimate, onClose, onSave, documentType
   const chooseItem = (row, name) => {
     const item = items.find((entry) => isItemActive(entry) && String(entry.itemName || entry.name).toLowerCase() === name.trim().toLowerCase());
     updateRow(row.id, "item", name);
-    if (item) setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, item: name, unit: item.unit || entry.unit, price: item.salePrice || item.price || entry.price, taxRate: String(item.taxRate || item.gstRate || "NONE") } : entry));
+    if (item) setRows((current) => current.map((entry) => entry.id === row.id ? { ...entry, item: name, unit: item.unit || entry.unit, price: item.salePrice || item.price || entry.price, taxRate: normalizeTaxSelectValue(item.taxRate || item.gstRate || "NONE") } : entry));
   };
   const save = async () => {
     const amount = Number(adjusted.toFixed(2));

@@ -11,6 +11,7 @@ import { getAppSettings } from "../../services/appSettingsStorage";
 import { getSaleOrders, saveSaleOrders, getOrderFulfillmentSummary } from "../../services/transactionRepository.js";
 import { transactionsDb, saleOrdersDb } from "../../services/databaseRepository.js";
 import { businessDataChangedEvent, notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { getScopedStorageKey } from "../../config/businessConfig.js";
 import OrderPartialConvertModal from "../../components/Common/OrderPartialConvertModal.jsx";
 import {
   buildTransactionMessage,
@@ -73,7 +74,12 @@ function normalizeSaleOrder(order) {
 }
 
 function readOrders() { try { const data = getSaleOrders(); return Array.isArray(data) ? data.map(normalizeSaleOrder) : []; } catch { return []; } }
-function rowAmount(row) { const gross = (Number(row.qty) || 0) * (Number(row.price) || 0); const discount = row.discountType === "amount" ? Number(row.discount || 0) : gross * (Number(row.discount || 0) / 100); const net = Math.max(0, gross - discount); return net + net * (Number(row.tax) || 0) / 100 + net * (Number(row.cess) || 0) / 100; }
+function parseRateNum(val) {
+  if (val == null || val === "" || String(val).trim().toUpperCase() === "NONE") return 0;
+  const m = String(val).match(/(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+}
+function rowAmount(row) { const gross = (Number(row.qty) || 0) * (Number(row.price) || 0); const discount = row.discountType === "amount" ? Number(row.discount || 0) : gross * (Number(row.discount || 0) / 100); const net = Math.max(0, gross - discount); return net + net * parseRateNum(row.tax) / 100 + net * parseRateNum(row.cess) / 100; }
 const displayDate = (date) => date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-GB") : "—";
 
 function printSaleOrderDoc(order) {
@@ -310,10 +316,12 @@ export default function SaleOrders() {
     syncRemote();
 
     const handleUpdate = () => setOrders(readOrders());
+    window.addEventListener("focus", syncRemote);
     window.addEventListener(businessDataChangedEvent, handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
       active = false;
+      window.removeEventListener("focus", syncRemote);
       window.removeEventListener(businessDataChangedEvent, handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
@@ -513,7 +521,7 @@ export default function SaleOrders() {
 
     // Update the source quotation or proforma status if converted
     if (value.convertedFromQuotationId) {
-      ["ledgerly:estimateQuotations.v1", "ledgerly:estimates.v1"].forEach((k) => {
+      ["ledgerly:estimateQuotations.v1", "ledgerly:estimates.v1"].flatMap((k) => [getScopedStorageKey(k), k]).forEach((k) => {
         try {
           const list = JSON.parse(window.localStorage.getItem(k) || "[]");
           window.localStorage.setItem(
@@ -531,7 +539,7 @@ export default function SaleOrders() {
       }).catch(() => {});
       window.dispatchEvent(new CustomEvent("ledgerly:business-data-changed"));
     } else if (value.convertedFromProformaId) {
-      ["ledgerly:proformaInvoices.v1", "ledgerly:proformas.v1"].forEach((k) => {
+      ["ledgerly:proformaInvoices.v1", "ledgerly:proformas.v1"].flatMap((k) => [getScopedStorageKey(k), k]).forEach((k) => {
         try {
           const list = JSON.parse(window.localStorage.getItem(k) || "[]");
           window.localStorage.setItem(

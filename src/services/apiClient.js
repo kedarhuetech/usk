@@ -107,6 +107,14 @@ export const itemsApi = {
   deleteImage: (imageId) => {
     return apiRequest(`/items/images/${encodeURIComponent(imageId)}`, { method: "DELETE" });
   },
+  previewUnused: () => apiRequest("/items/unused/preview"),
+  deleteUnused: () => apiRequest("/items/unused", { method: "DELETE" }),
+};
+
+export const tallyApi = {
+  listBatches: (limit = 20) => apiRequest(`/utilities/tally/batches?limit=${encodeURIComponent(limit)}`),
+  checkHash: (hash) => apiRequest(`/utilities/tally/batches/check-hash?hash=${encodeURIComponent(hash)}`),
+  recordBatch: (payload) => apiRequest("/utilities/tally/batches", { method: "POST", body: JSON.stringify(payload) }),
 };
 
 export const transactionsApi = {

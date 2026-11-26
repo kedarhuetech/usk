@@ -41,6 +41,7 @@ import balanceSheetRoutes from "./routes/balanceSheetRouter.js";
 import expenseCategoriesRoutes from "./routes/expenseCategoriesRouter.js";
 import expenseItemsRoutes from "./routes/expenseItemsRouter.js";
 import maintenanceRoutes from "./routes/maintenanceRouter.js";
+import tallyRoutes from "./routes/tallyRouter.js";
 import { runDatabaseMaintenance } from "./services/dbMaintenanceService.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
 import { pool } from "./db/mysql.js";
@@ -107,6 +108,7 @@ app.use("/api/expense-categories", requireAuth, expenseCategoriesRoutes);
 app.use("/api/expense-items", requireAuth, expenseItemsRoutes);
 app.use("/api/maintenance", requireAuth, maintenanceRoutes);
 app.use("/api/database/maintenance", requireAuth, maintenanceRoutes);
+app.use("/api/utilities/tally", requireAuth, tallyRoutes);
 
 app.get("/api/health", async (_req, res) => {
   try {
