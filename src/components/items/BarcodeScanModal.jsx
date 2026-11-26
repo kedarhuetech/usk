@@ -11,8 +11,9 @@ export default function BarcodeScanModal({ onScan, onClose, title = "Scan or Ent
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
   const streamRef = useRef(null);
+  const scannedRef = useRef(false);
 
-  const stopCamera = () => {
+  const stopCamera = (updateState = true) => {
     try {
       controlsRef.current?.stop();
     } catch {}
@@ -21,39 +22,48 @@ export default function BarcodeScanModal({ onScan, onClose, title = "Scan or Ent
       streamRef.current?.getTracks().forEach((track) => track.stop());
     } catch {}
     streamRef.current = null;
-    setCameraOpen(false);
+    if (updateState) {
+      setCameraOpen(false);
+    }
   };
 
   const startCamera = async () => {
+    scannedRef.current = false;
     setCameraOpen(true);
     setScanStatus("Requesting camera...");
     try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera access is not supported in this browser or requires HTTPS/localhost.");
+      }
       const { BrowserMultiFormatReader } = await import("@zxing/browser");
       const reader = new BrowserMultiFormatReader();
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
         audio: false,
       });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setScanStatus("Point camera at barcode...");
-        controlsRef.current = await reader.decodeFromVideoElement(videoRef.current, (result) => {
-          if (result) {
-            const text = result.getText();
-            stopCamera();
-            onScan(text);
-          }
-        });
+      if (!videoRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
       }
+      streamRef.current = stream;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+      setScanStatus("Point camera at barcode...");
+      controlsRef.current = await reader.decodeFromVideoElement(videoRef.current, (result) => {
+        if (result && !scannedRef.current) {
+          scannedRef.current = true;
+          const text = result.getText();
+          stopCamera();
+          onScan(text);
+        }
+      });
     } catch (err) {
-      setScanStatus(err.message || "Could not access camera. Please check camera permissions.");
+      setScanStatus(err?.message || "Could not access camera. Please check camera permissions.");
     }
   };
 
   useEffect(() => {
-    return () => stopCamera();
+    return () => stopCamera(false);
   }, []);
 
   return (
@@ -86,6 +96,7 @@ export default function BarcodeScanModal({ onScan, onClose, title = "Scan or Ent
               onChange={(e) => setManualCode(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && manualCode.trim()) {
+                  e.preventDefault();
                   stopCamera();
                   onScan(manualCode.trim());
                 }

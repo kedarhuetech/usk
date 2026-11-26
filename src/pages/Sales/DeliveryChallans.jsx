@@ -20,9 +20,14 @@ import {
 import { toast, ConfirmModal } from "../../components/Common/Toast.jsx";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
+import { getScopedStorageKey } from "../../config/businessConfig.js";
 
 const STORAGE_KEY = "ledgerly:deliveryChallans.v1";
-const today = () => new Date().toISOString().slice(0, 10);
+const challanStorageKey = () => getScopedStorageKey(STORAGE_KEY);
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 const money = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const dateLabel = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const freshRow = () => ({ id: crypto.randomUUID(), item: "", description: "", size: "", qty: "", unit: "NONE", price: "", discount: "", tax: "NONE", cess: "" });
@@ -73,10 +78,15 @@ function normalizeChallan(item) {
   };
 }
 
-const readChallans = () => { try { const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); return Array.isArray(value) ? value.map(normalizeChallan) : []; } catch { return []; } };
+const readChallans = () => { try { const value = JSON.parse(localStorage.getItem(challanStorageKey()) || "[]"); return Array.isArray(value) ? value.map(normalizeChallan) : []; } catch { return []; } };
+const parseRateNum = (val) => {
+  if (val == null || val === "" || String(val).trim().toUpperCase() === "NONE") return 0;
+  const m = String(val).match(/(\d+(?:\.\d+)?)/);
+  return m ? Number(m[1]) : 0;
+};
 const rowAmount = (row) => {
   const net = Math.max(0, Number(row.qty || 0) * Number(row.price || 0) - (Number(row.qty || 0) * Number(row.price || 0) * Number(row.discount || 0) / 100));
-  return net + net * (Number(row.tax) || 0) / 100 + net * (Number(row.cess) || 0) / 100;
+  return net + net * parseRateNum(row.tax) / 100 + net * parseRateNum(row.cess) / 100;
 };
 
 export default function DeliveryChallans() {
@@ -160,25 +170,31 @@ export default function DeliveryChallans() {
     async function fetchChallans() {
       try {
         const list = await transactionsDb.listByType("delivery_challan");
-        if (isMounted && Array.isArray(list) && list.length > 0) {
-          setChallans(list.map(normalizeChallan));
+        if (isMounted && Array.isArray(list)) {
+          const normalized = list.map(normalizeChallan);
+          setChallans(normalized);
+          try {
+            localStorage.setItem(challanStorageKey(), JSON.stringify(normalized));
+          } catch {}
         }
       } catch {}
     }
     fetchChallans();
     const onDataChanged = () => fetchChallans();
-    if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
-      window.addEventListener("ledgerly:business-data-changed", onDataChanged);
-      return () => {
-        isMounted = false;
-        window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
-      };
-    }
+    window.addEventListener("focus", onDataChanged);
+    window.addEventListener("storage", onDataChanged);
+    window.addEventListener("ledgerly:business-data-changed", onDataChanged);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("focus", onDataChanged);
+      window.removeEventListener("storage", onDataChanged);
+      window.removeEventListener("ledgerly:business-data-changed", onDataChanged);
+    };
   }, []);
 
   const persist = (next) => {
     setChallans(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    localStorage.setItem(challanStorageKey(), JSON.stringify(next));
     notifyBusinessDataChanged();
   };
   const exportExcel = () => {

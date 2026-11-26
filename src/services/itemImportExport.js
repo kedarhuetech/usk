@@ -53,7 +53,12 @@ export function rowsToItems(rows) {
     isActive: column("active", "isactive", "enabled"),
     description: column("description", "itemdescription", "productdescription", "details", "itemdetails", "productdetails", "desc", "notes", "itemnotes", "note", "itemnote", "remarks", "itemremarks"),
   };
-  if (indexes.name < 0) throw new Error("The file must include an Item Name column.");
+  if (indexes.name < 0) {
+    const foundColumns = rowsWithValues[0].filter(Boolean).join(", ");
+    throw new Error(
+      `The file must include an "Item Name" column (such as Item Name, Product Name, or Name).${foundColumns ? ` Found columns: ${foundColumns}.` : ""}`
+    );
+  }
   return rowsWithValues.slice(1).map((values, rowIndex) => {
     const get = (key) => indexes[key] < 0 ? "" : String(values[indexes[key]] || "").trim();
 

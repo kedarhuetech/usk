@@ -143,7 +143,7 @@ function BarcodeGenerator() {
 
   useEffect(() => {
     loadBusinessItems().then((dbItems) => {
-      if (Array.isArray(dbItems) && dbItems.length > 0) {
+      if (Array.isArray(dbItems)) {
         const seen = new Set();
         const filtered = dbItems.filter((item) => item.type !== "service").filter((item) => {
           const name = (item.itemName || "").trim().toLowerCase();
@@ -192,6 +192,7 @@ function BarcodeGenerator() {
   // Updates form.
   const updateForm = (field, value) => {
     setForm((current) => ({ ...current, [field]: value }));
+    setGenerated(null);
     setError("");
     setNotice("");
   };
@@ -200,6 +201,7 @@ function BarcodeGenerator() {
   const chooseInventoryItem = (event) => {
     const item = inventory.find((candidate) => candidate.id === event.target.value);
     if (!item) return;
+    setGenerated(null);
     setError("");
     setNotice("");
     setForm((current) => ({
@@ -219,6 +221,7 @@ function BarcodeGenerator() {
         (item.itemCode && candidate.itemCode === item.itemCode) ||
         (item.itemName && candidate.itemName?.toLowerCase() === item.itemName.toLowerCase())
     );
+    setGenerated(null);
     setError("");
     setNotice("");
     setForm((current) => ({
@@ -254,7 +257,7 @@ function BarcodeGenerator() {
       link.href = url;
       link.download = `${generated.itemName.trim().replace(/[^a-z0-9]+/gi, "-") || "barcode"}-${generated.barcode.text}.svg`;
       link.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (downloadError) {
       setError(downloadError.message || "Unable to download the barcode.");
     }

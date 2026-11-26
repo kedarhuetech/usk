@@ -122,11 +122,7 @@ function invoiceReceived(invoice) {
 // This helper handles balance logic.
 function invoiceBalance(invoice) {
   const calc = calculateInvoiceSettlement(invoice, { kind: "sale", payments: getPaymentIns() });
-  const rawBal = invoice.balanceAmount ?? invoice.balance_amount ?? invoice.balance;
-  if (rawBal != null && !isNaN(rawBal)) return Number(rawBal);
-  const amt = invoiceAmount(invoice);
-  const rec = invoiceReceived(invoice);
-  return Math.max(0, amt - rec);
+  return Number(calc.outstanding || 0);
 }
 
 function invoiceStatus(invoice) {
@@ -338,6 +334,7 @@ function SaleInvoices() {
     let active = true;
     // Refreshes result.
     const refresh = async () => {
+      if (active) setInvoiceUi(readSaleInvoiceUi());
       try {
         const rows = await loadSalesInvoices();
         if (active) setInvoices(rows.filter((invoice) => invoice.transactionType !== "purchase"));

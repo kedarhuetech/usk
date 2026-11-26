@@ -8,7 +8,6 @@ import { getInventoryItems } from "../../services/itemsStorage";
 import { saveBusinessItem, loadBusinessItems } from "../../services/businessRecords";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { notifyBusinessDataChanged } from "../../services/businessDataChanged.js";
-import { businessDataApi } from "../../services/apiClient.js";
 
 const fields = [
   { key: "itemName", label: "Item Name", type: "text" },
@@ -38,6 +37,9 @@ function itemValue(item, key) {
   if (key === "itemName") return item.itemName || item.name || "";
   if (key === "itemCode") return item.itemCode || item.code || "";
   if (key === "unit") return item.unit || item.baseUnit || "";
+  if (key === "hsn") return item.hsn || item.hsnCode || item.sac || "";
+  if (key === "minimumStock") return item.minimumStock ?? item.minStock ?? "";
+  if (key === "openingQuantity") return item.openingQuantity ?? item.openingStock ?? item.stock ?? "";
   return item[key] ?? "";
 }
 
@@ -48,9 +50,11 @@ function changedItem(item, key, value) {
     [key]: value,
     ...(key === "itemName" ? { name: value, ...(item.type === "service" ? { serviceName: value } : {}) } : {}),
     ...(key === "itemCode" ? { code: value, ...(item.type === "service" ? { serviceCode: value } : {}) } : {}),
+    ...(key === "hsn" ? { hsnCode: value, hsn_code: value, ...(item.type === "service" ? { sac: value } : {}) } : {}),
     ...(key === "unit" ? { baseUnit: value } : {}),
     ...(key === "salePrice" ? { price: value } : {}),
-    ...(key === "openingQuantity" ? { stock: value } : {}),
+    ...(key === "openingQuantity" ? { openingStock: value, opening_stock: value, currentStock: value, stock: value } : {}),
+    ...(key === "minimumStock" ? { minStock: value, min_stock: value } : {}),
   };
 }
 
@@ -75,7 +79,7 @@ function UpdateItemsInBulk() {
     setItems(getInventoryItems());
     setLoading(false);
     loadBusinessItems().then((dbItems) => {
-      if (Array.isArray(dbItems) && dbItems.length > 0) setItems(dbItems);
+      if (Array.isArray(dbItems)) setItems(dbItems);
     }).catch(() => {});
   }, []);
 
@@ -88,7 +92,7 @@ function UpdateItemsInBulk() {
       const matchesType = type === "All types" || (item.type || "product") === type;
       return matchesQuery && matchesCategory && matchesType;
     });
-  }, [items, query, category, type]);
+  }, [items, query, category, type, enableItemCategory]);
   const selectedItems = useMemo(() => items.filter((item) => selectedIds.includes(item.id)), [items, selectedIds]);
   const activeFields = useMemo(() => fields.filter((f) => enableItemCategory || f.key !== "category"), [enableItemCategory]);
   const selectedFieldDefinition = activeFields.find((field) => field.key === selectedField);
@@ -115,6 +119,9 @@ function UpdateItemsInBulk() {
       if (!value) return "Item Name cannot be blank.";
       if (selectedItems.length > 1) return "Cannot bulk rename multiple items to the exact same Item Name. Item names must be unique.";
     }
+    if (selectedField === "itemCode" && value && selectedItems.length > 1) {
+      return "Cannot assign the same Item Code to multiple items. Item codes must be unique.";
+    }
     if (numericFields.has(selectedField) && value && (!Number.isFinite(Number(value)) || Number(value) < 0)) return `${selectedFieldDefinition.label} must be a non-negative number.`;
     return "";
   };
@@ -137,9 +144,6 @@ function UpdateItemsInBulk() {
       const updated = [];
       for (const item of selectedItems) {
         const saved = await saveBusinessItem(changedItem(item, selectedField, value));
-        try {
-          businessDataApi.save("items", saved).catch(() => {});
-        } catch {}
         updated.push(saved);
       }
       setItems((current) => current.map((item) => updated.find((next) => next.id === item.id) || item));
@@ -169,7 +173,7 @@ function UpdateItemsInBulk() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-sm"><label className="flex items-center gap-2 font-semibold text-slate-700"><input type="checkbox" checked={visibleItems.length > 0 && visibleItems.every((item) => selectedIds.includes(item.id))} onChange={toggleVisible} />Select visible ({visibleItems.length})</label><span className="text-slate-500">{selectedIds.length} selected</span></div>
             {loading ? <p className="p-8 text-center text-sm text-slate-500">Loading items...</p> : <div className="max-h-[28rem] overflow-auto"><table className="min-w-full text-left text-sm"><thead className="bg-white text-xs uppercase text-slate-500"><tr><th className="w-12 px-4 py-3"></th><th className="px-4 py-3">Item</th><th className="px-4 py-3">Code</th>{enableItemCategory && <th className="px-4 py-3">Category</th>}<th className="px-4 py-3">Type</th></tr></thead><tbody>{visibleItems.map((item) => <tr key={item.id} className="border-t border-slate-100"><td className="px-4 py-3"><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleItem(item.id)} aria-label={`Select ${item.itemName || item.name}`} /></td><td className="px-4 py-3 font-semibold text-slate-800">{item.itemName || item.name || "-"}</td><td className="px-4 py-3 text-slate-600">{item.itemCode || item.code || "-"}</td>{enableItemCategory && <td className="px-4 py-3 text-slate-600">{item.category || "-"}</td>}<td className="px-4 py-3 text-slate-600">{item.type || "product"}</td></tr>)}</tbody></table>{!visibleItems.length && <p className="p-8 text-center text-sm text-slate-500">No items match the current search and filters.</p>}</div>}
-            <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 p-4"><label className="min-w-64 flex-1 text-sm font-semibold text-slate-700">Field to update<select value={selectedField} onChange={(event) => chooseField(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Choose a supported field</option>{fields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label>{selectedFieldDefinition && <label className="min-w-64 flex-1 text-sm font-semibold text-slate-700">New value{selectedFieldDefinition.type === "select" ? <select value={fieldValues[selectedField] || ""} onChange={(event) => setFieldValues((current) => ({ ...current, [selectedField]: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Choose value</option>{selectedFieldDefinition.options.map((option) => <option key={option}>{option}</option>)}</select> : <input type={selectedFieldDefinition.type} value={fieldValues[selectedField] || ""} onChange={(event) => setFieldValues((current) => ({ ...current, [selectedField]: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 font-normal" />}</label>}<Button onClick={continueToPreview} disabled={!selectedIds.length || !selectedField} className="bg-emerald-600 text-white hover:bg-emerald-700">Review Changes</Button></div>
+            <div className="flex flex-wrap items-end gap-3 border-t border-slate-200 p-4"><label className="min-w-64 flex-1 text-sm font-semibold text-slate-700">Field to update<select value={selectedField} onChange={(event) => chooseField(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Choose a supported field</option>{activeFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}</select></label>{selectedFieldDefinition && <label className="min-w-64 flex-1 text-sm font-semibold text-slate-700">New value{selectedFieldDefinition.type === "select" ? <select value={fieldValues[selectedField] || ""} onChange={(event) => setFieldValues((current) => ({ ...current, [selectedField]: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Choose value</option>{selectedFieldDefinition.options.map((option) => <option key={option}>{option}</option>)}</select> : <input type={selectedFieldDefinition.type} value={fieldValues[selectedField] || ""} onChange={(event) => setFieldValues((current) => ({ ...current, [selectedField]: event.target.value }))} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 font-normal" />}</label>}<Button onClick={continueToPreview} disabled={!selectedIds.length || !selectedField} className="bg-emerald-600 text-white hover:bg-emerald-700">Review Changes</Button></div>
           </Card>
         ) : (
           <Card className="overflow-hidden">

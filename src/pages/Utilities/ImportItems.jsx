@@ -6,7 +6,7 @@ import { FiAlertCircle, FiCamera, FiCheckCircle, FiImage, FiSearch, FiUpload, Fi
 import * as XLSX from "xlsx";
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
-import { saveBusinessItem } from "../../services/businessRecords";
+import { loadBusinessItems, saveBusinessItem } from "../../services/businessRecords";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import { rowsToItems } from "../../services/itemImportExport.js";
@@ -36,19 +36,26 @@ function createBarcodeReader() {
 }
 
 // Parses csv.
+function detectCsvDelimiter(text) {
+  const firstLine = String(text || "").split(/\r?\n/)[0] || "";
+  if (firstLine.includes(",") || (!firstLine.includes(";") && !firstLine.includes("\t"))) return ",";
+  return firstLine.includes("\t") ? "\t" : ";";
+}
+
 function parseCsv(text) {
   const rows = [];
   let row = [];
   let cell = "";
   let quoted = false;
   const source = String(text || "").replace(/^\uFEFF/, "");
+  const delimiter = detectCsvDelimiter(source);
   for (let index = 0; index < source.length; index += 1) {
     const character = source[index];
     if (character === '"' && quoted && source[index + 1] === '"') {
       cell += '"';
       index += 1;
     } else if (character === '"') quoted = !quoted;
-    else if (character === "," && !quoted) {
+    else if (character === delimiter && !quoted) {
       row.push(cell.trim());
       cell = "";
     } else if ((character === "\n" || character === "\r") && !quoted) {
@@ -66,30 +73,62 @@ function parseCsv(text) {
 
 // Parses excel.
 async function parseExcel(file) {
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+  let workbook;
+  try {
+    workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+  } catch {
+    throw new Error("Could not read the Excel file. Make sure it is a valid, uncorrupted .xlsx or .xls workbook.");
+  }
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!firstSheet) throw new Error("The Excel workbook does not contain a worksheet.");
   return rowsToItems(XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: "", raw: false }));
 }
 
 // Validates rows.
-function validateRows(rows) {
+function validateRows(rows, existingItems = []) {
   const seen = new Set();
+  const seenBarcodes = new Set();
+  const existingKeys = new Set();
+  const existingBarcodes = new Set();
+  for (const item of existingItems) {
+    if (item.itemCode) existingKeys.add(`code:${String(item.itemCode).trim().toLowerCase()}`);
+    if (item.itemName) existingKeys.add(`name:${String(item.itemName).trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}`);
+    if (item.barcode) existingBarcodes.add(String(item.barcode).trim().toLowerCase());
+  }
+
   return rows.map((row) => {
     const errors = [];
     if (!row.itemName) errors.push("Item Name is required");
     if (row.salePrice && (!Number.isFinite(Number(row.salePrice)) || Number(row.salePrice) < 0)) errors.push("Sale Price must be a non-negative number");
     if (row.purchasePrice && (!Number.isFinite(Number(row.purchasePrice)) || Number(row.purchasePrice) < 0)) errors.push("Purchase Price must be a non-negative number");
     if (row.discount && (!Number.isFinite(Number(row.discount)) || Number(row.discount) < 0)) errors.push("Discount must be a non-negative number");
+    if (row.cessRate && (!Number.isFinite(Number(row.cessRate)) || Number(row.cessRate) < 0)) errors.push("Cess Rate must be a non-negative number");
     if (row.openingQuantity && (!Number.isFinite(Number(row.openingQuantity)) || Number(row.openingQuantity) < 0)) errors.push("Quantity must be a non-negative number");
     if (row.openingStock && (!Number.isFinite(Number(row.openingStock)) || Number(row.openingStock) < 0)) errors.push("Opening Stock must be a non-negative number");
     if (row.minimumStock && (!Number.isFinite(Number(row.minimumStock)) || Number(row.minimumStock) < 0)) errors.push("Minimum Stock must be a non-negative number");
     if (row.minStock && (!Number.isFinite(Number(row.minStock)) || Number(row.minStock) < 0)) errors.push("Minimum Stock must be a non-negative number");
-    const key = row.itemCode
-      ? `code:${row.itemCode.toLowerCase()}`
-      : `name:${row.itemName.toLowerCase()}|${row.unit.toLowerCase()}`;
-    if (seen.has(key)) errors.push("Duplicate item in this file");
-    seen.add(key);
+
+    if (row.itemCode || row.itemName) {
+      const key = row.itemCode
+        ? `code:${row.itemCode.toLowerCase()}`
+        : `name:${row.itemName.toLowerCase()}|${row.unit.toLowerCase()}`;
+      if (seen.has(key)) errors.push("Duplicate item in this file");
+      seen.add(key);
+
+      const codeKey = row.itemCode ? `code:${row.itemCode.toLowerCase()}` : "";
+      const nameKey = row.itemName ? `name:${row.itemName.toLowerCase()}|${row.unit.toLowerCase()}` : "";
+      if ((codeKey && existingKeys.has(codeKey)) || (nameKey && existingKeys.has(nameKey))) {
+        errors.push("Already exists in inventory");
+      }
+    }
+
+    if (row.barcode) {
+      const bKey = row.barcode.toLowerCase();
+      if (seenBarcodes.has(bKey)) errors.push("Duplicate barcode in this file");
+      seenBarcodes.add(bKey);
+      if (existingBarcodes.has(bKey)) errors.push("Barcode already assigned in inventory");
+    }
+
     return { ...row, errors };
   });
 }
@@ -193,6 +232,7 @@ function ImportItems() {
   const [rows, setRows] = useState([]);
   const [fileError, setFileError] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState("success");
   const [saving, setSaving] = useState(false);
   const [barcode, setBarcode] = useState("");
   const [lookupState, setLookupState] = useState({ status: "idle", message: "" });
@@ -228,6 +268,9 @@ function ImportItems() {
     nativeStream.current?.getTracks().forEach((track) => track.stop());
     const stream = cameraVideo.current?.srcObject;
     if (stream) stream.getTracks().forEach((track) => track.stop());
+  }, []);
+
+  useEffect(() => () => {
     if (imagePreview) URL.revokeObjectURL(imagePreview);
   }, [imagePreview]);
 
@@ -494,14 +537,23 @@ function ImportItems() {
     setMessage("");
     setRows([]);
     try {
+      if (file.size > 15 * 1024 * 1024) {
+        throw new Error("File is too large. Please upload a file smaller than 15 MB.");
+      }
       const fileName = file.name.toLowerCase();
       const parsed = fileName.endsWith(".csv")
         ? parseCsv(await file.text())
         : fileName.endsWith(".xlsx") || fileName.endsWith(".xls")
           ? await parseExcel(file)
-          : (() => { throw new Error("Choose a .xlsx, .xls, or .csv file."); })();
+          : (() => { throw new Error("Unsupported file type. Choose a .xlsx, .xls, or .csv file."); })();
       if (parsed.length > maxRows) throw new Error(`Import up to ${maxRows} rows at a time.`);
-      setRows(validateRows(parsed));
+      let existingItems = [];
+      try {
+        existingItems = await loadBusinessItems();
+      } catch {
+        try { existingItems = getInventoryItems(); } catch {}
+      }
+      setRows(validateRows(parsed, existingItems));
     } catch (error) {
       setFileError(error.message || "Could not read this file.");
     } finally {
@@ -512,6 +564,7 @@ function ImportItems() {
   // Imports items.
   const importItems = async () => {
     if (!validRows.length) {
+      setMessageTone("error");
       setMessage("There are no valid rows to import.");
       return;
     }
@@ -521,9 +574,10 @@ function ImportItems() {
     const failures = [];
     let existingItems;
     try {
-      existingItems = getInventoryItems();
+      existingItems = await loadBusinessItems().catch(() => getInventoryItems());
     } catch (error) {
       setSaving(false);
+      setMessageTone("error");
       setMessage(`Import stopped before saving because existing items could not be checked: ${error.message || "backend/database unavailable"}`);
       return;
     }
@@ -531,11 +585,13 @@ function ImportItems() {
       item.itemCode ? `code:${String(item.itemCode).trim().toLowerCase()}` : "",
       `name:${String(item.itemName || "").trim().toLowerCase()}|${String(item.unit || "").trim().toLowerCase()}`,
     ].filter(Boolean)));
+    const existingBarcodes = new Set(existingItems.map((item) => item.barcode ? String(item.barcode).trim().toLowerCase() : "").filter(Boolean));
     for (const row of validRows) {
       const codeKey = row.itemCode ? `code:${row.itemCode.toLowerCase()}` : "";
       const nameKey = `name:${row.itemName.toLowerCase()}|${row.unit.toLowerCase()}`;
-      if ((codeKey && existingKeys.has(codeKey)) || existingKeys.has(nameKey)) {
-        failures.push(`Row ${row.rowNumber}: item already exists`);
+      const barcodeKey = row.barcode ? row.barcode.toLowerCase() : "";
+      if ((codeKey && existingKeys.has(codeKey)) || existingKeys.has(nameKey) || (barcodeKey && existingBarcodes.has(barcodeKey))) {
+        failures.push(`Row ${row.rowNumber}: item or barcode already exists`);
         continue;
       }
       try {
@@ -557,11 +613,13 @@ function ImportItems() {
         imported += 1;
         if (codeKey) existingKeys.add(codeKey);
         existingKeys.add(nameKey);
+        if (barcodeKey) existingBarcodes.add(barcodeKey);
       } catch (error) {
         failures.push(`Row ${row.rowNumber}: ${error.message || "save failed"}`);
       }
     }
     setSaving(false);
+    setMessageTone(imported === 0 ? "error" : failures.length > 0 ? "warning" : "success");
     setMessage(`${imported} item${imported === 1 ? "" : "s"} imported.${failures.length ? ` ${failures.length} item${failures.length === 1 ? "" : "s"} failed: ${failures.join(" | ")}` : ""}`);
   };
 
@@ -579,7 +637,7 @@ function ImportItems() {
           <input ref={fileInput} type="file" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" className="hidden" onChange={selectFile} />
           <Button onClick={() => fileInput.current?.click()} className="mt-5 bg-[#1A1F71] text-white hover:bg-[#14185D]"><FiUpload /> Choose Excel or CSV</Button>
           {fileError && <p role="alert" className="mt-4 flex gap-2 rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><FiAlertCircle />{fileError}</p>}
-          {message && <p role="status" className="mt-4 flex gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><FiCheckCircle />{message}</p>}
+          {message && <p role={messageTone === "error" ? "alert" : "status"} className={`mt-4 flex gap-2 rounded-lg p-3 text-sm ${messageTone === "error" ? "bg-rose-50 text-rose-800" : messageTone === "warning" ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}>{messageTone === "success" ? <FiCheckCircle /> : <FiAlertCircle />}{message}</p>}
         </Card>
         {enableBarcodeScanning && (<>
         <Card className="p-5">
