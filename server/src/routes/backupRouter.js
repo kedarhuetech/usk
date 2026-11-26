@@ -13,17 +13,17 @@ import { restoreUsvToDatabase } from "../services/backupRestoreService.js";
 const router = Router();
 
 export const BACKUP_TABLES = [
-  "businesses", "company_profiles", "company_profile_assets", "app_settings", "parties",
+  "company_profiles", "company_profile_assets", "app_settings", "parties",
   "units", "inventory_items", "item_batches", "inventory_adjustments",
   "transactions", "transaction_items", "service_reminders", "service_reminder_history",
   "bank_accounts", "bank_transactions", "cash_in_hand", "cheques", "loan_accounts",
-  "expense_categories", "online_store_settings", "online_store_orders",
+  "expense_categories", "expense_items", "online_store_settings", "online_store_orders",
   "online_store_order_items", "smart_ads", "audit_trails"
 ];
 
 /**
  * GET /api/backup/export
- * Dumps all tables for the current business
+ * Dumps all tenant-scoped tables for the authenticated business only.
  */
 router.get("/export", async (req, res) => {
   try {
@@ -41,19 +41,16 @@ router.get("/export", async (req, res) => {
       try {
         const [hasBiz] = await pool.query(
           `SELECT COUNT(*) AS c FROM information_schema.COLUMNS 
-           WHERE TABLE_SCHEMA = 'vyapaar' AND TABLE_NAME = ? AND COLUMN_NAME = 'business_id'`,
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'business_id'`,
           [table]
         );
 
-        let rows = [];
-        if (hasBiz[0]?.c > 0) {
-          const [result] = await pool.query(`SELECT * FROM \`${table}\` WHERE business_id = ?`, [businessId]);
-          rows = result;
-        } else {
-          const [result] = await pool.query(`SELECT * FROM \`${table}\``);
-          rows = result;
+        if (!(hasBiz[0]?.c > 0)) {
+          // Never export global tables without business_id
+          continue;
         }
 
+        const [rows] = await pool.query(`SELECT * FROM \`${table}\` WHERE business_id = ?`, [businessId]);
         dump.tables[table] = rows;
         dump.summary[table] = rows.length;
       } catch (err) {
@@ -93,14 +90,15 @@ router.post("/restore", async (req, res) => {
       const rows = payload.tables[table];
       if (!Array.isArray(rows) || rows.length === 0) continue;
 
-      // Clean existing rows for this business
-      try {
-        await conn.query(`DELETE FROM \`${table}\` WHERE business_id = ?`, [businessId]);
-      } catch {}
+      // Clean existing rows for this business only
+      await conn.query(`DELETE FROM \`${table}\` WHERE business_id = ?`, [businessId]);
 
       for (const row of rows) {
-        const keys = Object.keys(row).map((k) => `\`${k}\``);
-        const values = Object.values(row).map((v) => {
+        if (!row || typeof row !== "object") continue;
+        // Force authenticated business_id; never allow payload row to target another business
+        const scopedRow = { ...row, business_id: businessId };
+        const keys = Object.keys(scopedRow).map((k) => `\`${k}\``);
+        const values = Object.values(scopedRow).map((v) => {
           if (v && typeof v === "object" && v.type === "Buffer" && Array.isArray(v.data)) {
             return Buffer.from(v.data);
           }

@@ -249,6 +249,7 @@ export default function AddPartyModal({
     loyaltyPoints: 0,
     ...(initialParty || {}),
     partyName: initialParty?.partyName || initialParty?.name || "",
+    partyType: (initialParty?.partyType || initialParty?.party_type || "customer").toLowerCase(),
     phone: initialParty?.phone || initialParty?.phoneNumber || "",
     billingAddress: initialParty?.billingAddress || initialParty?.address || "",
   }));
@@ -421,7 +422,7 @@ export default function AddPartyModal({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className={`grid gap-4 md:grid-cols-2 ${(appSettings.enablePartyGrouping ?? true) ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
+        <div className={`grid gap-4 md:grid-cols-2 ${(appSettings.enablePartyGrouping ?? true) ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
           <div>
             <Input
               label="Party Name *"
@@ -438,6 +439,19 @@ export default function AddPartyModal({
               </p>
             )}
           </div>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-slate-600">Party Type</span>
+            <select
+              aria-label="Party Type"
+              value={form.partyType || "customer"}
+              onChange={(event) => setField("partyType", event.target.value)}
+              className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-blue-500"
+            >
+              <option value="customer">Customer</option>
+              <option value="supplier">Supplier</option>
+              <option value="both">Both (Customer &amp; Supplier)</option>
+            </select>
+          </label>
           <div>
             <Input label="GSTIN" value={form.gstin} onChange={(event) => setField("gstin", event.target.value)} placeholder="GSTIN" />
             {duplicateGstinParty && (

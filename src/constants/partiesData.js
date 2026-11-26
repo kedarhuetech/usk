@@ -53,6 +53,7 @@ export const additionalPartyFields = [
 
 export const partyFormDefaults = {
   partyName: "",
+  partyType: "customer",
   gstin: "",
   phone: "",
   group: "General",

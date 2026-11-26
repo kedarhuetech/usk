@@ -14,6 +14,7 @@ import {
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
+import { apiRequest } from "../../services/apiClient.js";
 import { toast as toastNotification } from "../../components/Common/Toast.jsx";
 
 export default function TransactionMessageTab({ settings, update }) {
@@ -26,6 +27,7 @@ export default function TransactionMessageTab({ settings, update }) {
   const [metaStatus, setMetaStatus] = useState({
     connected: false,
     loading: true,
+    error: "",
     phoneNumber: "",
     templates: [],
     approvedCount: 0,
@@ -33,14 +35,15 @@ export default function TransactionMessageTab({ settings, update }) {
   });
 
   const loadMetaConnection = () => {
-    fetch("/api/whatsapp-business/connection")
-      .then((r) => r.json())
+    setMetaStatus((prev) => ({ ...prev, loading: true, error: "" }));
+    apiRequest("/whatsapp-business/connection")
       .then((data) => {
         const templates = data.assets?.templates || [];
         const approvedCount = templates.filter((t) => t.status === "APPROVED").length;
         const pendingCount = templates.filter((t) => t.status === "PENDING").length;
         setMetaStatus({
           connected: Boolean(data.connected || data.testModeConfigured),
+          error: "",
           phoneNumber: data.selection?.phoneNumberId || data.assets?.phoneNumbers?.[0]?.display_phone_number || "",
           templates,
           approvedCount,
@@ -48,7 +51,17 @@ export default function TransactionMessageTab({ settings, update }) {
           loading: false,
         });
       })
-      .catch(() => setMetaStatus({ connected: false, loading: false, phoneNumber: "", templates: [], approvedCount: 0, pendingCount: 0 }));
+      .catch((err) =>
+        setMetaStatus({
+          connected: false,
+          loading: false,
+          error: err?.message || "Failed to verify WhatsApp connection.",
+          phoneNumber: "",
+          templates: [],
+          approvedCount: 0,
+          pendingCount: 0,
+        })
+      );
   };
 
   useEffect(() => {
@@ -161,9 +174,31 @@ export default function TransactionMessageTab({ settings, update }) {
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="text-xs font-bold text-slate-900">WhatsApp</p>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        {metaStatus.connected ? "Meta API Connected" : "Active"}
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                          metaStatus.error
+                            ? "bg-rose-100 border-rose-300 text-rose-800"
+                            : metaStatus.connected
+                            ? "bg-emerald-100 border-emerald-300 text-emerald-800"
+                            : "bg-slate-100 border-slate-300 text-slate-700"
+                        }`}
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            metaStatus.error
+                              ? "bg-rose-500"
+                              : metaStatus.connected
+                              ? "bg-emerald-500 animate-pulse"
+                              : "bg-slate-400"
+                          }`}
+                        />
+                        {metaStatus.loading
+                          ? "Checking..."
+                          : metaStatus.error
+                          ? "Connection Error"
+                          : metaStatus.connected
+                          ? "Meta API Connected"
+                          : "Disconnected"}
                       </span>
                       {metaStatus.approvedCount > 0 && (
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">

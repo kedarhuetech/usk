@@ -77,27 +77,34 @@ app.use("/api/meta-business", metaBusinessRoutes);
 app.use("/api/meta/ads", metaAdsRoutes);
 app.use("/api/whatsapp-business", whatsappBusinessRoutes);
 app.use("/api/whatsapp", whatsappWebhookRoutes);
-app.use("/api/parties", partiesRoutes);
-app.use("/api/items", itemsRoutes);
-app.use("/api/transactions", transactionsRoutes);
-app.use("/api/service-reminders", serviceRemindersRoutes);
-app.use("/api/bank-accounts", bankAccountsRoutes);
-app.use("/api/settings", settingsRoutes);
-app.use("/api/migration", migrationRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/cash-bank", cashBankRoutes);
-app.use("/api/units", unitsRoutes);
-app.use("/api/inventory-adjustments", inventoryAdjustmentsRoutes);
+const requireAuthForSettings = (req, res, next) => {
+  if (req.method === "GET" && /(?:^|\/)company-profile\/assets\/[^/]+$/.test(req.path)) {
+    return next();
+  }
+  return requireAuth(req, res, next);
+};
+
+app.use("/api/parties", requireAuth, partiesRoutes);
+app.use("/api/items", requireAuth, itemsRoutes);
+app.use("/api/transactions", requireAuth, transactionsRoutes);
+app.use("/api/service-reminders", requireAuth, serviceRemindersRoutes);
+app.use("/api/bank-accounts", requireAuth, bankAccountsRoutes);
+app.use("/api/settings", requireAuthForSettings, settingsRoutes);
+app.use("/api/migration", requireAuth, migrationRoutes);
+app.use("/api/dashboard", requireAuth, dashboardRoutes);
+app.use("/api/cash-bank", requireAuth, cashBankRoutes);
+app.use("/api/units", requireAuth, unitsRoutes);
+app.use("/api/inventory-adjustments", requireAuth, inventoryAdjustmentsRoutes);
 app.use("/api/online-store", onlineStoreRoutes);
 app.use("/api/smart-ads", smartAdsRoutes);
-app.use("/api/audit-trail", auditTrailRoutes);
-app.use("/api/reports", reportsRoutes);
-app.use("/api/backup", backupRoutes);
+app.use("/api/audit-trail", requireAuth, auditTrailRoutes);
+app.use("/api/reports", requireAuth, reportsRoutes);
+app.use("/api/backup", requireAuth, backupRoutes);
 app.use("/api/hsn", hsnRoutes);
-app.use("/api/purchase-job-works", purchaseJobWorksRoutes);
-app.use("/api/balance-sheet", balanceSheetRoutes);
-app.use("/api/expense-categories", expenseCategoriesRoutes);
-app.use("/api/expense-items", expenseItemsRoutes);
+app.use("/api/purchase-job-works", requireAuth, purchaseJobWorksRoutes);
+app.use("/api/balance-sheet", requireAuth, balanceSheetRoutes);
+app.use("/api/expense-categories", requireAuth, expenseCategoriesRoutes);
+app.use("/api/expense-items", requireAuth, expenseItemsRoutes);
 app.use("/api/maintenance", requireAuth, maintenanceRoutes);
 app.use("/api/database/maintenance", requireAuth, maintenanceRoutes);
 

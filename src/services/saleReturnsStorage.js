@@ -1,7 +1,6 @@
 import { calculateRow, toNumber } from "../utils/saleInvoice.js";
-import { inventoryItemsStorageKey } from "./itemsStorage.js";
+import { getInventoryItems, applyBatchRowsToInventory, inventoryItemsStorageKey } from "./itemsStorage.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
-import { applyBatchRowsToInventory } from "./itemsStorage.js";
 import { batchMovementStorageKey, moveBatchRows, reverseBatchMovement } from "./batchInventoryService.js";
 import { getAppSettings } from "./appSettingsStorage.js";
 import { readTransactionCollection, writeTransactionCollection } from "./transactionRepository.js";
@@ -40,11 +39,17 @@ function itemInventoryKey(item) {
 }
 
 function readList(key) {
-  const raw = window.localStorage.getItem(key);
-  if (raw == null) return [];
-  const value = JSON.parse(raw);
-  if (!Array.isArray(value)) throw new Error(`Saved ${key} data is invalid.`);
-  return value;
+  const scoped = readTransactionCollection(key);
+  if (scoped.length > 0) return scoped;
+  if (typeof window !== "undefined" && window.localStorage) {
+    const raw = window.localStorage.getItem(key);
+    if (raw != null) {
+      const value = JSON.parse(raw);
+      if (!Array.isArray(value)) throw new Error(`Saved ${key} data is invalid.`);
+      return value;
+    }
+  }
+  return scoped;
 }
 
 export function getSaleReturns() {

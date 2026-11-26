@@ -65,7 +65,6 @@ async function seedDefaultCategories(businessId) {
 router.get("/", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    await seedDefaultCategories(businessId);
 
     const [rows] = await pool.query(
       `SELECT * FROM expense_categories WHERE business_id = ? ORDER BY category_name ASC`,

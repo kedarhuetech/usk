@@ -9,6 +9,7 @@ export const APP_SETTINGS_KEY = "ledgerly:appSettings.v1";
 export const getAppSettingsStorageKey = () => getScopedStorageKey(APP_SETTINGS_KEY);
 export const APP_SETTINGS_UPDATED_EVENT = "ledgerly:app-settings-updated";
 export const AUTO_BACKUP_HISTORY_KEY = "ledgerly:autoBackupSnapshots.v1";
+export const getAutoBackupHistoryStorageKey = () => getScopedStorageKey(AUTO_BACKUP_HISTORY_KEY);
 
 const defaultCompany = () => {
   try {
@@ -355,13 +356,33 @@ export const DEFAULT_SETTINGS = {
   multiCurrencyList: [],
 };
 
+function buildResetSettingsPayload(current = {}) {
+  const nextDefaults = { ...DEFAULT_SETTINGS };
+  const preserveKeys = [
+    "companyName",
+    "companyNamePrint",
+    "companyPhone",
+    "phoneNumberPrint",
+    "companyLogo",
+    "signatureImage",
+    "firms",
+  ];
+  for (const key of preserveKeys) {
+    if (current[key] !== undefined) {
+      nextDefaults[key] = current[key];
+    }
+  }
+  return nextDefaults;
+}
+
 export function resetAppSettings() {
   if (typeof window === "undefined" || !window.localStorage) return { ...DEFAULT_SETTINGS };
+  const nextDefaults = buildResetSettingsPayload(getAppSettings());
   try {
-    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(DEFAULT_SETTINGS));
+    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(nextDefaults));
     window.localStorage.removeItem(getScopedStorageKey("ledgerly:serviceReminderSettings.v1"));
-    applyScreenZoom(DEFAULT_SETTINGS.screenZoom || "100%");
-    window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: DEFAULT_SETTINGS }));
+    applyScreenZoom(nextDefaults.screenZoom || "100%");
+    window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: nextDefaults }));
     recordAuditTrail({
       action: "Settings Reset to Defaults",
       entity: "Settings",
@@ -371,7 +392,43 @@ export function resetAppSettings() {
   } catch (error) {
     console.error("Failed to reset settings in storage", error);
   }
-  return { ...DEFAULT_SETTINGS };
+  return nextDefaults;
+}
+
+export async function resetAppSettingsAuthoritative() {
+  const current = getAppSettings();
+  const nextDefaults = buildResetSettingsPayload(current);
+  if (isDatabaseMode()) {
+    await settingsDb.saveSettings(nextDefaults);
+  }
+  if (typeof window !== "undefined" && window.localStorage) {
+    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(nextDefaults));
+    window.localStorage.removeItem(getScopedStorageKey("ledgerly:serviceReminderSettings.v1"));
+    applyScreenZoom(nextDefaults.screenZoom || "100%");
+    window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: nextDefaults }));
+    recordAuditTrail({
+      action: "Settings Reset to Defaults",
+      entity: "Settings",
+      details: "All settings restored to system defaults",
+      user: "Current User",
+    });
+  }
+  return nextDefaults;
+}
+
+export async function loadAuthoritativeAppSettings() {
+  const remote = await settingsDb.getSettings({ throwOnError: true });
+  const merged = {
+    ...DEFAULT_SETTINGS,
+    ...(remote && typeof remote === "object" ? remote : {}),
+  };
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(merged));
+    } catch {}
+    window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: merged }));
+  }
+  return merged;
 }
 
 export function getAppSettings() {
@@ -445,6 +502,58 @@ export function getAppSettings() {
   }
 }
 
+let settingsSaveQueue = Promise.resolve();
+
+function syncReminderPreferencesCache(updates) {
+  if (
+    updates.serviceRemindersEnabled === undefined &&
+    updates.reminderDaysBefore === undefined &&
+    updates.serviceRemindersAutoWhatsApp === undefined
+  ) {
+    return;
+  }
+  try {
+    const reminderKey = getScopedStorageKey("ledgerly:serviceReminderSettings.v1");
+    const rawReminder = window.localStorage.getItem(reminderKey);
+    const parsed = rawReminder ? JSON.parse(rawReminder) : {};
+    const updatedReminder = {
+      ...parsed,
+      ...(updates.serviceRemindersEnabled !== undefined ? { enabled: Boolean(updates.serviceRemindersEnabled) } : {}),
+      ...(updates.reminderDaysBefore !== undefined ? { reminderDaysBefore: Number(updates.reminderDaysBefore) } : {}),
+      ...(updates.serviceRemindersAutoWhatsApp !== undefined ? { autoNotifyWhatsApp: Boolean(updates.serviceRemindersAutoWhatsApp) } : {}),
+    };
+    window.localStorage.setItem(reminderKey, JSON.stringify(updatedReminder));
+  } catch {}
+}
+
+export async function saveAppSettingsAuthoritative(updates) {
+  const task = settingsSaveQueue.then(async () => {
+    if (typeof window === "undefined" || !window.localStorage) {
+      return { ...DEFAULT_SETTINGS, ...updates };
+    }
+    const current = getAppSettings();
+    const next = { ...current, ...updates };
+    if (isDatabaseMode()) {
+      await settingsDb.saveSettings(updates);
+    }
+    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(next));
+    if (updates.screenZoom) {
+      applyScreenZoom(updates.screenZoom);
+    }
+    syncReminderPreferencesCache(updates);
+    window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: next }));
+    recordAuditTrail({
+      action: "Settings Updated",
+      entity: "Settings",
+      details: Object.keys(updates).join(", "),
+      user: "Current User",
+    });
+    return next;
+  });
+  settingsSaveQueue = task.catch(() => {});
+  return task;
+}
+
 export function saveAppSettings(updates) {
   if (typeof window === "undefined" || !window.localStorage) return DEFAULT_SETTINGS;
   const current = getAppSettings();
@@ -454,24 +563,7 @@ export function saveAppSettings(updates) {
     if (updates.screenZoom) {
       applyScreenZoom(updates.screenZoom);
     }
-    if (
-      updates.serviceRemindersEnabled !== undefined ||
-      updates.reminderDaysBefore !== undefined ||
-      updates.serviceRemindersAutoWhatsApp !== undefined
-    ) {
-      try {
-        const reminderKey = getScopedStorageKey("ledgerly:serviceReminderSettings.v1");
-        const rawReminder = window.localStorage.getItem(reminderKey);
-        const parsed = rawReminder ? JSON.parse(rawReminder) : {};
-        const updatedReminder = {
-          ...parsed,
-          ...(updates.serviceRemindersEnabled !== undefined ? { enabled: Boolean(updates.serviceRemindersEnabled) } : {}),
-          ...(updates.reminderDaysBefore !== undefined ? { reminderDaysBefore: Number(updates.reminderDaysBefore) } : {}),
-          ...(updates.serviceRemindersAutoWhatsApp !== undefined ? { autoNotifyWhatsApp: Boolean(updates.serviceRemindersAutoWhatsApp) } : {}),
-        };
-        window.localStorage.setItem(reminderKey, JSON.stringify(updatedReminder));
-      } catch {}
-    }
+    syncReminderPreferencesCache(updates);
     window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: next }));
     recordAuditTrail({
       action: "Settings Updated",
@@ -533,7 +625,7 @@ export function formatCurrency(value, currencyCode = null) {
 export function getAutoBackupHistory() {
   if (typeof window === "undefined" || !window.localStorage) return [];
   try {
-    const raw = window.localStorage.getItem(AUTO_BACKUP_HISTORY_KEY);
+    const raw = window.localStorage.getItem(getAutoBackupHistoryStorageKey());
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -567,7 +659,7 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
   try {
     const history = getAutoBackupHistory();
     const updatedHistory = [snapshotRecord, ...history].slice(0, 10); // keep last 10 rolling snapshots
-    window.localStorage.setItem(AUTO_BACKUP_HISTORY_KEY, JSON.stringify(updatedHistory));
+    window.localStorage.setItem(getAutoBackupHistoryStorageKey(), JSON.stringify(updatedHistory));
 
     // Update settings timestamp
     const current = getAppSettings();
@@ -576,7 +668,7 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
       lastBackupDate: formattedDate,
       lastBackupTimestamp: now.toISOString(),
     };
-    window.localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(nextSettings));
+    window.localStorage.setItem(getAppSettingsStorageKey(), JSON.stringify(nextSettings));
     window.dispatchEvent(new CustomEvent(APP_SETTINGS_UPDATED_EVENT, { detail: nextSettings }));
 
     recordAuditTrail({
@@ -632,98 +724,51 @@ export function restoreSnapshot(snapshotId) {
 }
 
 export async function exportBackupData() {
-  if (typeof window === "undefined" || !window.localStorage) return;
-  // Also create a local snapshot
+  if (typeof window === "undefined" || !window.localStorage) return null;
+  const {
+    syncAllFromDatabase,
+    collectBackupData,
+    createBackupPayload,
+    downloadBackupFile,
+  } = await import("./backupToComputer.js");
+
+  if (isDatabaseMode()) {
+    await syncAllFromDatabase();
+  }
+  const collected = collectBackupData(window.localStorage);
+  const payload = createBackupPayload(collected);
+  await downloadBackupFile(payload);
+
   createAutoBackupSnapshot("Manual Export Backup");
 
-  const backup = {
-    format: "usk-unified-backup",
-    version: 2,
-    createdAt: new Date().toISOString(),
-    localStorage: {},
-    mysqlDump: null,
-  };
-
-  for (let i = 0; i < window.localStorage.length; i++) {
-    const key = window.localStorage.key(i);
-    if (key && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
-      const val = window.localStorage.getItem(key);
-      backup.localStorage[key] = val;
-      backup[key] = val;
-    }
-  }
-
-  // Also include MySQL database tables if backend is active
-  try {
-    const res = await fetch("/api/backup/export");
-    if (res.ok) {
-      const dbDump = await res.json();
-      backup.mysqlDump = dbDump;
-      if (dbDump.tables) {
-        backup.tables = dbDump.tables;
-      }
-    }
-  } catch (err) {
-    console.warn("[Backup Notice] Could not export MySQL dump directly:", err.message);
-  }
-
-  const dateStr = new Date().toISOString().replace(/[:.]/g, "-");
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `USK_Backup_${dateStr}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-
   const now = new Date();
-  const formattedDate = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()} | ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-  return formattedDate;
+  return `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()} | ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 export async function restoreBackupData(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = JSON.parse(e.target.result);
-        if (typeof data !== "object" || data === null) throw new Error("Invalid backup format");
+  if (!file) throw new Error("Backup file is required.");
+  const text = await file.text();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    throw new Error("Invalid .usvbackup file format.");
+  }
 
-        // 1. Restore MySQL database tables if present in backup file
-        const mysqlTables = data.mysqlDump?.tables || data.tables;
-        if (mysqlTables && typeof mysqlTables === "object") {
-          try {
-            await fetch("/api/backup/restore", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ tables: mysqlTables }),
-            });
-          } catch (mysqlErr) {
-            console.warn("[Restore Notice] Server MySQL restore notice:", mysqlErr.message);
-          }
-        }
+  const { validateBackupPayload, restoreBackupPayload } = await import("./backupToComputer.js");
+  const validation = validateBackupPayload(payload);
+  if (!validation.valid) {
+    throw new Error(validation.error || "Invalid .usvbackup file.");
+  }
 
-        // 2. Restore localStorage keys
-        const localSource = data.localStorage && typeof data.localStorage === "object" ? data.localStorage : data;
-        Object.entries(localSource).forEach(([key, val]) => {
-          if (typeof val === "string" && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
-            window.localStorage.setItem(key, val);
-          }
-        });
+  await restoreBackupPayload(payload);
 
-        recordAuditTrail({
-          action: "Backup Restored from File",
-          entity: "Backup",
-          details: file.name,
-          user: "User",
-        });
-        window.dispatchEvent(new Event("storage"));
-        resolve(true);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(new Error("Failed to read file"));
-    reader.readAsText(file);
+  recordAuditTrail({
+    action: "Backup Restored from File",
+    entity: "Backup",
+    details: file.name,
+    user: "User",
   });
+  window.dispatchEvent(new Event("storage"));
+  return true;
 }

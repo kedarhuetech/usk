@@ -9,6 +9,13 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
+import {
+  resolveCashEntryDirection,
+  isCashProducingTransactionType,
+  isCancelledStatus,
+  CASH_PROVENANCE,
+} from "../utils/cashTransactionTypes.js";
+import { getIstDateString } from "../utils/dateUtils.js";
 
 const router = Router();
 
@@ -17,40 +24,36 @@ const router = Router();
 /**
  * Synchronize cash transactions from transactions table into cash_in_hand ledger table
  */
-async function syncCashTransactions(businessId) {
+export async function syncCashTransactions(businessId, queryable = pool) {
   try {
-    const [cashTxns] = await pool.query(
+    const [cashTxns] = await queryable.query(
       `SELECT t.id, t.business_id, t.transaction_type, t.document_number, t.transaction_date,
-              t.party_id, t.party_name, t.total_amount, t.paid_amount, t.payment_mode, t.notes, t.created_at
+              t.party_id, t.party_name, t.total_amount, t.paid_amount, t.payment_mode,
+              t.payment_status, t.status, t.notes, t.created_at
        FROM transactions t
-       WHERE t.business_id = ? AND LOWER(t.payment_mode) = 'cash'
-         AND t.transaction_type IN ('sale', 'pos', 'purchase', 'expense', 'payment_in', 'payment-in', 'payment_out', 'payment-out', 'sale_return', 'credit note', 'credit_note', 'purchase_return', 'debit note', 'debit_note')`,
+       WHERE t.business_id = ? AND LOWER(t.payment_mode) = 'cash'`,
       [businessId]
     );
 
+    const validCashIds = [];
     for (const txn of cashTxns) {
-      const type = (txn.transaction_type || "").toLowerCase();
-      let entryType = "in";
-      let amount = parseFloat(txn.paid_amount) || 0;
-      if (amount <= 0) {
-        amount = parseFloat(txn.total_amount) || 0;
-      }
+      if (isCancelledStatus(txn.payment_status, txn.status)) continue;
+      if (!isCashProducingTransactionType(txn.transaction_type)) continue;
+
+      const type = String(txn.transaction_type || "").toLowerCase();
+      const entryType = resolveCashEntryDirection(type);
+      const amount = parseFloat(txn.paid_amount) || 0;
       if (amount <= 0) continue;
 
-      if (["purchase", "expense", "payment_out", "payment-out", "sale_return", "credit note", "credit_note"].includes(type)) {
-        entryType = "out";
-      } else {
-        entryType = "in";
-      }
-
-      const entryDate = toSqlDate(txn.transaction_date) || toSqlDate(txn.created_at) || new Date().toISOString().slice(0, 10);
+      validCashIds.push(txn.id);
+      const entryDate = toSqlDate(txn.transaction_date) || toSqlDate(txn.created_at) || getIstDateString();
       const desc = txn.notes || `${type.replace(/_/g, " ").toUpperCase()} #${txn.document_number || txn.id.slice(0, 8)}`;
 
-      await pool.query(
+      await queryable.query(
         `INSERT INTO cash_in_hand (
           id, business_id, entry_date, entry_type, amount,
-          party_id, party_name, reference_type, reference_no, description, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          party_id, party_name, reference_type, reference_no, description, provenance, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           entry_date = VALUES(entry_date),
           entry_type = VALUES(entry_type),
@@ -59,7 +62,8 @@ async function syncCashTransactions(businessId) {
           party_name = VALUES(party_name),
           reference_type = VALUES(reference_type),
           reference_no = VALUES(reference_no),
-          description = VALUES(description)`,
+          description = VALUES(description),
+          provenance = VALUES(provenance)`,
         [
           txn.id,
           businessId,
@@ -71,24 +75,35 @@ async function syncCashTransactions(businessId) {
           type,
           txn.document_number || "",
           desc,
+          CASH_PROVENANCE.TRANSACTION,
           txn.created_at || new Date()
         ]
       );
     }
 
-    // Clean up synced transactions that are no longer cash or were deleted
-    await pool.query(
-      `DELETE FROM cash_in_hand 
-       WHERE business_id = ? 
-         AND (reference_type IS NULL OR reference_type != 'adjustment')
-         AND id NOT IN (
-           SELECT id FROM transactions 
-           WHERE business_id = ? AND LOWER(payment_mode) = 'cash'
-         )`,
-      [businessId, businessId]
-    );
+    // Clean up synced transaction-linked entries that are no longer cash, have zero paid_amount,
+    // are cancelled, or were deleted, while preserving manual adjustments and restored history.
+    if (validCashIds.length > 0) {
+      await queryable.query(
+        `DELETE FROM cash_in_hand 
+         WHERE business_id = ? 
+           AND provenance = ?
+           AND (reference_type IS NULL OR LOWER(TRIM(reference_type)) != 'adjustment')
+           AND id NOT IN (?)`,
+        [businessId, CASH_PROVENANCE.TRANSACTION, validCashIds]
+      );
+    } else {
+      await queryable.query(
+        `DELETE FROM cash_in_hand 
+         WHERE business_id = ? 
+           AND provenance = ?
+           AND (reference_type IS NULL OR LOWER(TRIM(reference_type)) != 'adjustment')`,
+        [businessId, CASH_PROVENANCE.TRANSACTION]
+      );
+    }
   } catch (err) {
     console.error("[CashBank] Failed to sync cash transactions:", err);
+    throw err;
   }
 }
 
@@ -124,6 +139,7 @@ router.get("/cash-in-hand", async (req, res) => {
         referenceType: r.reference_type || "",
         referenceNo: r.reference_no || "",
         description: r.description || "",
+        provenance: r.provenance || CASH_PROVENANCE.TRANSACTION,
         createdAt: r.created_at,
       })),
     });
@@ -141,7 +157,7 @@ const saveCashHandler = async (req, res) => {
     const body = req.body || {};
 
     const id = req.params?.id || body.id || `cash_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const entryDate = toSqlDate(body.entryDate || body.date) || new Date().toISOString().slice(0, 10);
+    const entryDate = toSqlDate(body.entryDate || body.date) || getIstDateString();
     const entryType = (body.entryType || body.type || "in").toLowerCase();
     const amount = Math.abs(parseFloat(body.amount) || 0);
     const partyId = body.partyId || null;
@@ -149,12 +165,16 @@ const saveCashHandler = async (req, res) => {
     const referenceType = body.referenceType || "adjustment";
     const referenceNo = body.referenceNo || "ADJUSTMENT";
     const description = body.description || body.reason || null;
+    const provenance =
+      String(referenceType).trim().toLowerCase() === "adjustment"
+        ? CASH_PROVENANCE.MANUAL_ADJUSTMENT
+        : CASH_PROVENANCE.TRANSACTION;
 
     await pool.query(
       `INSERT INTO cash_in_hand (
         id, business_id, entry_date, entry_type, amount,
-        party_id, party_name, reference_type, reference_no, description
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        party_id, party_name, reference_type, reference_no, description, provenance
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         entry_date = VALUES(entry_date),
         entry_type = VALUES(entry_type),
@@ -163,8 +183,9 @@ const saveCashHandler = async (req, res) => {
         party_name = VALUES(party_name),
         reference_type = VALUES(reference_type),
         reference_no = VALUES(reference_no),
-        description = VALUES(description)`,
-      [id, businessId, entryDate, entryType, amount, partyId, partyName, referenceType, referenceNo, description]
+        description = VALUES(description),
+        provenance = VALUES(provenance)`,
+      [id, businessId, entryDate, entryType, amount, partyId, partyName, referenceType, referenceNo, description, provenance]
     );
 
     return res.json({ success: true, message: "Cash entry recorded.", data: { id, amount, entryType } });
@@ -244,8 +265,8 @@ const saveChequeHandler = async (req, res) => {
     const chequeNumber = (body.chequeNumber || body.number || "").trim();
     const bankName = (body.bankName || "Bank").trim();
     const amount = parseFloat(body.amount) || 0;
-    const rawChequeDate = body.chequeDate || body.date || new Date().toISOString().slice(0, 10);
-    const chequeDate = toSqlDate(rawChequeDate) || new Date().toISOString().slice(0, 10);
+    const rawChequeDate = body.chequeDate || body.date || getIstDateString();
+    const chequeDate = toSqlDate(rawChequeDate) || getIstDateString();
     const chequeType = (body.chequeType || "received").toLowerCase();
     const status = (body.status || "pending").toLowerCase();
     const isReceived = chequeType === "received";
@@ -399,14 +420,26 @@ const saveLoanHandler = async (req, res) => {
     const providedEmi = parseFloat(body.emiAmount ?? 0);
     const emiAmount = providedEmi > 0 ? providedEmi : calculatedEmi;
 
-    const currentBalance = parseFloat(body.currentBalance ?? principalAmount) || 0;
+    let existingLoan = null;
+    if (req.params?.id || body.id) {
+      const [existingRows] = await pool.query(
+        `SELECT current_balance, principal_amount FROM loan_accounts WHERE business_id = ? AND id = ? LIMIT 1`,
+        [businessId, id]
+      );
+      existingLoan = existingRows[0] || null;
+    }
+
+    const hasCurrentBalance = body.currentBalance !== undefined || body.current_balance !== undefined;
+    const currentBalance = hasCurrentBalance
+      ? (parseFloat(body.currentBalance ?? body.current_balance) || 0)
+      : (existingLoan ? (parseFloat(existingLoan.current_balance) || 0) : principalAmount);
     const startDate = body.startDate || null;
     const rawStatus = String(body.status || "").trim();
     const status = ["active", "closed"].includes(rawStatus.toLowerCase())
       ? (rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase())
       : "Active";
     const closedDate = status === "Closed"
-      ? (toSqlDate(body.closedDate || body.closed_date) || new Date().toISOString().slice(0, 10))
+      ? (toSqlDate(body.closedDate || body.closed_date) || getIstDateString())
       : null;
 
     await pool.query(
@@ -449,13 +482,19 @@ router.put("/loan-accounts/:id", saveLoanHandler);
  * DELETE /api/cash-bank/loan-accounts/:id
  */
 router.delete("/loan-accounts/:id", async (req, res) => {
+  const conn = await pool.getConnection();
   try {
+    await conn.beginTransaction();
     const businessId = businessIdFromRequest(req);
-    await pool.query(`DELETE FROM loan_repayments WHERE business_id = ? AND loan_id = ?`, [businessId, req.params.id]);
-    await pool.query(`DELETE FROM loan_accounts WHERE business_id = ? AND id = ?`, [businessId, req.params.id]);
+    await conn.query(`DELETE FROM loan_repayments WHERE business_id = ? AND loan_id = ?`, [businessId, req.params.id]);
+    await conn.query(`DELETE FROM loan_accounts WHERE business_id = ? AND id = ?`, [businessId, req.params.id]);
+    await conn.commit();
     return res.json({ success: true, message: "Loan account and associated repayments deleted." });
   } catch (err) {
+    await conn.rollback();
     return res.status(500).json({ success: false, message: err.message });
+  } finally {
+    conn.release();
   }
 });
 

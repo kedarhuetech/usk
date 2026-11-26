@@ -15,6 +15,7 @@ import {
 } from "../../services/companyProfileStorage";
 import { getAppSettings, APP_SETTINGS_UPDATED_EVENT } from "../../services/appSettingsStorage";
 import { getInventoryItems } from "../../services/itemsStorage";
+import { getParties } from "../../services/partiesStorage";
 
 function Sidebar() {
   const navigate = useNavigate();
@@ -121,7 +122,7 @@ function Sidebar() {
 
     let partyMatches = [];
     try {
-      const parties = JSON.parse(localStorage.getItem("ledgerly:parties.v1") || "[]");
+      const parties = getParties();
       parties.forEach((p) => {
         const pName = String(p.partyName || p.name || "");
         const pPhone = String(p.phone || "");

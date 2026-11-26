@@ -13,9 +13,42 @@ import { Router } from "express";
 import multer from "multer";
 import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
 import { storageService } from "../services/storage/storageService.js";
+import {
+  resolveCashEntryDirection,
+  isCashProducingTransactionType,
+  isCancelledStatus,
+  CASH_PROVENANCE,
+} from "../utils/cashTransactionTypes.js";
+import { getIstDateString } from "../utils/dateUtils.js";
 import { getFileMetadataById, deleteFileMetadata } from "../db/businessFilesRepository.js";
 
 const router = Router();
+
+async function resolveUnitMultiplier(conn, businessId, itemId, lineUnit) {
+  if (!itemId || !lineUnit) return 1;
+  const [itemRows] = await conn.query(
+    `SELECT unit FROM inventory_items WHERE business_id = ? AND id = ? LIMIT 1`,
+    [businessId, itemId]
+  );
+  const baseUnit = String(itemRows[0]?.unit || "").trim().toLowerCase();
+  const txUnit = String(lineUnit || "").trim().toLowerCase();
+  if (!baseUnit || !txUnit || baseUnit === txUnit) return 1;
+  const [convRows] = await conn.query(
+    `SELECT unit, to_unit, factor
+     FROM unit_conversions
+     WHERE business_id = ?
+       AND (
+         (LOWER(TRIM(unit)) = ? AND LOWER(TRIM(to_unit)) = ?)
+         OR (LOWER(TRIM(unit)) = ? AND LOWER(TRIM(to_unit)) = ?)
+       )
+     LIMIT 1`,
+    [businessId, baseUnit, txUnit, txUnit, baseUnit]
+  );
+  if (convRows.length === 0) return 1;
+  const f = parseFloat(convRows[0].factor) || 1;
+  if (f <= 0) return 1;
+  return String(convRows[0].unit || "").trim().toLowerCase() === txUnit ? f : (1 / f);
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -271,9 +304,9 @@ router.get("/", async (req, res) => {
       if (type === "sale") {
         conditions.push("(t.transaction_type = 'sale' OR t.transaction_type = 'pos')");
       } else if (type === "credit_note" || type === "sale_return") {
-        conditions.push("(t.transaction_type = 'credit_note' OR t.transaction_type = 'sale_return')");
+        conditions.push("LOWER(t.transaction_type) IN ('credit_note', 'credit note', 'sale_return', 'sale return')");
       } else if (type === "debit_note" || type === "purchase_return") {
-        conditions.push("(t.transaction_type = 'debit_note' OR t.transaction_type = 'purchase_return')");
+        conditions.push("LOWER(t.transaction_type) IN ('debit_note', 'debit note', 'purchase_return', 'purchase return')");
       } else {
         conditions.push("t.transaction_type = ?");
         params.push(type);
@@ -311,7 +344,7 @@ router.get("/", async (req, res) => {
 
     // Query 1: Total count for lazy loading
     const [countRows] = await pool.query(
-      `SELECT COUNT(*) AS total FROM transactions t LEFT JOIN parties p ON t.party_id = p.id WHERE ${whereClause}`,
+      `SELECT COUNT(*) AS total FROM transactions t LEFT JOIN parties p ON t.party_id = p.id AND p.business_id = t.business_id WHERE ${whereClause}`,
       params
     );
     const total = countRows[0]?.total || 0;
@@ -332,7 +365,7 @@ router.get("/", async (req, res) => {
               t.image_id, t.image_url, t.image_name, t.document_id, t.document_url, t.document_name,
               t.created_at, t.updated_at
        FROM transactions t
-       LEFT JOIN parties p ON t.party_id = p.id
+       LEFT JOIN parties p ON t.party_id = p.id AND p.business_id = t.business_id
        WHERE ${whereClause}
        ORDER BY t.transaction_date DESC, t.created_at DESC`;
     let queryParams = [...params];
@@ -625,7 +658,7 @@ router.get("/:id", async (req, res) => {
               COALESCE(NULLIF(TRIM(t.billing_address), ''), p.billing_address, '') AS resolved_billing_address,
               COALESCE(NULLIF(TRIM(t.shipping_address), ''), p.shipping_address, '') AS resolved_shipping_address
        FROM transactions t
-       LEFT JOIN parties p ON t.party_id = p.id
+       LEFT JOIN parties p ON t.party_id = p.id AND p.business_id = t.business_id
        WHERE t.business_id = ? AND t.id = ?
        LIMIT 1`,
       [businessId, txnId]
@@ -931,7 +964,10 @@ const saveTransactionHandler = async (req, res) => {
     const balanceAmount = parseFloat(body.balanceAmount ?? body.balance ?? body.totals?.balance ?? (transactionType === "payment_in" || transactionType === "payment_out" ? 0 : (totalAmount - paidAmount))) || 0;
 
     const paymentMode = body.paymentMode || body.paymentType || body.form?.paymentType || "Cash";
-    const paymentStatus = body.status || body.paymentStatus || (balanceAmount <= 0.001 ? "Paid" : (paidAmount > 0 ? "Partial" : "Unpaid"));
+    const isCancelled = isCancelledStatus(body.paymentStatus, body.status);
+    const paymentStatus = isCancelled
+      ? "Cancelled"
+      : (body.status || body.paymentStatus || (balanceAmount <= 0.001 ? "Paid" : (paidAmount > 0 ? "Partial" : "Unpaid")));
     const paymentRefNo = body.paymentRefNo || body.refNo || null;
     const cashTendered = parseFloat(body.cashTendered ?? body.tendered ?? 0) || 0;
     const changeReturned = parseFloat(body.changeReturned ?? body.change ?? 0) || 0;
@@ -1012,7 +1048,7 @@ const saveTransactionHandler = async (req, res) => {
 
     // Check if transaction already exists in MySQL for safe differential accounting
     const [existingRows] = await conn.query(
-      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, image_id, document_id
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, payment_status, status, image_id, document_id
        FROM transactions
        WHERE business_id = ? AND id = ?
        FOR UPDATE`,
@@ -1162,32 +1198,35 @@ const saveTransactionHandler = async (req, res) => {
       ]
     );
 
-    // 2. Revert previous inventory movements if this is an update, then re-insert fresh lines
+    // 2. Revert previous inventory movements if this is an update (and was not cancelled), then re-insert fresh lines
     if (existingTxn) {
-      const [oldLines] = await conn.query(
-        `SELECT item_id, batch_no, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
-        [businessId, id]
-      );
-      for (const line of oldLines) {
-        if (line.item_id) {
-          const qty = (parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0);
-          let revertStock = 0;
-          const oldType = String(existingTxn.transaction_type || "").toLowerCase();
-          if (oldType === "sale" || oldType === "pos" || oldType === "delivery_challan" || oldType === "purchase_return" || oldType === "debit note" || oldType === "debit_note") {
-            revertStock = +qty;
-          } else if (oldType === "purchase" || oldType === "sale_return" || oldType === "credit note" || oldType === "credit_note") {
-            revertStock = -qty;
-          }
-          if (revertStock !== 0) {
-            await conn.query(
-              `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
-              [revertStock, businessId, line.item_id]
-            );
-            if (line.batch_no) {
+      if (!isCancelledStatus(existingTxn.payment_status, existingTxn.status)) {
+        const [oldLines] = await conn.query(
+          `SELECT item_id, batch_no, unit, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
+          [businessId, id]
+        );
+        for (const line of oldLines) {
+          if (line.item_id) {
+            const multiplier = await resolveUnitMultiplier(conn, businessId, line.item_id, line.unit);
+            const qty = ((parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0)) * multiplier;
+            let revertStock = 0;
+            const oldType = String(existingTxn.transaction_type || "").toLowerCase();
+            if (oldType === "sale" || oldType === "pos" || oldType === "delivery_challan" || oldType === "purchase_return" || oldType === "debit note" || oldType === "debit_note") {
+              revertStock = +qty;
+            } else if (oldType === "purchase" || oldType === "sale_return" || oldType === "credit note" || oldType === "credit_note") {
+              revertStock = -qty;
+            }
+            if (revertStock !== 0) {
               await conn.query(
-                `UPDATE item_batches SET current_qty = current_qty + ? WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
-                [revertStock, businessId, line.item_id, line.batch_no]
+                `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
+                [revertStock, businessId, line.item_id]
               );
+              if (line.batch_no) {
+                await conn.query(
+                  `UPDATE item_batches SET current_qty = current_qty + ? WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
+                  [revertStock, businessId, line.item_id, line.batch_no]
+                );
+              }
             }
           }
         }
@@ -1244,14 +1283,16 @@ const saveTransactionHandler = async (req, res) => {
         ]
       );
 
-      // 3. Atomically adjust stock if linked to inventory item
-      if (itemId) {
+      // 3. Atomically adjust stock if linked to inventory item (skip for cancelled transactions)
+      if (itemId && !isCancelled) {
+        const multiplier = await resolveUnitMultiplier(conn, businessId, itemId, unit);
+        const baseQty = (quantity + freeQty) * multiplier;
         let stockDelta = 0;
         const normTxnType = String(transactionType || "").toLowerCase();
         if (normTxnType === "sale" || normTxnType === "pos" || normTxnType === "delivery_challan" || normTxnType === "purchase_return" || normTxnType === "debit note" || normTxnType === "debit_note") {
-          stockDelta = -(quantity + freeQty);
+          stockDelta = -baseQty;
         } else if (normTxnType === "purchase" || normTxnType === "sale_return" || normTxnType === "credit note" || normTxnType === "credit_note") {
-          stockDelta = (quantity + freeQty);
+          stockDelta = baseQty;
         }
 
         if (stockDelta !== 0) {
@@ -1275,14 +1316,16 @@ const saveTransactionHandler = async (req, res) => {
     }
 
     // 4. Atomically update party ledger balance with strict differential accounting
-    const newImpact = getPartyBalanceImpact(transactionType, balanceAmount, paidAmount);
+    const newImpact = isCancelled ? 0 : getPartyBalanceImpact(transactionType, balanceAmount, paidAmount);
 
     if (existingTxn) {
-      const oldImpact = getPartyBalanceImpact(
-        existingTxn.transaction_type,
-        parseFloat(existingTxn.balance_amount) || 0,
-        parseFloat(existingTxn.paid_amount) || 0
-      );
+      const oldImpact = isCancelledStatus(existingTxn.payment_status, existingTxn.status)
+        ? 0
+        : getPartyBalanceImpact(
+            existingTxn.transaction_type,
+            parseFloat(existingTxn.balance_amount) || 0,
+            parseFloat(existingTxn.paid_amount) || 0
+          );
       const oldPartyId = existingTxn.party_id;
 
       if (oldPartyId === partyId) {
@@ -1319,47 +1362,43 @@ const saveTransactionHandler = async (req, res) => {
       }
     }
 
-    // Sync cash movement into cash_in_hand table
+    // Sync cash movement into cash_in_hand table (only actual paid cash on non-cancelled transactions)
     const normPayMode = String(paymentMode || "").toLowerCase();
-    if (normPayMode === "cash") {
-      let entryType = "in";
-      let cashAmt = parseFloat(paidAmount) || 0;
-      if (cashAmt <= 0) cashAmt = parseFloat(totalAmount) || 0;
-      if (["purchase", "expense", "payment_out", "payment-out", "sale_return", "credit note", "credit_note"].includes(transactionType.toLowerCase())) {
-        entryType = "out";
-      }
-      if (cashAmt > 0) {
-        await conn.query(
-          `INSERT INTO cash_in_hand (
-            id, business_id, entry_date, entry_type, amount,
-            party_id, party_name, reference_type, reference_no, description, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-          ON DUPLICATE KEY UPDATE
-            entry_date = VALUES(entry_date),
-            entry_type = VALUES(entry_type),
-            amount = VALUES(amount),
-            party_id = VALUES(party_id),
-            party_name = VALUES(party_name),
-            reference_type = VALUES(reference_type),
-            reference_no = VALUES(reference_no),
-            description = VALUES(description)`,
-          [
-            id,
-            businessId,
-            toSqlDate(transactionDate) || new Date().toISOString().slice(0, 10),
-            entryType,
-            cashAmt,
-            partyId || null,
-            partyName || "Cash",
-            transactionType,
-            documentNumber || "",
-            notes || `${transactionType.toUpperCase()} #${documentNumber || id.slice(0, 8)}`
-          ]
-        );
-      }
+    const cashAmt = parseFloat(paidAmount) || 0;
+    if (!isCancelled && normPayMode === "cash" && isCashProducingTransactionType(transactionType) && cashAmt > 0) {
+      const entryType = resolveCashEntryDirection(transactionType);
+      await conn.query(
+        `INSERT INTO cash_in_hand (
+          id, business_id, entry_date, entry_type, amount,
+          party_id, party_name, reference_type, reference_no, description, provenance, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE
+          entry_date = VALUES(entry_date),
+          entry_type = VALUES(entry_type),
+          amount = VALUES(amount),
+          party_id = VALUES(party_id),
+          party_name = VALUES(party_name),
+          reference_type = VALUES(reference_type),
+          reference_no = VALUES(reference_no),
+          description = VALUES(description),
+          provenance = VALUES(provenance)`,
+        [
+          id,
+          businessId,
+          toSqlDate(transactionDate) || getIstDateString(),
+          entryType,
+          cashAmt,
+          partyId || null,
+          partyName || "Cash",
+          transactionType,
+          documentNumber || "",
+          notes || `${transactionType.toUpperCase()} #${documentNumber || id.slice(0, 8)}`,
+          CASH_PROVENANCE.TRANSACTION
+        ]
+      );
     } else {
       await conn.query(
-        `DELETE FROM cash_in_hand WHERE business_id = ? AND id = ? AND (reference_type IS NULL OR reference_type != 'adjustment')`,
+        `DELETE FROM cash_in_hand WHERE business_id = ? AND id = ? AND (reference_type IS NULL OR LOWER(TRIM(reference_type)) != 'adjustment')`,
         [businessId, id]
       );
     }
@@ -1421,7 +1460,7 @@ router.delete("/:id", async (req, res) => {
     const txnId = req.params.id;
 
     const [existingRows] = await conn.query(
-      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, image_id, document_id
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, payment_status, status, image_id, document_id
        FROM transactions
        WHERE business_id = ? AND id = ?
        FOR UPDATE`,
@@ -1430,11 +1469,14 @@ router.delete("/:id", async (req, res) => {
 
     if (existingRows.length > 0) {
       const existing = existingRows[0];
-      const impact = getPartyBalanceImpact(
-        existing.transaction_type,
-        parseFloat(existing.balance_amount) || 0,
-        parseFloat(existing.paid_amount) || 0
-      );
+      const wasCancelled = isCancelledStatus(existing.payment_status, existing.status);
+      const impact = wasCancelled
+        ? 0
+        : getPartyBalanceImpact(
+            existing.transaction_type,
+            parseFloat(existing.balance_amount) || 0,
+            parseFloat(existing.paid_amount) || 0
+          );
 
       // Revert party balance adjustment
       if (existing.party_id && impact !== 0) {
@@ -1445,30 +1487,33 @@ router.delete("/:id", async (req, res) => {
       }
 
       // Revert inventory stock adjustments
-      const [oldLines] = await conn.query(
-        `SELECT item_id, batch_no, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
-        [businessId, txnId]
-      );
-      for (const line of oldLines) {
-        if (line.item_id) {
-          const qty = (parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0);
-          let revertStock = 0;
-          const delType = String(existing.transaction_type || "").toLowerCase();
-          if (delType === "sale" || delType === "pos" || delType === "delivery_challan" || delType === "purchase_return" || delType === "debit note" || delType === "debit_note") {
-            revertStock = +qty;
-          } else if (delType === "purchase" || delType === "sale_return" || delType === "credit note" || delType === "credit_note") {
-            revertStock = -qty;
-          }
-          if (revertStock !== 0) {
-            await conn.query(
-              `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
-              [revertStock, businessId, line.item_id]
-            );
-            if (line.batch_no) {
+      if (!wasCancelled) {
+        const [oldLines] = await conn.query(
+          `SELECT item_id, batch_no, unit, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
+          [businessId, txnId]
+        );
+        for (const line of oldLines) {
+          if (line.item_id) {
+            const multiplier = await resolveUnitMultiplier(conn, businessId, line.item_id, line.unit);
+            const qty = ((parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0)) * multiplier;
+            let revertStock = 0;
+            const delType = String(existing.transaction_type || "").toLowerCase();
+            if (delType === "sale" || delType === "pos" || delType === "delivery_challan" || delType === "purchase_return" || delType === "debit note" || delType === "debit_note") {
+              revertStock = +qty;
+            } else if (delType === "purchase" || delType === "sale_return" || delType === "credit note" || delType === "credit_note") {
+              revertStock = -qty;
+            }
+            if (revertStock !== 0) {
               await conn.query(
-                `UPDATE item_batches SET current_qty = current_qty + ? WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
-                [revertStock, businessId, line.item_id, line.batch_no]
+                `UPDATE inventory_items SET current_stock = current_stock + ? WHERE business_id = ? AND id = ?`,
+                [revertStock, businessId, line.item_id]
               );
+              if (line.batch_no) {
+                await conn.query(
+                  `UPDATE item_batches SET current_qty = current_qty + ? WHERE business_id = ? AND item_id = ? AND batch_no = ?`,
+                  [revertStock, businessId, line.item_id, line.batch_no]
+                );
+              }
             }
           }
         }

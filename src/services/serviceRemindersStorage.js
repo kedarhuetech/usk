@@ -3,7 +3,7 @@
 // Designed with a clean storage interface to enable future migration to MySQL backend API
 // without modifying UI components or business logic.
 
-import { getAppSettings, saveAppSettings } from "./appSettingsStorage.js";
+import { getAppSettings, saveAppSettings, saveAppSettingsAuthoritative } from "./appSettingsStorage.js";
 import { serviceRemindersDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { getScopedStorageKey } from "../config/businessConfig.js";
@@ -115,6 +115,41 @@ export function saveReminderSettings(patch = {}) {
     reminderDaysBefore: next.reminderDaysBefore,
     serviceRemindersAutoWhatsApp: next.autoNotifyWhatsApp,
   });
+
+  notifyChanges("settings");
+  return next;
+}
+
+export async function saveReminderSettingsAuthoritative(patch = {}) {
+  const current = getReminderSettings();
+  const next = {
+    ...current,
+    ...patch,
+  };
+
+  if (patch.enabled !== undefined) {
+    next.enabled = Boolean(patch.enabled);
+  }
+  if (patch.autoNotifyWhatsApp !== undefined) {
+    next.autoNotifyWhatsApp = Boolean(patch.autoNotifyWhatsApp);
+  }
+  if (patch.reminderDaysBefore !== undefined) {
+    next.reminderDaysBefore = Math.max(0, Math.min(90, Number(patch.reminderDaysBefore) || 0));
+  }
+
+  await saveAppSettingsAuthoritative({
+    serviceRemindersEnabled: next.enabled,
+    reminderDaysBefore: next.reminderDaysBefore,
+    serviceRemindersAutoWhatsApp: next.autoNotifyWhatsApp,
+  });
+
+  if (canUseStorage()) {
+    try {
+      window.localStorage.setItem(getScopedStorageKey(SERVICE_REMINDER_SETTINGS_KEY), JSON.stringify(next));
+    } catch (err) {
+      console.error("Failed to save service reminder settings to LocalStorage:", err);
+    }
+  }
 
   notifyChanges("settings");
   return next;

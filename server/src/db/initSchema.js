@@ -76,6 +76,11 @@ export async function initializeDatabaseSchema() {
       await addCol("parties", "shipping_pincode VARCHAR(20)");
       await addCol("parties", "balance_type VARCHAR(20) DEFAULT 'to_receive'");
       await addCol("parties", "is_active TINYINT(1) DEFAULT 1");
+      await addCol("parties", "party_group VARCHAR(100) DEFAULT 'General'");
+      await addCol("parties", "gst_type VARCHAR(100) DEFAULT 'Unregistered / Consumer'");
+      await addCol("parties", "as_of_date DATE DEFAULT NULL");
+      await addCol("parties", "credit_limit_type VARCHAR(32) DEFAULT 'no-limit'");
+      await addCol("parties", "additional_fields TEXT DEFAULT NULL");
 
       await addCol("company_profile_assets", "storage_key VARCHAR(500) NULL");
       await addCol("company_profile_assets", "file_id VARCHAR(64) NULL");
@@ -96,6 +101,15 @@ export async function initializeDatabaseSchema() {
       await addCol("inventory_items", "opening_stock DECIMAL(12,2) DEFAULT 0.00");
       await addCol("inventory_items", "is_serial_tracked TINYINT(1) DEFAULT 0");
       await addCol("inventory_items", "description TEXT");
+      await addCol("cash_in_hand", "provenance VARCHAR(32) NOT NULL DEFAULT 'transaction'");
+      try {
+        await pool.query(
+          `UPDATE cash_in_hand
+           SET provenance = 'manual_adjustment'
+           WHERE LOWER(TRIM(COALESCE(reference_type, ''))) = 'adjustment'
+             AND provenance = 'transaction'`
+        );
+      } catch {}
       await addCol("inventory_items", "image_url VARCHAR(500) NULL");
       await addCol("inventory_items", "image_id VARCHAR(64) NULL");
       await addCol("inventory_items", "is_active TINYINT(1) DEFAULT 1");
@@ -258,6 +272,11 @@ export async function initializeDatabaseSchema() {
       shipping_state VARCHAR(100),
       shipping_pincode VARCHAR(20),
       is_active TINYINT(1) DEFAULT 1,
+      party_group VARCHAR(100) DEFAULT 'General',
+      gst_type VARCHAR(100) DEFAULT 'Unregistered / Consumer',
+      as_of_date DATE DEFAULT NULL,
+      credit_limit_type VARCHAR(32) DEFAULT 'no-limit',
+      additional_fields TEXT DEFAULT NULL,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       PRIMARY KEY (id, business_id),
@@ -514,6 +533,7 @@ export async function initializeDatabaseSchema() {
       reference_type VARCHAR(50),
       reference_no VARCHAR(100),
       description TEXT,
+      provenance VARCHAR(32) NOT NULL DEFAULT 'transaction',
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_cash_biz (business_id, entry_date DESC)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,

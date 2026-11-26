@@ -8,12 +8,16 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
+import { getIstDateString } from "../utils/dateUtils.js";
 
 const router = Router();
 
+const ACTIVE_TXN_FILTER = `LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')
+  AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')`;
+
 function toSqlDate(val, fallback = null) {
   if (!val || typeof val !== "string") return fallback;
-  const match = val.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const match = val.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!match) return fallback;
   return `${match[1]}-${match[2]}-${match[3]}`;
 }
@@ -27,22 +31,28 @@ router.get("/profit-and-loss", async (req, res) => {
     const startDate = toSqlDate(req.query.startDate, "2000-01-01");
     const endDate = toSqlDate(req.query.endDate, "2099-12-31");
 
-    // 1. Total Sales Revenue
+    // 1. Net Sales Revenue (Sales + POS - Sale Returns / Credit Notes)
     const [salesRows] = await pool.query(
-      `SELECT COALESCE(SUM(total_amount), 0) AS totalSales,
-              COALESCE(SUM(tax_amount), 0) AS totalSalesTax
+      `SELECT COALESCE(SUM(CASE WHEN LOWER(transaction_type) IN ('sale', 'pos') THEN total_amount ELSE 0 END), 0) AS grossSales,
+              COALESCE(SUM(CASE WHEN LOWER(transaction_type) IN ('sale_return', 'sale return', 'credit_note', 'credit note') THEN total_amount ELSE 0 END), 0) AS saleReturns,
+              COALESCE(SUM(CASE WHEN LOWER(transaction_type) IN ('sale', 'pos') THEN tax_amount ELSE -tax_amount END), 0) AS netSalesTax
        FROM transactions
-       WHERE business_id = ? AND transaction_type IN ('sale', 'pos')
+       WHERE business_id = ?
+         AND LOWER(transaction_type) IN ('sale', 'pos', 'sale_return', 'sale return', 'credit_note', 'credit note')
+         AND ${ACTIVE_TXN_FILTER}
          AND transaction_date BETWEEN ? AND ?`,
       [businessId, startDate, endDate]
     );
 
-    // 2. Total Purchase Cost
+    // 2. Net Purchase Cost (Purchases - Purchase Returns / Debit Notes)
     const [purchaseRows] = await pool.query(
-      `SELECT COALESCE(SUM(total_amount), 0) AS totalPurchases,
-              COALESCE(SUM(tax_amount), 0) AS totalPurchaseTax
+      `SELECT COALESCE(SUM(CASE WHEN LOWER(transaction_type) = 'purchase' THEN total_amount ELSE 0 END), 0) AS grossPurchases,
+              COALESCE(SUM(CASE WHEN LOWER(transaction_type) IN ('purchase_return', 'purchase return', 'debit_note', 'debit note') THEN total_amount ELSE 0 END), 0) AS purchaseReturns,
+              COALESCE(SUM(CASE WHEN LOWER(transaction_type) = 'purchase' THEN tax_amount ELSE -tax_amount END), 0) AS netPurchaseTax
        FROM transactions
-       WHERE business_id = ? AND transaction_type = 'purchase'
+       WHERE business_id = ?
+         AND LOWER(transaction_type) IN ('purchase', 'purchase_return', 'purchase return', 'debit_note', 'debit note')
+         AND ${ACTIVE_TXN_FILTER}
          AND transaction_date BETWEEN ? AND ?`,
       [businessId, startDate, endDate]
     );
@@ -51,13 +61,14 @@ router.get("/profit-and-loss", async (req, res) => {
     const [expenseRows] = await pool.query(
       `SELECT COALESCE(SUM(total_amount), 0) AS totalExpenses
        FROM transactions
-       WHERE business_id = ? AND transaction_type = 'expense'
+       WHERE business_id = ? AND LOWER(transaction_type) = 'expense'
+         AND ${ACTIVE_TXN_FILTER}
          AND transaction_date BETWEEN ? AND ?`,
       [businessId, startDate, endDate]
     );
 
-    const totalSales = parseFloat(salesRows[0]?.totalSales) || 0;
-    const totalPurchases = parseFloat(purchaseRows[0]?.totalPurchases) || 0;
+    const totalSales = (parseFloat(salesRows[0]?.grossSales) || 0) - (parseFloat(salesRows[0]?.saleReturns) || 0);
+    const totalPurchases = (parseFloat(purchaseRows[0]?.grossPurchases) || 0) - (parseFloat(purchaseRows[0]?.purchaseReturns) || 0);
     const totalExpenses = parseFloat(expenseRows[0]?.totalExpenses) || 0;
     const grossProfit = totalSales - totalPurchases;
     const netProfit = grossProfit - totalExpenses;
@@ -87,6 +98,11 @@ router.get("/balance-sheet", async (req, res) => {
     const businessId = businessIdFromRequest(req);
 
     // Assets: Cash + Bank + Accounts Receivable + Inventory Stock Value
+    const [cashRows] = await pool.query(
+      `SELECT COALESCE(SUM(CASE WHEN LOWER(entry_type) = 'in' THEN amount ELSE -amount END), 0) AS cashBalance
+       FROM cash_in_hand WHERE business_id = ?`,
+      [businessId]
+    );
     const [bankRows] = await pool.query(
       `SELECT COALESCE(SUM(current_balance), 0) AS bankBalance FROM bank_accounts WHERE business_id = ?`,
       [businessId]
@@ -107,13 +123,14 @@ router.get("/balance-sheet", async (req, res) => {
       [businessId]
     );
 
+    const cashBalance = parseFloat(cashRows[0]?.cashBalance) || 0;
     const bankBalance = parseFloat(bankRows[0]?.bankBalance) || 0;
     const accountsReceivable = parseFloat(partyRows[0]?.accountsReceivable) || 0;
     const accountsPayable = parseFloat(partyRows[0]?.accountsPayable) || 0;
     const stockValue = parseFloat(stockRows[0]?.stockValue) || 0;
     const loansPayable = parseFloat(loanRows[0]?.loansPayable) || 0;
 
-    const totalAssets = bankBalance + accountsReceivable + stockValue;
+    const totalAssets = cashBalance + bankBalance + accountsReceivable + stockValue;
     const totalLiabilities = accountsPayable + loansPayable;
     const netWorth = totalAssets - totalLiabilities;
 
@@ -121,6 +138,7 @@ router.get("/balance-sheet", async (req, res) => {
       success: true,
       data: {
         assets: {
+          cashBalance,
           bankBalance,
           accountsReceivable,
           stockValue,
@@ -182,12 +200,12 @@ router.get("/stock-summary", async (req, res) => {
 router.get("/daybook", async (req, res) => {
   try {
     const businessId = businessIdFromRequest(req);
-    const date = toSqlDate(req.query.date, new Date().toISOString().slice(0, 10));
+    const date = toSqlDate(req.query.date, getIstDateString());
     const [rows] = await pool.query(
       `SELECT id, transaction_type, document_number, transaction_date, party_name,
               total_amount, paid_amount, balance_amount, payment_mode
        FROM transactions
-       WHERE business_id = ? AND transaction_date = ?
+       WHERE business_id = ? AND transaction_date = ? AND ${ACTIVE_TXN_FILTER}
        ORDER BY created_at ASC`,
       [businessId, date]
     );
@@ -211,7 +229,9 @@ router.get("/cash-flow", async (req, res) => {
     const [inflows] = await pool.query(
       `SELECT COALESCE(SUM(paid_amount), 0) AS totalInflow
        FROM transactions
-       WHERE business_id = ? AND transaction_type IN ('sale', 'payment_in', 'pos')
+       WHERE business_id = ?
+         AND LOWER(transaction_type) IN ('sale', 'payment_in', 'pos', 'purchase_return', 'purchase return', 'debit_note', 'debit note')
+         AND ${ACTIVE_TXN_FILTER}
          AND transaction_date BETWEEN ? AND ?`,
       [businessId, startDate, endDate]
     );
@@ -219,7 +239,9 @@ router.get("/cash-flow", async (req, res) => {
     const [outflows] = await pool.query(
       `SELECT COALESCE(SUM(paid_amount), 0) AS totalOutflow
        FROM transactions
-       WHERE business_id = ? AND transaction_type IN ('purchase', 'payment_out', 'expense')
+       WHERE business_id = ?
+         AND LOWER(transaction_type) IN ('purchase', 'payment_out', 'expense', 'sale_return', 'sale return', 'credit_note', 'credit note')
+         AND ${ACTIVE_TXN_FILTER}
          AND transaction_date BETWEEN ? AND ?`,
       [businessId, startDate, endDate]
     );

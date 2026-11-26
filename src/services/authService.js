@@ -97,7 +97,7 @@ export function clearAuthSession() {
     const keysToRemove = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const k = window.localStorage.key(i);
-      if (k && (k.startsWith("ledgerly:") || k.startsWith("usk:"))) {
+      if (k && (k.startsWith("ledgerly:") || k.startsWith("usk:") || k.startsWith("usv.") || k.startsWith("usv:"))) {
         keysToRemove.push(k);
       }
     }

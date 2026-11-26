@@ -24,15 +24,17 @@ import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import ItemTab from "./ItemTab";
 import {
   applyScreenZoom,
-  resetAppSettings,
+  resetAppSettingsAuthoritative,
   createAutoBackupSnapshot,
   exportBackupData,
   getAppSettings,
   getAutoBackupHistory,
+  loadAuthoritativeAppSettings,
   restoreBackupData,
   restoreSnapshot,
-  saveAppSettings,
+  saveAppSettingsAuthoritative,
 } from "../../services/appSettingsStorage.js";
+import { isDatabaseMode } from "../../services/dataStorageConfig.js";
 import {
   clearAuditTrailLogs,
   getAuditTrailLogs,
@@ -69,7 +71,13 @@ function Settings() {
   const location = useLocation();
   const activeTab = settingsTabFromSearch(location.search);
   const [settings, setSettings] = useState(getAppSettings);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(() => isDatabaseMode());
+  const [loadError, setLoadError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [pendingRetryPatch, setPendingRetryPatch] = useState(null);
   const [toast, setToast] = useState("");
+  const saveSeqRef = useRef(0);
+  const pendingLocalPatchRef = useRef({});
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: "",
@@ -101,6 +109,29 @@ function Settings() {
   const newPassInput = useRef(null);
   const confirmPassInput = useRef(null);
 
+  const hydrateSettings = async () => {
+    if (!isDatabaseMode()) {
+      setIsLoadingSettings(false);
+      return;
+    }
+    setIsLoadingSettings(true);
+    setLoadError("");
+    try {
+      const hydrated = await loadAuthoritativeAppSettings();
+      const merged = { ...hydrated, ...pendingLocalPatchRef.current };
+      setSettings(merged);
+      setSelectedZoom(merged.screenZoom || "100%");
+    } catch (err) {
+      setLoadError(err.message || "Failed to load settings from MySQL. Check backend connection.");
+    } finally {
+      setIsLoadingSettings(false);
+    }
+  };
+
+  useEffect(() => {
+    hydrateSettings();
+  }, []);
+
   useEffect(() => {
     if (settings.screenZoom) {
       applyScreenZoom(settings.screenZoom);
@@ -112,17 +143,33 @@ function Settings() {
     setTimeout(() => setToast(""), 3200);
   };
 
-  const update = (key, value) => {
-    const updated = saveAppSettings({ [key]: value });
-    setSettings(updated);
-    showToast("Settings updated");
+  const persistPatch = async (patch) => {
+    const seq = ++saveSeqRef.current;
+    pendingLocalPatchRef.current = { ...pendingLocalPatchRef.current, ...patch };
+    setSettings((prev) => ({ ...prev, ...patch }));
+    setSaveError("");
+    setPendingRetryPatch(null);
+    try {
+      const saved = await saveAppSettingsAuthoritative(patch);
+      for (const k of Object.keys(patch)) {
+        delete pendingLocalPatchRef.current[k];
+      }
+      if (seq === saveSeqRef.current) {
+        setSettings((prev) => ({ ...saved, ...pendingLocalPatchRef.current, ...prev, ...saved }));
+        showToast("Settings updated");
+      }
+      return saved;
+    } catch (err) {
+      setSaveError(err.message || "Failed to save settings to MySQL. Your change was not persisted.");
+      setPendingRetryPatch((prev) => ({ ...(prev || {}), ...patch }));
+      toastNotification.error(err.message || "Failed to save settings to MySQL.");
+      return null;
+    }
   };
 
-  const updateMultiple = (patch) => {
-    const updated = saveAppSettings(patch);
-    setSettings(updated);
-    showToast("Settings updated");
-  };
+  const update = (key, value) => persistPatch({ [key]: value });
+
+  const updateMultiple = (patch) => persistPatch(patch);
 
   // Passcode submission
   const handlePasscodeSubmit = async (e) => {
@@ -241,11 +288,21 @@ function Settings() {
                   message: "Reset all settings to default values? This action cannot be undone.",
                   confirmText: "Reset to Defaults",
                   tone: "danger",
-                  onConfirm: () => {
+                  onConfirm: async () => {
                     setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-                    const defaults = resetAppSettings();
-                    setSettings(defaults);
-                    showToast("Settings reset to defaults");
+                    try {
+                      const defaults = await resetAppSettingsAuthoritative();
+                      pendingLocalPatchRef.current = {};
+                      setSaveError("");
+                      setPendingRetryPatch(null);
+                      setSettings(defaults);
+                      setSelectedZoom(defaults.screenZoom || "100%");
+                      showToast("Settings reset to defaults");
+                    } catch (err) {
+                      const msg = err.message || "Failed to reset settings in MySQL.";
+                      setSaveError(msg);
+                      toastNotification.error(msg);
+                    }
                   },
                 });
               }}
@@ -270,6 +327,37 @@ function Settings() {
 
         {/* Tab Content Body */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6">
+          {isLoadingSettings && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-semibold text-blue-700">
+              Loading authoritative settings from MySQL...
+            </div>
+          )}
+          {loadError && (
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-medium text-rose-700">
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={hydrateSettings}
+                className="ml-4 rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white hover:bg-rose-700"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {saveError && (
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
+              <span>{saveError}</span>
+              {pendingRetryPatch && (
+                <button
+                  type="button"
+                  onClick={() => persistPatch(pendingRetryPatch)}
+                  className="ml-4 rounded-md bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-700"
+                >
+                  Retry Save
+                </button>
+              )}
+            </div>
+          )}
           {activeTab === "general" && (
             <GeneralTab
               settings={settings}
@@ -280,7 +368,8 @@ function Settings() {
               onBackupNow={handleBackupNow}
               onRestoreFile={handleRestoreFile}
               onOpenFirmModal={() => {
-                setNewFirmName(settings.firms?.[0]?.name || "Sai Kirana Stores");
+                const profile = getCompanyProfile();
+                setNewFirmName(settings.firms?.[0]?.name || profile?.companyName || profile?.businessName || "My Business");
                 setFirmModal(true);
               }}
               onOpenGodownModal={() => setGodownModal(true)}
@@ -1011,7 +1100,7 @@ function GeneralTab({
               <label className="inline-flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white py-2 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
                 <FiUpload className="h-3.5 w-3.5 text-emerald-600" />
                 Restore
-                <input type="file" accept=".json" onChange={onRestoreFile} className="hidden" />
+                <input type="file" accept=".usvbackup" onChange={onRestoreFile} className="hidden" />
               </label>
             </div>
           </div>
@@ -1459,15 +1548,19 @@ function TransactionTab({ settings, update, showToast }) {
                 <InfoTooltip text="Automate recurring periodic invoices for regular subscribers or clients." />
               </label>
 
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
+              <label className="flex cursor-not-allowed items-center gap-2 text-xs font-semibold text-slate-400">
                 <input
                   type="checkbox"
+                  disabled
                   checked={settings.passcodeForTxnEditDelete || false}
-                  onChange={(e) => update("passcodeForTxnEditDelete", e.target.checked)}
+                  onChange={() => {}}
                   className="h-4 w-4 rounded accent-blue-600"
                 />
                 Enable Passcode for transaction edit/delete
-                <InfoTooltip text="Require 4-digit passcode authentication before editing or deleting transactions." />
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                  Unavailable
+                </span>
+                <InfoTooltip text="Transaction-level passcode enforcement is not yet supported." />
               </label>
 
               <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
