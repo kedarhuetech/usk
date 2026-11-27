@@ -473,6 +473,14 @@ export function buildUnifiedDocumentHtml(opts = {}) {
         ${partyBillingAddress ? `<div style="font-size:12px;color:#64748b;margin-top:2px;">${escapeHtml(partyBillingAddress)}</div>` : ""}
         ${partyGstin ? `<div style="font-size:11px;font-weight:700;color:#334155;margin-top:2px;">GSTIN: ${escapeHtml(partyGstin)}</div>` : ""}
         ${
+          (() => {
+            const rawFields = opts.party?.additionalFields || opts.partyAdditionalFields || opts.doc?.party?.additionalFields || opts.invoice?.party?.additionalFields || [];
+            const fields = Array.isArray(rawFields) ? rawFields.filter((f) => (f.showInPrint !== false) && (f.value != null && f.value !== "")) : [];
+            if (!fields.length) return "";
+            return fields.map((f) => `<div style="font-size:11px;color:#475569;margin-top:2px;"><b>${escapeHtml(f.fieldName || f.name || "Field")}:</b> ${escapeHtml(f.value)}</div>`).join("");
+          })()
+        }
+        ${
           company.appSettings?.printCurrentBalanceParty && (opts.partyCurrentBalance !== undefined || opts.party?.balance !== undefined || opts.currentBalance !== undefined)
             ? `<div style="font-size:11px;font-weight:700;color:#0284c7;margin-top:4px;">Current Balance of Party: ${formatMoney(opts.partyCurrentBalance ?? opts.party?.balance ?? opts.currentBalance ?? 0)}</div>`
             : ""

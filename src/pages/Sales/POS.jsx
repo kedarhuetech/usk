@@ -499,6 +499,8 @@ export default function PointOfSale() {
       phone: p.phoneNumber || p.phone || "",
       address: p.billingAddress || p.address || "",
       loyaltyPoints: Number(p.loyaltyPoints || p.points || 0),
+      status: p.status || (p.isActive === false ? "inactive" : "active"),
+      isActive: p.isActive !== false && String(p.status).toLowerCase() !== "inactive",
     }));
   }, []);
 
@@ -1580,7 +1582,7 @@ export default function PointOfSale() {
                         >
                           <span className="flex items-center gap-1.5 font-semibold text-slate-800 text-xs">
                             <span>{customer.name}</span>
-                            {(customer.status === "Inactive" || customer.isInactive) && (
+                            {(String(customer.status || "").toLowerCase() === "inactive" || customer.isActive === false || customer.isInactive) && (
                               <span className="rounded bg-amber-100 px-1 py-0.2 text-[9px] font-semibold text-amber-800">
                                 Inactive
                               </span>
