@@ -343,7 +343,7 @@ export const DEFAULT_SETTINGS = {
   // Service Reminders
   serviceRemindersEnabled: true,
   reminderDaysBefore: 2,
-  serviceRemindersAutoWhatsApp: true,
+  serviceRemindersAutoWhatsApp: false,
 
   // Accounting
   financialYearStart: "01/04",
