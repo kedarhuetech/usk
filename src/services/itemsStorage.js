@@ -3,6 +3,7 @@ import { isDatabaseMode } from "./dataStorageConfig.js";
 import { getScopedStorageKey } from "../config/businessConfig.js";
 
 const INVENTORY_ITEMS_KEY = "ledgerly:inventoryItems.v1";
+export const inventoryItemsStorageKey = INVENTORY_ITEMS_KEY;
 export const csvImportedItemsStorageKey = "ledgerly:itemsCsvImports.v1";
 export const itemUiOverridesStorageKey = "ledgerly:itemsUiOverrides.v1";
 export const itemTransactionActionsStorageKey = "ledgerly:itemsTransactionActions.v1";
@@ -587,5 +588,3 @@ export function applyPurchaseBatchStockUpdate(invoice = {}) {
   if (changed) writeItems(nextItems);
   return nextItems;
 }
-
-export const inventoryItemsStorageKey = INVENTORY_ITEMS_KEY;
