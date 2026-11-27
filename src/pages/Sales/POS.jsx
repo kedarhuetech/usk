@@ -200,8 +200,9 @@ function printPosBill(draft, calculations) {
           ${phone ? `<div style="font-size: 10px; color: #333;">Ph: ${phone}</div>` : ''}
           ${gstin ? `<div style="font-size: 10px; font-weight: 700; margin-top: 2px;">GSTIN: ${gstin}</div>` : ''}
           <div style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; margin-top: 6px; font-weight: 900; letter-spacing: 1px; font-size: 11px;">
-            ${settings.transactionNames?.saleInvoice || "TAX INVOICE / CASH MEMO"}
+            ${settings.compositeScheme ? "BILL OF SUPPLY" : (settings.enableGst === false ? "CASH MEMO" : (settings.transactionNames?.saleInvoice || "TAX INVOICE / CASH MEMO"))}
           </div>
+          ${settings.compositeScheme ? `<div style="font-size: 8px; font-weight: bold; margin-top: 2px;">Composition Dealer, Not Eligible to Collect Tax</div>` : ''}
         </div>
 
         <div style="margin-top: 6px; font-size: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px;">
@@ -478,7 +479,7 @@ export default function PointOfSale() {
       code: item.itemCode || item.code || `ITM-${String(item.id || "").slice(-4)}`,
       name: item.itemName || item.name || "Item",
       price: Number(item.salePrice ?? item.price ?? 0),
-      taxRate: appSettings.enableGst === false ? 0 : Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
+      taxRate: (appSettings.enableGst === false || appSettings.compositeScheme) ? 0 : Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
       unit: item.unit || item.baseUnit || "Pcs",
       stock: Number(item.stock ?? item.openingQuantity ?? 0),
       discount: Number(item.discount || 0),
@@ -487,7 +488,7 @@ export default function PointOfSale() {
       barcode: item.barcode || item.barCode || item.itemBarcode || "",
       type: item.type || item.itemType || "product",
     }));
-  }, [appSettings.enableGst]);
+  }, [appSettings.enableGst, appSettings.compositeScheme]);
 
   // Load customers from localStorage (getParties)
   const loadCustomers = useCallback(() => {
@@ -2524,7 +2525,7 @@ export default function PointOfSale() {
                       code: saved.itemCode || saved.code || `ITM-${String(saved.id || "").slice(-4)}`,
                       name: saved.itemName || saved.name || "Item",
                       price: Number(saved.salePrice ?? saved.price ?? 0),
-                      taxRate: appSettings.enableGst === false ? 0 : Number(String(saved.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
+                      taxRate: (appSettings.enableGst === false || appSettings.compositeScheme) ? 0 : Number(String(saved.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
                       unit: saved.unit || saved.baseUnit || "Pcs",
                       stock: Number(saved.currentStock ?? saved.stock ?? saved.openingQuantity ?? 0),
                       discount: Number(saved.discount || 0),

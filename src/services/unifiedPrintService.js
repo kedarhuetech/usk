@@ -160,7 +160,15 @@ const escapeHtml = (val) =>
  * Proforma Invoices, Credit Notes, Debit Notes, Payment Vouchers, etc.
  */
 export function buildUnifiedDocumentHtml(opts = {}) {
-  const title = opts.title || opts.docType || "Tax Invoice";
+  const defaultCompany = getEffectiveCompanyInfo();
+  const company = opts.company
+    ? { ...defaultCompany, ...opts.company, appSettings: { ...(defaultCompany.appSettings || {}), ...(opts.company.appSettings || {}) } }
+    : defaultCompany;
+  const isComposite = Boolean(company.appSettings?.compositeScheme);
+  const isGstEnabled = company.appSettings?.enableGst !== false;
+  const isRcm = Boolean(opts.isRcm || opts.reverseCharge || opts.doc?.reverseCharge || opts.invoice?.reverseCharge || opts.doc?.isRcm || opts.invoice?.isRcm);
+  const defaultTitle = isComposite ? "Bill of Supply" : (!isGstEnabled ? "Invoice" : "Tax Invoice");
+  const title = opts.title || opts.docType || defaultTitle;
   const documentNumber = opts.documentNumber || opts.docNumber || "";
   const date = opts.date || opts.docDate || "";
   const dueDate = opts.dueDate || "";
@@ -169,10 +177,6 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   const partyPhone = opts.partyPhone || "";
   const partyBillingAddress = opts.partyBillingAddress || opts.billToAddress || "";
   const partyShippingAddress = opts.partyShippingAddress || opts.shipToAddress || "";
-  const defaultCompany = getEffectiveCompanyInfo();
-  const company = opts.company
-    ? { ...defaultCompany, ...opts.company, appSettings: { ...(defaultCompany.appSettings || {}), ...(opts.company.appSettings || {}) } }
-    : defaultCompany;
   const isGstinEnabled = (company.appSettings?.enableGstin !== false) && (getAppSettings().enableGstin !== false);
   const partyGstin = isGstinEnabled ? (opts.partyGstin || "") : "";
   const metadataRows = opts.metadataRows || [];
@@ -191,6 +195,7 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     { key: "amount", label: "Amount", align: "right", width: "110px" },
   ];
   const columns = baseColumns.filter((col) => {
+    if (col.key === "tax" && (isComposite || !isGstEnabled)) return false;
     if (!colsConfig) {
       if (col.key === "hsn" && (!opts.columns && company.appSettings?.enableHsnSacCode === false)) return false;
       if (col.key === "discount" && (!opts.columns && !rows.some((r) => Number(r.discount) > 0))) return false;
@@ -417,11 +422,26 @@ export function buildUnifiedDocumentHtml(opts = {}) {
         <span style="display:inline-block;background:${themeColor};color:#ffffff;font-size:13px;font-weight:800;padding:6px 18px;border-radius:6px;text-transform:uppercase;letter-spacing:1px;box-shadow:0 2px 4px rgba(0,0,0,0.06);">
           ${escapeHtml(title)}
         </span>
+        ${
+          isComposite
+            ? `<div style="font-size:10px;font-weight:700;color:#92400e;margin-top:4px;">
+                Composition taxable person, not eligible to collect tax on supplies
+              </div>`
+            : ""
+        }
+        ${
+          isRcm
+            ? `<div style="font-size:10px;font-weight:700;color:#b91c1c;margin-top:4px;background:#fef2f2;border:1px solid #fecaca;padding:2px 6px;border-radius:4px;display:inline-block;">
+                Tax Payable on Reverse Charge: YES
+              </div>`
+            : ""
+        }
         <div style="margin-top:8px;font-size:12px;color:#334155;">
           ${documentNumber ? `<p style="margin:2px 0;"><b>No.:</b> ${escapeHtml(documentNumber)}</p>` : ""}
           ${date ? `<p style="margin:2px 0;"><b>Date:</b> ${escapeHtml(date)}</p>` : ""}
           ${dueDate ? `<p style="margin:2px 0;"><b>Due Date:</b> ${escapeHtml(dueDate)}</p>` : ""}
           ${status ? `<p style="margin:2px 0;"><b>Status:</b> <span style="font-weight:700;color:${themeColor};">${escapeHtml(status)}</span></p>` : ""}
+          ${(opts.stateOfSupply || opts.doc?.stateOfSupply || opts.invoice?.stateOfSupply) && company.appSettings?.enablePlaceOfSupply !== false ? `<p style="margin:2px 0;"><b>Place of Supply:</b> ${escapeHtml(opts.stateOfSupply || opts.doc?.stateOfSupply || opts.invoice?.stateOfSupply)}</p>` : ""}
           ${(opts.transporterName || opts.doc?.transporterName || opts.invoice?.transporterName) ? `<p style="margin:2px 0;"><b>Transporter:</b> ${escapeHtml(opts.transporterName || opts.doc?.transporterName || opts.invoice?.transporterName)}</p>` : ""}
           ${(opts.vehicleNumber || opts.doc?.vehicleNumber || opts.invoice?.vehicleNumber || opts.vehicleNo || opts.doc?.vehicleNo || opts.invoice?.vehicleNo) && !company.appSettings?.additionalFieldsSetup?.txnField1?.enabled ? `<p style="margin:2px 0;"><b>Vehicle No:</b> ${escapeHtml(opts.vehicleNumber || opts.doc?.vehicleNumber || opts.invoice?.vehicleNumber || opts.vehicleNo || opts.doc?.vehicleNo || opts.invoice?.vehicleNo)}</p>` : ""}
           ${[
@@ -662,6 +682,22 @@ export function buildUnifiedDocumentHtml(opts = {}) {
                   ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
                       <span>${escapeHtml(company.appSettings?.additionalChargesSetup?.charges?.[2]?.name || "Other Charges")}:</span>
                       <span style="font-weight:700;">+${formatMoney(opts.additionalCharges?.other || opts.doc?.otherCharges || totals.other)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.tcsAmount || totals.tcsAmount || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
+                      <span>TCS (+):</span>
+                      <span style="font-weight:700;color:#0f172a;">+${formatMoney(opts.tcsAmount || totals.tcsAmount)}</span>
+                    </div>`
+                  : ""
+              }
+              ${
+                Number(opts.tdsAmount || totals.tdsAmount || 0) > 0
+                  ? `<div style="display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #e2e8f0;color:#475569;">
+                      <span>TDS Deductible (-):</span>
+                      <span style="font-weight:700;color:#be123c;">-${formatMoney(opts.tdsAmount || totals.tdsAmount)}</span>
                     </div>`
                   : ""
               }
