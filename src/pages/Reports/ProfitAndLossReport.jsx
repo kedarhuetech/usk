@@ -6,6 +6,7 @@ import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
 import { isDatabaseMode } from "../../services/dataStorageConfig";
 import { transactionsDb } from "../../services/databaseRepository";
 import { loadBusinessItems } from "../../services/businessRecords";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const readLocal = (...keys) => {
@@ -537,7 +538,49 @@ export default function ProfitAndLossReport() {
     XLSX.writeFile(wb, `ProfitAndLoss_${view}_${from}_to_${to}.xlsx`);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    const rows = [
+      { section: "Trading Account (Income)", particulars: "Gross Sales", amount: data.grossSales },
+      { section: "Trading Account (Income)", particulars: "Less: Sale Returns", amount: -Math.abs(data.saleReturns) },
+      { section: "Trading Account (Income)", particulars: "Closing Stock", amount: data.closingStock },
+      { section: "Trading Account (Income)", particulars: "Other Operating Income", amount: data.otherIncome },
+      { section: "Trading Account (Costs)", particulars: "Opening Stock", amount: -Math.abs(data.openingStock) },
+      { section: "Trading Account (Costs)", particulars: "Gross Purchases", amount: -Math.abs(data.grossPurchases) },
+      { section: "Trading Account (Costs)", particulars: "Less: Purchase Returns", amount: data.purchaseReturns },
+      { section: "Trading Account (Costs)", particulars: "Direct Expenses", amount: -Math.abs(data.directExpense) },
+      { section: "Indirect Expenses", particulars: "Other Indirect Expenses", amount: -Math.abs(data.otherExpense) },
+      { section: "Indirect Expenses", particulars: "Loan Interest Expense", amount: -Math.abs(data.loanInterest) },
+      { section: "Indirect Expenses", particulars: "Loan Processing / Charges", amount: -Math.abs(data.loanProcessingFee + data.loanCharges) },
+    ].map((r, i) => ({ index: i + 1, ...r }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Profit & Loss Statement",
+      documentNumber: `PL-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: data.netProfit >= 0 ? "Net Profit" : "Net Loss",
+      partyName: "All Business Operations",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "section", label: "Classification", align: "left", width: "180px" },
+        { key: "particulars", label: "Particulars", align: "left" },
+        { key: "amount", label: "Amount (₹)", align: "right", width: "150px", formatMoney: true },
+      ],
+      rows,
+      totals: [
+        { label: "Total Revenue / Income", value: fmt(data.totalSales + data.otherIncome + data.closingStock) },
+        { label: "Cost of Goods Sold (COGS)", value: fmt(data.totalPurchase + data.openingStock + data.directExpense - data.closingStock) },
+        { label: "Gross Profit", value: fmt(data.grossProfit) },
+        { label: "Total Indirect Expenses", value: fmt(data.otherExpense + data.loanInterest + data.loanProcessingFee + data.loanCharges) },
+        { label: data.netProfit >= 0 ? "NET PROFIT" : "NET LOSS", value: fmt(data.netProfit), isGrand: true },
+      ],
+      notes: `${dateSub} | Gross Profit: ${fmt(data.grossProfit)} | Net Profit: ${fmt(data.netProfit)}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[#263b57]">

@@ -8,6 +8,7 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { calculateSaleReturnRow } from "../../services/saleReturnsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
@@ -377,6 +378,46 @@ export default function PartyReportByItem() {
     XLSX.writeFile(wb, "party-report-by-item.xlsx");
   };
 
+  const handlePrint = () => {
+    const printRows = filteredRows.map((r, idx) => ({
+      index: idx + 1,
+      partyName: r.partyName,
+      saleQty: r.saleQty,
+      saleAmount: r.saleAmount,
+      purchaseQty: r.purchaseQty,
+      purchaseAmount: r.purchaseAmount,
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Party Report By Item",
+      documentNumber: `PARTY-ITEM-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: selectedItem || "All Items",
+      partyName: selectedItem || "All Items",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "partyName", label: "Party Name", align: "left" },
+        { key: "saleQty", label: "Sale Qty", align: "center", width: "90px" },
+        { key: "saleAmount", label: "Sale Amount", align: "right", width: "120px", formatMoney: true },
+        { key: "purchaseQty", label: "Purchase Qty", align: "center", width: "90px" },
+        { key: "purchaseAmount", label: "Purchase Amount", align: "right", width: "120px", formatMoney: true },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Sale Qty", value: String(totalSaleQty) },
+        { label: "Total Sale Amount", value: `₹ ${totalSaleAmount.toFixed(2)}` },
+        { label: "Total Purchase Qty", value: String(totalPurchaseQty) },
+        { label: "Total Purchase Amount", value: `₹ ${totalPurchaseAmount.toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Item: ${selectedItem || "All Items"}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full flex-col bg-white overflow-hidden text-slate-800">
       {/* ── Top Filter Bar matching Screenshot ── */}
@@ -445,7 +486,7 @@ export default function PartyReportByItem() {
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={handlePrint}
               className="flex flex-col items-center gap-1 hover:text-blue-600 transition"
             >
               <FiPrinter className="h-5 w-5 text-slate-600" />

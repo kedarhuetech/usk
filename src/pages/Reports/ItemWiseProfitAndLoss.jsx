@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { FiPrinter } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { isDatabaseMode } from "../../services/dataStorageConfig";
 import { transactionsDb } from "../../services/databaseRepository";
@@ -336,6 +337,46 @@ export default function ItemWiseProfitAndLoss() {
     XLSX.writeFile(wb, `Item_Wise_ProfitLoss_${from}_to_${to}.xlsx`);
   };
 
+  const handlePrint = () => {
+    const printRows = rows.map((r, idx) => ({
+      index: idx + 1,
+      item: r.itemName,
+      sale: r.saleAmt,
+      purchase: r.purchaseAmt,
+      openingStock: r.openingStockVal,
+      closingStock: r.closingStockVal,
+      netPL: r.netPL,
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Item Wise Profit & Loss Report",
+      documentNumber: `ITEM-PL-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${rows.length} Items Analyzed`,
+      partyName: "All Inventory Items",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "item", label: "Item Name", align: "left" },
+        { key: "sale", label: "Sales (₹)", align: "right", width: "110px", formatMoney: true },
+        { key: "purchase", label: "Purchases (₹)", align: "right", width: "110px", formatMoney: true },
+        { key: "openingStock", label: "Opening (₹)", align: "right", width: "100px", formatMoney: true },
+        { key: "closingStock", label: "Closing (₹)", align: "right", width: "100px", formatMoney: true },
+        { key: "netPL", label: "Net Profit / Loss", align: "right", width: "130px", formatMoney: true },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Items", value: String(rows.length) },
+        { label: "TOTAL NET PROFIT / LOSS", value: `₹ ${totalNetPL.toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Total Net Profit: ₹${totalNetPL.toFixed(2)}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-slate-800 text-xs">
       {/* ── Top Bar ── */}
@@ -369,7 +410,7 @@ export default function ItemWiseProfitAndLoss() {
             className="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-emerald-600 shadow-xs hover:bg-emerald-50">
             <RiFileExcel2Line className="h-4 w-4" />
           </button>
-          <button type="button" onClick={() => window.print()} title="Print"
+          <button type="button" onClick={handlePrint} title="Print"
             className="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-50">
             <FiPrinter className="h-4 w-4" />
           </button>

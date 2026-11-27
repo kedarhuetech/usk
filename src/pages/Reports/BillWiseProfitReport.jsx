@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { getParties } from "../../services/partiesStorage";
 import { getPurchaseBills } from "../../services/purchaseBillsStorage";
@@ -483,6 +484,48 @@ export default function BillWiseProfitReport() {
     );
   };
 
+  const handlePrint = () => {
+    const rows = filteredInvoices.map((inv, idx) => ({
+      index: idx + 1,
+      date: inv.formattedDate || inv.date,
+      invoiceNumber: inv.invoiceNumber,
+      partyName: inv.partyName,
+      saleAmount: inv.saleAmount,
+      totalCost: inv.totalCost !== null ? inv.totalCost : "—",
+      profit: inv.profit !== null ? inv.profit : "—",
+      status: inv.hasMissingCost ? "Cost Missing" : (inv.profit < 0 ? "Loss" : "Profit"),
+    }));
+
+    const dateSub = fromDate && toDate ? `Period: ${fromDate} to ${toDate}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Bill Wise Profit & Loss Report",
+      documentNumber: `BILL-PROF-${fromDate ? fromDate.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${filteredInvoices.length} Invoices`,
+      partyName: selectedParty || "All Parties",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "date", label: "Date", align: "center", width: "85px" },
+        { key: "invoiceNumber", label: "Invoice No", align: "center", width: "95px" },
+        { key: "partyName", label: "Party Name", align: "left" },
+        { key: "saleAmount", label: "Sale Amount", align: "right", width: "110px", formatMoney: true },
+        { key: "totalCost", label: "Total Cost", align: "right", width: "110px", formatMoney: true },
+        { key: "profit", label: "Profit / Loss", align: "right", width: "110px", formatMoney: true },
+        { key: "status", label: "Status", align: "center", width: "85px" },
+      ],
+      rows,
+      totals: [
+        { label: "Total Sale Amount", value: `₹ ${totalSaleAmount.toFixed(2)}` },
+        { label: "Total Profit / Loss", value: `₹ ${totalProfitKnown.toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Total Bills: ${countTotal} | Known Profit Bills: ${countKnown}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 text-slate-800 text-xs">
       {/* ── Top Filters Bar ── */}
@@ -595,7 +638,7 @@ export default function BillWiseProfitReport() {
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={handlePrint}
               title="Print Report"
               className="flex h-8 w-8 items-center justify-center rounded border border-slate-300 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
             >

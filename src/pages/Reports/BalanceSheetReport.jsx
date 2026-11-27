@@ -5,6 +5,7 @@ import { balanceSheetRepository } from "../../services/balanceSheetRepository";
 import { balanceSheetAccountGroups, calculateBalanceSheet, validateBalanceSheetAccount } from "../../utils/balanceSheetCalculations";
 import { toast } from "../../components/Common/Toast.jsx";
 import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const fmt = (value) => `₹ ${Number(value || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -53,9 +54,54 @@ export default function BalanceSheetReport() {
   };
   const exportExcel = () => { const rows = [["Balance Sheet", `As of ${report.asOfDate || asOfDate}`], [], ["ASSETS", "Amount"], ["Current Assets", report.totalCurrentAssets], ...report.assets.map((row) => [row.name, row.amount]), ["Non-Current Assets", report.totalNonCurrentAssets], ...report.nonCurrentAssets.map((row) => [row.name, row.amount]), ["Total Assets", report.totalAssets], [], ["LIABILITIES", "Amount"], ...report.liabilities.map((row) => [row.name, row.amount]), ...report.nonCurrentLiabilities.map((row) => [row.name, row.amount]), ["Total Liabilities", report.totalLiabilities], [], ["OWNER'S EQUITY", "Amount"], ...report.equity.map((row) => [row.name, row.amount]), ["Total Owner's Equity", report.totalEquity], ["Total Liabilities + Equity", report.totalLiabilitiesAndEquity], ["Difference", report.difference], ...report.warnings.map((warning) => ["Data note", warning])]; const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), "Balance Sheet"); XLSX.writeFile(book, `balance-sheet-${report.asOfDate || asOfDate}.xlsx`); };
   const quickDate = (period) => { const d = new Date(); if (period === "Last Month") { const end = new Date(d.getFullYear(), d.getMonth(), 0); setAsOfDate(`${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}`); return; } if (period === "This Year") { setAsOfDate(`${d.getFullYear()}-12-31`); return; } setAsOfDate(todayIso()); };
+  const handlePrint = () => {
+    const assetRows = [
+      ...report.assets.map((r) => ({ section: "Current Assets", name: r.name, amount: r.amount })),
+      ...report.nonCurrentAssets.map((r) => ({ section: "Non-Current Assets", name: r.name, amount: r.amount })),
+    ];
+    const liabilityRows = [
+      ...report.liabilities.map((r) => ({ section: "Current Liabilities", name: r.name, amount: r.amount })),
+      ...report.nonCurrentLiabilities.map((r) => ({ section: "Non-Current Liabilities", name: r.name, amount: r.amount })),
+      ...report.equity.map((r) => ({ section: "Owner's Equity", name: r.name, amount: r.amount })),
+    ];
+
+    const rows = [
+      ...assetRows.map((r, i) => ({ index: i + 1, section: r.section, name: r.name, amount: r.amount })),
+      ...liabilityRows.map((r, i) => ({ index: assetRows.length + i + 1, section: r.section, name: r.name, amount: r.amount })),
+    ];
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Balance Sheet",
+      documentNumber: `BS-${(report.asOfDate || asOfDate).replace(/-/g, "")}`,
+      date: report.asOfDate || asOfDate,
+      status: firm,
+      partyName: firm === "ALL FIRMS" ? "All Business Operations" : firm,
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "section", label: "Classification", align: "left", width: "160px" },
+        { key: "name", label: "Account / Particulars", align: "left" },
+        { key: "amount", label: "Amount", align: "right", width: "140px", formatMoney: true },
+      ],
+      rows,
+      totals: [
+        { label: "Total Current Assets", value: fmt(report.totalCurrentAssets) },
+        { label: "Total Non-Current Assets", value: fmt(report.totalNonCurrentAssets) },
+        { label: "TOTAL ASSETS", value: fmt(report.totalAssets), isGrand: true },
+        { label: "Total Liabilities", value: fmt(report.totalLiabilities) },
+        { label: "Total Owner's Equity", value: fmt(report.totalEquity) },
+        { label: "TOTAL LIABILITIES + EQUITY", value: fmt(report.totalLiabilitiesAndEquity), isGrand: true },
+        ...(report.difference !== 0 ? [{ label: "Difference", value: fmt(report.difference) }] : []),
+      ],
+      notes: `As of Date: ${report.asOfDate || asOfDate} | Firm: ${firm} | Total Assets: ${fmt(report.totalAssets)}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
+
   const toggle = (key) => setExpanded((old) => ({ ...old, [key]: !old[key] }));
   return <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 text-[#263b57]">
-    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3"><div><h1 className="text-lg font-bold">Balance Sheet</h1><p className="text-xs text-slate-500">Balances as at the selected date</p></div><div className="flex flex-wrap items-center gap-2"><label className="text-sm text-slate-600">As of <input aria-label="As of date" type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5" /></label><select aria-label="Balance Sheet date shortcut" defaultValue="" onChange={(e) => { if (e.target.value) quickDate(e.target.value); e.target.value = ""; }} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"><option value="">Quick date</option><option>This Month</option><option>Last Month</option><option>This Year</option><option>All Time</option></select><button type="button" onClick={exportExcel} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Export Excel</button><button type="button" onClick={() => window.print()} className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"><FiPrinter />Print</button></div></header>
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3"><div><h1 className="text-lg font-bold">Balance Sheet</h1><p className="text-xs text-slate-500">Balances as at the selected date</p></div><div className="flex flex-wrap items-center gap-2"><label className="text-sm text-slate-600">As of <input aria-label="As of date" type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5" /></label><select aria-label="Balance Sheet date shortcut" defaultValue="" onChange={(e) => { if (e.target.value) quickDate(e.target.value); e.target.value = ""; }} className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm"><option value="">Quick date</option><option>This Month</option><option>Last Month</option><option>This Year</option><option>All Time</option></select><button type="button" onClick={exportExcel} className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50">Export Excel</button><button type="button" onClick={handlePrint} className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50"><FiPrinter />Print</button></div></header>
     <main className="flex-1 space-y-4 overflow-auto p-4 md:p-6">
       <div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs uppercase text-slate-500">Total Assets</p><b className="text-lg">{fmt(report.totalAssets)}</b></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs uppercase text-slate-500">Total Liabilities</p><b className="text-lg">{fmt(report.totalLiabilities)}</b></div><div className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs uppercase text-slate-500">Owner’s Equity</p><b className="text-lg">{fmt(report.totalEquity)}</b></div></div>
       <Section title="Current Assets" rows={report.assets} total={report.totalCurrentAssets} expanded={expanded.assets} onToggle={() => toggle("assets")} />

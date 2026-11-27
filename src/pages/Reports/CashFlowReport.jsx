@@ -17,6 +17,7 @@ import {
 } from "../../utils/cashFlowCalculations";
 import { toast } from "../../components/Common/Toast.jsx";
 import ConfirmModal from "../../components/Common/ConfirmModal.jsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 const readLocal = (...keys) => {
@@ -213,6 +214,49 @@ export default function CashFlowReport() {
     });
   };
 
+  const handlePrintSingle = (row, autoPrint = true) => {
+    if (!row) return;
+    const t = String(row.type || "").toLowerCase();
+    const rawDoc = row.raw || row;
+
+    if (t.includes("sale") || t.includes("pos")) {
+      navigate("/sales/sale-invoices/preview", {
+        state: { invoice: rawDoc, printAfterOpen: autoPrint },
+      });
+      return;
+    }
+
+    const isCashIn = (row.cashIn ?? row.in ?? 0) > 0 || (row.type || "").toLowerCase().includes("in");
+    const amount = Number(row.cashIn || row.cashOut || row.amount || 0);
+
+    const html = buildUnifiedDocumentHtml({
+      title: `${row.type || "Cash Flow"} Voucher`,
+      documentNumber: row.refNo || rawDoc.billNumber || rawDoc.invoiceNumber || rawDoc.id || "",
+      date: row.date || rawDoc.date || "",
+      status: isCashIn ? "Cash In" : "Cash Out",
+      partyName: row.partyName || row.name || rawDoc.party || "Cash / Direct Account",
+      columns: [
+        { key: "description", label: "Description / Account", align: "left" },
+        { key: "type", label: "Transaction Type", align: "center", width: "120px" },
+        { key: "amount", label: "Amount", align: "right", width: "140px", formatMoney: true },
+      ],
+      rows: [
+        {
+          description: `${row.partyName || row.name || "Cash Flow Entry"} (${row.category || "General"})`,
+          type: row.type || "Cash Flow",
+          amount,
+        },
+      ],
+      totals: {
+        total: amount,
+      },
+      notes: `Flow Type: ${isCashIn ? "Inflow (+)" : "Outflow (-)"} | Category: ${row.category || "General"}`,
+      autoPrint,
+    });
+
+    openPrintWindow(html, autoPrint);
+  };
+
   const handleAction = (action, row) => {
     setMenuState(null);
     if (!row) return;
@@ -239,14 +283,7 @@ export default function CashFlowReport() {
     }
 
     if (action === "Open PDF" || action === "Print") {
-      const t = row.type.toLowerCase();
-      if (t.includes("sale") || t.includes("pos")) {
-        navigate("/sales/sale-invoices/preview", {
-          state: { invoice: row.raw, printAfterOpen: action === "Print" },
-        });
-      } else {
-        window.print();
-      }
+      handlePrintSingle(row, action === "Print");
       return;
     }
 
@@ -289,7 +326,50 @@ export default function CashFlowReport() {
     XLSX.writeFile(wb, `CashFlow_${from}_to_${to}.xlsx`);
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    const rows = filteredRows.map((r, idx) => ({
+      index: idx + 1,
+      date: r.date || "—",
+      refNo: r.refNo || "—",
+      partyName: r.name || r.partyName || "—",
+      category: r.category || "—",
+      type: r.type || "—",
+      cashIn: r.cashIn || 0,
+      cashOut: r.cashOut || 0,
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Cash Flow Statement",
+      documentNumber: `CF-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${filteredRows.length} Transactions`,
+      partyName: "All Accounts",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "date", label: "Date", align: "center", width: "85px" },
+        { key: "refNo", label: "Ref No", align: "center", width: "90px" },
+        { key: "partyName", label: "Party / Account", align: "left" },
+        { key: "category", label: "Category", align: "left", width: "100px" },
+        { key: "type", label: "Type", align: "center", width: "90px" },
+        { key: "cashIn", label: "Cash In", align: "right", width: "110px", formatMoney: true },
+        { key: "cashOut", label: "Cash Out", align: "right", width: "110px", formatMoney: true },
+      ],
+      rows,
+      totals: [
+        { label: "Opening Balance", value: `₹ ${Number(openingBalance).toFixed(2)}` },
+        { label: "Total Cash-In", value: `₹ ${Number(totalCashIn).toFixed(2)}` },
+        { label: "Total Cash-Out", value: `₹ ${Number(totalCashOut).toFixed(2)}` },
+        { label: "Net Cash Flow", value: `₹ ${Number(totalCashIn - totalCashOut).toFixed(2)}` },
+        { label: "Closing Balance", value: `₹ ${Number(closingBalance).toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Total Transactions: ${filteredRows.length} | Net Position: ₹${(closingBalance).toFixed(2)}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-[#263b57]">
@@ -506,7 +586,7 @@ export default function CashFlowReport() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          window.print();
+                          handlePrintSingle(row, true);
                         }}
                         title="Print"
                         className="hover:text-gray-800 p-1 rounded"

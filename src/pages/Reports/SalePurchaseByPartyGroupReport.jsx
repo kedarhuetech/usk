@@ -6,6 +6,7 @@ import {
   FiSearch,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getParties } from "../../services/partiesStorage";
 import { loadBusinessParties } from "../../services/businessRecords.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
@@ -279,6 +280,41 @@ export default function SalePurchaseByPartyGroupReport() {
     XLSX.writeFile(wb, `Sale_Purchase_By_Party_Group_${from}_to_${to}.xlsx`);
   };
 
+  const handlePrint = () => {
+    const printRows = rows.map((r, idx) => ({
+      index: idx + 1,
+      groupName: r.groupName,
+      saleAmount: r.saleAmount || 0,
+      purchaseAmount: r.purchaseAmount || 0,
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Sale & Purchase By Party Group Report",
+      documentNumber: `SP-GROUP-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${rows.length} Groups`,
+      partyName: "All Party Groups",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "groupName", label: "Group Name", align: "left" },
+        { key: "saleAmount", label: "Sale Amount", align: "right", width: "150px", formatMoney: true },
+        { key: "purchaseAmount", label: "Purchase Amount", align: "right", width: "150px", formatMoney: true },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Sale Amount", value: `₹ ${totalSaleAmount.toFixed(2)}` },
+        { label: "Total Purchase Amount", value: `₹ ${totalPurchaseAmount.toFixed(2)}` },
+        { label: "NET TURNOVER", value: `₹ ${(totalSaleAmount + totalPurchaseAmount).toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Total Groups: ${rows.length}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 text-slate-800">
       {/* ── Top Filters ── */}
@@ -346,7 +382,7 @@ export default function SalePurchaseByPartyGroupReport() {
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
+              onClick={handlePrint}
               className="flex flex-col items-center gap-1 hover:text-blue-600 transition"
               title="Print Report"
             >

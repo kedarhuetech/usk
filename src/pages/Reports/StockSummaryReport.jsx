@@ -6,6 +6,7 @@ import {
   FiFilter,
 } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
@@ -294,6 +295,44 @@ export default function StockSummaryReport() {
     XLSX.writeFile(wb, `Stock_Summary_${dateFilter}.xlsx`);
   };
 
+  const handlePrint = () => {
+    const printRows = rows.map((r, i) => ({
+      index: i + 1,
+      item: r.name,
+      purchasePrice: r.purchasePrice,
+      sellingPrice: r.salePrice,
+      stockQty: r.stockQty,
+      availableQty: r.availableQty,
+      reservedQty: r.reservedQty,
+      stockValue: r.stockValue,
+    }));
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Stock Summary Report",
+      documentNumber: `STOCK-${dateFilter.replace(/-/g, "")}`,
+      date: dateFilter,
+      status: `${rows.length} Items`,
+      partyName: categoryFilter,
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "item", label: "Item Name", align: "left" },
+        { key: "purchasePrice", label: "Purchase Price", align: "right", width: "110px", formatMoney: true },
+        { key: "sellingPrice", label: "Selling Price", align: "right", width: "110px", formatMoney: true },
+        { key: "stockQty", label: "Stock Qty", align: "center", width: "90px" },
+        { key: "stockValue", label: "Stock Value", align: "right", width: "130px", formatMoney: true },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Stock Items", value: String(rows.length) },
+        { label: "Total Stock Qty", value: String(totals.stockQty) },
+        { label: "TOTAL STOCK VALUE", value: fmt(totals.stockValue), isGrand: true },
+      ],
+      notes: `Category: ${categoryFilter} | Total Value: ${fmt(totals.stockValue)}`,
+      autoPrint: true,
+    });
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-slate-800 text-xs">
       {/* ── Filter Bar ── */}
@@ -378,7 +417,7 @@ export default function StockSummaryReport() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             title="Print"
             className="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-50 transition-colors"
           >
