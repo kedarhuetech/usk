@@ -22,6 +22,7 @@ import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import HsnAutocomplete from "../../components/Common/HsnAutocomplete";
 import { matchGstRateToOption } from "../../services/hsnService.js";
+import { validateGstin, cleanGstin } from "../../utils/gstinUtils";
 import DatePicker from "../../components/items/DatePicker";
 import UnitSelector from "../../components/items/UnitSelector";
 import AddItem from "../Items/AddItem";
@@ -46,7 +47,7 @@ import {
 } from "../../services/businessRecords";
 import { getParties } from "../../services/partiesStorage";
 import { getInventoryItems, saveInventoryItem, isItemBatchTracked } from "../../services/itemsStorage";
-import { saveSaleInvoice as saveSaleInvoiceLocally } from "../../services/salesStorage";
+import { saveSaleInvoice as saveSaleInvoiceLocally, getLast5PricesForItem } from "../../services/salesStorage";
 import { localDateOnly } from "../../services/batchInventoryService.js";
 import { getPurchaseBills, savePurchaseBill as savePurchaseBillLocally } from "../../services/purchaseBillsStorage";
 import { calculateInvoiceTotals, calculateRow, toNumber } from "../../utils/saleInvoice";
@@ -130,6 +131,7 @@ function createRow() {
     id: crypto.randomUUID(),
     item: "",
     qty: "",
+    freeQty: "",
     unit: "",
     price: "",
     priceMode: priceModes[0],
@@ -960,6 +962,20 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           </>
         )}
 
+        {(appSettings.transportationDetails?.transporterName || form.transporterName) && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">Transporter</span>
+            <TextInput value={form.transporterName || ""} onChange={(e) => setField("transporterName", e.target.value)} placeholder="Transporter Name" />
+          </>
+        )}
+
+        {(appSettings.transportationDetails?.vehicleNumber || form.vehicleNumber) && !appSettings.additionalFieldsSetup?.txnField1?.enabled && (
+          <>
+            <span className="pt-2 text-[13px] text-slate-500">Vehicle No.</span>
+            <TextInput value={form.vehicleNumber || ""} onChange={(e) => setField("vehicleNumber", e.target.value)} placeholder="Vehicle Number" />
+          </>
+        )}
+
         {/* Enabled Transaction Additional Fields */}
         {["txnField1", "txnField2", "txnField3", "dateField"].map((fKey) => {
           const field = appSettings.additionalFieldsSetup?.[fKey];
@@ -1355,6 +1371,9 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
               <th rowSpan="2" className="w-28 border-r border-slate-200 px-2 py-1.5 text-center">Serial/IMEI</th>
             )}
             <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-16 border-r border-slate-200 px-2 py-1.5">Qty</th>
+            {appSettings.enableFreeItemQuantity && (
+              <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-16 border-r border-slate-200 px-2 py-1.5 text-center">Free Qty</th>
+            )}
             <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : 2} className="w-24 border-r border-slate-200 px-2 py-1.5">Unit</th>
             <th rowSpan={appSettings.billingType === "Lite Sale" ? 1 : undefined} className="w-36 border-r border-slate-200 px-2 py-1.5 text-center">Price/Unit</th>
             {appSettings.billingType !== "Lite Sale" && (
@@ -1545,13 +1564,40 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
                     return null;
                   })()}
                 </td>
+                {appSettings.enableFreeItemQuantity && (
+                  <td className="border-r border-slate-200 p-1">
+                    <CellInput inputMode="decimal" value={row.freeQty || ""} onChange={(event) => updateRow(row.id, "freeQty", event.target.value)} placeholder="0" />
+                  </td>
+                )}
                 <td className="border-r border-slate-200 p-1"><UnitSelector value={row.unit} onChange={(value) => updateRow(row.id, "unit", value)} className="[&_button]:h-8 [&_button]:px-2 [&_button]:text-[13px]" /></td>
                 <td className="border-r border-slate-200 p-1">
                   <div className="grid gap-1">
-                    {appSettings.billingType !== "Lite Sale" && (
+                    {appSettings.billingType !== "Lite Sale" && appSettings.inclusiveTaxOnRate !== false && (
                       <SelectInput value={row.priceMode} onChange={(value) => updateRow(row.id, "priceMode", value)} options={priceModes} className="h-8 text-xs" />
                     )}
                     <CellInput inputMode="decimal" error={rowErrors.price} value={row.price} onChange={(event) => updateRow(row.id, "price", event.target.value)} />
+                    {(() => {
+                      const showLastPrices = isPurchase ? appSettings.showLast5PurchasePrice : appSettings.showLast5SalePrice;
+                      if (!showLastPrices || !row.item?.trim()) return null;
+                      const lastPrices = getLast5PricesForItem(row.item, isPurchase);
+                      if (!lastPrices || !lastPrices.length) return null;
+                      return (
+                        <div className="flex flex-wrap items-center gap-1 text-[10px] text-slate-500 mt-0.5">
+                          <span className="font-semibold text-slate-600">Last 5:</span>
+                          {lastPrices.map((p, pIdx) => (
+                            <button
+                              key={pIdx}
+                              type="button"
+                              title="Click to apply rate"
+                              onClick={() => updateRow(row.id, "price", String(p))}
+                              className="rounded bg-blue-50 px-1 py-0.5 font-bold text-blue-700 hover:bg-blue-100 hover:text-blue-800 transition-colors"
+                            >
+                              ₹{p}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </td>
                 {appSettings.billingType !== "Lite Sale" && (
@@ -1591,6 +1637,9 @@ function InvoiceTable({ rows, setRows, items, errors, onAddItem, appSettings = {
             )}
             {enableSerialTracking && <td className="border-r border-slate-200" />}
             <td className="border-r border-slate-200 px-2 text-right">{totals.qty}</td>
+            {appSettings.enableFreeItemQuantity && (
+              <td className="border-r border-slate-200 px-2 text-right text-slate-500 font-semibold">{totals.freeQty || 0}</td>
+            )}
             <td className="border-r border-slate-200" />
             <td className="border-r border-slate-200 text-right">Total</td>
             {appSettings.billingType !== "Lite Sale" && (
@@ -1898,38 +1947,110 @@ function AddOns({ form, setField, files, setFiles, templates, setTemplates, show
 }
 
 // Renders the totals panel interface.
-function TotalsPanel({ totals, roundOff, setRoundOff, roundOffValue, setRoundOffValue, receivedEnabled, setReceivedEnabled, receivedAmount, setReceivedAmount, appSettings = {}, rowCount = 0, error = "", additionalCharges = {}, setAdditionalCharges }) {
+function TotalsPanel({
+  totals,
+  roundOff,
+  setRoundOff,
+  roundOffValue,
+  setRoundOffValue,
+  receivedEnabled,
+  setReceivedEnabled,
+  receivedAmount,
+  setReceivedAmount,
+  appSettings = {},
+  rowCount = 0,
+  error = "",
+  additionalCharges = {},
+  setAdditionalCharges,
+  txnDiscount = "",
+  setTxnDiscount,
+  txnTaxRate = "",
+  setTxnTaxRate,
+}) {
   const displayedRoundOff = roundOff ? (roundOffValue || formatMoneyInput(totals.roundOffAmount)) : "";
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {(appSettings.additionalChargesEnabled || Number(additionalCharges?.shipping || 0) > 0) && (
+        {(appSettings.transactionWiseDiscount || Number(totals.txnDiscount || 0) > 0) && (
           <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">Shipping / Freight:</span>
+            <span className="font-semibold text-slate-700">Invoice Discount:</span>
             <input
               type="number"
               min="0"
-              value={additionalCharges?.shipping ?? ""}
-              onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, shipping: Math.max(0, Number(e.target.value) || 0) }))}
+              value={txnDiscount}
+              onChange={(e) => setTxnDiscount && setTxnDiscount(e.target.value)}
               placeholder="0.00"
               className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
             />
           </div>
         )}
-        {(appSettings.additionalChargesEnabled || Number(additionalCharges?.packaging || 0) > 0) && (
+        {(appSettings.transactionWiseTax || Number(totals.txnTax || 0) > 0) && (
           <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
-            <span className="font-semibold text-slate-700">Packaging Charges:</span>
+            <span className="font-semibold text-slate-700">Transaction Tax (%):</span>
             <input
               type="number"
               min="0"
-              value={additionalCharges?.packaging ?? ""}
-              onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, packaging: Math.max(0, Number(e.target.value) || 0) }))}
-              placeholder="0.00"
-              className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+              value={txnTaxRate}
+              onChange={(e) => setTxnTaxRate && setTxnTaxRate(e.target.value)}
+              placeholder="0%"
+              className="h-8 w-20 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
             />
+            {Number(totals.txnTax || 0) > 0 && (
+              <span className="font-semibold text-slate-700">+₹{totals.txnTax.toFixed(2)}</span>
+            )}
           </div>
         )}
+        {(() => {
+          const isChargesEnabled = Boolean(appSettings.additionalChargesEnabled || appSettings.additionalChargesSetup?.enabled);
+          const charge1 = appSettings.additionalChargesSetup?.charges?.[0] || { name: "Shipping / Freight" };
+          const charge2 = appSettings.additionalChargesSetup?.charges?.[1] || { name: "Packaging Charges" };
+          const charge3 = appSettings.additionalChargesSetup?.charges?.[2] || { name: "Other Charges" };
+
+          return (
+            <>
+              {(isChargesEnabled || Number(additionalCharges?.shipping || 0) > 0) && (
+                <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">{charge1.name || "Shipping / Freight"}:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalCharges?.shipping ?? ""}
+                    onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, shipping: Math.max(0, Number(e.target.value) || 0) }))}
+                    placeholder="0.00"
+                    className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+              {(isChargesEnabled || Number(additionalCharges?.packaging || 0) > 0) && (
+                <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">{charge2.name || "Packaging Charges"}:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalCharges?.packaging ?? ""}
+                    onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, packaging: Math.max(0, Number(e.target.value) || 0) }))}
+                    placeholder="0.00"
+                    className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+              {(isChargesEnabled || Number(additionalCharges?.other || 0) > 0) && (
+                <div className="w-full flex justify-end items-center gap-3 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">{charge3.name || "Other Charges"}:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={additionalCharges?.other ?? ""}
+                    onChange={(e) => setAdditionalCharges && setAdditionalCharges((prev) => ({ ...prev, other: Math.max(0, Number(e.target.value) || 0) }))}
+                    placeholder="0.00"
+                    className="h-8 w-28 rounded border border-slate-300 bg-white px-2 text-right text-xs outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+            </>
+          );
+        })()}
         <label className="flex items-center gap-2 text-[13px] text-slate-500">
           <input type="checkbox" checked={roundOff} onChange={(event) => setRoundOff(event.target.checked)} className="h-4 w-4 accent-blue-600" />
           Round Off
@@ -2458,9 +2579,19 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
 
   // Saves result.
   const save = () => {
+    const isGstinEnabled = getAppSettings().enableGstin !== false;
     const nextErrors = {};
     if (!business.name.trim()) nextErrors.name = "Business Name is required";
-    if (!business.gstin.trim()) nextErrors.gstin = "Please Enter GSTIN";
+    if (isGstinEnabled) {
+      if (!business.gstin.trim()) {
+        nextErrors.gstin = "Please Enter GSTIN";
+      } else {
+        const gstinVal = validateGstin(business.gstin);
+        if (!gstinVal.valid) {
+          nextErrors.gstin = gstinVal.error;
+        }
+      }
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setSuccess(`${mode} details saved for demo.`);
@@ -2491,9 +2622,11 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
           <h2 className="text-lg font-bold text-slate-800">{mode === "Generate E-Way Bill" ? "E-Way Bill Details" : "Edit Firm"}</h2>
           <button type="button" onClick={onClose} className="rounded-md p-1 text-slate-500 hover:bg-slate-100"><FiX className="h-5 w-5" /></button>
         </header>
-        <div className="mb-5 rounded-md border border-rose-300 bg-rose-50 px-3 py-2.5 text-[13px] font-medium text-rose-700">
-          Please fill in the GSTIN to continue generating the e-Invoice/E-Way Bill.
-        </div>
+        {isGstinEnabled && (
+          <div className="mb-5 rounded-md border border-rose-300 bg-rose-50 px-3 py-2.5 text-[13px] font-medium text-rose-700">
+            Please fill in the GSTIN to continue generating the e-Invoice/E-Way Bill.
+          </div>
+        )}
         {success && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-[13px] font-semibold text-emerald-700">{success}</div>}
         <div className="grid gap-5 md:grid-cols-[260px_1fr]">
           <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
@@ -2502,7 +2635,9 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
           </button>
           <div className="grid gap-3">
             <label><span className="mb-1 block text-xs text-slate-500">Business Name *</span><TextInput error={errors.name} value={business.name} onChange={(event) => setBusinessField("name", event.target.value)} /></label>
-            <label><span className="mb-1 block text-xs text-blue-600">GSTIN</span><TextInput error={errors.gstin} value={business.gstin} onChange={(event) => setBusinessField("gstin", event.target.value)} />{errors.gstin && <span className="mt-1 block text-xs text-rose-600">{errors.gstin}</span>}</label>
+            {isGstinEnabled && (
+              <label><span className="mb-1 block text-xs text-blue-600">GSTIN</span><TextInput error={errors.gstin} value={business.gstin} onChange={(event) => setBusinessField("gstin", event.target.value)} />{errors.gstin && <span className="mt-1 block text-xs text-rose-600">{errors.gstin}</span>}</label>
+            )}
             <label><span className="mb-1 block text-xs text-slate-500">Phone No.</span><TextInput value={business.phone} onChange={(event) => setBusinessField("phone", event.target.value.slice(0, 30))} /></label>
             <TextInput value={business.email} onChange={(event) => setBusinessField("email", event.target.value)} placeholder="Email ID" />
           </div>
@@ -2717,6 +2852,14 @@ function AddSale({ mode = "sale", localOnly = false }) {
       other: Number(editInvoice?.otherCharges ?? editInvoice?.other_charges ?? 0),
     };
   });
+  const [txnDiscount, setTxnDiscount] = useState(() => {
+    const raw = editInvoice?.totals?.txnDiscount ?? editInvoice?.txnDiscount;
+    return raw != null && raw !== "" && Number(raw) > 0 ? String(raw) : "";
+  });
+  const [txnTaxRate, setTxnTaxRate] = useState(() => {
+    const raw = editInvoice?.totals?.txnTaxRate ?? editInvoice?.txnTaxRate;
+    return raw != null && raw !== "" && Number(raw) > 0 ? String(raw) : "";
+  });
   const [billingType, setBillingType] = useState("Full Sale");
   const [transactionId, setTransactionId] = useState(() => editInvoice?.id || editInvoice?.invoiceId || crypto.randomUUID());
   const [files, setFiles] = useState(() => {
@@ -2762,7 +2905,8 @@ function AddSale({ mode = "sale", localOnly = false }) {
         ? [`Converted from Online Order ${onlineOrderConversion.id}.`, orderAdditionalChargeNote(onlineOrderConversion)].filter(Boolean).join("\n")
         : ""),
       ewayBillNo: deliveryChallanConversion?.ewayBillNo || deliveryChallanConversion?.eWayBillNo || "",
-      vehicleNumber: deliveryChallanConversion?.vehicleNumber || deliveryChallanConversion?.vehicleNo || "",
+      vehicleNumber: deliveryChallanConversion?.vehicleNumber || deliveryChallanConversion?.vehicleNo || (getAppSettings().transportationDetails?.vehicleNumber || ""),
+      transporterName: deliveryChallanConversion?.transporterName || (getAppSettings().transportationDetails?.transporterName || ""),
       driverName: deliveryChallanConversion?.driverName || "",
       paymentType: "Cash",
     };
@@ -2878,8 +3022,8 @@ function AddSale({ mode = "sale", localOnly = false }) {
   }, []);
 
   const totals = useMemo(
-    () => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0, additionalCharges),
-    [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled, additionalCharges]
+    () => calculateInvoiceTotals(rows, roundOff, roundOffValue, receivedEnabled ? receivedAmount : 0, additionalCharges, txnDiscount, txnTaxRate),
+    [rows, roundOff, roundOffValue, receivedAmount, receivedEnabled, additionalCharges, txnDiscount, txnTaxRate]
   );
   const hasValidInvoiceItem = useMemo(() => rows.some((row) => row.item.trim() && toNumber(row.qty) > 0), [rows]);
 
@@ -3111,6 +3255,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
       description: form.description || "",
       terms: form.terms || "",
       termsTitle: form.termsTitle || "",
+      transporterName: form.transporterName || appSettings.transportationDetails?.transporterName || "",
       vehicleNumber: form.vehicleNumber || form.txnField1 || "",
       vehicleNo: form.vehicleNumber || form.txnField1 || "",
       driverName: form.driverName || form.txnField2 || "",
@@ -3169,7 +3314,13 @@ function AddSale({ mode = "sale", localOnly = false }) {
       },
       rows: mappedRows,
       items: mappedRows,
-      totals,
+      txnDiscount: Math.max(0, Number(txnDiscount) || 0),
+      txnTaxRate: Math.max(0, Number(txnTaxRate) || 0),
+      totals: {
+        ...totals,
+        txnDiscount: Math.max(0, Number(txnDiscount) || 0),
+        txnTaxRate: Math.max(0, Number(txnTaxRate) || 0),
+      },
       business,
       files,
       saleOrderIds: [
@@ -3626,6 +3777,10 @@ function AddSale({ mode = "sale", localOnly = false }) {
             error={errors?.received || ""}
             additionalCharges={additionalCharges}
             setAdditionalCharges={setAdditionalCharges}
+            txnDiscount={txnDiscount}
+            setTxnDiscount={setTxnDiscount}
+            txnTaxRate={txnTaxRate}
+            setTxnTaxRate={setTxnTaxRate}
           />
           {toast && <p className="mt-2 text-right text-[13px] font-medium text-emerald-600">{toast}</p>}
         </div>

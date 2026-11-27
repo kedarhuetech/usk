@@ -12,6 +12,7 @@ import multer from "multer";
 import { pool, businessIdFromRequest } from "../db/mysql.js";
 import { storageService } from "../services/storage/storageService.js";
 import { getFileMetadataById } from "../db/businessFilesRepository.js";
+import { validateGstin } from "../utils/gstinUtils.js";
 
 const router = Router();
 
@@ -515,8 +516,20 @@ router.post("/company-profile", async (req, res) => {
 
     const phone = resolveField(["phone", "phoneNumber"], existing?.phone);
     const email = resolveField(["email", "emailId"], existing?.email);
-    const gstin = resolveField(["gstin"], existing?.gstin);
-    const pan = resolveField(["pan"], existing?.pan);
+    const rawGstin = resolveField(["gstin"], existing?.gstin);
+    let gstin = rawGstin;
+    let pan = resolveField(["pan"], existing?.pan);
+
+    if (rawGstin) {
+      const gstinValidation = validateGstin(rawGstin, { required: false });
+      if (!gstinValidation.valid) {
+        return res.status(400).json({ success: false, message: gstinValidation.error });
+      }
+      gstin = gstinValidation.clean;
+      if (!pan && gstinValidation.pan) {
+        pan = gstinValidation.pan;
+      }
+    }
 
     const streetAddress = resolveField(["streetAddress", "businessAddress", "address"], existing?.street_address);
     const city = resolveField(["city"], existing?.city);

@@ -9,6 +9,7 @@
 
 import { Router } from "express";
 import { pool, businessIdFromRequest, toSqlDate } from "../db/mysql.js";
+import { validateGstin } from "../utils/gstinUtils.js";
 
 const router = Router();
 
@@ -283,8 +284,20 @@ const savePartyHandler = async (req, res) => {
 
     const phone = pickText(["phone", "mobile", "phoneNumber"], existingParty?.phone);
     const email = pickText(["email"], existingParty?.email);
-    const gstin = pickText(["gstin", "gstNumber"], existingParty?.gstin);
-    const pan = pickText(["pan"], existingParty?.pan);
+    const rawGstin = pickText(["gstin", "gstNumber"], existingParty?.gstin);
+    let gstin = rawGstin;
+    let pan = pickText(["pan"], existingParty?.pan);
+
+    if (rawGstin) {
+      const gstinValidation = validateGstin(rawGstin, { required: false });
+      if (!gstinValidation.valid) {
+        return res.status(400).json({ success: false, message: gstinValidation.error });
+      }
+      gstin = gstinValidation.clean;
+      if (!pan && gstinValidation.pan) {
+        pan = gstinValidation.pan;
+      }
+    }
 
     const rawPartyType = body.partyType ?? body.party_type;
     let partyType;

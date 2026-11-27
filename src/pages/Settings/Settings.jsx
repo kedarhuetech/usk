@@ -951,28 +951,6 @@ function GeneralTab({
               <InfoTooltip text="Track open Sales and Purchase Orders." />
             </label>
 
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={settings.enableOtherIncome || false}
-                onChange={(e) => update("enableOtherIncome", e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
-              />
-              Other Income
-              <InfoTooltip text="Record direct other income entries." />
-            </label>
-
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                checked={settings.enableFixedAssets || false}
-                onChange={(e) => update("enableFixedAssets", e.target.checked)}
-                className="h-4 w-4 rounded accent-blue-600"
-              />
-              Fixed Assets (FA)
-              <InfoTooltip text="Manage depreciation and fixed asset transactions." />
-            </label>
-
             {/* Delivery Challan with Nested options */}
             <div className="pt-1">
               <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700">
@@ -2137,7 +2115,9 @@ function TransactionTab({ settings, update, showToast }) {
                   <div className="text-center space-y-0.5">
                     <h4 className="text-base font-bold text-slate-900">{firmName}</h4>
                     {firmPhone && <p className="text-[11px] text-slate-500">Phone no: {firmPhone}</p>}
-                    {firmGstin && <p className="text-[11px] text-slate-500">GSTIN: {firmGstin}</p>}
+                    {settings.enableGstin !== false && settings.printGstinOnSale !== false && firmGstin && (
+                      <p className="text-[11px] text-slate-500">GSTIN: {firmGstin}</p>
+                    )}
                     {/* Dynamic Firm Additional Fields */}
                     {["firmField1", "firmField2"].map((k) => {
                       const f = settings.additionalFieldsSetup?.[k];
@@ -2392,13 +2372,17 @@ function TransactionTab({ settings, update, showToast }) {
         };
 
         const toggleMasterEnable = () => {
-          const updatedSetup = { ...setup, enabled: !setup.enabled };
+          const nextEnabled = !setup.enabled;
+          const updatedSetup = { ...setup, enabled: nextEnabled };
           update("additionalChargesSetup", updatedSetup);
+          update("additionalChargesEnabled", nextEnabled);
         };
 
         const handleSaveDetails = () => {
           const activeCharges = (setup.charges || []).filter((c) => c.selected);
           update("additionalCharges", activeCharges);
+          update("additionalChargesSetup", setup);
+          update("additionalChargesEnabled", Boolean(setup.enabled));
           setAdditionalChargesModal(false);
           if (typeof showToast === "function") {
             showToast("Additional charges saved successfully");

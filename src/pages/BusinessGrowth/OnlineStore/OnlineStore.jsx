@@ -23,6 +23,7 @@ import {
 } from "react-icons/fi";
 import Button from "../../../components/Common/Button";
 import Card from "../../../components/Common/Card";
+import { getAppSettings } from "../../../services/appSettingsStorage";
 import AddItem from "../../Items/AddItem";
 import {
   calculateInventoryItemPricing,
@@ -352,7 +353,7 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
               </div>
             </div>
             <div className="grid gap-1 text-sm text-slate-600">
-              {storeState.gstin && <span className="font-semibold text-slate-700">GSTIN: {storeState.gstin}</span>}
+              {getAppSettings().enableGstin !== false && storeState.gstin && <span className="font-semibold text-slate-700">GSTIN: {storeState.gstin}</span>}
               {storeState.contactNumber && <span><FiPhone className="mr-2 inline h-4 w-4" />{storeState.contactNumber}</span>}
               {storeState.email && <span><FiMail className="mr-2 inline h-4 w-4" />{storeState.email}</span>}
               {storeState.address && <span><FiMapPin className="mr-2 inline h-4 w-4" />{storeState.address}</span>}
@@ -1133,7 +1134,7 @@ function StorefrontPreview({ storeState, items, onBack, onShareProduct }) {
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
               <p className="font-bold text-slate-900">{storeState.businessName || storeState.storeName}</p>
-              {storeState.gstin && <p className="mt-2 font-semibold text-slate-700">GSTIN: {storeState.gstin}</p>}
+              {getAppSettings().enableGstin !== false && storeState.gstin && <p className="mt-2 font-semibold text-slate-700">GSTIN: {storeState.gstin}</p>}
               {storeState.contactNumber && <p className="mt-2"><FiPhone className="mr-2 inline h-4 w-4" />{storeState.contactNumber}</p>}
               {storeState.email && <p className="mt-1"><FiMail className="mr-2 inline h-4 w-4" />{storeState.email}</p>}
               {storeState.address && <p className="mt-1"><FiMapPin className="mr-2 inline h-4 w-4" />{storeState.address}</p>}

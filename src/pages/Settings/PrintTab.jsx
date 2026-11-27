@@ -186,11 +186,12 @@ export default function PrintTab({ settings, update }) {
                       className="accent-blue-600 h-4 w-4 rounded"
                     />
                   </label>
-                  <label className="flex items-center justify-between text-xs text-slate-700 cursor-pointer">
-                    <span>Print GSTIN Number</span>
+                  <label className={`flex items-center justify-between text-xs ${settings.enableGstin === false ? "text-slate-400 cursor-not-allowed" : "text-slate-700 cursor-pointer"}`}>
+                    <span>Print GSTIN Number {settings.enableGstin === false && <span className="text-[10px] text-amber-600 font-normal">(Disabled in General)</span>}</span>
                     <input
                       type="checkbox"
-                      checked={settings.printGstinOnSale !== false}
+                      disabled={settings.enableGstin === false}
+                      checked={settings.enableGstin !== false && settings.printGstinOnSale !== false}
                       onChange={(e) => update("printGstinOnSale", e.target.checked)}
                       className="accent-blue-600 h-4 w-4 rounded"
                     />
@@ -479,14 +480,15 @@ export default function PrintTab({ settings, update }) {
               </div>
 
               {/* GSTIN on Sale */}
-              <label className="flex items-center gap-2.5 text-xs text-slate-700 cursor-pointer">
+              <label className={`flex items-center gap-2.5 text-xs ${settings.enableGstin === false ? "text-slate-400 cursor-not-allowed" : "text-slate-700 cursor-pointer"}`}>
                 <input
                   type="checkbox"
-                  checked={settings.printGstinOnSale ?? true}
+                  disabled={settings.enableGstin === false}
+                  checked={settings.enableGstin !== false && (settings.printGstinOnSale ?? true)}
                   onChange={(e) => update("printGstinOnSale", e.target.checked)}
                   className="h-4 w-4 rounded accent-blue-600 cursor-pointer"
                 />
-                <span>GSTIN on Sale</span>
+                <span>GSTIN on Sale {settings.enableGstin === false && <span className="text-[10px] text-amber-600 font-normal">(Disabled in General)</span>}</span>
                 <InfoTooltip text="Print firm GST identification number on tax invoice" />
               </label>
 
@@ -918,7 +920,7 @@ export default function PrintTab({ settings, update }) {
                       Ph: {settings.phoneNumberPrint || defaultPhone}
                     </div>
                   )}
-                  {settings.printGstinOnSale && (
+                  {settings.enableGstin !== false && settings.printGstinOnSale && (
                     <div className="text-[8.5px] font-semibold text-slate-700">
                       GSTIN: {defaultGstin || "27AAACH7409R1Z1"}
                     </div>
@@ -1267,7 +1269,7 @@ function LiveThemeRenderer({ themeName, themeColor, settings }) {
             <div className={`font-bold ${companyFontSize}`} style={{ color: themeColor }}>{companyName}</div>
             {settings.printAddress && <div className="text-[9px] text-slate-600">{address}</div>}
             {settings.printPhoneNumber && <div className="text-[9px] text-slate-600">Ph: {phone}</div>}
-            {settings.printGstinOnSale && <div className="text-[9px] font-bold">GSTIN: {gstin}</div>}
+            {settings.enableGstin !== false && settings.printGstinOnSale && <div className="text-[9px] font-bold">GSTIN: {gstin}</div>}
           </div>
           <div className="text-right">
             <span className="inline-block px-2 py-1 text-white font-bold rounded text-xs" style={{ backgroundColor: themeColor }}>
@@ -1612,7 +1614,7 @@ function LiveThemeRenderer({ themeName, themeColor, settings }) {
           {settings.printAddress && address && (
             <div className="text-slate-500 text-[9px]">{address}</div>
           )}
-          {settings.printGstinOnSale && (
+          {settings.enableGstin !== false && settings.printGstinOnSale && (
             <div className="text-slate-600 text-[9.5px] font-semibold mt-0.5">
               GSTIN : {gstin}
             </div>

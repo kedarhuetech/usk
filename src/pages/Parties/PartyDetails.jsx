@@ -765,7 +765,7 @@ function PartyDetails() {
       companyName,
       companyPhone: company.phone || company.phoneNumber || "",
       companyEmail: senderEmail,
-      companyGstin: company.gstin || "",
+      companyGstin: (appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false) ? (company.gstin || "") : "",
       party: selectedParty || {},
       rows: statementRows,
       totals: statementTotals,
@@ -850,7 +850,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
         companyName: company.businessName || company.companyName || "Company",
         companyPhone: company.phone || company.phoneNumber || "",
         companyEmail: senderEmail,
-        companyGstin: company.gstin || "",
+        companyGstin: (appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false) ? (company.gstin || "") : "",
         party: selectedParty || {},
         rows: statementRows,
         totals: statementTotals,
@@ -917,7 +917,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
         companyName: company.businessName || company.companyName || "Company",
         companyPhone: company.phone || company.phoneNumber || "",
         companyEmail: senderEmail,
-        companyGstin: company.gstin || "",
+        companyGstin: (appSettings.enableGstin !== false && appSettings.printGstinOnSale !== false) ? (company.gstin || "") : "",
         party: selectedParty || {},
         rows: statementRows,
         totals: statementTotals,
@@ -1331,7 +1331,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
                 {selectedParty.email && (
                   <div><strong className="text-slate-700">Email:</strong> {selectedParty.email}</div>
                 )}
-                {selectedParty.gstin && (
+                {(appSettings.enableGstin !== false) && selectedParty.gstin && (
                   <div><strong className="text-slate-700">GSTIN:</strong> {selectedParty.gstin}</div>
                 )}
                 {selectedParty.billingAddress && (

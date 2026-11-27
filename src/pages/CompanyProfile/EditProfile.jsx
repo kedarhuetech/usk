@@ -19,6 +19,8 @@ import {
 } from "../../services/companyProfileStorage";
 import { companyProfileApi } from "../../services/apiClient";
 import { getActiveBusinessId, getScopedStorageKey } from "../../config/businessConfig";
+import { useAppSettings } from "../../hooks/useAppSettings";
+import { validateGstin, cleanGstin } from "../../utils/gstinUtils";
 
 const LOGO_FIT_MODE_STORAGE_KEY = "ledgerly:companyLogoFitMode.v1";
 
@@ -112,6 +114,8 @@ const BUSINESS_CATEGORIES = [
 
 export default function EditProfile() {
   const navigate = useNavigate();
+  const appSettings = useAppSettings() || {};
+  const isGstinEnabled = appSettings.enableGstin !== false;
   const [formData, setFormData] = useState(getCompanyProfile);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -198,6 +202,20 @@ export default function EditProfile() {
         next.companyName = value;
       } else if (name === "companyName") {
         next.businessName = value;
+      } else if (name === "gstin") {
+        const clean = cleanGstin(value);
+        next.gstin = clean;
+        if (clean.length === 15) {
+          const meta = validateGstin(clean);
+          if (meta.valid) {
+            if (!prev.pan && meta.pan) {
+              next.pan = meta.pan;
+            }
+            if (!prev.state && meta.stateName) {
+              next.state = meta.stateName;
+            }
+          }
+        }
       } else if (name === "phoneNumber") {
         next.phone = value;
       } else if (name === "phone") {
@@ -304,11 +322,11 @@ export default function EditProfile() {
     setIsSaving(true);
     setErrorMessage("");
 
-    const trimmedGstin = (formData.gstin || "").trim().toUpperCase();
-    if (trimmedGstin) {
-      const gstinPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i;
-      if (!gstinPattern.test(trimmedGstin)) {
-        setErrorMessage("Please enter a valid 15-character GSTIN (e.g. 27ABCDE1234F1Z5).");
+    const trimmedGstin = cleanGstin(formData.gstin);
+    if (isGstinEnabled && trimmedGstin) {
+      const gstinResult = validateGstin(trimmedGstin, { required: false });
+      if (!gstinResult.valid) {
+        setErrorMessage(gstinResult.error);
         setIsSaving(false);
         return;
       }
@@ -597,23 +615,55 @@ export default function EditProfile() {
                 />
               </div>
 
-              <div>
-                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
-                  GSTIN{" "}
-                  <FiInfo
-                    className="cursor-pointer text-xs text-slate-400"
-                    title="Goods and Services Tax Identification Number"
+              {isGstinEnabled && (
+                <div>
+                  <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      GSTIN{" "}
+                      <FiInfo
+                        className="cursor-pointer text-xs text-slate-400"
+                        title="Goods and Services Tax Identification Number (15 alphanumeric characters)"
+                      />
+                    </span>
+                    {cleanGstin(formData.gstin).length > 0 && cleanGstin(formData.gstin).length < 15 && (
+                      <span className="text-[11px] font-medium text-slate-400">
+                        {cleanGstin(formData.gstin).length}/15
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    name="gstin"
+                    value={formData.gstin || ""}
+                    onChange={handleChange}
+                    maxLength={15}
+                    placeholder="e.g. 27ABCDE1234F1Z5"
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm uppercase font-mono text-slate-800 placeholder:text-slate-400 placeholder:normal-case transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
-                </label>
-                <input
-                  type="text"
-                  name="gstin"
-                  value={formData.gstin || ""}
-                  onChange={handleChange}
-                  placeholder="Enter GSTIN"
-                  className="h-10 w-full rounded-lg border border-slate-300 px-3.5 text-sm text-slate-800 placeholder:text-slate-400 transition focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
+                  {(() => {
+                    const clean = cleanGstin(formData.gstin);
+                    if (!clean) return null;
+                    const res = validateGstin(clean);
+                    if (res.valid) {
+                      return (
+                        <p className="mt-1.5 flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                          <FiCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span>Valid GSTIN · {res.stateName} · PAN: {res.pan}</span>
+                        </p>
+                      );
+                    }
+                    if (clean.length === 15) {
+                      return (
+                        <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-rose-500">
+                          <FiAlertCircle className="w-3.5 h-3.5" />
+                          <span>{res.error}</span>
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
 
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-slate-600">

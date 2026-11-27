@@ -638,6 +638,8 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
   let keyCount = 0;
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
+    // Never include snapshot history inside snapshots to prevent exponential recursive bloat
+    if (key && (key.includes("snapshots") || key.includes("backup_history"))) continue;
     if (key && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
       snapshotData[key] = window.localStorage.getItem(key);
       keyCount++;
@@ -658,7 +660,7 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
 
   try {
     const history = getAutoBackupHistory();
-    const updatedHistory = [snapshotRecord, ...history].slice(0, 10); // keep last 10 rolling snapshots
+    const updatedHistory = [snapshotRecord, ...history].slice(0, 3); // keep last 3 rolling snapshots to stay safely within browser 5MB quota
     window.localStorage.setItem(getAutoBackupHistoryStorageKey(), JSON.stringify(updatedHistory));
 
     // Update settings timestamp
