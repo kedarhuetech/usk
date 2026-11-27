@@ -7,6 +7,7 @@ import { transactionsDb } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 
 const PURCHASE_BILLS_KEY = transactionStorageKeys.purchases;
+export const purchaseBillsStorageKey = PURCHASE_BILLS_KEY;
 
 function canUseStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
@@ -260,5 +261,3 @@ export async function applyPaymentToPurchaseBill(billNumberOrId, paymentAmount =
 
   return updatedBill;
 }
-
-export const purchaseBillsStorageKey = PURCHASE_BILLS_KEY;

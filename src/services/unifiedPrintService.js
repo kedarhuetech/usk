@@ -253,16 +253,6 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     }
   }
 
-  const themeColor = company.themeColor || "#881337";
-  const rawSym = String(company.currencySymbol || "₹").trim();
-  const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
-  const decimals = company.appSettings?.printAmountWithDecimal !== false ? 2 : 0;
-  const formatMoney = (v) =>
-    `${sym} ${Number(v || 0).toLocaleString("en-IN", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    })}`;
-
   const grandTotal = opts.totalAmount !== undefined
     ? Number(opts.totalAmount)
     : Number(
@@ -277,6 +267,15 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company.name || "Business")}&am=${grandTotal}&cu=INR`
     : "";
 
+  const themeColor = company.themeColor || "#881337";
+  const rawSym = String(company.currencySymbol || "₹").trim();
+  const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
+  const decimals = company.appSettings?.printAmountWithDecimal !== false ? 2 : 0;
+  const formatMoney = (v) =>
+    `${sym} ${Number(v || 0).toLocaleString("en-IN", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    })}`;
   const printShipping =
     company.appSettings?.printShippingAddress !== false &&
     Boolean(partyShippingAddress);
@@ -1062,7 +1061,25 @@ export function openPrintWindow(html, autoPrint = false) {
 function fallbackToWindow(html, autoPrint = false) {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    toast.warning("Please allow pop-ups in your browser to print documents.");
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => {
+        if (iframe.parentNode) document.body.removeChild(iframe);
+      }, 3000);
+    }, 400);
     return;
   }
   printWindow.document.open();
@@ -1077,6 +1094,7 @@ function fallbackToWindow(html, autoPrint = false) {
         console.warn("Print trigger error:", e);
       }
     };
+    printWindow.focus();
     if (printWindow.document.readyState === "complete" || printWindow.document.readyState === "interactive") {
       setTimeout(trigger, 300);
     } else {

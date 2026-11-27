@@ -327,12 +327,20 @@ export function calculateInvoiceProfit(invoice = {}, inventoryItems = [], purcha
   );
 
   // Additional Charges
-  const additionalCharges = Number(
+  const rawAdditional =
+    safeInvoice.totals?.additionalChargesSum ??
     safeInvoice.totals?.additionalCharges ??
-      safeInvoice.additionalCharges ??
-      safeInvoice.form?.additionalCharges ??
-      0
-  );
+    safeInvoice.additionalCharges ??
+    safeInvoice.form?.additionalCharges ??
+    0;
+
+  const additionalCharges = typeof rawAdditional === "number" && !isNaN(rawAdditional)
+    ? rawAdditional
+    : typeof rawAdditional === "object" && rawAdditional !== null
+    ? Object.values(rawAdditional).reduce((sum, val) => sum + (Number(val) || 0), 0)
+    : !isNaN(Number(rawAdditional))
+    ? Number(rawAdditional)
+    : 0;
 
   // Profit/Loss Calculation
   let profit = null;

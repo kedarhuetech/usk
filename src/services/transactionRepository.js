@@ -65,14 +65,18 @@ export function readTransactionCollection(key) {
   if (memoryStore.has(scopedKey)) {
     return memoryStore.get(scopedKey) || [];
   }
+  if (memoryStore.has(key)) {
+    return memoryStore.get(key) || [];
+  }
   if (typeof window === "undefined" || !window.localStorage) return [];
-  const raw = window.localStorage.getItem(scopedKey);
+  const raw = window.localStorage.getItem(scopedKey) ?? window.localStorage.getItem(key);
   if (raw == null) return [];
   let value;
   try { value = JSON.parse(raw); }
   catch (error) { throw new Error(`Saved transaction data (${key}) is corrupted: ${error.message}`, { cause: error }); }
   if (!Array.isArray(value)) throw new Error(`Saved transaction data (${key}) must be a list.`);
   memoryStore.set(scopedKey, value);
+  memoryStore.set(key, value);
   return value;
 }
 
@@ -80,7 +84,13 @@ export function writeTransactionCollection(key, records) {
   if (!Array.isArray(records)) throw new Error("Transaction records must be an array.");
   const scopedKey = getScopedStorageKey(key);
   memoryStore.set(scopedKey, records);
-  try { storage().setItem(scopedKey, JSON.stringify(records)); } catch {}
+  memoryStore.set(key, records);
+  try {
+    storage().setItem(scopedKey, JSON.stringify(records));
+    if (scopedKey !== key) {
+      storage().setItem(key, JSON.stringify(records));
+    }
+  } catch {}
   return records;
 }
 

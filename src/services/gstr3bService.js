@@ -191,6 +191,24 @@ export function calculateGSTR3BData({
 
   // Home state resolution (defaults to Maharashtra)
   const homeState = (companyProfile?.state || "Maharashtra").trim().toLowerCase();
+  const homeGstin = String(companyProfile?.gstin || "").trim();
+  const homeGstinPrefix = homeGstin.length >= 2 ? homeGstin.slice(0, 2) : "";
+
+  const checkInterstate = (stateOfSupply, partyState, gstin) => {
+    const supply = String(stateOfSupply || partyState || "").trim();
+    const isExplicit = supply && supply.toLowerCase() !== "none" && supply.toLowerCase() !== homeState;
+    const cleanGst = String(gstin || "").trim();
+    const prefix = cleanGst.length >= 2 ? cleanGst.slice(0, 2) : "";
+    let isGst = false;
+    if (prefix && /^\d{2}$/.test(prefix)) {
+      if (homeGstinPrefix && /^\d{2}$/.test(homeGstinPrefix)) {
+        isGst = prefix !== homeGstinPrefix;
+      } else if (homeState === "maharashtra") {
+        isGst = prefix !== "27";
+      }
+    }
+    return Boolean(isExplicit || isGst);
+  };
 
   // Create party lookup map
   const partyMap = new Map();
@@ -257,10 +275,8 @@ export function calculateGSTR3BData({
       sale.form?.stateOfSupply || party.state || ""
     ).trim();
 
-    const isExplicitInterstate = stateOfSupply && stateOfSupply.toLowerCase() !== "none" && stateOfSupply.toLowerCase() !== homeState;
     const gstin = String(party.gstin || sale.form?.gstin || "").trim();
-    const isGstinInterstate = gstin.length >= 2 && !gstin.startsWith("27") && homeState === "maharashtra";
-    const isInterstate = Boolean(isExplicitInterstate || isGstinInterstate);
+    const isInterstate = checkInterstate(sale.form?.stateOfSupply, party.state, gstin);
 
     const partyGstType = String(party.gstType || "").toLowerCase();
     const isUnregistered = partyGstType.includes("unregistered") || partyGstType.includes("consumer") || !gstin;
@@ -389,11 +405,8 @@ export function calculateGSTR3BData({
     const suppName = String(bill.form?.customer || bill.partyName || bill.supplier || bill.party || "").trim();
     const party = partyMap.get(suppName.toLowerCase()) || {};
 
-    const stateOfSupply = String(bill.form?.stateOfSupply || party.state || "").trim();
-    const isExplicitInterstate = stateOfSupply && stateOfSupply.toLowerCase() !== "none" && stateOfSupply.toLowerCase() !== homeState;
     const gstin = String(party.gstin || bill.form?.gstin || "").trim();
-    const isGstinInterstate = gstin.length >= 2 && !gstin.startsWith("27") && homeState === "maharashtra";
-    const isInterstate = Boolean(isExplicitInterstate || isGstinInterstate);
+    const isInterstate = checkInterstate(bill.form?.stateOfSupply, party.state, gstin);
 
     const isRcm = Boolean(bill.isReverseCharge || bill.reverseCharge || bill.form?.isReverseCharge);
     const isCompositionSupplier = String(party.gstType || "").toLowerCase().includes("composition");
@@ -451,7 +464,7 @@ export function calculateGSTR3BData({
     const suppName = String(exp.party || exp.vendor || exp.category || "").trim();
     const party = partyMap.get(suppName.toLowerCase()) || {};
     const gstin = String(exp.gstin || party.gstin || "").trim();
-    const isInterstate = Boolean(gstin && gstin.length >= 2 && !gstin.startsWith("27") && homeState === "maharashtra");
+    const isInterstate = checkInterstate(exp.stateOfSupply, party.state, gstin);
 
     (exp.rows || []).forEach((row) => {
       const taxRateNum = Number(row.tax || exp.tax || 0);
@@ -473,10 +486,8 @@ export function calculateGSTR3BData({
   purchaseReturnsInPeriod.forEach((pr) => {
     const suppName = String(pr.party || pr.supplier || "").trim();
     const party = partyMap.get(suppName.toLowerCase()) || {};
-    const stateOfSupply = String(pr.stateOfSupply || party.state || "").trim();
-    const isExplicitInterstate = stateOfSupply && stateOfSupply.toLowerCase() !== "none" && stateOfSupply.toLowerCase() !== homeState;
     const gstin = String(party.gstin || pr.gstin || "").trim();
-    const isInterstate = Boolean(isExplicitInterstate || (gstin.length >= 2 && !gstin.startsWith("27") && homeState === "maharashtra"));
+    const isInterstate = checkInterstate(pr.stateOfSupply, party.state, gstin);
 
     const rows = pr.rows || pr.items || [];
     rows.forEach((row) => {

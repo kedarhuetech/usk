@@ -607,6 +607,37 @@ function Reports({ defaultReport }) {
     ]
   );
 
+  const getStatus = (row, amount, received) => {
+    if (["Sale", "Purchase"].includes(row.reportType)) {
+      const settlement = calculateInvoiceSettlement(row, {
+        kind: row.reportType === "Purchase" ? "purchase" : "sale",
+        payments: row.reportType === "Purchase" ? paymentOuts : paymentIns,
+      });
+      return settlement.paymentStatus;
+    }
+    if (row.reportType === "Sale Order" || row.reportType === "Purchase Order") {
+      if (row.status === "Converted to Sale" || row.status === "Converted to Purchase") return row.status;
+      const d = row.dueDate || row.date;
+      if (row.status === "Open" && d && new Date(`${d}T23:59:59`) < new Date()) return "Order Overdue";
+      return row.status || "Open";
+    }
+    if (
+      ["Cancelled", "Unused", "Unpaid", "Partial", "Paid"].includes(
+        row.status
+      )
+    ) {
+      return row.status;
+    }
+
+    if (amount > 0) {
+      if (received >= amount) return "Paid";
+      if (received > 0) return "Partial";
+      return "Unpaid";
+    }
+
+    return row.status || "—";
+  };
+
   const getRowAmounts = (row) => {
     if (["Sale", "Purchase"].includes(row.reportType)) {
       const settlement = calculateInvoiceSettlement(row, {
@@ -747,34 +778,6 @@ function Reports({ defaultReport }) {
               "Status",
               "Actions",
             ];
-
-  const getStatus = (row, amount, received) => {
-    if (["Sale", "Purchase"].includes(row.reportType)) {
-      const settlement = calculateInvoiceSettlement(row, { kind: row.reportType === "Purchase" ? "purchase" : "sale", payments: row.reportType === "Purchase" ? paymentOuts : paymentIns });
-      return settlement.paymentStatus;
-    }
-    if (row.reportType === "Sale Order" || row.reportType === "Purchase Order") {
-      if (row.status === "Converted to Sale" || row.status === "Converted to Purchase") return row.status;
-      const d = row.dueDate || row.date;
-      if (row.status === "Open" && d && new Date(`${d}T23:59:59`) < new Date()) return "Order Overdue";
-      return row.status || "Open";
-    }
-    if (
-      ["Cancelled", "Unused", "Unpaid", "Partial", "Paid"].includes(
-        row.status
-      )
-    ) {
-      return row.status;
-    }
-
-    if (amount > 0) {
-      if (received >= amount) return "Paid";
-      if (received > 0) return "Partial";
-      return "Unpaid";
-    }
-
-    return row.status || "—";
-  };
 
   const statusClass = (status) => {
     if (status === "Paid" || status === "Overpaid / Advance") return "text-emerald-600";

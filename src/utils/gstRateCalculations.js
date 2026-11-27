@@ -264,7 +264,7 @@ export function resolveRowGst(row = {}, isInterstate = false) {
  * Extracts line tax items from any Sale Invoice, Purchase Bill, Sale Return, or Purchase Return.
  */
 export function extractTransactionTaxLines(transaction, type = "Sale", options = {}) {
-  const { homeState = "maharashtra", partyMap = new Map() } = options;
+  const { homeState = "maharashtra", partyMap = new Map(), companyProfile = null } = options;
 
   if (!transaction) return [];
 
@@ -299,10 +299,18 @@ export function extractTransactionTaxLines(transaction, type = "Sale", options =
       ""
   ).trim();
 
-  const isGstinInterstate =
-    gstin.length >= 2 &&
-    !gstin.startsWith("27") &&
-    homeState.toLowerCase() === "maharashtra";
+  const partyGstinPrefix = gstin.length >= 2 ? gstin.slice(0, 2) : "";
+  const homeGstin = String(companyProfile?.gstin || "").trim();
+  const homeGstinPrefix = homeGstin.length >= 2 ? homeGstin.slice(0, 2) : "";
+
+  let isGstinInterstate = false;
+  if (partyGstinPrefix && /^\d{2}$/.test(partyGstinPrefix)) {
+    if (homeGstinPrefix && /^\d{2}$/.test(homeGstinPrefix)) {
+      isGstinInterstate = partyGstinPrefix !== homeGstinPrefix;
+    } else if (homeState.toLowerCase() === "maharashtra") {
+      isGstinInterstate = partyGstinPrefix !== "27";
+    }
+  }
 
   const isInterstate = Boolean(isExplicitInterstate || isGstinInterstate);
 
@@ -439,7 +447,7 @@ export function compileGstData(params = {}) {
     if (idKey) partyMap.set(idKey, p);
   });
 
-  const opts = { homeState, partyMap };
+  const opts = { homeState, partyMap, companyProfile };
   const lines = [];
 
   // 1. Sale Invoices (Outward Supplies)

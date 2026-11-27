@@ -420,8 +420,8 @@ export default function ProfitAndLossReport() {
 
     const otherIncome = 0;
 
-    // Net Profit = Total Incomes - Total Expenses
-    const netProfit = totalIncomes - totalExpenses;
+    // In standard accounting, Net Profit = Gross Profit + Other Income - Indirect Expenses
+    const netProfit = grossProfit + otherIncome - indirectExpensesTotal;
 
     return {
       saleTotal,
