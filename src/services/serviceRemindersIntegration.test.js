@@ -15,15 +15,26 @@ import {
   deleteReminderRecord,
   saveReminderSettings,
 } from "./serviceRemindersStorage.js";
+import { serviceRemindersDb } from "./databaseRepository.js";
+
+// Ensure unit tests never write to MySQL production database
+serviceRemindersDb.save = async () => {};
+serviceRemindersDb.remove = async () => {};
 
 // Mock localStorage for node environment
-const memoryStore = {};
+const memoryStore = {
+  "ledgerly:storageMode": "local",
+};
 global.window = {
   localStorage: {
     getItem: (key) => memoryStore[key] || null,
     setItem: (key, val) => { memoryStore[key] = String(val); },
     removeItem: (key) => { delete memoryStore[key]; },
-    clear: () => { Object.keys(memoryStore).forEach((k) => delete memoryStore[k]); },
+    clear: () => {
+      Object.keys(memoryStore).forEach((k) => {
+        if (k !== "ledgerly:storageMode") delete memoryStore[k];
+      });
+    },
   },
   dispatchEvent: () => {},
 };

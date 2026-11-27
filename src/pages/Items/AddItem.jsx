@@ -391,6 +391,8 @@ function createEditableItemForm(initialItem, defaultUnit = "PCS", defaultTaxRate
     location: initialItem.location || "",
     minimumStock: initialItem.minimumStock || "",
     description: initialItem.description || "",
+    cess: initialItem.cess !== undefined ? initialItem.cess : (initialItem.cessPercent || ""),
+    cessPercent: initialItem.cessPercent !== undefined ? initialItem.cessPercent : (initialItem.cess || ""),
   };
 }
 
@@ -638,9 +640,31 @@ function TaxesSection({ form, setField, compact = false, enabled = true }) {
   const currentOptions = combined.includes(form.taxRate)
     ? combined
     : [form.taxRate, ...combined].filter(Boolean);
+  const showCess = Boolean(settings?.additionalCessOnItem);
+
   return (
     <Card className={`p-5 ${compact ? "" : "min-h-32"}`}>
-      <SelectField label="Tax Rate" value={form.taxRate} onChange={(value) => setField("taxRate", value)} options={currentOptions} className="max-w-xs" />
+      <div className="flex flex-wrap items-center gap-4">
+        <SelectField label="Tax Rate" value={form.taxRate} onChange={(value) => setField("taxRate", value)} options={currentOptions} className="max-w-xs" />
+        {showCess && (
+          <div className="w-32">
+            <label className="mb-1.5 block text-xs font-semibold text-slate-700">Cess (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              max="100"
+              placeholder="0"
+              value={form.cessPercent || form.cess || ""}
+              onChange={(e) => {
+                setField("cessPercent", e.target.value);
+                setField("cess", e.target.value);
+              }}
+              className="h-10 w-full rounded border border-slate-300 bg-white px-3 text-xs outline-none focus:border-blue-500"
+            />
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
@@ -774,6 +798,7 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
   const enableItemDescription = appSettings.enableItemDescription ?? true;
   const enableItemDiscount = appSettings.enableItemDiscount ?? true;
   const enableGst = appSettings.enableGst ?? true;
+  const enableHsnSacCode = appSettings.enableHsnSacCode ?? true;
   const enableBatchTracking = Boolean(appSettings.enableBatchTracking);
   const enableSerialTracking = Boolean(appSettings.enableSerialTracking);
 
@@ -1004,49 +1029,51 @@ function AddItem({ embedded = false, mode = "create", initialItem = null, onClos
           <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
             <div className="grid max-w-5xl gap-5 md:grid-cols-3">
               <Input value={form.itemName} onChange={(event) => setField("itemName", event.target.value)} placeholder={isProduct ? "Item Name *" : "Service Name *"} />
-              <HsnAutocomplete
-                value={form.hsn || (form.type === "service" ? form.sac : "") || ""}
-                type={form.type === "service" ? "SAC" : "HSN"}
-                placeholder={isProduct ? "Item HSN Code / Name" : "Service SAC Code / Name"}
-                onChange={(code) => {
-                  setField("hsn", code);
-                  if (form.type === "service") setField("sac", code);
-                }}
-                onSelect={(selected) => {
-                  if (!selected) return;
-                  setForm((current) => {
-                    const next = { ...current };
-                    next.hsn = selected.code || current.hsn;
-                    const isSac = selected.type === "SAC" || String(selected.code || "").startsWith("99");
-                    if (isSac) {
-                      next.sac = selected.code;
-                      next.type = "service";
-                    } else {
-                      next.type = "product";
-                    }
-
-                    // Auto-fill Item/Service Name with description if empty or matching previous description
-                    if (selected.description && (!current.itemName || current.itemName === current.description)) {
-                      next.itemName = selected.description;
-                    }
-
-                    // Auto-fill Description field if available
-                    if (selected.description) {
-                      next.description = selected.description;
-                    }
-
-                    // Auto-fill Tax Rate if GST rate exists in CBIC data
-                    if (selected.gst_rate !== null && selected.gst_rate !== undefined) {
-                      const matchedTax = matchGstRateToOption(selected.gst_rate, taxOptions);
-                      if (matchedTax) {
-                        next.taxRate = matchedTax;
+              {enableHsnSacCode && (
+                <HsnAutocomplete
+                  value={form.hsn || (form.type === "service" ? form.sac : "") || ""}
+                  type={form.type === "service" ? "SAC" : "HSN"}
+                  placeholder={isProduct ? "Item HSN Code / Name" : "Service SAC Code / Name"}
+                  onChange={(code) => {
+                    setField("hsn", code);
+                    if (form.type === "service") setField("sac", code);
+                  }}
+                  onSelect={(selected) => {
+                    if (!selected) return;
+                    setForm((current) => {
+                      const next = { ...current };
+                      next.hsn = selected.code || current.hsn;
+                      const isSac = selected.type === "SAC" || String(selected.code || "").startsWith("99");
+                      if (isSac) {
+                        next.sac = selected.code;
+                        next.type = "service";
+                      } else {
+                        next.type = "product";
                       }
-                    }
 
-                    return next;
-                  });
-                }}
-              />
+                      // Auto-fill Item/Service Name with description if empty or matching previous description
+                      if (selected.description && (!current.itemName || current.itemName === current.description)) {
+                        next.itemName = selected.description;
+                      }
+
+                      // Auto-fill Description field if available
+                      if (selected.description) {
+                        next.description = selected.description;
+                      }
+
+                      // Auto-fill Tax Rate if GST rate exists in CBIC data
+                      if (selected.gst_rate !== null && selected.gst_rate !== undefined) {
+                        const matchedTax = matchGstRateToOption(selected.gst_rate, taxOptions);
+                        if (matchedTax) {
+                          next.taxRate = matchedTax;
+                        }
+                      }
+
+                      return next;
+                    });
+                  }}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => setUnitModal(true)}

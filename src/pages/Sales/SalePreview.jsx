@@ -1310,6 +1310,19 @@ function SalePreview() {
     }
   };
 
+  const uploadInvoiceImage = async (blob, invoiceNumber) => {
+    if (!blob) return "";
+    try {
+      const file = new File([blob], `Invoice-${invoiceNumber}.png`, { type: "image/png" });
+      const asset = await businessGrowthApi.upload(file, "sale-invoice-image", String(invoiceNumber));
+      if (asset?.url) {
+        return `${window.location.origin}${asset.url}?businessId=demo-business`;
+      }
+    } catch (err) {
+      console.warn("Could not upload invoice image asset:", err.message);
+    }
+    return "";
+  };
 
   const handleShareWhatsApp = async () => {
     if (!normalized) return;
@@ -1322,10 +1335,12 @@ function SalePreview() {
     const balanceVal = normalized.balanceAmount ?? normalized.totals?.balance ?? 0;
 
     let copied = false;
+    let mediaUrl = "";
     const imgResult = await captureInvoiceBlob();
     if (imgResult?.blob) {
       copied = await copyBlobToClipboard(imgResult.blob);
       triggerDownload(imgResult.blob, `Invoice-${normalized.invoiceNumber}.png`);
+      mediaUrl = await uploadInvoiceImage(imgResult.blob, normalized.invoiceNumber);
     }
 
     const message = buildTransactionMessage({
@@ -1357,6 +1372,7 @@ function SalePreview() {
       sendMetaWhatsAppMessage({
         phone: targetPhone,
         message,
+        mediaUrl,
         openFallback: true,
       });
     } else {
