@@ -12,6 +12,7 @@ import {
   FiLayers,
   FiInfo,
   FiChevronDown,
+  FiChevronUp,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 
@@ -72,6 +73,7 @@ export default function GSTReport() {
   const [sortAsc, setSortAsc] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [viewMode, setViewMode] = useState("transactions"); // "transactions" | "lines"
+  const [showSummary, setShowSummary] = useState(true);
 
   // Sync with data changes across USV
   useEffect(() => {
@@ -397,7 +399,7 @@ export default function GSTReport() {
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50">
       {/* Top Header */}
-      <header className="flex min-h-[64px] flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
+      <header className="flex min-h-[64px] shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-slate-800">GST Report</h1>
@@ -453,7 +455,7 @@ export default function GSTReport() {
       </header>
 
       {/* Filter Toolbar */}
-      <section className="border-b border-slate-200 bg-white px-5 py-3 shadow-xs">
+      <section className="shrink-0 border-b border-slate-200 bg-white px-5 py-3 shadow-xs">
         <div className="flex flex-wrap items-center gap-3">
           {/* Preset Selector */}
           <div className="relative">
@@ -574,159 +576,174 @@ export default function GSTReport() {
               <FiFilter size={12} /> Clear
             </button>
           )}
+
+          {/* Toggle Summary Cards Button */}
+          <button
+            type="button"
+            onClick={() => setShowSummary((prev) => !prev)}
+            className="ml-auto flex h-9 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+            title={showSummary ? "Collapse summary cards to maximize table space" : "Expand summary cards"}
+          >
+            {showSummary ? <FiChevronUp size={14} /> : <FiChevronDown size={14} />}
+            <span>{showSummary ? "Hide Summary" : "Show Summary"}</span>
+          </button>
         </div>
       </section>
 
-      {/* Summary KPI Sections */}
-      <section className="p-5 space-y-4">
-        {/* Three Columns: Sales Summary, Purchase Summary, and Overall Summary */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {/* 1. Sales GST Summary Card */}
-          <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-emerald-50 pb-2.5 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
-                  Sales GST Summary
-                </span>
-                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-                  {summary.sales.count} Invoices
-                </span>
-              </div>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>Taxable Sales:</span>
-                  <span className="font-semibold text-slate-800">{money(summary.sales.taxable)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>CGST Collected:</span>
-                  <span className="font-medium text-slate-700">{money(summary.sales.cgst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>SGST Collected:</span>
-                  <span className="font-medium text-slate-700">{money(summary.sales.sgst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>IGST Collected:</span>
-                  <span className="font-medium text-slate-700">{money(summary.sales.igst)}</span>
-                </div>
-                {summary.sales.cess > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>Cess Collected:</span>
-                    <span className="font-medium text-slate-700">{money(summary.sales.cess)}</span>
+      {/* Scrollable Report Content Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col">
+        {/* Summary KPI Sections */}
+        {showSummary && (
+          <section className="p-5 space-y-4 shrink-0">
+            {/* Three Columns: Sales Summary, Purchase Summary, and Overall Summary */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              {/* 1. Sales GST Summary Card */}
+              <div className="rounded-xl border border-emerald-100 bg-white p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-emerald-50 pb-2.5 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                      Sales GST Summary
+                    </span>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                      {summary.sales.count} Invoices
+                    </span>
                   </div>
-                )}
-              </div>
-            </div>
-            <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">Total GST on Sales:</span>
-              <span className="text-lg font-black text-emerald-600">{money(summary.sales.tax)}</span>
-            </div>
-          </div>
-
-          {/* 2. Purchase GST Summary Card */}
-          <div className="rounded-xl border border-sky-100 bg-white p-5 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-sky-50 pb-2.5 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-sky-800">
-                  Purchase GST Summary
-                </span>
-                <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700">
-                  {summary.purchases.count} Bills
-                </span>
-              </div>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>Taxable Purchases:</span>
-                  <span className="font-semibold text-slate-800">{money(summary.purchases.taxable)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>CGST Paid:</span>
-                  <span className="font-medium text-slate-700">{money(summary.purchases.cgst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>SGST Paid:</span>
-                  <span className="font-medium text-slate-700">{money(summary.purchases.sgst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>IGST Paid:</span>
-                  <span className="font-medium text-slate-700">{money(summary.purchases.igst)}</span>
-                </div>
-                {summary.purchases.cess > 0 && (
-                  <div className="flex justify-between text-slate-500">
-                    <span>Cess Paid:</span>
-                    <span className="font-medium text-slate-700">{money(summary.purchases.cess)}</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Taxable Sales:</span>
+                      <span className="font-semibold text-slate-800">{money(summary.sales.taxable)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>CGST Collected:</span>
+                      <span className="font-medium text-slate-700">{money(summary.sales.cgst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>SGST Collected:</span>
+                      <span className="font-medium text-slate-700">{money(summary.sales.sgst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>IGST Collected:</span>
+                      <span className="font-medium text-slate-700">{money(summary.sales.igst)}</span>
+                    </div>
+                    {summary.sales.cess > 0 && (
+                      <div className="flex justify-between text-slate-500">
+                        <span>Cess Collected:</span>
+                        <span className="font-medium text-slate-700">{money(summary.sales.cess)}</span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+                <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">Total GST on Sales:</span>
+                  <span className="text-lg font-black text-emerald-600">{money(summary.sales.tax)}</span>
+                </div>
               </div>
-            </div>
-            <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">Total GST on Purchases:</span>
-              <span className="text-lg font-black text-sky-600">{money(summary.purchases.tax)}</span>
-            </div>
-          </div>
 
-          {/* 3. Overall Summary Card */}
-          <div className="rounded-xl border border-indigo-100 bg-white p-5 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-indigo-50 pb-2.5 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-indigo-800">
-                  Overall GST Summary
-                </span>
-                <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700">
-                  {summary.overall.totalTransactions} Total
-                </span>
+              {/* 2. Purchase GST Summary Card */}
+              <div className="rounded-xl border border-sky-100 bg-white p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-sky-50 pb-2.5 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-sky-800">
+                      Purchase GST Summary
+                    </span>
+                    <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700">
+                      {summary.purchases.count} Bills
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Taxable Purchases:</span>
+                      <span className="font-semibold text-slate-800">{money(summary.purchases.taxable)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>CGST Paid:</span>
+                      <span className="font-medium text-slate-700">{money(summary.purchases.cgst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>SGST Paid:</span>
+                      <span className="font-medium text-slate-700">{money(summary.purchases.sgst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>IGST Paid:</span>
+                      <span className="font-medium text-slate-700">{money(summary.purchases.igst)}</span>
+                    </div>
+                    {summary.purchases.cess > 0 && (
+                      <div className="flex justify-between text-slate-500">
+                        <span>Cess Paid:</span>
+                        <span className="font-medium text-slate-700">{money(summary.purchases.cess)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700">Total GST on Purchases:</span>
+                  <span className="text-lg font-black text-sky-600">{money(summary.purchases.tax)}</span>
+                </div>
               </div>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>Total Sales GST:</span>
-                  <span className="font-semibold text-emerald-600">{money(summary.overall.totalSalesGst)}</span>
+
+              {/* 3. Overall Summary Card */}
+              <div className="rounded-xl border border-indigo-100 bg-white p-5 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b border-indigo-50 pb-2.5 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-800">
+                      Overall GST Summary
+                    </span>
+                    <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 text-[11px] font-semibold text-indigo-700">
+                      {summary.overall.totalTransactions} Total
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Total Sales GST:</span>
+                      <span className="font-semibold text-emerald-600">{money(summary.overall.totalSalesGst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-600">
+                      <span>Total Purchase GST:</span>
+                      <span className="font-semibold text-sky-600">{money(summary.overall.totalPurchaseGst)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Taxable Turnover:</span>
+                      <span className="font-medium text-slate-700">{money(summary.overall.totalTaxable)}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Total Tax Across Ops:</span>
+                      <span className="font-medium text-slate-700">{money(summary.overall.totalTax)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Total Purchase GST:</span>
-                  <span className="font-semibold text-sky-600">{money(summary.overall.totalPurchaseGst)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Total Taxable Turnover:</span>
-                  <span className="font-medium text-slate-700">{money(summary.overall.totalTaxable)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Total Tax Across Ops:</span>
-                  <span className="font-medium text-slate-700">{money(summary.overall.totalTax)}</span>
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-700">
+                      Net GST Difference:
+                    </span>
+                    <span
+                      className={`text-lg font-black ${
+                        summary.overall.netDifference >= 0 ? "text-indigo-700" : "text-amber-600"
+                      }`}
+                    >
+                      {money(summary.overall.netDifference)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400 italic">
+                    *Informational figure only; not confirmed GST liability.
+                  </p>
                 </div>
               </div>
             </div>
-            <div className="mt-4 border-t border-slate-100 pt-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700">
-                  Net GST Difference:
-                </span>
-                <span
-                  className={`text-lg font-black ${
-                    summary.overall.netDifference >= 0 ? "text-indigo-700" : "text-amber-600"
-                  }`}
-                >
-                  {money(summary.overall.netDifference)}
-                </span>
+
+            {/* Informational Callout Banner */}
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 shadow-2xs">
+              <FiInfo className="mt-0.5 text-amber-600 shrink-0" size={16} />
+              <div>
+                <strong className="font-semibold">Statutory Accounting Note:</strong> The net difference of{" "}
+                <strong>{money(summary.overall.netDifference)}</strong> between Sales GST collected and Purchase GST paid is an informational figure for tracking operational tax flow. Actual GST payable or eligible Input Tax Credit (ITC) must be determined in your statutory <strong>GSTR-3B</strong> return according to Section 16/17(5) eligibility and reverse charge rules.
               </div>
-              <p className="mt-1 text-[11px] text-slate-400 italic">
-                *Informational figure only; not confirmed GST liability.
-              </p>
             </div>
-          </div>
-        </div>
+          </section>
+        )}
 
-        {/* Informational Callout Banner */}
-        <div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900 shadow-2xs">
-          <FiInfo className="mt-0.5 text-amber-600 shrink-0" size={16} />
-          <div>
-            <strong className="font-semibold">Statutory Accounting Note:</strong> The net difference of{" "}
-            <strong>{money(summary.overall.netDifference)}</strong> between Sales GST collected and Purchase GST paid is an informational figure for tracking operational tax flow. Actual GST payable or eligible Input Tax Credit (ITC) must be determined in your statutory <strong>GSTR-3B</strong> return according to Section 16/17(5) eligibility and reverse charge rules.
-          </div>
-        </div>
-      </section>
-
-      {/* Transaction Details Table View */}
-      <div className="mx-5 mb-5 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
+        {/* Transaction Details Table View */}
+        <div className="mx-5 mb-5 flex min-h-[460px] flex-1 flex-col rounded-xl border border-slate-200 bg-white shadow-xs">
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <div>
             <h2 className="text-sm font-bold text-slate-800">
@@ -968,6 +985,7 @@ export default function GSTReport() {
             </div>
           )
         )}
+      </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { FiPrinter } from "react-icons/fi";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { listBatchExpiryStatus, reconcileBatchQuantities } from "../../services/batchInventoryService.js";
 import { getInventoryItems, normalizeInventoryItem, saveInventoryItem } from "../../services/itemsStorage.js";
 import { businessDataApi } from "../../services/apiClient.js";
@@ -70,6 +71,45 @@ export default function BatchExpiryReport() {
     XLSX.writeFile(wb, "Batch_Expiry_Report.xlsx");
   };
 
+  const handlePrint = () => {
+    const printRows = batches.map((b, i) => ({
+      index: i + 1,
+      item: b.itemName || b.name,
+      batchNo: b.batchNo || "—",
+      qty: b.quantity || 0,
+      mfgDate: b.mfgDate || "—",
+      expiryDate: b.expiryDate || "—",
+      status: b.status || "Valid",
+    }));
+
+    const totalQty = batches.reduce((s, b) => s + (Number(b.quantity) || 0), 0);
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Batch Expiry & Stock Report",
+      documentNumber: `BATCH-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${batches.length} Batches`,
+      partyName: "Warehouse Stock",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "item", label: "Item Name", align: "left" },
+        { key: "batchNo", label: "Batch No", align: "center", width: "110px" },
+        { key: "qty", label: "Available Qty", align: "center", width: "90px" },
+        { key: "mfgDate", label: "Mfg Date", align: "center", width: "90px" },
+        { key: "expiryDate", label: "Expiry Date", align: "center", width: "90px" },
+        { key: "status", label: "Status", align: "center", width: "90px" },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Batches", value: String(batches.length) },
+        { label: "TOTAL AVAILABLE BATCH QTY", value: String(totalQty), isGrand: true },
+      ],
+      notes: "Near expiry includes items expiring within 30 days.",
+      autoPrint: true,
+    });
+    openPrintWindow(html, true);
+  };
+
   return (
     <section className="min-h-0 flex-1 overflow-auto bg-white p-5">
       <div className="mb-4 flex items-center justify-between">
@@ -89,7 +129,7 @@ export default function BatchExpiryReport() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             className="flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
           >
             <FiPrinter /> Print

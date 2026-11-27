@@ -17,6 +17,7 @@ import * as XLSX from "xlsx";
 import { getAllLoans } from "../../services/loanAccountsRepository.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import {
   buildLoanStatementEntries,
   calculateLoanOpeningBalance,
@@ -273,6 +274,52 @@ export default function LoanStatementReport() {
     const found = loans.find((l) => l.id === selectedLoanId);
     return found ? `${found.loanName} (${found.lenderName})` : "All Loans";
   }, [loans, selectedLoanId]);
+
+  const handleDirectPrint = () => {
+    const loanName = selectedLoanName || "All Loan Accounts";
+    const rows = processedEntries.map((e, idx) => ({
+      index: idx + 1,
+      date: e.date || "—",
+      type: e.transactionType || e.type || "—",
+      account: e.loanName || e.accountName || loanName,
+      principal: e.principalReceived || e.principalPaid || 0,
+      interest: e.interestPaid || 0,
+      charges: (e.processingFee || 0) + (e.otherCharges || 0),
+      balance: e.runningBalance ?? 0,
+    }));
+
+    const dateSub = fromDate && toDate ? `Period: ${fromDate} to ${toDate}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Loan Account Statement",
+      documentNumber: `LN-${selectedLoanId !== "all" && selectedLoanId !== "All" ? String(selectedLoanId).slice(0, 8) : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: "Active",
+      partyName: loanName,
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "date", label: "Date", align: "center", width: "85px" },
+        { key: "type", label: "Transaction Type", align: "left" },
+        { key: "account", label: "Loan Account", align: "left" },
+        { key: "principal", label: "Principal Flow", align: "right", width: "110px", formatMoney: true },
+        { key: "interest", label: "Interest Paid", align: "right", width: "100px", formatMoney: true },
+        { key: "charges", label: "Fees / Charges", align: "right", width: "100px", formatMoney: true },
+        { key: "balance", label: "Outstanding Balance", align: "right", width: "120px", formatMoney: true },
+      ],
+      rows,
+      totals: [
+        { label: "Total Loan Received", value: fmt(summary.totalLoanReceived) },
+        { label: "Total Principal Paid", value: fmt(summary.totalPrincipalPaid) },
+        { label: "Total Interest Paid", value: fmt(summary.totalInterestPaid) },
+        { label: "Total Fees & Charges", value: fmt(summary.totalFeesAndCharges) },
+        { label: "CLOSING OUTSTANDING BALANCE", value: fmt(summary.closingOutstandingBalance), isGrand: true },
+      ],
+      notes: `${dateSub} | Total Payments: ${summary.totalPaidCount} | Net Outstanding: ${fmt(summary.closingOutstandingBalance)}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 text-slate-800">
@@ -653,7 +700,7 @@ export default function LoanStatementReport() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={handleDirectPrint}
                   className="rounded-md bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-700"
                 >
                   Print Document

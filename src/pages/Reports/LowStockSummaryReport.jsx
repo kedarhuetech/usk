@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { FiChevronDown, FiPrinter } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import {
@@ -166,6 +167,43 @@ export default function LowStockSummaryReport() {
     XLSX.writeFile(wb, "Low_Stock_Summary.xlsx");
   };
 
+  const handlePrint = () => {
+    const printRows = rows.map((r, i) => ({
+      index: i + 1,
+      item: r.name,
+      minStock: r.minStock,
+      stockQty: r.stockQty,
+      stockValue: r.stockValue,
+      status: r.stockQty <= 0 ? "Out of Stock" : "Low Stock",
+    }));
+
+    const totalValue = rows.reduce((s, r) => s + r.stockValue, 0);
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Low Stock Summary Report",
+      documentNumber: `LOWSTOCK-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${rows.length} Low Stock Items`,
+      partyName: selectedCategory,
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "item", label: "Item Name", align: "left" },
+        { key: "minStock", label: "Minimum Stock", align: "center", width: "100px" },
+        { key: "stockQty", label: "Current Stock", align: "center", width: "90px" },
+        { key: "stockValue", label: "Stock Value", align: "right", width: "130px", formatMoney: true },
+        { key: "status", label: "Stock Status", align: "center", width: "110px" },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Low Stock Items", value: String(rows.length) },
+        { label: "TOTAL STOCK VALUE", value: `₹ ${totalValue.toFixed(2)}`, isGrand: true },
+      ],
+      notes: `Category: ${selectedCategory} | Reorder items immediately`,
+      autoPrint: true,
+    });
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-slate-800 text-xs">
       {/* ── Filters Bar ── */}
@@ -213,7 +251,7 @@ export default function LowStockSummaryReport() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             title="Print"
             className="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-50 cursor-pointer"
           >

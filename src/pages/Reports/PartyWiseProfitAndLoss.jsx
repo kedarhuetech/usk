@@ -12,6 +12,7 @@ import {
 } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getParties } from "../../services/partiesStorage.js";
 import { getSaleInvoices } from "../../services/salesStorage.js";
 import { getSaleReturns } from "../../services/saleReturnsStorage.js";
@@ -305,7 +306,48 @@ export default function PartyWiseProfitAndLoss() {
 
   // Print Report
   const handlePrint = () => {
-    window.print();
+    const printRows = rows.map((r, idx) => ({
+      index: idx + 1,
+      partyName: r.partyName,
+      partyType: r.partyType,
+      invoicesCount: r.invoicesCount,
+      totalSales: r.totalSales,
+      cogs: r.cogs,
+      grossProfit: r.grossProfit,
+      margin: `${r.profitMargin.toFixed(2)}%`,
+      status: r.hasMissingCost ? "Cost Missing" : (r.isLoss ? "Loss" : "Profitable"),
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Party Wise Profit & Loss Report",
+      documentNumber: `PARTY-PL-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${rows.length} Parties Analyzed`,
+      partyName: "All Parties / Customers",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "partyName", label: "Party Name", align: "left" },
+        { key: "partyType", label: "Type", align: "center", width: "85px" },
+        { key: "invoicesCount", label: "Bills", align: "center", width: "60px" },
+        { key: "totalSales", label: "Total Sales", align: "right", width: "110px", formatMoney: true },
+        { key: "cogs", label: "Total Cost", align: "right", width: "110px", formatMoney: true },
+        { key: "grossProfit", label: "Gross Profit", align: "right", width: "110px", formatMoney: true },
+        { key: "margin", label: "Margin", align: "right", width: "75px" },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Invoices", value: String(summary.totalInvoices) },
+        { label: "Total Sales", value: `₹ ${summary.totalSales.toFixed(2)}` },
+        { label: "Total Cost", value: `₹ ${summary.totalCost.toFixed(2)}` },
+        { label: "TOTAL GROSS PROFIT", value: `₹ ${summary.totalGrossProfit.toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Overall Profit Margin: ${summary.overallMargin.toFixed(2)}%`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
   };
 
   return (

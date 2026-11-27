@@ -11,6 +11,7 @@ import {
 } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import {
   loadSalesInvoices,
   loadPurchaseBills,
@@ -765,6 +766,49 @@ export default function ItemCategoryWiseProfitAndLoss() {
     XLSX.writeFile(wb, `Item_Category_Wise_Profit_and_Loss${dateSuffix}.xlsx`);
   };
 
+  const handlePrint = () => {
+    const rows = categoryRows.map((cat, idx) => ({
+      index: idx + 1,
+      category: cat.category,
+      itemsCount: cat.itemsCount,
+      qtySold: cat.qtySold,
+      netSales: cat.netSales,
+      cogs: cat.cogs,
+      grossProfit: cat.grossProfit,
+      profitMargin: `${cat.profitMargin.toFixed(2)}%`,
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Category Wise Profit & Loss Report",
+      documentNumber: `CAT-PL-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: `${categoryRows.length} Categories`,
+      partyName: selectedCategory === "ALL" ? "All Categories" : selectedCategory,
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "category", label: "Category", align: "left" },
+        { key: "itemsCount", label: "Items", align: "center", width: "70px" },
+        { key: "qtySold", label: "Qty Sold", align: "center", width: "80px" },
+        { key: "netSales", label: "Net Sales", align: "right", width: "110px", formatMoney: true },
+        { key: "cogs", label: "COGS", align: "right", width: "110px", formatMoney: true },
+        { key: "grossProfit", label: "Gross Profit", align: "right", width: "110px", formatMoney: true },
+        { key: "profitMargin", label: "Margin", align: "right", width: "80px" },
+      ],
+      rows,
+      totals: [
+        { label: "Total Net Sales", value: `₹ ${totals.netSales.toFixed(2)}` },
+        { label: "Total COGS", value: `₹ ${totals.cogs.toFixed(2)}` },
+        { label: "TOTAL GROSS PROFIT", value: `₹ ${totals.grossProfit.toFixed(2)}`, isGrand: true },
+      ],
+      notes: `${dateSub} | Overall Profit Margin: ${totals.profitMargin.toFixed(2)}%`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-slate-50 text-slate-800 text-xs">
       {/* ── Top Bar: Date presets, filters, search, refresh, print, export ── */}
@@ -888,7 +932,7 @@ export default function ItemCategoryWiseProfitAndLoss() {
 
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             title="Print Report"
             className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 shadow-2xs hover:bg-slate-50 transition-colors"
           >

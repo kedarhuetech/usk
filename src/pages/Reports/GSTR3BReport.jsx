@@ -16,6 +16,7 @@ import { getParties } from "../../services/partiesStorage.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { calculateGSTR3BData } from "../../services/gstr3bService.js";
 import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 
 function readLocal(key) {
   try {
@@ -238,7 +239,89 @@ export default function GSTR3BReport() {
   };
 
   const handlePrint = () => {
-    window.print();
+    const rows = [
+      {
+        nature: "(a) Outward taxable supplies (other than zero rated, nil rated and exempted)",
+        taxable: gstr3b.table1.taxable.taxableValue,
+        igst: gstr3b.table1.taxable.igst,
+        cgst: gstr3b.table1.taxable.cgst,
+        sgst: gstr3b.table1.taxable.sgst,
+        cess: gstr3b.table1.taxable.cess,
+      },
+      {
+        nature: "(b) Outward taxable supplies (zero rated)",
+        taxable: gstr3b.table1.zeroRated.taxableValue,
+        igst: gstr3b.table1.zeroRated.igst,
+        cgst: gstr3b.table1.zeroRated.cgst,
+        sgst: gstr3b.table1.zeroRated.sgst,
+        cess: gstr3b.table1.zeroRated.cess,
+      },
+      {
+        nature: "(c) Other outward supplies (Nil rated, exempted)",
+        taxable: gstr3b.table1.nilRated.taxableValue,
+        igst: gstr3b.table1.nilRated.igst,
+        cgst: gstr3b.table1.nilRated.cgst,
+        sgst: gstr3b.table1.nilRated.sgst,
+        cess: gstr3b.table1.nilRated.cess,
+      },
+      {
+        nature: "(d) Inward supplies liable to reverse charge",
+        taxable: gstr3b.table1.rcmInward.taxableValue,
+        igst: gstr3b.table1.rcmInward.igst,
+        cgst: gstr3b.table1.rcmInward.cgst,
+        sgst: gstr3b.table1.rcmInward.sgst,
+        cess: gstr3b.table1.rcmInward.cess,
+      },
+      {
+        nature: "(e) Non-GST outward supplies",
+        taxable: gstr3b.table1.nonGst.taxableValue,
+        igst: gstr3b.table1.nonGst.igst,
+        cgst: gstr3b.table1.nonGst.cgst,
+        sgst: gstr3b.table1.nonGst.sgst,
+        cess: gstr3b.table1.nonGst.cess,
+      },
+      {
+        nature: "Table 4(A)(5) All other ITC (Purchases)",
+        taxable: 0,
+        igst: gstr3b.table3.available.allOther.igst,
+        cgst: gstr3b.table3.available.allOther.cgst,
+        sgst: gstr3b.table3.available.allOther.sgst,
+        cess: gstr3b.table3.available.allOther.cess,
+      },
+    ].map((r, i) => ({ index: i + 1, ...r }));
+
+    const totalTaxable = rows.reduce((s, r) => s + (Number(r.taxable) || 0), 0);
+    const totalIgst = rows.reduce((s, r) => s + (Number(r.igst) || 0), 0);
+    const totalCgst = rows.reduce((s, r) => s + (Number(r.cgst) || 0), 0);
+    const totalSgst = rows.reduce((s, r) => s + (Number(r.sgst) || 0), 0);
+
+    const html = buildUnifiedDocumentHtml({
+      title: "GSTR-3B Summary Report",
+      documentNumber: `GSTR3B-${fromMonthYear.replace("/", "")}-${toMonthYear.replace("/", "")}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: "GST Statutory Return",
+      partyName: "GST Department / Self-Assessment",
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "nature", label: "Nature of Supplies / Section", align: "left" },
+        { key: "taxable", label: "Total Taxable Value", align: "right", width: "130px", formatMoney: true },
+        { key: "igst", label: "IGST", align: "right", width: "95px", formatMoney: true },
+        { key: "cgst", label: "CGST", align: "right", width: "95px", formatMoney: true },
+        { key: "sgst", label: "SGST", align: "right", width: "95px", formatMoney: true },
+      ],
+      rows,
+      totals: [
+        { label: "Total Taxable Value", value: `₹ ${totalTaxable.toFixed(2)}` },
+        { label: "Total Integrated Tax (IGST)", value: `₹ ${totalIgst.toFixed(2)}` },
+        { label: "Total Central Tax (CGST)", value: `₹ ${totalCgst.toFixed(2)}` },
+        { label: "Total State Tax (SGST)", value: `₹ ${totalSgst.toFixed(2)}` },
+        { label: "TOTAL TAX LIABILITY / ITC", value: `₹ ${(totalIgst + totalCgst + totalSgst).toFixed(2)}`, isGrand: true },
+      ],
+      notes: `Period: ${fromMonthYear} to ${toMonthYear} | Eligible ITC Available: ₹${(gstr3b.table3.available.allOther.igst + gstr3b.table3.available.allOther.cgst + gstr3b.table3.available.allOther.sgst).toFixed(2)}`,
+      autoPrint: true,
+    });
+
+    openPrintWindow(html, true);
   };
 
   return (

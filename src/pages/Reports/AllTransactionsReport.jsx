@@ -14,6 +14,7 @@ import {
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { transactionTypes } from "../../services/transactionRecordsStorage";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { readTransactionCollection, writeTransactionCollection, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -133,6 +134,79 @@ export default function AllTransactionsReport() {
     });
   };
 
+  const handlePrintSingle = (row, autoPrint = true) => {
+    if (!row) return;
+    const t = String(row.type || "").toLowerCase();
+    const rawDoc = row.raw || row;
+
+    if (t.includes("sale order")) {
+      navigate("/sales/sale-order", { state: { printOrder: rawDoc, autoPrint } });
+      return;
+    }
+    if (t.includes("purchase order")) {
+      navigate("/purchase-expense/purchase-order", { state: { printOrder: rawDoc, autoPrint } });
+      return;
+    }
+    if (t.includes("sale") || t.includes("pos")) {
+      navigate("/sales/sale-invoices/preview", {
+        state: { invoice: rawDoc, printAfterOpen: autoPrint },
+      });
+      return;
+    }
+    if (t.includes("delivery") || t.includes("challan")) {
+      navigate("/sales/delivery-challan", { state: { printChallan: rawDoc, autoPrint } });
+      return;
+    }
+
+    const docType = row.type || "Transaction";
+    const rawItems = Array.isArray(rawDoc.items) && rawDoc.items.length > 0
+      ? rawDoc.items
+      : Array.isArray(rawDoc.rows) && rawDoc.rows.length > 0
+      ? rawDoc.rows
+      : [];
+
+    const items = rawItems.map((it, idx) => ({
+      index: idx + 1,
+      item: it.item || it.name || it.itemName || it.description || docType,
+      qty: it.qty || it.quantity || 1,
+      price: it.price || it.rate || 0,
+      tax: it.tax ? `${it.tax}%` : "",
+      amount: it.amount || it.total || (Number(it.qty || 1) * Number(it.price || 0)),
+    }));
+
+    const html = buildUnifiedDocumentHtml({
+      title: docType,
+      documentNumber: row.refNo || rawDoc.billNumber || rawDoc.invoiceNumber || rawDoc.paymentNumber || rawDoc.id || "",
+      date: row.date || rawDoc.date || "",
+      status: row.status || rawDoc.status || "",
+      partyName: row.partyName || rawDoc.customer || rawDoc.party || "Cash",
+      partyPhone: rawDoc.phone || rawDoc.customerPhone || rawDoc.partyPhone || "",
+      columns: items.length > 0 ? [
+        { key: "index", label: "#", align: "center", width: "50px" },
+        { key: "item", label: "Item Description", align: "left" },
+        { key: "qty", label: "Qty", align: "center", width: "80px" },
+        { key: "price", label: "Rate", align: "right", width: "100px", formatMoney: true },
+        { key: "amount", label: "Amount", align: "right", width: "110px", formatMoney: true },
+      ] : [
+        { key: "description", label: "Description", align: "left" },
+        { key: "amount", label: "Amount", align: "right", width: "140px", formatMoney: true },
+      ],
+      rows: items.length > 0 ? items : [
+        { description: `${docType} - Ref #${row.refNo || "—"} (${row.partyName || "General"})`, amount: row.total }
+      ],
+      totals: {
+        subtotal: row.total,
+        total: row.total,
+        paid: row.received,
+        balance: row.balance,
+      },
+      notes: rawDoc.notes || rawDoc.description || `Transaction Type: ${docType}`,
+      autoPrint,
+    });
+
+    openPrintWindow(html, autoPrint);
+  };
+
   const handleAction = (action, row) => {
     setMenuState(null);
     if (!row) return;
@@ -173,18 +247,7 @@ export default function AllTransactionsReport() {
     }
 
     if (action === "Open PDF" || action === "Print") {
-      const t = row.type.toLowerCase();
-      if (t.includes("sale order")) {
-        navigate("/sales/sale-order", { state: { printOrder: row.raw, autoPrint: action === "Print" } });
-      } else if (t.includes("purchase order")) {
-        navigate("/purchase-expense/purchase-order", { state: { printOrder: row.raw, autoPrint: action === "Print" } });
-      } else if (t.includes("sale") || t.includes("pos")) {
-        navigate("/sales/sale-invoices/preview", {
-          state: { invoice: row.raw, printAfterOpen: action === "Print" },
-        });
-      } else {
-        window.print();
-      }
+      handlePrintSingle(row, action === "Print");
       return;
     }
 
@@ -772,16 +835,7 @@ export default function AllTransactionsReport() {
                     <div className="flex items-center justify-center gap-3 text-slate-400">
                       <button
                         type="button"
-                        onClick={() => {
-                          const t = row.type.toLowerCase();
-                          if (t.includes("sale") || t.includes("pos")) {
-                            navigate("/sales/sale-invoices/preview", {
-                              state: { invoice: row.raw, printAfterOpen: true },
-                            });
-                          } else {
-                            window.print();
-                          }
-                        }}
+                        onClick={() => handlePrintSingle(row, true)}
                         title="Print"
                         className="hover:text-blue-600 transition"
                       >

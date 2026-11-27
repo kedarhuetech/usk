@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { FiChevronDown, FiPrinter } from "react-icons/fi";
 import { RiFileExcel2Line } from "react-icons/ri";
 import * as XLSX from "xlsx";
+import { buildUnifiedDocumentHtml, openPrintWindow } from "../../services/unifiedPrintService.js";
 import { getInventoryItems } from "../../services/itemsStorage";
 import { useAppSettings } from "../../hooks/useAppSettings";
 import {
@@ -224,6 +225,51 @@ export default function StockDetailReport() {
     XLSX.writeFile(wb, `Stock_Detail_${from}_to_${to}.xlsx`);
   };
 
+  const handlePrint = () => {
+    const printRows = rows.map((r, i) => ({
+      index: i + 1,
+      item: r.name,
+      beginningQty: r.beginningQty,
+      qtyIn: r.qtyIn,
+      purchaseAmount: r.purchaseAmount,
+      qtyOut: r.qtyOut,
+      saleAmount: r.saleAmount,
+      closingQty: r.closingQty,
+    }));
+
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
+
+    const html = buildUnifiedDocumentHtml({
+      title: "Stock Detail Report",
+      documentNumber: `STK-DET-${from ? from.replace(/-/g, "") : "ALL"}`,
+      date: new Date().toISOString().slice(0, 10),
+      status: selectedCategory,
+      partyName: selectedCategory,
+      columns: [
+        { key: "index", label: "#", align: "center", width: "40px" },
+        { key: "item", label: "Item Name", align: "left" },
+        { key: "beginningQty", label: "Opening Qty", align: "center", width: "85px" },
+        { key: "qtyIn", label: "Qty In", align: "center", width: "80px" },
+        { key: "purchaseAmount", label: "Purchase (₹)", align: "right", width: "110px", formatMoney: true },
+        { key: "qtyOut", label: "Qty Out", align: "center", width: "80px" },
+        { key: "saleAmount", label: "Sales (₹)", align: "right", width: "110px", formatMoney: true },
+        { key: "closingQty", label: "Closing Qty", align: "center", width: "85px" },
+      ],
+      rows: printRows,
+      totals: [
+        { label: "Total Beginning Qty", value: String(totals.beginningQty) },
+        { label: "Total Qty In", value: String(totals.qtyIn) },
+        { label: "Total Purchases", value: `₹ ${totals.purchaseAmount.toFixed(2)}` },
+        { label: "Total Qty Out", value: String(totals.qtyOut) },
+        { label: "Total Sales", value: `₹ ${totals.saleAmount.toFixed(2)}` },
+        { label: "TOTAL CLOSING QTY", value: String(totals.closingQty), isGrand: true },
+      ],
+      notes: `${dateSub} | Category: ${selectedCategory}`,
+      autoPrint: true,
+    });
+    openPrintWindow(html, true);
+  };
+
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white text-slate-800 text-xs">
       {/* ── Top Bar ── */}
@@ -264,7 +310,7 @@ export default function StockDetailReport() {
           </button>
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={handlePrint}
             title="Print"
             className="flex h-8 w-8 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 shadow-xs hover:bg-slate-50 cursor-pointer"
           >
