@@ -10,6 +10,7 @@ import { getPurchaseBills } from "./purchaseBillsStorage.js";
 import { getParties } from "./partiesStorage.js";
 
 const SALE_INVOICES_KEY = transactionStorageKeys.sales;
+export const saleInvoicesStorageKey = SALE_INVOICES_KEY;
 
 // This helper handles parse logic.
 // Checks whether use storage.
@@ -575,7 +576,6 @@ export function applyPaymentToSaleInvoice(invoiceId, paymentAmount = 0) {
   return updatedInvoice;
 }
 
-export const saleInvoicesStorageKey = SALE_INVOICES_KEY;
 
 // Gets last 5 distinct prices for an item from sales or purchases
 export function getLast5PricesForItem(itemName, isPurchase = false) {

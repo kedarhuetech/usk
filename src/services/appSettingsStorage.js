@@ -646,9 +646,16 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
   for (let i = 0; i < window.localStorage.length; i++) {
     const key = window.localStorage.key(i);
     // Never include snapshot history inside snapshots to prevent exponential recursive bloat
-    if (key && (key.includes("snapshots") || key.includes("backup_history"))) continue;
+    if (key && (key.toLowerCase().includes("snapshot") || key.toLowerCase().includes("backup"))) continue;
     if (key && (key.startsWith("ledgerly:") || key.startsWith("usk:"))) {
-      snapshotData[key] = window.localStorage.getItem(key);
+      let val = window.localStorage.getItem(key);
+      // Strip heavy base64 data URLs from snapshot values to keep snapshots lean and prevent quota overflow
+      if (typeof val === "string" && val.length > 20000 && val.includes("data:image")) {
+        try {
+          val = val.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, "");
+        } catch {}
+      }
+      snapshotData[key] = val;
       keyCount++;
     }
   }
@@ -667,7 +674,8 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
 
   try {
     const history = getAutoBackupHistory();
-    const updatedHistory = [snapshotRecord, ...history].slice(0, 3); // keep last 3 rolling snapshots to stay safely within browser 5MB quota
+    // Keep max 1 rolling snapshot to prevent local storage quota overflow
+    const updatedHistory = [snapshotRecord, ...history].slice(0, 1);
     window.localStorage.setItem(getAutoBackupHistoryStorageKey(), JSON.stringify(updatedHistory));
 
     // Update settings timestamp
@@ -689,7 +697,21 @@ export function createAutoBackupSnapshot(label = "Manual Snapshot") {
 
     return snapshotRecord;
   } catch (error) {
-    console.warn("Could not save auto-backup snapshot", error);
+    if (error?.name === "QuotaExceededError" || error?.code === 22 || error?.message?.includes("quota")) {
+      console.warn("Storage quota exceeded while saving auto-backup snapshot. Pruning old snapshots and cache...");
+      try {
+        window.localStorage.removeItem(getAutoBackupHistoryStorageKey());
+        window.localStorage.removeItem("ledgerly:autoBackupSnapshots.v1");
+        window.localStorage.removeItem("ledgerly:snapshots.v1");
+        // Store only the single lightweight record metadata
+        const leanRecord = { ...snapshotRecord, data: {} };
+        window.localStorage.setItem(getAutoBackupHistoryStorageKey(), JSON.stringify([leanRecord]));
+      } catch (innerErr) {
+        console.warn("Could not save snapshot even after pruning:", innerErr);
+      }
+    } else {
+      console.warn("Could not save auto-backup snapshot", error);
+    }
     return null;
   }
 }

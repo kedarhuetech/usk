@@ -3,6 +3,7 @@ import { isDatabaseMode } from "./dataStorageConfig.js";
 import { getScopedStorageKey } from "../config/businessConfig.js";
 
 const INVENTORY_ITEMS_KEY = "ledgerly:inventoryItems.v1";
+export const inventoryItemsStorageKey = INVENTORY_ITEMS_KEY;
 export const csvImportedItemsStorageKey = "ledgerly:itemsCsvImports.v1";
 export const itemUiOverridesStorageKey = "ledgerly:itemsUiOverrides.v1";
 export const itemTransactionActionsStorageKey = "ledgerly:itemsTransactionActions.v1";
@@ -79,10 +80,17 @@ export function writeItems(items, { skipEvent = false } = {}) {
         });
         window.localStorage.setItem(scopedKey, JSON.stringify(leanItems));
       } catch {
-        // Prune old snapshots if quota is still full
+        // Prune old snapshots and backups if quota is still full
         try {
           const snapshotKey = "ledgerly:snapshots.v1";
           window.localStorage.removeItem(snapshotKey);
+          window.localStorage.removeItem("ledgerly:autoBackupSnapshots.v1");
+          for (let i = window.localStorage.length - 1; i >= 0; i--) {
+            const k = window.localStorage.key(i);
+            if (k && (k.toLowerCase().includes("snapshot") || k.toLowerCase().includes("autobackup"))) {
+              window.localStorage.removeItem(k);
+            }
+          }
           window.localStorage.setItem(scopedKey, JSON.stringify(items));
         } catch {
           console.warn("[Storage] Preserved items in in-memory session cache.");
@@ -588,5 +596,3 @@ export function applyPurchaseBatchStockUpdate(invoice = {}) {
   if (changed) writeItems(nextItems);
   return nextItems;
 }
-
-export const inventoryItemsStorageKey = INVENTORY_ITEMS_KEY;

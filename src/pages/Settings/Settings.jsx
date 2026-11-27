@@ -816,29 +816,6 @@ function GeneralTab({
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-900">Application</h3>
 
           <div className="mt-4 space-y-4">
-            {/* Business Currency */}
-            <div className="flex items-center justify-between pt-1">
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-                Business Currency
-                <InfoTooltip text="Select the default primary currency symbol." />
-              </span>
-              <select
-                value={settings.currencySymbol || "₹"}
-                onChange={(e) => {
-                  const sym = e.target.value;
-                  const code = sym === "₹" ? "INR" : sym === "$" ? "USD" : sym === "€" ? "EUR" : "GBP";
-                  updateMultiple({ currencySymbol: sym, currency: code });
-                }}
-                className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-sm outline-none focus:border-blue-500"
-              >
-                <option value="₹">₹ (INR)</option>
-                <option value="$">$ (USD)</option>
-                <option value="€">€ (EUR)</option>
-                <option value="£">£ (GBP)</option>
-                <option value="AED">AED</option>
-              </select>
-            </div>
-
             {/* Amount Decimal Places */}
             <div className="flex items-center justify-between pt-1">
               <div>

@@ -4,6 +4,7 @@ import { isDatabaseMode } from "./dataStorageConfig.js";
 import { getScopedStorageKey } from "../config/businessConfig.js";
 
 export const PARTIES_KEY = "ledgerly:parties.v1";
+export const partiesStorageKey = PARTIES_KEY;
 export function getPartiesStorageKey() {
   return getScopedStorageKey(PARTIES_KEY);
 }
@@ -198,5 +199,3 @@ export function getPartyDeletionBlockReason(party) {
   }
   return "";
 }
-
-export const partiesStorageKey = PARTIES_KEY;
