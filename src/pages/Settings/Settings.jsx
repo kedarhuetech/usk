@@ -6,6 +6,7 @@ import {
   FiCheck,
   FiDownload,
   FiFileText,
+  FiGlobe,
   FiInfo,
   FiMessageSquare,
   FiPackage,
@@ -45,6 +46,7 @@ import { toast as toastNotification, ConfirmModal } from "../../components/Commo
 import PartyTab from "./PartyTab";
 import TransactionMessageTab from "./TransactionMessageTab";
 import ServiceRemindersTab from "./ServiceRemindersTab.jsx";
+import MultiCurrencyTab from "./MultiCurrencyTab.jsx";
 
 
 const TABS = [
@@ -56,6 +58,7 @@ const TABS = [
   { id: "party", label: "PARTY", icon: FiUsers },
   { id: "item", label: "ITEM", icon: FiPackage },
   { id: "service_reminders", label: "SERVICE REMINDERS", icon: FiBell },
+  { id: "multi_currency", label: "MULTI-CURRENCY", icon: FiGlobe },
   
 
 ];
@@ -392,6 +395,7 @@ function Settings() {
           {activeTab === "party" && <PartyTab settings={settings} update={update} />}
           {activeTab === "item" && <ItemTab settings={settings} update={update} />}
           {activeTab === "service_reminders" && <ServiceRemindersTab settings={settings} update={update} />}
+          {activeTab === "multi_currency" && <MultiCurrencyTab settings={settings} update={update} />}
          
           
         </div>

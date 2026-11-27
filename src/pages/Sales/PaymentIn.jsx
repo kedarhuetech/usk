@@ -4,7 +4,7 @@ import { FiCalendar, FiChevronDown, FiFilter, FiMoreVertical, FiPlus, FiPrinter,
 import Button from "../../components/Common/Button";
 import Card from "../../components/Common/Card";
 import { getParties } from "../../services/partiesStorage";
-import { applyPaymentToSaleInvoice } from "../../services/salesStorage";
+import { getSaleInvoices, applyPaymentToSaleInvoice } from "../../services/salesStorage";
 import { getPaymentIns, savePaymentIns } from "../../services/transactionRepository.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
 import { getAppSettings } from "../../services/appSettingsStorage.js";
@@ -25,6 +25,147 @@ const toIsoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 const today = () => toIsoDate(new Date());
 const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-GB") : "—";
 const blankPayment = () => ({ id: crypto.randomUUID(), type: "Cash", amount: "", reference: "", chequeDate: "" });
+
+function PaymentLinkModal({ isOpen, onClose, partyName, partyId, paymentAmount, currentLinkedId, onLink }) {
+  const [selectedId, setSelectedId] = useState(currentLinkedId || "");
+  const [invoices, setInvoices] = useState([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedId(currentLinkedId || "");
+    const all = getSaleInvoices();
+    const pName = String(partyName || "").trim().toLowerCase();
+    const pId = String(partyId || "").trim();
+    const filtered = all
+      .filter((inv) => {
+        const invParty = String(inv.partyName || inv.customer || inv.form?.customer || "").trim().toLowerCase();
+        const invPartyId = String(inv.partyId || inv.form?.partyId || "").trim();
+        return (pName && invParty === pName) || (pId && invPartyId === pId);
+      })
+      .map((inv) => {
+        const total = Number(inv.totals?.finalTotal ?? inv.totalAmount ?? inv.total ?? 0);
+        const paid = Number(inv.totals?.received ?? inv.receivedAmount ?? inv.paidAmount ?? 0);
+        const due = Math.max(0, total - paid);
+        return {
+          id: inv.id,
+          number: inv.invoiceNumber || inv.form?.invoiceNumber || inv.number || "INV-—",
+          date: inv.invoiceDate || inv.date || inv.createdAt,
+          total,
+          paid,
+          due,
+        };
+      });
+    setInvoices(filtered);
+  }, [isOpen, partyName, partyId, currentLinkedId]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/45 p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+        <header className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Link Payment to Sale Invoice</h3>
+            <p className="text-xs text-slate-500">Party: <span className="font-semibold text-slate-700">{partyName || "No party selected"}</span> · Receipt Amount: <span className="font-semibold text-emerald-600">{money(paymentAmount)}</span></p>
+          </div>
+          <button onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"><FiX className="h-5 w-5" /></button>
+        </header>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {!partyName ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-800">
+              Please select a party in the payment form first.
+            </div>
+          ) : !invoices.length ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+              <p className="font-medium">No sales invoices found for {partyName}.</p>
+              <p className="mt-1 text-xs text-slate-400">Create a sale invoice for this party first to link payment.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span>Select an invoice to settle with this payment receipt:</span>
+                {selectedId && (
+                  <button type="button" onClick={() => setSelectedId("")} className="font-semibold text-rose-600 hover:underline">
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="p-3 w-10 text-center"></th>
+                      <th className="p-3">Invoice No.</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3 text-right">Total</th>
+                      <th className="p-3 text-right">Balance Due</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {invoices.map((inv) => {
+                      const isSelected = selectedId === inv.id;
+                      return (
+                        <tr
+                          key={inv.id}
+                          onClick={() => setSelectedId(inv.id)}
+                          className={`cursor-pointer transition hover:bg-blue-50/60 ${isSelected ? "bg-blue-50 font-medium text-blue-900" : ""}`}
+                        >
+                          <td className="p-3 text-center">
+                            <input
+                              type="radio"
+                              name="linkedInvoice"
+                              checked={isSelected}
+                              onChange={() => setSelectedId(inv.id)}
+                              className="h-4 w-4 text-blue-600"
+                            />
+                          </td>
+                          <td className="p-3 font-semibold">{inv.number}</td>
+                          <td className="p-3 text-slate-500">{formatDate(inv.date)}</td>
+                          <td className="p-3 text-right">{money(inv.total)}</td>
+                          <td className="p-3 text-right font-bold text-rose-600">{money(inv.due)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <footer className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+          <Button onClick={onClose} className="bg-white border border-slate-300 text-slate-700 hover:bg-slate-100">
+            Cancel
+          </Button>
+          <div className="flex gap-2">
+            {currentLinkedId && (
+              <Button
+                onClick={() => {
+                  onLink("", "");
+                  onClose();
+                }}
+                className="bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100"
+              >
+                Unlink Current
+              </Button>
+            )}
+            <Button
+              onClick={() => {
+                const found = invoices.find((inv) => inv.id === selectedId);
+                onLink(selectedId, found?.number || "");
+                onClose();
+              }}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Apply Link
+            </Button>
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
+}
 
 function normalizePayment(entry) {
   if (!entry) return entry;
@@ -367,8 +508,19 @@ export default function PaymentIn() {
 
     {editor && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-3" onMouseDown={(event) => { if (event.target === event.currentTarget) { setEditor(null); setLinkOpen(false); } }}><section className="flex max-h-[92vh] w-full max-w-[1500px] flex-col overflow-hidden rounded-lg bg-white shadow-2xl"><header className="flex items-center justify-between border-b px-8 py-5"><h2 className="text-2xl font-bold text-slate-800">Payment-In</h2><div className="flex items-center gap-8"><button type="button" title="Settings" onClick={() => navigate("/settings?tab=transaction")} className="text-2xl text-slate-400 hover:text-slate-600">⚙</button><button type="button" onClick={() => { setEditor(null); setLinkOpen(false); }} aria-label="Close" className="text-3xl text-slate-400"><FiX /></button></div></header><div className="min-h-0 flex-1 overflow-auto px-8 py-7"><div className="grid min-h-[620px] grid-cols-1 gap-8 lg:grid-cols-[minmax(500px,1fr)_minmax(400px,1fr)]"><div><div className="grid gap-5 sm:grid-cols-[minmax(280px,1fr)_minmax(260px,1fr)]"><div><label className="mb-1 block text-slate-500">Party <span className="text-rose-500">*</span></label><input list="payment-in-parties" value={editor.entry.partyName} onChange={(event) => { const party = parties.find((value) => (value.partyName || value.name) === event.target.value); updateEntry("partyName", event.target.value); updateEntry("partyId", party?.id || ""); }} placeholder="Select or enter party" className="h-14 w-full rounded-md border border-slate-300 px-4 text-lg outline-none focus:border-blue-500" /><datalist id="payment-in-parties">{parties.map((party) => <option key={party.id} value={party.partyName || party.name}>{party.phone}</option>)}</datalist>{editor.entry.partyId && <p className="px-4 pt-1 text-sm font-semibold text-teal-500">BAL: {money(parties.find((party) => String(party.id) === String(editor.entry.partyId))?.openingBalance || 0)}</p>}</div><div className="space-y-5"><label className="flex items-center justify-between gap-5 text-slate-500">Receipt No<input value={editor.entry.number} onChange={(event) => updateEntry("number", event.target.value)} className="w-36 border-b border-slate-300 px-2 py-2 text-lg text-slate-800 outline-none" /></label><label className="flex items-center justify-between gap-5 text-slate-500">Date<input type="date" value={editor.entry.date} onChange={(event) => updateEntry("date", event.target.value)} className="w-44 border-b border-slate-300 px-2 py-2 text-lg text-slate-800 outline-none" /></label></div></div>
       <div className="mt-8 max-w-[700px] rounded-md border border-slate-200 bg-slate-50/70 p-5">{(editor.entry.payments || []).map((payment) => <div key={payment.id} className="mb-4 grid grid-cols-[minmax(150px,1fr)_minmax(150px,1fr)_32px] items-end gap-4"><label className="text-slate-500">Payment Type<select value={payment.type} onChange={(event) => updatePayment(payment.id, "type", event.target.value)} className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-4 text-lg text-slate-800">{["Cash", "Cheque", "UPI", "Card", "Bank Transfer", "Other"].map((type) => <option key={type}>{type}</option>)}</select></label><label className="text-slate-500">Amount<input type="number" min="0" step="0.01" value={payment.amount} onChange={(event) => updatePayment(payment.id, "amount", event.target.value)} placeholder="0" className="mt-1 h-14 w-full rounded-md border border-slate-300 bg-white px-4 text-lg text-slate-800" /></label><button aria-label="Remove payment type" disabled={(editor.entry.payments || []).length === 1} onClick={() => updateEntry("payments", editor.entry.payments.filter((value) => value.id !== payment.id))} className="mb-4 text-xl text-slate-400 disabled:opacity-30"><FiTrash2 /></button>{["Cheque", "Bank Transfer", "UPI", "Card"].includes(payment.type) && <><input value={payment.reference} onChange={(event) => updatePayment(payment.id, "reference", event.target.value)} placeholder={payment.type === "Cheque" ? "Reference No." : "Transaction / Reference No."} className="h-12 rounded-md border border-slate-300 bg-white px-3" />{payment.type === "Cheque" ? <input type="date" value={payment.chequeDate} onChange={(event) => updatePayment(payment.id, "chequeDate", event.target.value)} aria-label="Cheque Date" className="h-12 rounded-md border border-slate-300 bg-white px-3" /> : <span />}</>}</div>)}<div className="flex flex-wrap items-center justify-between gap-4 pt-2"><button onClick={() => updateEntry("payments", [...(editor.entry.payments || []), blankPayment()])} className="flex items-center gap-2 font-medium text-blue-600"><FiPlus /> Add Payment type</button><b>Total payment: {money(paymentTotal)}</b></div></div>
-      <label className="mt-6 block max-w-[400px] text-slate-500"><textarea value={editor.entry.description} onChange={(event) => updateEntry("description", event.target.value)} placeholder="Description" className="mt-1 h-40 w-full resize-none rounded-md border border-slate-300 p-4 outline-none focus:border-blue-500" /></label><button onClick={() => document.getElementById("payment-attachment")?.click()} className="mt-4 text-2xl text-slate-400" title="Attach image">▧</button><input id="payment-attachment" type="file" accept="image/*" className="hidden" /></div><div className="flex flex-col justify-center"><label className="flex items-center justify-between gap-5 text-slate-500">Received<input value={money(paymentTotal)} readOnly className="h-12 w-64 rounded-md border border-slate-300 bg-slate-50 px-4 text-right text-lg text-slate-800" /></label><p className="mt-2 text-sm text-slate-400">The receipt amount is calculated from its payment methods.</p></div></div></div><footer className="flex flex-wrap items-center justify-between gap-3 border-t px-8 py-4"><Button onClick={() => setLinkOpen(true)} className="bg-emerald-500 text-white hover:bg-emerald-600">LINK PAYMENT</Button><div className="ml-auto flex gap-3"><Button onClick={() => { const html = documentHtml({ ...editor.entry, amount: paymentTotal }); const target = window.open("", "_blank"); if (target) { target.document.write(html); target.document.close(); } }} className="border border-blue-300 text-blue-600">Share <FiChevronDown /></Button><Button onClick={saveReceipt} className="bg-blue-600 px-10 text-white hover:bg-blue-700">Save</Button></div></footer></section></div>}
-    {linkOpen && editor && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4"><section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl"><div className="mb-4 flex justify-between"><h3 className="text-lg font-bold">Link Payment</h3><button onClick={() => setLinkOpen(false)}><FiX /></button></div><p className="mb-4 text-sm text-slate-500">Receipt linking will be available when there are unpaid sale invoices for this party. You can save this receipt now and link it later.</p><div className="rounded-lg bg-slate-50 p-4 text-sm">Party: <b>{editor.entry.partyName || "Select a party first"}</b><br />Received: <b>{money(paymentTotal)}</b><br />No local sale-invoice balance is available to link here yet.</div><div className="mt-5 flex justify-end"><Button onClick={() => setLinkOpen(false)} className="bg-blue-600 text-white">Done</Button></div></section></div>}
+      <label className="mt-6 block max-w-[400px] text-slate-500"><textarea value={editor.entry.description} onChange={(event) => updateEntry("description", event.target.value)} placeholder="Description" className="mt-1 h-40 w-full resize-none rounded-md border border-slate-300 p-4 outline-none focus:border-blue-500" /></label><button onClick={() => document.getElementById("payment-attachment")?.click()} className="mt-4 text-2xl text-slate-400" title="Attach image">▧</button><input id="payment-attachment" type="file" accept="image/*" className="hidden" /></div><div className="flex flex-col justify-center"><label className="flex items-center justify-between gap-5 text-slate-500">Received<input value={money(paymentTotal)} readOnly className="h-12 w-64 rounded-md border border-slate-300 bg-slate-50 px-4 text-right text-lg text-slate-800" /></label><p className="mt-2 text-sm text-slate-400">The receipt amount is calculated from its payment methods.</p></div></div></div><footer className="flex flex-wrap items-center justify-between gap-3 border-t px-8 py-4"><Button onClick={() => setLinkOpen(true)} className="bg-emerald-500 text-white hover:bg-emerald-600">{editor.entry.linkedInvoiceId ? "CHANGE LINKED INVOICE" : "LINK PAYMENT"}</Button><div className="ml-auto flex gap-3"><Button onClick={() => { const html = documentHtml({ ...editor.entry, amount: paymentTotal }); const target = window.open("", "_blank"); if (target) { target.document.write(html); target.document.close(); } }} className="border border-blue-300 text-blue-600">Share <FiChevronDown /></Button><Button onClick={saveReceipt} className="bg-blue-600 px-10 text-white hover:bg-blue-700">Save</Button></div></footer></section></div>}
+    <PaymentLinkModal
+      isOpen={linkOpen && Boolean(editor)}
+      onClose={() => setLinkOpen(false)}
+      partyName={editor?.entry?.partyName || ""}
+      partyId={editor?.entry?.partyId || ""}
+      paymentAmount={paymentTotal}
+      currentLinkedId={editor?.entry?.linkedInvoiceId || ""}
+      onLink={(id, number) => {
+        updateEntry("linkedInvoiceId", id);
+        updateEntry("linkedInvoiceNumber", number);
+      }}
+    />
     {history && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setHistory(null); }}><section className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl"><div className="mb-4 flex justify-between"><h3 className="text-lg font-bold">Payment History · Receipt {history.number}</h3><button onClick={() => setHistory(null)}><FiX /></button></div><div className="space-y-3">{(history.history || []).length ? history.history.map((event, index) => <p key={index} className="rounded bg-slate-50 p-3">{event.action}<span className="block text-xs text-slate-500">{new Date(event.at).toLocaleString()}</span></p>) : <p className="text-slate-500">No history recorded yet.</p>}</div><div className="mt-5 flex justify-end"><Button onClick={() => setHistory(null)} className="bg-blue-600 text-white">Close</Button></div></section></div>}
     <ConfirmModal
       isOpen={confirmModal.isOpen}
