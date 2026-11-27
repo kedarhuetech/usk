@@ -1,6 +1,5 @@
 // Implements the import items page.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BrowserMultiFormatReader } from "@zxing/browser";
 import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { FiAlertCircle, FiCamera, FiCheckCircle, FiImage, FiSearch, FiUpload, FiX } from "react-icons/fi";
 import * as XLSX from "xlsx";
@@ -24,7 +23,8 @@ const cameraFormats = [
 ];
 
 // Creates barcode reader.
-function createBarcodeReader() {
+async function createBarcodeReader() {
+  const { BrowserMultiFormatReader } = await import("@zxing/browser");
   const hints = new Map([
     [DecodeHintType.POSSIBLE_FORMATS, cameraFormats],
   ]);
@@ -354,7 +354,7 @@ function ImportItems() {
     // Starts zxing scan.
     async function startZxingScan() {
       if (!active) return;
-      const reader = createBarcodeReader();
+      const reader = await createBarcodeReader();
       let stream;
       try {
         stream = await requestCamera();
@@ -433,7 +433,7 @@ function ImportItems() {
         image.onload = resolve;
         image.onerror = () => reject(new Error("The selected image could not be opened."));
       });
-      const result = await createBarcodeReader().decodeFromImageElement(image);
+      const result = await (await createBarcodeReader()).decodeFromImageElement(image);
       setBarcode(result.getText());
       setLookupState({ status: "success", message: `Barcode detected: ${result.getText()}. Click Look Up to retrieve product details.` });
     } catch {

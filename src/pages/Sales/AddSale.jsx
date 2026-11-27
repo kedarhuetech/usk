@@ -2685,7 +2685,7 @@ function AddSale({ mode = "sale", localOnly = false }) {
   const isPurchase = config.type === "purchase";
   const purchaseOrderConversion = isPurchase ? location.state?.purchaseOrderConversion || null : null;
   const quotationConversion = !isPurchase ? location.state?.quotationConversion || location.state?.proformaConversion || null : null;
-  const saleOrderConversions = !isPurchase ? location.state?.saleOrdersConversion || [] : [];
+  const saleOrderConversions = useMemo(() => !isPurchase ? location.state?.saleOrdersConversion || [] : [], [isPurchase, location.state?.saleOrdersConversion]);
   const saleOrderConversion = saleOrderConversions[0] || null;
   const conversionItems = location.state?.conversionItems || null;
   const deliveryChallanConversions = !isPurchase ? location.state?.deliveryChallansConversion || [] : [];

@@ -17,7 +17,7 @@ export const DEFAULT_SERVICE_REMINDER_SETTINGS = Object.freeze({
   reminderDaysBefore: 2, // User requested: "Notify customers: 2 days before service due date"
   defaultMessageTemplate:
     "Dear {customerName}, this is a friendly reminder from {companyName} that your service for {serviceName} is due on {serviceDueDate}. Please contact us to schedule your service.",
-  autoNotifyWhatsApp: true, // User requested: Due reminders automatically get sent with no clicking required
+  autoNotifyWhatsApp: false, // Default to false so no unsolicited background reminders are sent
   autoNotifyEmail: false,
 });
 

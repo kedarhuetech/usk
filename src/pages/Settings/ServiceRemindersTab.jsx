@@ -40,7 +40,6 @@ import {
   checkMetaWhatsAppConnection,
   formatReminderMessage,
   requestServiceReminderTemplateApproval,
-  autoDispatchDueRemindersViaMeta,
 } from "../../services/serviceRemindersService.js";
 import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { getParties } from "../../services/partiesStorage.js";
@@ -143,44 +142,6 @@ export default function ServiceRemindersTab({ settings: parentSettings, update: 
   const processed = useMemo(() => {
     return processServiceReminders({ records, settings });
   }, [records, settings]);
-
-  const autoDispatchingRef = useRef(false);
-  const hasCheckedAutoDispatchRef = useRef(false);
-
-  // Automatically dispatch due reminders via Meta WhatsApp without requiring clicking
-  useEffect(() => {
-    if (!metaStatus.connected || !settings.enabled || settings.autoNotifyWhatsApp === false) {
-      return;
-    }
-    if (hasCheckedAutoDispatchRef.current || autoDispatchingRef.current) {
-      return;
-    }
-
-    const unnotified = (processed.activeAlerts || []).filter(
-      (r) => r.hasValidPhone && !r.alreadyNotifiedForThisDueDate
-    );
-    if (!unnotified.length) {
-      return;
-    }
-
-    autoDispatchingRef.current = true;
-    hasCheckedAutoDispatchRef.current = true;
-
-    autoDispatchDueRemindersViaMeta(company)
-      .then((res) => {
-        if (res.dispatched > 0) {
-          toast.success(
-            `⚡ Automatically sent ${res.dispatched} due service reminder${res.dispatched > 1 ? "s" : ""} via WhatsApp!`,
-            { duration: 5500 }
-          );
-          setRecords(getReminderRecords());
-        }
-      })
-      .catch((err) => console.warn("Auto-dispatch reminder check error:", err))
-      .finally(() => {
-        autoDispatchingRef.current = false;
-      });
-  }, [metaStatus.connected, settings.enabled, settings.autoNotifyWhatsApp, company]);
 
   const showNotice = (msg) => {
     setNotice(msg);

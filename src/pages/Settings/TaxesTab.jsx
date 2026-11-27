@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FiHelpCircle, FiPlus, FiTrash2, FiX, FiUploadCloud, FiFileText, FiCheck, FiCheckCircle, FiAlertCircle, FiLoader } from "react-icons/fi";
 import HsnAutocomplete from "../../components/Common/HsnAutocomplete.jsx";
 import { uploadHsnMasterFile, lookupHsnCode } from "../../services/hsnService.js";
@@ -60,6 +60,12 @@ export default function TaxesTab({ settings, update }) {
         { id: "tax-28-cess12", name: "GST @ 28% + Cess 12%", rate: 28, igst: 28, cgst: 14, sgst: 14, cess: 12, isDefault: false },
       ]
   );
+
+  useEffect(() => {
+    if (settings.taxRatesList && Array.isArray(settings.taxRatesList)) {
+      setTaxRates(settings.taxRatesList);
+    }
+  }, [settings.taxRatesList]);
 
   // New tax rate form state
   const [newTaxName, setNewTaxName] = useState("");

@@ -467,6 +467,7 @@ export default function ProfitAndLossReport() {
       loanCharges,
       netProfit,
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, refreshTrigger, dbTransactions, dbItems]);
 
   /* ── export ── */

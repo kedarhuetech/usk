@@ -24,7 +24,10 @@ import {
 } from "./serviceRemindersService.js";
 
 function setupMockEnvironment(initialData = {}) {
-  const store = new Map(Object.entries(initialData));
+  const store = new Map([
+    ["ledgerly:storageMode", "local"],
+    ...Object.entries(initialData),
+  ]);
   const priorWindow = globalThis.window;
   const dispatchedEvents = [];
 
@@ -194,7 +197,9 @@ test("Scenario 6: Settings saved and browser refreshed (storage persistence)", (
     });
 
     // Verify written to storage
-    assert.ok(env.store.has(SERVICE_REMINDER_SETTINGS_KEY));
+    assert.ok(
+      Array.from(env.store.keys()).some((k) => k.includes(SERVICE_REMINDER_SETTINGS_KEY))
+    );
 
     // Simulate page refresh / new reader
     const reloaded = getReminderSettings();

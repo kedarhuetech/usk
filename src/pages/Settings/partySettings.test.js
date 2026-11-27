@@ -146,3 +146,24 @@ test("Custom party fields configuration update and toggle showInPrint", () => {
   assert.equal(settings.partyCustomFields[3].type, "date");
 });
 
+test("Party custom fields with showInPrint render cleanly in buildUnifiedDocumentHtml", () => {
+  const html = buildUnifiedDocumentHtml({
+    title: "Sale Invoice",
+    documentNumber: "INV-103",
+    date: "2026-11-27",
+    partyName: "Custom Party Ltd",
+    partyBillingAddress: "123 Business Way",
+    party: {
+      additionalFields: [
+        { fieldName: "Registration No", value: "REG-9988", showInPrint: true },
+        { fieldName: "Internal Note", value: "Do not print", showInPrint: false },
+      ],
+    },
+    rows: [{ item: "Item A", qty: 1, price: 100, amount: 100 }],
+  });
+
+  assert.ok(html.includes("Registration No:</b> REG-9988"), "Printable party custom field should be rendered");
+  assert.ok(!html.includes("Do not print"), "Non-printable party custom field should be omitted");
+});
+
+
