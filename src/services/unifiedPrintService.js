@@ -230,6 +230,13 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     }
   }
 
+  const grandTotal = opts.totalAmount !== undefined
+    ? Number(opts.totalAmount)
+    : Number(
+        totals.total ?? totals.finalTotal ?? totals.grandTotal ?? totals.amount ?? 0
+      );
+  const totalInWords = numberToWords(grandTotal);
+
   // Issue #22: Standard dynamic UPI QR URI format
   const bankDetails = opts.bankDetails || company.bankDetails || company.appSettings?.bankAccount || null;
   const upiId = opts.upiId || bankDetails?.upiId || company.upiId || company.appSettings?.upiId || "";
@@ -246,13 +253,6 @@ export function buildUnifiedDocumentHtml(opts = {}) {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     })}`;
-
-  const grandTotal = opts.totalAmount !== undefined
-    ? Number(opts.totalAmount)
-    : Number(
-        totals.total ?? totals.finalTotal ?? totals.grandTotal ?? totals.amount ?? 0
-      );
-  const totalInWords = numberToWords(grandTotal);
 
   const printShipping =
     company.appSettings?.printShippingAddress !== false &&
@@ -963,15 +963,37 @@ export function buildUnifiedStatementHtml({
 export function openPrintWindow(html, autoPrint = false) {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    toast.warning("Please allow pop-ups in your browser to print documents.");
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => {
+        if (iframe.parentNode) document.body.removeChild(iframe);
+      }, 3000);
+    }, 400);
     return;
   }
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
   if (autoPrint) {
-    printWindow.addEventListener("load", () => {
-      setTimeout(() => printWindow.print(), 250);
-    });
+    printWindow.focus();
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch {}
+    }, 350);
   }
 }

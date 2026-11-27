@@ -215,21 +215,37 @@ function readPayments() {
 }
 
 function documentHtml(entry, printNow = false) {
-  const rows = (entry.payments || []).map((p) => ({
-    item: p.type || "Payment Out",
-    description: p.reference ? `Ref: ${p.reference}` : "Direct Payment",
-    qty: "1",
-    unit: "TXN",
-    price: p.amount || 0,
-    amount: p.amount || 0,
-  }));
+  const totalAmt = Number(entry.amount ?? entry.totalAmount ?? entry.received ?? 0);
+  const rawPayments = Array.isArray(entry.payments) && entry.payments.length > 0
+    ? entry.payments
+    : null;
+
+  const rows = rawPayments
+    ? rawPayments.map((p) => ({
+        item: p.type || entry.paymentType || "Payment Out",
+        description: p.reference ? `Ref: ${p.reference}` : "Direct Payment",
+        qty: "1",
+        unit: "TXN",
+        price: Number(p.amount || totalAmt),
+        amount: Number(p.amount || totalAmt),
+      }))
+    : [
+        {
+          item: entry.paymentType || entry.paymentMode || "UPI",
+          description: entry.reference ? `Ref: ${entry.reference}` : "Direct Payment",
+          qty: "1",
+          unit: "TXN",
+          price: totalAmt,
+          amount: totalAmt,
+        },
+      ];
 
   return buildUnifiedDocumentHtml({
     title: "Payment-Out Voucher",
-    documentNumber: entry.number || "",
-    date: formatDate(entry.date),
+    documentNumber: entry.number || entry.documentNumber || entry.refNo || "",
+    date: formatDate(entry.date || entry.transactionDate),
     status: entry.status || "Paid",
-    partyName: entry.partyName || "",
+    partyName: entry.partyName || entry.supplier || "",
     columns: [
       { key: "index", label: "#", align: "center", width: "40px" },
       { key: "item", label: "Payment Mode", align: "left" },
@@ -237,13 +253,14 @@ function documentHtml(entry, printNow = false) {
       { key: "amount", label: "Amount Paid", align: "right", width: "160px", formatMoney: true },
     ],
     rows,
+    totalAmount: totalAmt,
     totals: {
-      subtotal: entry.amount,
-      total: entry.amount,
-      received: entry.received ?? entry.amount,
+      subtotal: totalAmt,
+      total: totalAmt,
+      received: Number(entry.received ?? totalAmt),
       balance: 0,
     },
-    notes: entry.description || "",
+    notes: entry.description || entry.notes || "",
     autoPrint: printNow,
   });
 }
