@@ -342,7 +342,7 @@ export default function PurchaseReturns() {
       // Adjust linked purchase bill balance and debitNoteAppliedAmount
       if (saved.billNumber || saved.billId) {
         try {
-          applyDebitNoteToPurchaseBill(saved.billNumber || saved.billId, total);
+          await applyDebitNoteToPurchaseBill(saved.billNumber || saved.billId, total);
         } catch {}
       }
 
@@ -1017,13 +1017,13 @@ export default function PurchaseReturns() {
           confirmText="Delete"
           cancelText="Cancel"
           danger={true}
-          onConfirm={() => {
+          onConfirm={async () => {
             try {
+              await transactionsDb.remove(deleteConfirm.id);
               persist(records.filter((r) => r.id !== deleteConfirm.id));
-              transactionsDb.remove(deleteConfirm.id).catch(() => {});
               toast.success("Debit note deleted.");
             } catch (error) {
-              toast.error(error.message || "Could not delete this purchase return.");
+              toast.error(error.message || "Could not delete this purchase return from database.");
             } finally {
               setDeleteConfirm(null);
             }

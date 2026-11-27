@@ -216,13 +216,40 @@ export async function fetchCurrentAuthUser() {
   return getAuthUser();
 }
 
+let isLoggingOut = false;
+
 /**
- * Sign out and redirect to /login
+ * Sign out: calls backend logout to persist server-side token revocation,
+ * then clears local storage session and redirects to /login.
+ * Avoids duplicate concurrent logout requests.
  */
-export function logoutUser() {
-  clearAuthSession();
-  if (typeof window !== "undefined") {
-    window.location.href = "/login";
+export async function logoutUser() {
+  if (isLoggingOut) return;
+  isLoggingOut = true;
+
+  try {
+    const token = getAuthToken();
+    if (token) {
+      const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        keepalive: true,
+      });
+      if (!response.ok) {
+        console.warn(`[Auth] Backend logout returned HTTP ${response.status}. Local session will still be cleared.`);
+      }
+    }
+  } catch (err) {
+    console.warn("[Auth] Backend logout network error:", err?.message);
+  } finally {
+    clearAuthSession();
+    isLoggingOut = false;
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
   }
 }
 

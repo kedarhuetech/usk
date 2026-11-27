@@ -170,15 +170,27 @@ test("Authenticated JWT businessId cannot be overridden by forged X-Business-Id 
   const app = createTestAppWithAuth();
   const tokenBizA = signAuthToken({ userId: "u-a", email: "a@test.com", businessId: "biz-a" });
 
-  const res = await dispatchRequest(app, {
-    url: "/api/parties?businessId=biz-b",
-    headers: {
-      Authorization: `Bearer ${tokenBizA}`,
-      "X-Business-Id": "biz-b",
-    },
-  });
-  assert.equal(res.status, 200);
-  assert.equal(res.body.businessId, "biz-a", "Effective businessId must come strictly from verified JWT");
+  const origQuery = pool.query;
+  pool.query = async (sql, params) => {
+    if (String(sql).includes("FROM users")) {
+      return [[{ token_version: 1, is_revoked: 0 }]];
+    }
+    return origQuery.apply(pool, [sql, params]);
+  };
+
+  try {
+    const res = await dispatchRequest(app, {
+      url: "/api/parties?businessId=biz-b",
+      headers: {
+        Authorization: `Bearer ${tokenBizA}`,
+        "X-Business-Id": "biz-b",
+      },
+    });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.businessId, "biz-a", "Effective businessId must come strictly from verified JWT");
+  } finally {
+    pool.query = origQuery;
+  }
 });
 
 test("BACKUP_TABLES excludes global businesses table", () => {
@@ -196,6 +208,9 @@ test("GET /api/backup/export scopes every query to authenticated JWT businessId 
   pool.query = async (sql, params = []) => {
     const s = String(sql).trim();
     executedQueries.push({ sql: s, params });
+    if (s.includes("FROM users")) {
+      return [[{ token_version: 1, is_revoked: 0 }]];
+    }
     if (s.includes("information_schema.COLUMNS")) {
       return [[{ c: 1 }]];
     }
@@ -234,8 +249,15 @@ test("POST /api/backup/restore-payload targets authenticated JWT businessId rega
   const app = createTestAppWithAuth();
   const tokenBizA = signAuthToken({ userId: "u-a", businessId: "biz-a" });
 
+  const origPoolQuery = pool.query.bind(pool);
   const origGetConnection = pool.getConnection.bind(pool);
   const executed = [];
+  pool.query = async (sql, params = []) => {
+    if (String(sql).includes("FROM users")) {
+      return [[{ token_version: 1, is_revoked: 0 }]];
+    }
+    return origPoolQuery(sql, params);
+  };
   pool.getConnection = async () => ({
     async beginTransaction() {},
     async commit() {},
@@ -275,5 +297,6 @@ test("POST /api/backup/restore-payload targets authenticated JWT businessId rega
     assert.equal(insCat.params[1], "biz-a");
   } finally {
     pool.getConnection = origGetConnection;
+    pool.query = origPoolQuery;
   }
 });

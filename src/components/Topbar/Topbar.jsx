@@ -665,10 +665,9 @@ export default function Topbar({ onRefresh }) {
                 <div className="border-t border-[#2B313F]/70 pt-1 mt-1">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       setUserDropdownOpen(false);
-                      logoutUser();
-                      window.location.href = "/login";
+                      await logoutUser();
                     }}
                     className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition text-left cursor-pointer"
                   >

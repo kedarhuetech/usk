@@ -356,8 +356,8 @@ export default function ProfitAndLossReport() {
         );
 
         const unitCost = matchedItem
-          ? (Number(matchedItem.purchasePrice || matchedItem.atPrice || 0) || 0)
-          : (Number(row.purchasePrice || 0) || 0);
+          ? Number(matchedItem.purchasePrice || matchedItem.atPrice || 0) || 0
+          : Number(row.purchasePrice || 0) || 0;
         if (unitCost <= 0 && qty > 0) {
           missingCostCount += 1;
         }

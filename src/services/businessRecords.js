@@ -241,18 +241,6 @@ export async function saveBusinessSaleInvoice(value) {
   try {
     const remote = await transactionsDb.save(localInvoice);
     saved = { ...localInvoice, ...(remote || {}) };
-
-    const changedItems = getInventoryItems();
-    const touchedIds = new Set((localInvoice.rows || []).map((row) => row.sourceItemId || row.itemId).filter(Boolean));
-    for (const item of changedItems) {
-      if (touchedIds.has(item.id)) {
-        try {
-          await saveBusinessItem(item);
-        } catch (itemErr) {
-          console.warn("[MySQL] Item stock sync notice after sale:", itemErr.message);
-        }
-      }
-    }
   } catch (error) {
     if (canUseStorage) {
       for (const [key, stored] of before) {
@@ -333,18 +321,6 @@ export async function saveBusinessPurchaseBill(value) {
   try {
     const remote = await transactionsDb.save(localSaved);
     saved = { ...localSaved, ...(remote || {}) };
-
-    const changedItems = getInventoryItems();
-    const touchedItemIds = new Set((bill.rows || []).map((row) => row.sourceItemId || row.itemId).filter(Boolean));
-    for (const item of changedItems) {
-      if (touchedItemIds.has(item.id)) {
-        try {
-          await saveBusinessItem(item);
-        } catch (itemErr) {
-          console.warn("[MySQL] Item stock sync notice after purchase:", itemErr.message);
-        }
-      }
-    }
   } catch (error) {
     if (canUseStorage) {
       for (const [key, stored] of before) {

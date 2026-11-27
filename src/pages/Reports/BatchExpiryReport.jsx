@@ -23,7 +23,7 @@ export default function BatchExpiryReport() {
       if (Array.isArray(remoteItems) && remoteItems.length > 0) {
         for (const remote of remoteItems) {
           if (remote?.id) {
-            saveInventoryItem(normalizeInventoryItem(remote));
+            saveInventoryItem(normalizeInventoryItem(remote), { skipRemoteSync: true });
           }
         }
       }

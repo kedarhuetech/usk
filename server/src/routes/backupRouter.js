@@ -13,12 +13,41 @@ import { restoreUsvToDatabase } from "../services/backupRestoreService.js";
 const router = Router();
 
 export const BACKUP_TABLES = [
-  "company_profiles", "company_profile_assets", "app_settings", "parties",
-  "units", "inventory_items", "item_batches", "inventory_adjustments",
-  "transactions", "transaction_items", "service_reminders", "service_reminder_history",
-  "bank_accounts", "bank_transactions", "cash_in_hand", "cheques", "loan_accounts",
-  "expense_categories", "expense_items", "online_store_settings", "online_store_orders",
-  "online_store_order_items", "smart_ads", "audit_trails"
+  "company_profiles",
+  "company_profile_assets",
+  "app_settings",
+  "parties",
+  "units",
+  "unit_conversions",
+  "inventory_items",
+  "item_batches",
+  "inventory_adjustments",
+  "transactions",
+  "transaction_items",
+  "service_reminders",
+  "service_reminder_history",
+  "bank_accounts",
+  "bank_transactions",
+  "cash_in_hand",
+  "cheques",
+  "loan_accounts",
+  "loan_repayments",
+  "expense_categories",
+  "expense_items",
+  "purchase_job_works",
+  "purchase_job_work_items",
+  "balance_sheet_accounts",
+  "online_store_settings",
+  "online_store_orders",
+  "online_store_order_items",
+  "smart_ads",
+  "audit_trails",
+  "business_files",
+  "tally_import_batches",
+  "migration_logs",
+  "business_growth_assets",
+  "business_growth_records",
+  "business_growth_record_fields",
 ];
 
 /**
@@ -84,34 +113,82 @@ router.post("/restore", async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid backup format. Missing tables object." });
     }
 
+    const backupTableSet = new Set(BACKUP_TABLES);
+    for (const key of Object.keys(payload.tables)) {
+      if (!backupTableSet.has(key)) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: `Unsupported or disallowed table in backup: ${key}` });
+      }
+    }
+
+    const tablesToRestore = BACKUP_TABLES.filter(
+      (table) => Array.isArray(payload.tables[table]) && payload.tables[table].length > 0
+    );
+
+    const allowedColumnsByTable = new Map();
+    for (const table of tablesToRestore) {
+      const [colRows] = await conn.query(
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?`,
+        [table]
+      );
+      const colSet = new Set(colRows.map((c) => c.COLUMN_NAME));
+      if (!colSet.has("business_id")) {
+        await conn.rollback();
+        return res.status(400).json({ success: false, message: `Table '${table}' is not tenant-scoped and cannot be restored.` });
+      }
+      allowedColumnsByTable.set(table, colSet);
+    }
+
+    // Delete in reverse topological order to respect child -> parent relationships
+    for (const table of [...tablesToRestore].reverse()) {
+      await conn.query(`DELETE FROM \`${table}\` WHERE business_id = ?`, [businessId]);
+    }
+
     let restoredStats = {};
 
-    for (const table of BACKUP_TABLES) {
+    // Insert in forward topological order
+    for (const table of tablesToRestore) {
       const rows = payload.tables[table];
-      if (!Array.isArray(rows) || rows.length === 0) continue;
-
-      // Clean existing rows for this business only
-      await conn.query(`DELETE FROM \`${table}\` WHERE business_id = ?`, [businessId]);
+      const allowedCols = allowedColumnsByTable.get(table);
+      let insertedCount = 0;
 
       for (const row of rows) {
         if (!row || typeof row !== "object") continue;
-        // Force authenticated business_id; never allow payload row to target another business
+        // Force authenticated business_id and filter strictly to schema-verified columns
         const scopedRow = { ...row, business_id: businessId };
-        const keys = Object.keys(scopedRow).map((k) => `\`${k}\``);
-        const values = Object.values(scopedRow).map((v) => {
+        const validKeys = Object.keys(scopedRow).filter((k) => allowedCols.has(k));
+        if (validKeys.length === 0) {
+          throw Object.assign(new Error(`No valid schema columns found for table '${table}'.`), { status: 400 });
+        }
+
+        const escapedKeys = validKeys.map((k) => `\`${k}\``);
+        const values = validKeys.map((k) => {
+          const v = scopedRow[k];
           if (v && typeof v === "object" && v.type === "Buffer" && Array.isArray(v.data)) {
             return Buffer.from(v.data);
           }
           return v;
         });
-        const placeholders = keys.map(() => "?").join(",");
+        const placeholders = escapedKeys.map(() => "?").join(",");
 
         await conn.query(
-          `INSERT INTO \`${table}\` (${keys.join(",")}) VALUES (${placeholders})`,
+          `INSERT INTO \`${table}\` (${escapedKeys.join(",")}) VALUES (${placeholders})`,
           values
         );
+        insertedCount += 1;
       }
-      restoredStats[table] = rows.length;
+
+      // Verify restored count matches inserted count
+      const [countRows] = await conn.query(
+        `SELECT COUNT(*) AS c FROM \`${table}\` WHERE business_id = ?`,
+        [businessId]
+      );
+      const actualCount = Number(countRows[0]?.c || 0);
+      if (actualCount !== insertedCount) {
+        throw new Error(`Verification failed for '${table}': expected ${insertedCount} rows, found ${actualCount}.`);
+      }
+
+      restoredStats[table] = insertedCount;
     }
 
     await conn.commit();
@@ -164,7 +241,7 @@ router.get("/verify", async (_req, res) => {
     const [jsonCols] = await pool.query(
       `SELECT TABLE_NAME, COLUMN_NAME 
        FROM information_schema.COLUMNS 
-       WHERE TABLE_SCHEMA = 'vyapaar' AND DATA_TYPE = 'json'`
+       WHERE TABLE_SCHEMA = DATABASE() AND DATA_TYPE = 'json'`
     );
 
     const [tables] = await pool.query("SHOW TABLES");

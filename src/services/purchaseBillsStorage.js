@@ -160,7 +160,7 @@ export function replacePurchaseBills(bills) {
   }
 }
 
-export function applyDebitNoteToPurchaseBill(billNumberOrId, debitAmount = 0) {
+export async function applyDebitNoteToPurchaseBill(billNumberOrId, debitAmount = 0) {
   if (!billNumberOrId) return null;
   const target = String(billNumberOrId).trim().toLowerCase();
   const currentBills = readBills();
@@ -191,25 +191,24 @@ export function applyDebitNoteToPurchaseBill(billNumberOrId, debitAmount = 0) {
     updatedAt: new Date().toISOString(),
   };
 
-  currentBills[index] = updatedBill;
-  writeTransactionCollection(PURCHASE_BILLS_KEY, currentBills);
-  notifyBusinessDataChanged();
-
-  // Sync with MySQL transactionsDb if in database mode
-  try {
-    transactionsDb.save({
+  if (isDatabaseMode()) {
+    await transactionsDb.save({
       ...updatedBill,
       transactionType: "purchase",
       type: "purchase",
       balanceAmount: newBalance,
       status: updatedBill.status,
-    }).catch(() => {});
-  } catch {}
+    });
+  }
+
+  currentBills[index] = updatedBill;
+  writeTransactionCollection(PURCHASE_BILLS_KEY, currentBills);
+  notifyBusinessDataChanged();
 
   return updatedBill;
 }
 
-export function applyPaymentToPurchaseBill(billNumberOrId, paymentAmount = 0) {
+export async function applyPaymentToPurchaseBill(billNumberOrId, paymentAmount = 0) {
   if (!billNumberOrId) return null;
   const target = String(billNumberOrId).trim().toLowerCase();
   const currentBills = readBills();
@@ -244,21 +243,20 @@ export function applyPaymentToPurchaseBill(billNumberOrId, paymentAmount = 0) {
     updatedAt: new Date().toISOString(),
   };
 
-  currentBills[index] = updatedBill;
-  writeTransactionCollection(PURCHASE_BILLS_KEY, currentBills);
-  notifyBusinessDataChanged();
-
-  // Sync with MySQL
-  try {
-    transactionsDb.save({
+  if (isDatabaseMode()) {
+    await transactionsDb.save({
       ...updatedBill,
       transactionType: "purchase",
       type: "purchase",
       paidAmount: newPaid,
       balanceAmount: newBalance,
       status: updatedBill.status,
-    }).catch(() => {});
-  } catch {}
+    });
+  }
+
+  currentBills[index] = updatedBill;
+  writeTransactionCollection(PURCHASE_BILLS_KEY, currentBills);
+  notifyBusinessDataChanged();
 
   return updatedBill;
 }

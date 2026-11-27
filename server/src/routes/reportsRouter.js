@@ -12,8 +12,7 @@ import { getIstDateString } from "../utils/dateUtils.js";
 
 const router = Router();
 
-const ACTIVE_TXN_FILTER = `LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')
-  AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')`;
+const ACTIVE_TXN_FILTER = `LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')`;
 
 function toSqlDate(val, fallback = null) {
   if (!val || typeof val !== "string") return fallback;

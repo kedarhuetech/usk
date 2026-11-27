@@ -16,6 +16,10 @@ import {
   migrateBusinessGrowthAssets,
   zeroVerifiedCompanyProfileBlobs,
 } from "./storage/businessGrowthAssetMigration.js";
+import {
+  cleanupExpiredLoginAttempts,
+  cleanupExpiredRevokedTokens,
+} from "./rateLimiterService.js";
 
 /**
  * Gets storage size breakdown for the database tables.
@@ -230,7 +234,22 @@ export async function runDatabaseMaintenance({
     dryRun,
   });
 
-  // 4. Optimize tables to reclaim space
+  // 4. Security table routine cleanup (expired login attempts & expired revoked tokens)
+  let securityReport = { expiredLoginAttemptsRemoved: 0, expiredRevokedTokensRemoved: 0 };
+  if (!dryRun) {
+    try {
+      const loginClean = await cleanupExpiredLoginAttempts({ batchSize: 1000 });
+      const tokenClean = await cleanupExpiredRevokedTokens({ batchSize: 1000 });
+      securityReport = {
+        expiredLoginAttemptsRemoved: loginClean.cleanedCount,
+        expiredRevokedTokensRemoved: tokenClean.cleanedCount,
+      };
+    } catch (secErr) {
+      console.warn("[Maintenance] Security table cleanup notice:", secErr.message);
+    }
+  }
+
+  // 5. Optimize tables to reclaim space
   let tableOptimization = {};
   if (optimize && !dryRun) {
     tableOptimization = await optimizeTargetTables();
@@ -254,6 +273,7 @@ export async function runDatabaseMaintenance({
     auditTrails: auditReport,
     assetBlobs: assetReport,
     filesPurged: filePurgeReport,
+    securityCleanup: securityReport,
     tableOptimization,
     storage: {
       beforeTotalKb: beforeSizes.summary.totalKb,
