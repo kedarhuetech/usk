@@ -2561,6 +2561,7 @@ function BusinessModal({ mode, business, setBusiness, onClose }) {
   const [firmTab, setFirmTab] = useState("business");
   const logoInputRef = useRef(null);
   const sigInputRef = useRef(null);
+  const isGstinEnabled = getAppSettings().enableGstin !== false;
 
   useEffect(() => {
     // Handles key down.

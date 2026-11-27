@@ -851,6 +851,7 @@ export async function initializeDatabaseSchema() {
       business_id VARCHAR(64) NOT NULL,
       role VARCHAR(32) NOT NULL DEFAULT 'owner',
       is_verified TINYINT(1) NOT NULL DEFAULT 1,
+      token_version INT NOT NULL DEFAULT 1,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
       INDEX idx_user_biz (business_id),
@@ -896,6 +897,31 @@ export async function initializeDatabaseSchema() {
       summary_notes TEXT NULL,
       created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
       INDEX idx_tally_batches_biz (business_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
+
+    // 36. Revoked Tokens Table (Persistent JWT Session Revocation)
+    `CREATE TABLE IF NOT EXISTS revoked_tokens (
+      id VARCHAR(64) PRIMARY KEY,
+      token_hash VARCHAR(64) NOT NULL UNIQUE,
+      user_id VARCHAR(64) NOT NULL,
+      business_id VARCHAR(64) NOT NULL,
+      revocation_reason VARCHAR(32) NOT NULL DEFAULT 'logout',
+      expires_at DATETIME NOT NULL,
+      revoked_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      INDEX idx_revoked_tokens_user (user_id),
+      INDEX idx_revoked_tokens_expires (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
+
+    // 37. Login Attempts Table (Persistent Rate Limiting & Abuse Protection)
+    `CREATE TABLE IF NOT EXISTS login_attempts (
+      attempt_key VARCHAR(128) PRIMARY KEY,
+      attempt_type VARCHAR(32) NOT NULL DEFAULT 'login',
+      attempt_count INT NOT NULL DEFAULT 1,
+      first_attempt_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      last_attempt_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      locked_until DATETIME(3) DEFAULT NULL,
+      INDEX idx_login_attempts_locked (locked_until),
+      INDEX idx_login_attempts_last (last_attempt_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`
   ];
 

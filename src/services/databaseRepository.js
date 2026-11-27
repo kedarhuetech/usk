@@ -769,16 +769,11 @@ export const serviceRemindersDb = {
   },
 
   async save(reminder) {
-    try {
-      const res = await apiRequest("/service-reminders", {
-        method: "POST",
-        body: JSON.stringify(reminder),
-      });
-      return res?.data || reminder;
-    } catch (err) {
-      console.warn("[MySQL] Failed to save reminder to backend:", err.message);
-      return reminder;
-    }
+    const res = await apiRequest("/service-reminders", {
+      method: "POST",
+      body: JSON.stringify(reminder),
+    });
+    return res?.data || reminder;
   },
 
   async remove(id) {

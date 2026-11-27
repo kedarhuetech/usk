@@ -1048,7 +1048,7 @@ const saveTransactionHandler = async (req, res) => {
 
     // Check if transaction already exists in MySQL for safe differential accounting
     const [existingRows] = await conn.query(
-      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, payment_status, status, image_id, document_id
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, payment_status, image_id, document_id
        FROM transactions
        WHERE business_id = ? AND id = ?
        FOR UPDATE`,
@@ -1200,7 +1200,7 @@ const saveTransactionHandler = async (req, res) => {
 
     // 2. Revert previous inventory movements if this is an update (and was not cancelled), then re-insert fresh lines
     if (existingTxn) {
-      if (!isCancelledStatus(existingTxn.payment_status, existingTxn.status)) {
+      if (!isCancelledStatus(existingTxn.payment_status)) {
         const [oldLines] = await conn.query(
           `SELECT item_id, batch_no, unit, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
           [businessId, id]
@@ -1319,7 +1319,7 @@ const saveTransactionHandler = async (req, res) => {
     const newImpact = isCancelled ? 0 : getPartyBalanceImpact(transactionType, balanceAmount, paidAmount);
 
     if (existingTxn) {
-      const oldImpact = isCancelledStatus(existingTxn.payment_status, existingTxn.status)
+      const oldImpact = isCancelledStatus(existingTxn.payment_status)
         ? 0
         : getPartyBalanceImpact(
             existingTxn.transaction_type,
@@ -1460,7 +1460,7 @@ router.delete("/:id", async (req, res) => {
     const txnId = req.params.id;
 
     const [existingRows] = await conn.query(
-      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, payment_status, status, image_id, document_id
+      `SELECT id, transaction_type, party_id, total_amount, paid_amount, balance_amount, payment_status, image_id, document_id
        FROM transactions
        WHERE business_id = ? AND id = ?
        FOR UPDATE`,
@@ -1469,7 +1469,7 @@ router.delete("/:id", async (req, res) => {
 
     if (existingRows.length > 0) {
       const existing = existingRows[0];
-      const wasCancelled = isCancelledStatus(existing.payment_status, existing.status);
+      const wasCancelled = isCancelledStatus(existing.payment_status);
       const impact = wasCancelled
         ? 0
         : getPartyBalanceImpact(

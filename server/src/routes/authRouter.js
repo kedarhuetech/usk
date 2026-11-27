@@ -14,45 +14,17 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import { pool } from "../db/mysql.js";
 import { sendOtpEmail } from "../services/emailService.js";
-import { signAuthToken, requireAuth, invalidateUserSessions } from "../middleware/authMiddleware.js";
+import { signAuthToken, requireAuth, revokeToken, invalidateUserSessions } from "../middleware/authMiddleware.js";
+import {
+  getClientIp,
+  checkRateLimit,
+  recordFailedAttempt,
+  clearRateLimit,
+  checkAndRecordOtpRequest,
+  RATE_LIMIT_CONFIG,
+} from "../services/rateLimiterService.js";
 
 const router = Router();
-
-// Rate limiting map for OTP sending: email -> array of timestamps
-const otpRateLimitMap = new Map();
-const MAX_OTP_PER_10_MIN = 5;
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-
-function checkOtpRateLimit(email) {
-  const now = Date.now();
-  const history = (otpRateLimitMap.get(email) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (history.length >= MAX_OTP_PER_10_MIN) {
-    return false;
-  }
-  history.push(now);
-  otpRateLimitMap.set(email, history);
-  return true;
-}
-
-// Rate limiting map for forgot-password OTP sending: email -> array of timestamps
-const forgotOtpRateLimitMap = new Map();
-const MAX_FORGOT_OTP_PER_10_MIN = 3;
-const FORGOT_COOLDOWN_MS = 45 * 1000; // 45 seconds cooldown between OTP requests
-
-function checkForgotOtpRateLimit(email) {
-  const now = Date.now();
-  const history = (forgotOtpRateLimitMap.get(email) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  if (history.length > 0 && now - history[history.length - 1] < FORGOT_COOLDOWN_MS) {
-    const waitSec = Math.ceil((FORGOT_COOLDOWN_MS - (now - history[history.length - 1])) / 1000);
-    return { allowed: false, message: `Please wait ${waitSec}s before requesting another verification code.` };
-  }
-  if (history.length >= MAX_FORGOT_OTP_PER_10_MIN) {
-    return { allowed: false, message: "Too many password reset requests. Please wait 10 minutes before trying again." };
-  }
-  history.push(now);
-  forgotOtpRateLimitMap.set(email, history);
-  return { allowed: true };
-}
 
 // Failed forgot-password OTP attempts map: email -> attempt count
 const forgotOtpAttemptsMap = new Map();
@@ -61,37 +33,6 @@ const MAX_FORGOT_OTP_ATTEMPTS = 5;
 // Failed OTP attempt tracking: email -> attempt count
 const otpAttemptsMap = new Map();
 const MAX_OTP_ATTEMPTS = 5;
-
-// Failed login attempt tracking: email -> { count, lockedUntil }
-const loginAttemptsMap = new Map();
-const MAX_LOGIN_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
-
-function checkLoginLockout(email) {
-  const record = loginAttemptsMap.get(email);
-  if (!record) return null;
-  if (Date.now() < record.lockedUntil) {
-    const minutesLeft = Math.max(1, Math.ceil((record.lockedUntil - Date.now()) / 60000));
-    return `Too many failed login attempts. Account temporarily locked for security. Please try again in ${minutesLeft} minute(s).`;
-  }
-  if (Date.now() >= record.lockedUntil) {
-    loginAttemptsMap.delete(email);
-  }
-  return null;
-}
-
-function recordFailedLogin(email) {
-  const record = loginAttemptsMap.get(email) || { count: 0, lockedUntil: 0 };
-  record.count += 1;
-  if (record.count >= MAX_LOGIN_ATTEMPTS) {
-    record.lockedUntil = Date.now() + LOCKOUT_DURATION_MS;
-  }
-  loginAttemptsMap.set(email, record);
-}
-
-function clearFailedLogin(email) {
-  loginAttemptsMap.delete(email);
-}
 
 // Email format validator
 function isValidEmail(email) {
@@ -116,10 +57,17 @@ router.post("/register/send-otp", async (req, res) => {
       return res.status(400).json({ success: false, message: "Please provide a valid email address." });
     }
 
-    if (!checkOtpRateLimit(email)) {
+    const clientIp = getClientIp(req);
+    const otpCheck = await checkAndRecordOtpRequest({
+      emailKey: `otp:${email}`,
+      ipKey: `otp_ip:${clientIp}`,
+      maxEmailAttempts: RATE_LIMIT_CONFIG.OTP_EMAIL_MAX_ATTEMPTS,
+      maxIpAttempts: RATE_LIMIT_CONFIG.OTP_IP_MAX_ATTEMPTS,
+    });
+    if (!otpCheck.allowed) {
       return res.status(429).json({
         success: false,
-        message: "Too many verification code requests. Please wait a few minutes before trying again.",
+        message: otpCheck.message,
       });
     }
 
@@ -373,6 +321,7 @@ router.post("/register", async (req, res) => {
       email,
       businessId: rawBusinessId,
       role: "owner",
+      tokenVersion: 1,
     };
     const token = signAuthToken(tokenPayload);
 
@@ -406,19 +355,27 @@ router.post("/login", async (req, res) => {
     const rawEmail = req.body?.email || "";
     const email = String(rawEmail).trim().toLowerCase();
     const password = String(req.body?.password || "");
+    const clientIp = getClientIp(req);
 
     if (!email || !password) {
       return res.status(400).json({ success: false, message: "Email and password are required." });
     }
 
-    const lockoutMsg = checkLoginLockout(email);
-    if (lockoutMsg) {
-      return res.status(429).json({ success: false, message: lockoutMsg });
+    // 1. IP-level rate limiting
+    const ipCheck = await checkRateLimit(`ip:${clientIp}`);
+    if (!ipCheck.allowed) {
+      return res.status(429).json({ success: false, message: ipCheck.message });
+    }
+
+    // 2. Email-level rate limiting
+    const emailCheck = await checkRateLimit(`email:${email}`);
+    if (!emailCheck.allowed) {
+      return res.status(429).json({ success: false, message: emailCheck.message });
     }
 
     // Query user by email
     const [rows] = await pool.query(
-      `SELECT u.id, u.email, u.password_hash, u.business_id, u.role, u.is_verified,
+      `SELECT u.id, u.email, u.password_hash, u.business_id, u.role, u.is_verified, u.token_version,
               b.name as business_name, cp.company_name
        FROM users u
        LEFT JOIN businesses b ON u.business_id = b.id
@@ -429,7 +386,13 @@ router.post("/login", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      recordFailedLogin(email);
+      await recordFailedAttempt({ attemptKey: `email:${email}`, attemptType: "login" });
+      await recordFailedAttempt({
+        attemptKey: `ip:${clientIp}`,
+        attemptType: "login",
+        maxAttempts: RATE_LIMIT_CONFIG.LOGIN_IP_MAX_ATTEMPTS,
+        lockoutDurationMs: RATE_LIMIT_CONFIG.LOGIN_IP_LOCKOUT_MS,
+      });
       return res.status(401).json({ success: false, message: "Invalid email or password." });
     }
 
@@ -438,21 +401,29 @@ router.post("/login", async (req, res) => {
     // Verify password with bcryptjs
     const passwordValid = await bcrypt.compare(password, user.password_hash);
     if (!passwordValid) {
-      recordFailedLogin(email);
+      await recordFailedAttempt({ attemptKey: `email:${email}`, attemptType: "login" });
+      await recordFailedAttempt({
+        attemptKey: `ip:${clientIp}`,
+        attemptType: "login",
+        maxAttempts: RATE_LIMIT_CONFIG.LOGIN_IP_MAX_ATTEMPTS,
+        lockoutDurationMs: RATE_LIMIT_CONFIG.LOGIN_IP_LOCKOUT_MS,
+      });
       return res.status(401).json({ success: false, message: "Invalid email or password." });
     }
 
-    clearFailedLogin(email);
+    // Clear failed login tracking for this email on success
+    await clearRateLimit(`email:${email}`);
 
     const businessId = user.business_id;
     const businessName = user.business_name || user.company_name || businessId;
 
-    // Generate JWT token
+    // Generate JWT token with tokenVersion
     const token = signAuthToken({
       userId: user.id,
       email: user.email,
       businessId,
       role: user.role,
+      tokenVersion: user.token_version || 1,
     });
 
     return res.json({
@@ -516,10 +487,30 @@ router.get("/me", requireAuth, async (req, res) => {
 
 /**
  * POST /api/auth/logout
- * Logs out user session
+ * Persists JWT revocation to database and logs out user session
  */
-router.post("/logout", (req, res) => {
-  return res.json({ success: true, message: "Logged out successfully." });
+router.post("/logout", requireAuth, async (req, res) => {
+  try {
+    const rawToken = req.authToken;
+    const jti = req.user?.jti;
+    const userId = req.user?.userId;
+    const businessId = req.businessId;
+    const exp = req.user?.exp;
+
+    await revokeToken({
+      token: rawToken,
+      jti,
+      userId,
+      businessId,
+      reason: "logout",
+      exp,
+    });
+
+    return res.json({ success: true, message: "Logged out successfully." });
+  } catch (err) {
+    console.error("[Auth] Logout error:", err);
+    return res.status(500).json({ success: false, message: "Could not persist logout revocation." });
+  }
 });
 
 /**
@@ -536,8 +527,15 @@ router.post("/forgot-password/send-otp", async (req, res) => {
       return res.status(400).json({ success: false, message: "Please provide a valid email address." });
     }
 
-    // 1. Rate Limiting Check
-    const rateCheck = checkForgotOtpRateLimit(email);
+    // 1. Layered persistent rate limiting (IP and account)
+    const clientIp = getClientIp(req);
+    const rateCheck = await checkAndRecordOtpRequest({
+      emailKey: `forgot_email:${email}`,
+      ipKey: `forgot_ip:${clientIp}`,
+      maxEmailAttempts: RATE_LIMIT_CONFIG.FORGOT_EMAIL_MAX_ATTEMPTS,
+      maxIpAttempts: RATE_LIMIT_CONFIG.FORGOT_IP_MAX_ATTEMPTS,
+      cooldownMs: RATE_LIMIT_CONFIG.FORGOT_EMAIL_COOLDOWN_MS,
+    });
     if (!rateCheck.allowed) {
       return res.status(429).json({ success: false, message: rateCheck.message });
     }
@@ -739,11 +737,11 @@ router.post("/forgot-password/reset", async (req, res) => {
       [passwordHash, user.id]
     );
 
-    // Invalidate active user sessions in memory
-    invalidateUserSessions(user.id);
+    // Invalidate active user sessions
+    await invalidateUserSessions(user.id);
 
-    // Clear failed login attempts / lockouts
-    clearFailedLogin(email);
+    // Clear failed login attempts / lockouts for this email
+    await clearRateLimit(`email:${email}`);
 
     // Clean up used reset records for this email
     await pool.query("DELETE FROM password_resets WHERE LOWER(email) = ?", [email]);

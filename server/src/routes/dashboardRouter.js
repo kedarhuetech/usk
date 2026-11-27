@@ -22,8 +22,7 @@ const getSummary = async (req, res) => {
     const bizClause = "business_id = ?";
     const today = getIstDateString();
 
-    const activeTxnFilter = `LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')
-       AND LOWER(COALESCE(status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')`;
+    const activeTxnFilter = `LOWER(COALESCE(payment_status, '')) NOT IN ('cancelled', 'canceled', 'void', 'deleted')`;
 
     // 1. Sales & Purchases totals
     const [salesSummary] = await pool.query(
@@ -108,7 +107,7 @@ const getSummary = async (req, res) => {
               CAST(total_amount AS DECIMAL(12,2)) AS total, 
               CAST(paid_amount AS DECIMAL(12,2)) AS paidAmount, 
               CAST(balance_amount AS DECIMAL(12,2)) AS balanceAmount,
-              status, 
+              payment_status AS status, 
               party_name AS partyName, 
               party_name AS customer, 
               payment_mode AS paymentMode,

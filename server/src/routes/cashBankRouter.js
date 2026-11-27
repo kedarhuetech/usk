@@ -29,7 +29,7 @@ export async function syncCashTransactions(businessId, queryable = pool) {
     const [cashTxns] = await queryable.query(
       `SELECT t.id, t.business_id, t.transaction_type, t.document_number, t.transaction_date,
               t.party_id, t.party_name, t.total_amount, t.paid_amount, t.payment_mode,
-              t.payment_status, t.status, t.notes, t.created_at
+              t.payment_status, t.notes, t.created_at
        FROM transactions t
        WHERE t.business_id = ? AND LOWER(t.payment_mode) = 'cash'`,
       [businessId]
@@ -37,7 +37,7 @@ export async function syncCashTransactions(businessId, queryable = pool) {
 
     const validCashIds = [];
     for (const txn of cashTxns) {
-      if (isCancelledStatus(txn.payment_status, txn.status)) continue;
+      if (isCancelledStatus(txn.payment_status)) continue;
       if (!isCashProducingTransactionType(txn.transaction_type)) continue;
 
       const type = String(txn.transaction_type || "").toLowerCase();

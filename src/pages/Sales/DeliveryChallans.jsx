@@ -432,7 +432,13 @@ export default function DeliveryChallans() {
       returnHistory: [...(challan.returnHistory || []), newHistoryEntry],
     };
 
-    // Restore inventory stock for returned goods
+    await transactionsDb.save({
+      ...updatedChallan,
+      transactionType: "delivery_challan",
+      type: "delivery_challan",
+    });
+
+    // Update local inventory cache after backend confirms persistence
     try {
       const allInventory = getInventoryItems();
       activeReturns.forEach((ret) => {
@@ -442,26 +448,19 @@ export default function DeliveryChallans() {
         if (match) {
           const prevStock = Number(match.currentStock ?? match.stock ?? 0);
           const updatedStock = prevStock + Number(ret.returnQty || 0);
-          saveInventoryItem({
-            ...match,
-            stock: updatedStock,
-            currentStock: updatedStock,
-            current_stock: updatedStock,
-          });
+          saveInventoryItem(
+            {
+              ...match,
+              stock: updatedStock,
+              currentStock: updatedStock,
+              current_stock: updatedStock,
+            },
+            { skipRemoteSync: true }
+          );
         }
       });
     } catch (e) {
-      console.warn("Inventory restore notice on goods return:", e);
-    }
-
-    try {
-      await transactionsDb.save({
-        ...updatedChallan,
-        transactionType: "delivery_challan",
-        type: "delivery_challan",
-      });
-    } catch (err) {
-      console.warn("DB save warning on goods return:", err.message);
+      console.warn("Inventory cache update notice on goods return:", e);
     }
 
     persist(challans.map((c) => (c.id === updatedChallan.id ? updatedChallan : c)));

@@ -511,6 +511,10 @@ export function applySaleInvoiceStockUpdate(invoice = {}) {
       ...item,
       openingQuantity: nextQuantity,
       stock: nextQuantity,
+      currentStock: toNumber(nextQuantity),
+      current_stock: toNumber(nextQuantity),
+      openingStock: toNumber(nextQuantity),
+      opening_stock: toNumber(nextQuantity),
       updatedAt: timestamp,
     };
   });
@@ -557,6 +561,10 @@ export function applyPurchaseBillStockUpdate(bill = {}, direction = "add") {
       ...item,
       openingQuantity: nextQuantity,
       stock: nextQuantity,
+      currentStock: toNumber(nextQuantity),
+      current_stock: toNumber(nextQuantity),
+      openingStock: toNumber(nextQuantity),
+      opening_stock: toNumber(nextQuantity),
       updatedAt: timestamp,
     };
   });

@@ -1,10 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getAllLocalTransactions, transactionTypes } from "./transactionRecordsStorage.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
+import { clearMemoryCollections } from "./transactionRepository.js";
 
 function setup(records = {}) {
-  const data = new Map(Object.entries(records).map(([key, value]) => [`ledgerly:${key}.v1`, JSON.stringify(value)]));
-  globalThis.window = { localStorage: { getItem: (key) => data.get(key) ?? null } };
+  clearMemoryCollections();
+  const data = new Map(Object.entries(records).map(([key, value]) => [getScopedStorageKey(`ledgerly:${key}.v1`), JSON.stringify(value)]));
+  globalThis.window = { localStorage: { getItem: (key) => data.get(key) ?? null, setItem: (key, value) => data.set(key, String(value)), removeItem: (key) => data.delete(key) } };
 }
 
 test("unified transactions map actual module storage and classify cancelled sales once", () => {
@@ -73,6 +76,7 @@ test("transaction payment status labels stay consistent for active and cancelled
 
 test("corrupt transaction storage reports the exact source key", () => {
   setup();
-  window.localStorage.getItem = (key) => key === "ledgerly:paymentIns.v1" ? "{" : null;
+  const corruptKey = getScopedStorageKey("ledgerly:paymentIns.v1");
+  window.localStorage.getItem = (key) => key === corruptKey ? "{" : null;
   assert.throws(() => getAllLocalTransactions(), /ledgerly:paymentIns\.v1\) is corrupted/);
 });

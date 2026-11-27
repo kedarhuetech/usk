@@ -10,18 +10,41 @@ import {
   saveBusinessParty,
   deleteBusinessParty,
 } from "./businessRecords.js";
-import { getInventoryItems, inventoryItemsStorageKey } from "./itemsStorage.js";
+import { getInventoryItems, inventoryItemsStorageKey, getItemsStorageKey } from "./itemsStorage.js";
 import { getSaleInvoices, saleInvoicesStorageKey } from "./salesStorage.js";
 import { getPurchaseBills, purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
-import { getParties, partiesStorageKey, setMemoryParties } from "./partiesStorage.js";
+import { getParties, partiesStorageKey, setMemoryParties, getPartiesStorageKey } from "./partiesStorage.js";
 import { STORAGE_MODE_KEY } from "./dataStorageConfig.js";
 import { clearMemoryCollections } from "./transactionRepository.js";
+import { getScopedStorageKey } from "../config/businessConfig.js";
 
 class MemoryStorage {
   values = new Map();
   getItem(key) { return this.values.get(key) ?? null; }
-  setItem(key, value) { this.values.set(key, String(value)); }
-  removeItem(key) { this.values.delete(key); }
+  setItem(key, value) {
+    this.values.set(key, String(value));
+    if (key === inventoryItemsStorageKey) {
+      this.values.set(getItemsStorageKey(), String(value));
+    } else if (key === partiesStorageKey) {
+      this.values.set(getPartiesStorageKey(), String(value));
+    } else if (key === purchaseBillsStorageKey) {
+      this.values.set(getScopedStorageKey(purchaseBillsStorageKey), String(value));
+    } else if (key === saleInvoicesStorageKey) {
+      this.values.set(getScopedStorageKey(saleInvoicesStorageKey), String(value));
+    }
+  }
+  removeItem(key) {
+    this.values.delete(key);
+    if (key === inventoryItemsStorageKey) {
+      this.values.delete(getItemsStorageKey());
+    } else if (key === partiesStorageKey) {
+      this.values.delete(getPartiesStorageKey());
+    } else if (key === purchaseBillsStorageKey) {
+      this.values.delete(getScopedStorageKey(purchaseBillsStorageKey));
+    } else if (key === saleInvoicesStorageKey) {
+      this.values.delete(getScopedStorageKey(saleInvoicesStorageKey));
+    }
+  }
 }
 
 function setupEnvironment({ storageMode = "database" } = {}) {
