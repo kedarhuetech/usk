@@ -286,7 +286,6 @@ export const sidebarNavigation = [
       { id: "settings-party", label: "Party", path: "/settings?tab=party" },
       { id: "settings-item", label: "Item", path: "/settings?tab=item" },
       { id: "settings-service-reminders", label: "Service Reminders", path: "/settings?tab=service_reminders" },
-      { id: "settings-multi-currency", label: "Multi-Currency", path: "/settings?tab=multi_currency" },
       
     ],
   },
