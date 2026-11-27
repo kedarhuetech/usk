@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  FiCalendar,
   FiChevronDown,
   FiFilter,
   FiMoreVertical,
@@ -9,12 +8,18 @@ import {
   FiPrinter,
   FiSearch,
   FiSettings,
+  FiTrash2,
   FiX,
 } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import { getInventoryItems } from "../../services/itemsStorage";
-import { getParties, saveParty } from "../../services/partiesStorage";
+import { getParties } from "../../services/partiesStorage";
 import { getPurchaseBills, applyDebitNoteToPurchaseBill } from "../../services/purchaseBillsStorage";
+import {
+  loadBusinessItems,
+  loadBusinessParties,
+  loadPurchaseBills,
+} from "../../services/businessRecords";
 import { moveBatchRows, reverseBatchMovement } from "../../services/batchInventoryService.js";
 import { useAppSettings } from "../../hooks/useAppSettings.js";
 import {
@@ -41,8 +46,14 @@ const today = () => {
 
 const formatDisplayDate = (val) => {
   if (!val) return "—";
-  const [y, m, d] = val.split("-");
-  return `${d}/${m}/${y}`;
+  if (typeof val === "string" && val.includes("/")) return val;
+  const str = String(val).slice(0, 10);
+  const parts = str.split("-");
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    return `${d}/${m}/${y}`;
+  }
+  return str || "—";
 };
 
 const money = (value) =>
@@ -66,17 +77,24 @@ const freshRow = () => ({
 
 function normalizePurchaseReturn(item) {
   if (!item) return item;
+  const rawType = String(item.transactionType || item.type || item.source || "").toLowerCase().replace(/[\s_]+/g, "");
+  const isReturn = rawType === "purchasereturn" || item.type === "Purchase Return" || item.category === "Purchase Return";
+  const totalVal = Number(item.total ?? item.totalAmount ?? 0);
+  const receivedVal = Number(item.received ?? item.paidAmount ?? 0);
+  const balanceVal = Number(item.balance ?? item.balanceAmount ?? Math.max(0, totalVal - receivedVal));
   return {
     ...item,
     id: item.id,
     refNo: item.documentNumber || item.refNo || item.number || "",
     party: item.party || item.partyName || item.supplierName || item.supplier || "",
+    partyId: item.partyId || item.party_id || "",
     date: item.date || item.transactionDate || (item.createdAt ? item.createdAt.slice(0, 10) : today()),
-    total: Number(item.total ?? item.totalAmount ?? 0),
-    received: Number(item.received ?? item.paidAmount ?? 0),
-    balance: Number(item.balance ?? item.balanceAmount ?? 0),
-    type: item.type === "Purchase Return" ? "Purchase Return" : "Debit Note",
-    status: item.status || "Debit",
+    total: totalVal,
+    received: receivedVal,
+    balance: balanceVal,
+    type: isReturn ? "Purchase Return" : "Debit Note",
+    status: item.status || (balanceVal <= 0 && totalVal > 0 ? "Paid" : "Unpaid"),
+    category: item.category || (isReturn ? "Purchase Return" : "General"),
     description: item.description || item.notes || "",
     notes: item.notes || item.description || "",
     terms: item.terms || "",
@@ -89,9 +107,9 @@ function normalizePurchaseReturn(item) {
       qty: String(r.qty ?? r.quantity ?? 1),
       unit: r.unit || "NONE",
       price: String(r.price ?? r.unitPrice ?? 0),
-      discount: String(r.discount ?? 0),
-      tax: r.tax || "NONE",
-      sourceItemId: r.sourceItemId || "",
+      discount: String(r.discount ?? r.discountPercent ?? 0),
+      tax: r.tax || (r.taxPercent != null ? String(r.taxPercent) : "NONE"),
+      sourceItemId: r.sourceItemId || r.itemId || "",
       batchNo: r.batchNo || "",
     })),
   };
@@ -108,8 +126,11 @@ function readReturns() {
 
 const rowAmount = (row) => {
   const gross = (Number(row.qty) || 0) * (Number(row.price) || 0);
-  const net = Math.max(0, gross - (gross * (Number(row.discount) || 0)) / 100);
-  return net + (net * (Number(row.tax) || 0)) / 100;
+  const discountVal = Number(row.discount) || 0;
+  const net = Math.max(0, gross - (gross * discountVal) / 100);
+  const rawTax = String(row.tax || "").replace(/[^0-9.]/g, "");
+  const taxVal = Number(rawTax) || 0;
+  return net + (net * taxVal) / 100;
 };
 
 export default function PurchaseReturns() {
@@ -128,22 +149,40 @@ export default function PurchaseReturns() {
   const [datePreset, setDatePreset] = useState("This Month");
   const [fromDate, setFromDate] = useState(() => `${today().slice(0, 7)}-01`);
   const [toDate, setToDate] = useState(today);
-  const [firmFilter, setFirmFilter] = useState("ALL FIRMS");
-  const [userFilter, setUserFilter] = useState("ALL USERS");
-  const [recordType, setRecordType] = useState("Debit Note");
+  const [recordType, setRecordType] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All Payment");
 
-  const parties = useMemo(() => getParties(), []);
-  const bills = useMemo(() => getPurchaseBills(), []);
   const isItemActive = (item) => item && item.isActive !== false && item.is_active !== 0;
-  const items = useMemo(
-    () => getInventoryItems().filter((item) => item.type !== "service" && isItemActive(item)),
-    []
+  const [parties, setParties] = useState(getParties);
+  const [bills, setBills] = useState(getPurchaseBills);
+  const [items, setItems] = useState(() =>
+    getInventoryItems().filter((item) => item.type !== "service" && isItemActive(item))
   );
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      loadBusinessParties().catch(() => getParties()),
+      loadPurchaseBills().catch(() => getPurchaseBills()),
+      loadBusinessItems().catch(() => getInventoryItems()),
+    ]).then(([liveParties, liveBills, liveItems]) => {
+      if (!active) return;
+      if (Array.isArray(liveParties)) setParties(liveParties);
+      if (Array.isArray(liveBills)) setBills(liveBills);
+      if (Array.isArray(liveItems)) {
+        setItems(liveItems.filter((item) => item.type !== "service" && isItemActive(item)));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     return records.filter((record) => {
-      const matchType = (record.type || "Debit Note") === recordType;
+      const matchType =
+        recordType === "All" ||
+        (record.type || "Debit Note") === recordType;
       const matchDate =
         (!fromDate || record.date >= fromDate) &&
         (!toDate || record.date <= toDate);
@@ -173,10 +212,12 @@ export default function PurchaseReturns() {
     async function fetchReturns() {
       try {
         const list = await transactionsDb.listByType("debit_note");
-        if (isMounted && Array.isArray(list) && list.length > 0) {
+        if (isMounted && Array.isArray(list)) {
           setRecords(list.map(normalizePurchaseReturn));
         }
-      } catch {}
+      } catch (err) {
+        console.warn("[PurchaseReturns] Failed to fetch from DB:", err);
+      }
     }
     fetchReturns();
     const onDataChanged = () => fetchReturns();
@@ -190,8 +231,8 @@ export default function PurchaseReturns() {
   }, []);
 
   useEffect(() => {
-    if (location.state?.editReturn || location.state?.editPurchase) {
-      const target = location.state.editReturn || location.state.editPurchase;
+    if (location.state?.editReturn || location.state?.editPurchase || location.state?.editDebitNote) {
+      const target = location.state.editReturn || location.state.editPurchase || location.state.editDebitNote;
       setEditor({ mode: "edit", value: normalizePurchaseReturn(target) });
     }
   }, [location.state]);
@@ -203,7 +244,7 @@ export default function PurchaseReturns() {
     const tracking = appSettings.enableBatchTracking;
     let updated = next.map((record) => ({ ...record }));
     if (tracking) {
-      for (const old of records.filter((entry) => entry.type === "Purchase Return")) {
+      for (const old of records.filter((entry) => entry.type === "Purchase Return" || entry.type === "Debit Note")) {
         const replacement = updated.find((entry) => entry.id === old.id);
         const changed = !replacement || JSON.stringify(old.rows) !== JSON.stringify(replacement.rows);
         if (!changed) continue;
@@ -214,7 +255,7 @@ export default function PurchaseReturns() {
       updated = updated.map((record) => {
         const old = records.find((entry) => entry.id === record.id);
         const changed = !old || JSON.stringify(old.rows) !== JSON.stringify(record.rows);
-        if (record.type !== "Purchase Return" || !changed) return record;
+        if ((record.type !== "Purchase Return" && record.type !== "Debit Note") || !changed) return record;
         const rows = (record.rows || []).filter((row) => Number(row.qty) > 0);
         if (rows.some((row) => !row.batchNo)) throw new Error("Select a batch for each purchase return item while batch tracking is enabled.");
         const movementId = `${record.id}:${Date.now()}:${crypto.randomUUID()}`;
@@ -235,17 +276,19 @@ export default function PurchaseReturns() {
     const nextRef = String(
       Math.max(0, ...records.map((r) => Number(r.refNo) || 0)) + 1
     );
+    const initialType = recordType === "Purchase Return" ? "Purchase Return" : "Debit Note";
     setEditor({
       mode: "new",
       value: {
         id: "",
         refNo: nextRef,
-        type: recordType,
+        type: initialType,
         party: "",
+        partyId: "",
         phone: "",
         billNumber: "",
         billDate: "",
-        category: "General",
+        category: initialType === "Purchase Return" ? "Purchase Return" : "General",
         date: today(),
         state: "Select",
         rows: [freshRow(), freshRow()],
@@ -273,6 +316,15 @@ export default function PurchaseReturns() {
       },
     }));
 
+  const removeRow = (id) =>
+    setEditor((current) => ({
+      ...current,
+      value: {
+        ...current.value,
+        rows: current.value.rows.filter((row) => row.id !== id),
+      },
+    }));
+
   const save = async () => {
     const value = editor.value;
     if (!value.party.trim()) {
@@ -280,7 +332,7 @@ export default function PurchaseReturns() {
       return;
     }
 
-    const allInventory = getInventoryItems();
+    const allInventory = items.length ? items : getInventoryItems();
     const originalRecord = editor.mode === "edit" ? records.find((r) => r.id === value.id) : null;
     const originalRowItemNames = new Set(
       ((originalRecord?.rows || originalRecord?.items) || []).map((r) => String(r.item || "").trim().toLowerCase()).filter(Boolean)
@@ -297,6 +349,7 @@ export default function PurchaseReturns() {
       return;
     }
 
+    const isReturn = value.type === "Purchase Return";
     const total = value.rows.reduce((sum, row) => sum + rowAmount(row), 0);
     const receivedVal = Number(value.received || 0);
     const balanceVal = Math.max(0, total - receivedVal);
@@ -306,6 +359,8 @@ export default function PurchaseReturns() {
       total,
       received: receivedVal,
       balance: balanceVal,
+      type: isReturn ? "Purchase Return" : "Debit Note",
+      category: value.category || (isReturn ? "Purchase Return" : "General"),
       status: balanceVal <= 0 && total > 0 ? "Paid" : "Unpaid",
       updatedAt: new Date().toISOString(),
     };
@@ -314,11 +369,13 @@ export default function PurchaseReturns() {
       // Save directly to MySQL transactions table
       await transactionsDb.save({
         ...saved,
-        transactionType: "debit_note",
-        type: "debit_note",
+        transactionType: isReturn ? "purchase_return" : "debit_note",
+        type: isReturn ? "purchase_return" : "debit_note",
+        category: saved.category,
         documentNumber: saved.refNo,
         transactionDate: saved.date,
         partyName: saved.party,
+        partyId: saved.partyId || null,
         totalAmount: Number(saved.total || 0),
         paidAmount: Number(saved.received || 0),
         balanceAmount: Number(saved.balance || 0),
@@ -347,7 +404,11 @@ export default function PurchaseReturns() {
       }
 
       setEditor(null);
-      toast.success(editor.mode === "edit" ? "Debit note updated." : "Debit note created.");
+      toast.success(
+        editor.mode === "edit"
+          ? `${saved.type} updated.`
+          : `${saved.type} created.`
+      );
 
       // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
       try {
@@ -371,39 +432,153 @@ export default function PurchaseReturns() {
   };
 
   const printRecord = (record) => {
+    try {
+      const info = getEffectiveCompanyInfo();
+      const rowsList = record.rows || record.items || [];
+      let items = rowsList
+        .filter((r) => (r.item || r.itemName || r.name) && (r.item !== "Item" || Number(r.price ?? r.unitPrice ?? 0) > 0 || Number(r.qty ?? r.quantity ?? 0) > 0))
+        .map((r, i) => {
+          const itemQty = Number(r.qty ?? r.quantity ?? 1);
+          const itemPrice = Number(r.price ?? r.unitPrice ?? 0);
+          const itemDiscount = Number(r.discount ?? r.discountPercent ?? 0);
+          const rawTax = String(r.tax || r.taxPercent || "").replace(/[^0-9.]/g, "");
+          const itemTax = Number(rawTax || 0);
+          const gross = itemQty * itemPrice;
+          const net = Math.max(0, gross - (gross * itemDiscount) / 100);
+          const calculatedAmount = net + (net * itemTax) / 100;
+          const finalAmount = r.amount != null && !isNaN(Number(r.amount)) ? Number(r.amount) : calculatedAmount;
+
+          return {
+            index: i + 1,
+            item: r.item || r.itemName || r.name || "Item",
+            name: r.item || r.itemName || r.name || "Item",
+            qty: itemQty,
+            qtyUnit: `${itemQty} ${r.unit && r.unit !== "NONE" ? r.unit : ""}`.trim(),
+            price: itemPrice,
+            discount: itemDiscount,
+            tax: itemTax,
+            amount: finalAmount,
+          };
+        });
+
+      if (items.length === 0) {
+        items = [
+          {
+            index: 1,
+            item: `${record.type || "Debit Note"} - Ref: ${record.refNo || "—"}`,
+            name: `${record.type || "Debit Note"} - Ref: ${record.refNo || "—"}`,
+            qty: 1,
+            qtyUnit: "1",
+            price: Number(record.total || 0),
+            discount: 0,
+            tax: 0,
+            amount: Number(record.total || 0),
+          },
+        ];
+      }
+
+      const totalVal = Number(record.total ?? record.totalAmount ?? items.reduce((s, it) => s + it.amount, 0));
+      const receivedVal = Number(record.received ?? record.paidAmount ?? 0);
+      const balanceVal = Number(record.balance ?? record.balanceAmount ?? Math.max(0, totalVal - receivedVal));
+
+      const html = buildUnifiedDocumentHtml({
+        docType: record.type || "Debit Note",
+        title: record.type || "Debit Note",
+        documentNumber: String(record.refNo || ""),
+        date: formatDisplayDate(record.date),
+        partyName: record.party || record.partyName || "Supplier",
+        partyPhone: record.phone || record.partyPhone || "",
+        metadataRows: [
+          { label: "Original Bill No.", value: record.billNumber || "—" },
+          ...(record.billDate ? [{ label: "Bill Date", value: formatDisplayDate(record.billDate) }] : []),
+          { label: "Category", value: record.category || "General" },
+          { label: "Status", value: record.status || (balanceVal <= 0 && totalVal > 0 ? "Paid" : "Unpaid") },
+        ],
+        rows: items,
+        columns: [
+          { key: "index", label: "#", align: "center", width: "40px" },
+          { key: "item", label: "Item Description", align: "left" },
+          { key: "qtyUnit", label: "Return Qty", align: "center", width: "100px" },
+          { key: "price", label: "Rate", align: "right", width: "110px", formatMoney: true },
+          { key: "amount", label: "Amount", align: "right", width: "120px", formatMoney: true },
+        ],
+        totals: [
+          { label: "Total Return Amount", value: money(totalVal), isGrand: true },
+          { label: "Received / Adjusted", value: money(receivedVal) },
+          { label: "Balance Due", value: money(balanceVal) },
+        ],
+        totalAmount: totalVal,
+        notes: record.description || record.notes || "",
+        terms: record.terms || "",
+        company: info,
+        autoPrint: true,
+      });
+      openPrintWindow(html, true);
+    } catch (err) {
+      console.error("[PurchaseReturns] Print failed:", err);
+      toast.error("Could not generate print document.");
+    }
+  };
+
+  const printReport = () => {
+    if (!filtered.length) {
+      toast.info("No purchase returns or debit notes to print.");
+      return;
+    }
     const info = getEffectiveCompanyInfo();
-    const items = (record.rows || []).map((r) => ({
-      name: r.item,
-      qtyUnit: `${r.qty} ${r.unit || ""}`.trim(),
-      price: r.price,
-      amount: rowAmount(r),
+    const rows = filtered.map((r, idx) => ({
+      index: idx + 1,
+      date: formatDisplayDate(r.date),
+      refNo: r.refNo,
+      party: r.party,
+      category: r.category || "General",
+      type: r.type || "Debit Note",
+      total: Number(r.total || 0),
+      received: Number(r.received || 0),
+      balance: Number(r.balance || 0),
+      status: r.status || "Debit",
     }));
+
+    const totalAmount = rows.reduce((acc, r) => acc + r.total, 0);
+    const totalReceived = rows.reduce((acc, r) => acc + r.received, 0);
+    const totalBalance = rows.reduce((acc, r) => acc + r.balance, 0);
+
+    const dateRangeLabel = fromDate && toDate ? `${formatDisplayDate(fromDate)} to ${formatDisplayDate(toDate)}` : datePreset;
+
     const html = buildUnifiedDocumentHtml({
-      docType: record.type || "Debit Note / Purchase Return",
-      docNumber: record.refNo,
-      docDate: record.date,
-      partyName: record.party,
+      docType: "Purchase Returns & Debit Notes Report",
+      title: "Purchase Returns & Debit Notes Report",
+      documentNumber: `REP-${today().replace(/-/g, "")}`,
+      date: formatDisplayDate(today()),
       metadataRows: [
-        { label: "Bill No.", value: record.billNumber || "—" },
-        { label: "Status", value: record.status || "Debit" },
+        { label: "Period", value: dateRangeLabel },
+        { label: "Filter Type", value: recordType },
+        { label: "Total Records", value: String(rows.length) },
       ],
-      items,
+      partyName: "All Parties / Suppliers",
+      rows,
       columns: [
-        { label: "Item", key: "name" },
-        { label: "Return Qty", key: "qtyUnit", align: "center" },
-        { label: "Price", align: "right", render: (r) => money(r.price) },
-        { label: "Amount", align: "right", render: (r) => money(r.amount) },
+        { label: "#", key: "index", align: "center", width: "35px" },
+        { label: "Date", key: "date", width: "85px" },
+        { label: "Ref No.", key: "refNo", width: "95px" },
+        { label: "Party Name", key: "party" },
+        { label: "Type", key: "type", width: "100px" },
+        { label: "Status", key: "status", align: "center", width: "70px" },
+        { label: "Total", key: "total", align: "right", render: (r) => money(r.total) },
+        { label: "Received", key: "received", align: "right", render: (r) => money(r.received) },
+        { label: "Balance", key: "balance", align: "right", render: (r) => money(r.balance) },
       ],
       totals: [
-        { label: "Total Return Amount", value: money(record.total), isGrand: true },
-        { label: "Received / Adjusted", value: money(record.received) },
-        { label: "Balance Due", value: money(record.balance) },
+        { label: "Grand Total", value: money(totalAmount), isGrand: true },
+        { label: "Total Received / Adjusted", value: money(totalReceived) },
+        { label: "Total Balance Due", value: money(totalBalance) },
       ],
-      totalAmount: record.total,
+      totalAmount,
       company: info,
       autoPrint: true,
     });
-    openPrintWindow(html, `DebitNote_${record.refNo}`);
+
+    openPrintWindow(html, true);
   };
 
   const exportExcel = () => {
@@ -451,6 +626,7 @@ export default function PurchaseReturns() {
               <option value="This Month">This Month</option>
               <option value="Today">Today</option>
               <option value="All Time">All Time</option>
+              {datePreset === "Custom" && <option value="Custom">Custom</option>}
             </select>
             <FiChevronDown className="absolute right-0 top-2 pointer-events-none text-gray-600 text-xs" />
           </div>
@@ -495,9 +671,9 @@ export default function PurchaseReturns() {
             <span className="text-[10px] text-gray-600 font-medium mt-0.5">Excel Report</span>
           </button>
           <button
-            onClick={() => window.print()}
+            onClick={printReport}
             className="flex flex-col items-center text-gray-600 hover:text-blue-600 transition cursor-pointer"
-            title="Print"
+            title="Print Report"
           >
             <FiPrinter className="text-lg text-gray-700" />
             <span className="text-[10px] text-gray-600 font-medium mt-0.5">Print</span>
@@ -511,8 +687,9 @@ export default function PurchaseReturns() {
           <select
             value={recordType}
             onChange={(e) => setRecordType(e.target.value)}
-            className="appearance-none bg-white border border-gray-300 rounded px-3 py-1 pr-7 text-xs text-gray-700 cursor-pointer focus:outline-none focus:border-blue-500 min-w-[140px] h-[30px]"
+            className="appearance-none bg-white border border-gray-300 rounded px-3 py-1 pr-7 text-xs text-gray-700 cursor-pointer focus:outline-none focus:border-blue-500 min-w-[160px] h-[30px]"
           >
+            <option value="All">All Returns / Debit Notes</option>
             <option value="Debit Note">Debit Note</option>
             <option value="Purchase Return">Purchase Return</option>
           </select>
@@ -551,7 +728,7 @@ export default function PurchaseReturns() {
           className="flex items-center gap-1.5 bg-[#0078d4] hover:bg-[#006abc] text-white font-medium px-4 py-1.5 rounded-full text-xs transition shadow-xs cursor-pointer"
         >
           <FiPlus className="text-sm stroke-[3]" />
-          <span>Add Debit Note</span>
+          <span>Add {recordType === "Purchase Return" ? "Purchase Return" : "Debit Note"}</span>
         </button>
       </div>
 
@@ -638,26 +815,44 @@ export default function PurchaseReturns() {
                   </td>
                   <td className="py-2.5 px-3 text-center relative">
                     <button
-                      onClick={() => printRecord(item)}
-                      className="text-gray-500 hover:text-blue-600 mr-2"
-                      title="Print"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        printRecord(item);
+                      }}
+                      className="text-gray-500 hover:text-blue-600 mr-2 p-1.5 rounded hover:bg-gray-100 transition cursor-pointer inline-flex items-center justify-center"
+                      title="Print Debit Note"
                     >
-                      <FiPrinter />
+                      <FiPrinter className="text-sm" />
                     </button>
                     <button
-                      onClick={() => setMenuId(menuId === item.id ? "" : item.id)}
-                      className="text-gray-500 hover:text-gray-700"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuId(menuId === item.id ? "" : item.id);
+                      }}
+                      className="text-gray-500 hover:text-gray-700 p-1.5 rounded hover:bg-gray-100 transition cursor-pointer inline-flex items-center justify-center"
+                      title="More Options"
                     >
-                      <FiMoreVertical />
+                      <FiMoreVertical className="text-sm" />
                     </button>
                     {menuId === item.id && (
                       <div className="absolute right-3 top-8 z-30 w-36 rounded bg-white p-1 shadow-lg border border-gray-200 text-left">
                         <button
                           onClick={() => {
                             setMenuId("");
+                            printRecord(item);
+                          }}
+                          className="block w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 text-left cursor-pointer"
+                        >
+                          Print
+                        </button>
+                        <button
+                          onClick={() => {
+                            setMenuId("");
                             setEditor({ mode: "edit", value: normalizePurchaseReturn(item) });
                           }}
-                          className="block w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 text-left"
+                          className="block w-full px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 text-left cursor-pointer"
                         >
                           View / Edit
                         </button>
@@ -666,7 +861,7 @@ export default function PurchaseReturns() {
                             setMenuId("");
                             setDeleteConfirm(item);
                           }}
-                          className="block w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-left"
+                          className="block w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 text-left cursor-pointer"
                         >
                           Delete
                         </button>
@@ -707,11 +902,18 @@ export default function PurchaseReturns() {
 
               {/* Exact text from screenshot */}
               <h3 className="text-gray-500 font-medium text-xs mt-2 text-center">
-                No data is available for Debit Note.
+                No data is available for {recordType === "All" ? "Debit Note / Purchase Return" : recordType}.
               </h3>
               <p className="text-gray-400 text-[11px] mt-0.5 text-center">
                 Please try again after making relevant changes.
               </p>
+              <button
+                onClick={startNew}
+                className="mt-3 flex items-center gap-1.5 bg-[#0078d4] hover:bg-[#006abc] text-white font-medium px-4 py-1.5 rounded-full text-xs transition cursor-pointer"
+              >
+                <FiPlus className="text-xs" />
+                <span>Add {recordType === "Purchase Return" ? "Purchase Return" : "Debit Note"}</span>
+              </button>
             </div>
           )}
         </div>
@@ -875,6 +1077,7 @@ export default function PurchaseReturns() {
                       <th className="p-2 text-center w-20">Unit</th>
                       <th className="p-2 text-right w-24">Price</th>
                       <th className="p-2 text-right w-28">Amount</th>
+                      <th className="p-2 text-center w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -962,6 +1165,18 @@ export default function PurchaseReturns() {
                         <td className="p-2 text-right font-medium">
                           {money(rowAmount(row))}
                         </td>
+                        <td className="p-2 text-center">
+                          {(editor.value.rows || editor.value.items || []).length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeRow(row.id)}
+                              className="text-gray-400 hover:text-red-600 transition cursor-pointer p-1"
+                              title="Delete row"
+                            >
+                              <FiTrash2 className="text-xs" />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -974,7 +1189,7 @@ export default function PurchaseReturns() {
                   onClick={() =>
                     change("rows", [...editor.value.rows, freshRow()])
                   }
-                  className="border border-blue-600 text-blue-600 hover:bg-blue-50 px-3 py-1 rounded text-xs"
+                  className="border border-blue-600 text-blue-600 hover:bg-blue-50 px-3 py-1 rounded text-xs cursor-pointer"
                 >
                   + Add Row
                 </button>
@@ -989,21 +1204,33 @@ export default function PurchaseReturns() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={() => setEditor(null)}
-                  className="px-4 py-2 border rounded text-xs text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={save}
-                  className="px-5 py-2 bg-[#0078d4] text-white rounded text-xs font-medium hover:bg-[#006abc]"
-                >
-                  Save Debit Note
-                </button>
+              <div className="flex justify-between items-center pt-4 border-t">
+                {editor.mode === "edit" ? (
+                  <button
+                    type="button"
+                    onClick={() => printRecord(editor.value)}
+                    className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
+                  >
+                    <FiPrinter className="text-sm" />
+                    <span>Print</span>
+                  </button>
+                ) : <div />}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditor(null)}
+                    className="px-4 py-2 border rounded text-xs text-gray-700 hover:bg-gray-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={save}
+                    className="px-5 py-2 bg-[#0078d4] text-white rounded text-xs font-medium hover:bg-[#006abc] cursor-pointer"
+                  >
+                    Save {editor.value.type || "Debit Note"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1012,8 +1239,8 @@ export default function PurchaseReturns() {
       {deleteConfirm && (
         <ConfirmModal
           isOpen={Boolean(deleteConfirm)}
-          title="Delete Debit Note"
-          message={`Are you sure you want to delete debit note ${deleteConfirm.refNo || ""} for ${deleteConfirm.party || "this party"}? This action cannot be undone.`}
+          title={`Delete ${deleteConfirm.type || "Debit Note"}`}
+          message={`Are you sure you want to delete ${deleteConfirm.type || "debit note"} ${deleteConfirm.refNo || ""} for ${deleteConfirm.party || "this party"}? This action cannot be undone.`}
           confirmText="Delete"
           cancelText="Cancel"
           danger={true}

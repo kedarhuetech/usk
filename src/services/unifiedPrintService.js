@@ -3,6 +3,29 @@
 import { getAppSettings } from "./appSettingsStorage.js";
 import { getCompanyProfile } from "./companyProfileStorage.js";
 import { toast } from "../components/Common/toastDispatcher.js";
+import QRCode from "qrcode";
+
+export function generateQrSvg(text, size = 64) {
+  if (!text) return "";
+  try {
+    const qr = QRCode.create(text, { errorCorrectionLevel: "M" });
+    const modCount = qr.modules.size;
+    const margin = 2;
+    const totalSize = modCount + margin * 2;
+    let path = "";
+    for (let r = 0; r < modCount; r++) {
+      for (let c = 0; c < modCount; c++) {
+        if (qr.modules.get(r, c)) {
+          path += `M${c + margin},${r + margin}h1v1h-1z `;
+        }
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${size}" height="${size}" style="display:block;border:1px solid #cbd5e1;padding:2px;background:#fff;border-radius:4px;"><rect width="100%" height="100%" fill="#ffffff"/><path fill="#000000" d="${path}"/></svg>`;
+  } catch (err) {
+    console.error("Failed to generate QR SVG:", err);
+    return `<img src="https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}" alt="UPI QR" style="width:${size}px;height:${size}px;display:block;border:1px solid #cbd5e1;padding:2px;background:#fff;border-radius:4px;"/>`;
+  }
+}
 
 // Converts number to Indian currency words
 export function numberToWords(num) {
@@ -230,13 +253,6 @@ export function buildUnifiedDocumentHtml(opts = {}) {
     }
   }
 
-  // Issue #22: Standard dynamic UPI QR URI format
-  const bankDetails = opts.bankDetails || company.bankDetails || company.appSettings?.bankAccount || null;
-  const upiId = opts.upiId || bankDetails?.upiId || company.upiId || company.appSettings?.upiId || "";
-  const standardUpiUri = upiId
-    ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company.name || "Business")}&am=${grandTotal}&cu=INR`
-    : "";
-
   const themeColor = company.themeColor || "#881337";
   const rawSym = String(company.currencySymbol || "₹").trim();
   const sym = (!rawSym || rawSym === "$" || rawSym === "USD") ? "₹" : rawSym;
@@ -253,6 +269,13 @@ export function buildUnifiedDocumentHtml(opts = {}) {
         totals.total ?? totals.finalTotal ?? totals.grandTotal ?? totals.amount ?? 0
       );
   const totalInWords = numberToWords(grandTotal);
+
+  // Issue #22: Standard dynamic UPI QR URI format
+  const bankDetails = opts.bankDetails || company.bankDetails || company.appSettings?.bankAccount || null;
+  const upiId = opts.upiId || bankDetails?.upiId || company.upiId || company.appSettings?.upiId || "";
+  const standardUpiUri = upiId
+    ? `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(company.name || "Business")}&am=${grandTotal}&cu=INR`
+    : "";
 
   const printShipping =
     company.appSettings?.printShippingAddress !== false &&
@@ -600,7 +623,7 @@ export function buildUnifiedDocumentHtml(opts = {}) {
                 ${
                   standardUpiUri
                     ? `<div style="text-align:center;">
-                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=72x72&data=${encodeURIComponent(standardUpiUri)}" alt="UPI QR" style="width:64px;height:64px;display:block;border:1px solid #cbd5e1;padding:2px;background:#fff;border-radius:4px;"/>
+                        ${generateQrSvg(standardUpiUri, 64)}
                         <span style="font-size:8px;font-weight:700;color:#059669;display:block;margin-top:2px;">SCAN & PAY UPI</span>
                       </div>`
                     : ""
@@ -782,9 +805,22 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   ${
     autoPrint
       ? `<script>
-          window.addEventListener("load", function() {
-            setTimeout(function() { window.print(); }, 250);
-          });
+          (function() {
+            function triggerPrint() {
+              setTimeout(function() {
+                try {
+                  window.focus();
+                  window.print();
+                } catch (e) {}
+              }, 250);
+            }
+            if (document.readyState === "complete" || document.readyState === "interactive") {
+              triggerPrint();
+            } else {
+              window.addEventListener("load", triggerPrint, { once: true });
+              document.addEventListener("DOMContentLoaded", triggerPrint, { once: true });
+            }
+          })();
         </script>`
       : ""
   }
@@ -947,9 +983,22 @@ export function buildUnifiedStatementHtml({
   ${
     autoPrint
       ? `<script>
-          window.addEventListener("load", function() {
-            setTimeout(function() { window.print(); }, 250);
-          });
+          (function() {
+            function triggerPrint() {
+              setTimeout(function() {
+                try {
+                  window.focus();
+                  window.print();
+                } catch (e) {}
+              }, 250);
+            }
+            if (document.readyState === "complete" || document.readyState === "interactive") {
+              triggerPrint();
+            } else {
+              window.addEventListener("load", triggerPrint, { once: true });
+              document.addEventListener("DOMContentLoaded", triggerPrint, { once: true });
+            }
+          })();
         </script>`
       : ""
   }
@@ -961,6 +1010,56 @@ export function buildUnifiedStatementHtml({
  * Opens a print popup window with the provided HTML string.
  */
 export function openPrintWindow(html, autoPrint = false) {
+  // If autoPrint is requested, print directly via hidden isolated iframe so popup blockers NEVER block it
+  if (autoPrint && typeof document !== "undefined") {
+    try {
+      let iframe = document.getElementById("unified-print-isolated-iframe");
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = "unified-print-isolated-iframe";
+        iframe.style.position = "fixed";
+        iframe.style.right = "0";
+        iframe.style.bottom = "0";
+        iframe.style.width = "0";
+        iframe.style.height = "0";
+        iframe.style.border = "none";
+        iframe.style.visibility = "hidden";
+        iframe.setAttribute("aria-hidden", "true");
+        document.body.appendChild(iframe);
+      }
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (iframeDoc) {
+        iframeDoc.open();
+        iframeDoc.write(html);
+        iframeDoc.close();
+
+        const trigger = () => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch (e) {
+            console.warn("Iframe print invocation error, falling back to window:", e);
+            fallbackToWindow(html, true);
+          }
+        };
+
+        if (iframeDoc.readyState === "complete" || iframeDoc.readyState === "interactive") {
+          setTimeout(trigger, 250);
+        } else {
+          iframe.onload = () => setTimeout(trigger, 150);
+          setTimeout(trigger, 400);
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn("Iframe printing initialization failed, using popup window:", err);
+    }
+  }
+
+  fallbackToWindow(html, autoPrint);
+}
+
+function fallbackToWindow(html, autoPrint = false) {
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
     toast.warning("Please allow pop-ups in your browser to print documents.");
@@ -970,8 +1069,19 @@ export function openPrintWindow(html, autoPrint = false) {
   printWindow.document.write(html);
   printWindow.document.close();
   if (autoPrint) {
-    printWindow.addEventListener("load", () => {
-      setTimeout(() => printWindow.print(), 250);
-    });
+    const trigger = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        console.warn("Print trigger error:", e);
+      }
+    };
+    if (printWindow.document.readyState === "complete" || printWindow.document.readyState === "interactive") {
+      setTimeout(trigger, 300);
+    } else {
+      printWindow.addEventListener("load", () => setTimeout(trigger, 250), { once: true });
+      setTimeout(trigger, 500);
+    }
   }
 }
