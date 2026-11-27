@@ -1,9 +1,16 @@
 // Manages application settings, configuration persistence, and auto-backup snapshots.
 import { getCompanyProfile } from "./companyProfileStorage.js";
 import { recordAuditTrail } from "./auditTrailStorage.js";
-import { settingsDb } from "./databaseRepository.js";
+import { settingsDb, syncAllFromDatabase } from "./databaseRepository.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { getScopedStorageKey } from "../config/businessConfig.js";
+import {
+  collectBackupData,
+  createBackupPayload,
+  downloadBackupFile,
+  validateBackupPayload,
+  restoreBackupPayload,
+} from "./backupToComputer.js";
 
 export const APP_SETTINGS_KEY = "ledgerly:appSettings.v1";
 export const getAppSettingsStorageKey = () => getScopedStorageKey(APP_SETTINGS_KEY);
@@ -727,12 +734,7 @@ export function restoreSnapshot(snapshotId) {
 
 export async function exportBackupData() {
   if (typeof window === "undefined" || !window.localStorage) return null;
-  const {
-    syncAllFromDatabase,
-    collectBackupData,
-    createBackupPayload,
-    downloadBackupFile,
-  } = await import("./backupToComputer.js");
+  // backupToComputer.js functions are imported statically at the top of the file.
 
   if (isDatabaseMode()) {
     await syncAllFromDatabase();
@@ -757,7 +759,7 @@ export async function restoreBackupData(file) {
     throw new Error("Invalid .usvbackup file format.");
   }
 
-  const { validateBackupPayload, restoreBackupPayload } = await import("./backupToComputer.js");
+  // backupToComputer.js functions are imported statically at the top of the file.
   const validation = validateBackupPayload(payload);
   if (!validation.valid) {
     throw new Error(validation.error || "Invalid .usvbackup file.");

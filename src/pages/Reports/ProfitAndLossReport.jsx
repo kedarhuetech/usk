@@ -355,12 +355,9 @@ export default function ProfitAndLossReport() {
             (rowName && String(it.itemName || it.name || "").trim().toLowerCase() === rowName)
         );
 
-        let unitCost = 0;
-        if (matchedItem) {
-          unitCost = Number(matchedItem.purchasePrice || matchedItem.atPrice || 0) || 0;
-        } else {
-          unitCost = Number(row.purchasePrice || 0) || 0;
-        }
+        const unitCost = matchedItem
+          ? (Number(matchedItem.purchasePrice || matchedItem.atPrice || 0) || 0)
+          : (Number(row.purchasePrice || 0) || 0);
         if (unitCost <= 0 && qty > 0) {
           missingCostCount += 1;
         }
@@ -470,6 +467,7 @@ export default function ProfitAndLossReport() {
       loanCharges,
       netProfit,
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, refreshTrigger, dbTransactions, dbItems]);
 
   /* ── export ── */
