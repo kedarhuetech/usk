@@ -192,7 +192,7 @@ function App() {
             <Route path="reports/stock-detail" element={<Reports defaultReport="Stock Detail" />} />
             <Route path="reports/item-detail" element={<Reports defaultReport="Item Detail" />} />
             <Route path="reports/loan-statement" element={<Reports defaultReport="Loan Statement" />} />
-            <Route path="reports/sale-purchase-orders" element={<Reports defaultReport="Sale/Purchase Orders" />} />
+            <Route path="reports/sale-purchase-orders" element={<FeatureRouteGuard featureKey="enableSalePurchaseOrder" fallback="/reports"><Reports defaultReport="Sale/Purchase Orders" /></FeatureRouteGuard>} />
             <Route path="reports/expense" element={<Reports defaultReport="Expense" />} />
             <Route path="reports/expense-category-report" element={<Reports defaultReport="Expense Category Report" />} />
             <Route path="reports/gst-rate-report" element={<Reports defaultReport="GST Rate Report" />} />

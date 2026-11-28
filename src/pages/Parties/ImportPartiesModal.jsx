@@ -28,7 +28,7 @@ function loadGoogleIdentityScript() {
 
     const existing = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
     if (existing) {
-      existing.addEventListener("load", () => resolve(window.google?.accounts?.oauth2));
+      existing.addEventListener("load", () => resolve(window.google?.accounts?.oauth2), { once: true });
       return;
     }
 

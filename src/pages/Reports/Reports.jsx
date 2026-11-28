@@ -27,6 +27,7 @@ import GSTRateReport from "./GSTRateReport";
 import GSTReport from "./GSTReport";
 import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
+import { getFinancialYearRange } from "../../utils/dateUtils.js";
 import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
 import { loadSalesInvoices, loadPurchaseBills } from "../../services/businessRecords.js";
 import { transactionsDb } from "../../services/databaseRepository.js";
@@ -1114,8 +1115,9 @@ function Reports({ defaultReport }) {
                       ).padStart(2, "0")}`
                     );
                   } else if (selected === "This Year") {
-                    setFrom(`${now.getFullYear()}-01-01`);
-                    setTo(`${now.getFullYear()}-12-31`);
+                    const fy = getFinancialYearRange(now);
+                    setFrom(fy.startDate);
+                    setTo(fy.endDate);
                   } else {
                     setFrom("");
                     setTo("");

@@ -191,7 +191,13 @@ function BarcodeGenerator() {
 
   // Updates form.
   const updateForm = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "barcodeValue" && /[a-zA-Z\-_]/.test(value) && (current.format === "EAN13" || current.format === "UPCA")) {
+        next.format = "CODE128";
+      }
+      return next;
+    });
     setGenerated(null);
     setError("");
     setNotice("");

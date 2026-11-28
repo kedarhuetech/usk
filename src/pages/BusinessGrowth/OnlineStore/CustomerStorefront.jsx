@@ -560,9 +560,18 @@ function OrderSuccess({ order, storeState, onContinue }) {
 // Renders the customer storefront interface.
 function CustomerStorefront() {
   const { storeId } = useParams();
+  const cartStorageKey = useMemo(() => `ledgerly_store_cart_${storeId || "default"}`, [storeId]);
   const [storeState, setStoreState] = useState({ selectedItemIds: [] });
   const [inventoryItems, setInventoryItems] = useState([]);
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    if (typeof window === "undefined" || !window.sessionStorage) return [];
+    try {
+      const saved = window.sessionStorage.getItem(cartStorageKey);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
   const [activeProductId, setActiveProductId] = useState(null);
@@ -661,6 +670,15 @@ function CustomerStorefront() {
   // Persists cart.
   const persistCart = (nextCart) => {
     setCart(nextCart);
+    if (typeof window !== "undefined" && window.sessionStorage) {
+      try {
+        if (Array.isArray(nextCart) && nextCart.length > 0) {
+          window.sessionStorage.setItem(cartStorageKey, JSON.stringify(nextCart));
+        } else {
+          window.sessionStorage.removeItem(cartStorageKey);
+        }
+      } catch {}
+    }
   };
 
   // Handles to cart.

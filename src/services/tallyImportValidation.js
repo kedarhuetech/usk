@@ -1,4 +1,7 @@
 // Maps TallyPrime / Tally.ERP 9 records to Udyog (USV) Party and Item models.
+import { getStateNameFromGstin } from "../utils/gstinUtils.js";
+import { getCompanyProfile } from "./companyProfileStorage.js";
+
 const text = (value) => String(value ?? "").trim();
 const keyText = (value) => text(value).toLowerCase().replace(/\s+/g, " ");
 
@@ -136,7 +139,7 @@ function mapParty(record) {
       ...(gstType ? { gstType } : {}),
       phone: text(raw.phone),
       email: text(raw.email),
-      state: text(raw.state),
+      state: text(raw.state) || getStateNameFromGstin(raw.gstin) || (typeof getCompanyProfile === "function" ? (getCompanyProfile()?.state || getCompanyProfile()?.businessState || "") : ""),
       ...(text(raw.city) ? { billingCity: text(raw.city) } : {}),
       ...(text(raw.pincode) ? { billingPincode: text(raw.pincode) } : {}),
       billingAddress: text(raw.address),

@@ -415,12 +415,20 @@ export default function PaymentIn() {
       });
       toast.success(editor.mode === "edit" ? "Receipt updated successfully." : "Payment-In receipt created.");
 
-      // Settle linked sale invoice if linked
-      if (saved.linkedInvoiceId) {
-        try {
-          applyPaymentToSaleInvoice(saved.linkedInvoiceId, amount);
-        } catch {}
-      }
+      // Settle linked sale invoice with exact delta
+      try {
+        const oldLinkedId = editor.mode === "edit" ? editor.entry.linkedInvoiceId : null;
+        const oldAmount = editor.mode === "edit" ? Number(editor.entry.amount ?? editor.entry.received ?? 0) : 0;
+        if (oldLinkedId && oldLinkedId !== saved.linkedInvoiceId) {
+          applyPaymentToSaleInvoice(oldLinkedId, -oldAmount);
+        }
+        if (saved.linkedInvoiceId) {
+          const delta = oldLinkedId === saved.linkedInvoiceId ? (amount - oldAmount) : amount;
+          if (delta !== 0) {
+            applyPaymentToSaleInvoice(saved.linkedInvoiceId, delta);
+          }
+        }
+      } catch {}
     } catch (err) {
       console.error("[PaymentIn MySQL Save Error]", err?.message);
       toast.error(err.message || "Failed to save Payment-In receipt to database.");
@@ -487,6 +495,11 @@ export default function PaymentIn() {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         try {
           await transactionsDb.remove(entry.id);
+          if (entry.linkedInvoiceId) {
+            try {
+              applyPaymentToSaleInvoice(entry.linkedInvoiceId, -Number(entry.amount ?? entry.received ?? 0));
+            } catch {}
+          }
           persist(records.filter((record) => record.id !== entry.id));
           notifyBusinessDataChanged();
           toast.success(`Receipt ${entry.number} deleted.`);
