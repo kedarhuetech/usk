@@ -982,13 +982,9 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
           if (!field?.enabled) return null;
           const showOn = appSettings.additionalFieldsSetup?.showOn;
           if (showOn) {
-            const isPurchase = mode === "purchase";
-            const isSaleOrder = mode === "sale_order";
-            const isPurchaseOrder = mode === "purchase_order";
+            const isPurchase = config?.type === "purchase";
             if (isPurchase && showOn.purchase === false) return null;
-            if (isSaleOrder && showOn.saleOrder === false) return null;
-            if (isPurchaseOrder && showOn.purchaseOrder === false) return null;
-            if (!isPurchase && !isSaleOrder && !isPurchaseOrder && showOn.sales === false) return null;
+            if (!isPurchase && showOn.sales === false) return null;
           }
           return (
             <div key={fKey} className="contents">

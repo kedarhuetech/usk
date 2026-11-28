@@ -561,7 +561,7 @@ export const transactionsDb = {
       description: transaction.description || transaction.notes || transaction.form?.description || null,
       terms: transaction.terms || transaction.form?.terms || null,
       termsTitle: transaction.termsTitle || transaction.terms_title || transaction.form?.termsTitle || null,
-      driverName: transaction.driverName || transaction.driver_name || transaction.form?.driverName || null,
+      driver_name: transaction.driverName || transaction.driver_name || transaction.form?.driverName || null,
       stateOfSupply: transaction.stateOfSupply || transaction.state_of_supply || transaction.form?.stateOfSupply || null,
       reverseCharge: Boolean(transaction.reverseCharge || transaction.reverse_charge || transaction.form?.reverseCharge),
       paymentTerms: transaction.paymentTerms || transaction.payment_terms || transaction.form?.paymentTerms || null,
