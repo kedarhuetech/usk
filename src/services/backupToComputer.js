@@ -4,7 +4,7 @@ import { inventoryItemsStorageKey } from "./itemsStorage.js";
 import { getLoanAccountsStorageKey, LOAN_ACCOUNTS_STORAGE_KEY } from "./loanAccountsRepository.js";
 import { partiesStorageKey } from "./partiesStorage.js";
 import { purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
-import { saleInvoicesStorageKey } from "./salesStorage.js";
+import { transactionStorageKeys } from "../constants/transactionStorageKeys.js";
 import { SERVICE_REMINDER_RECORDS_KEY } from "./serviceRemindersStorage.js";
 import { getScopedStorageKey, getActiveBusinessId } from "../config/businessConfig.js";
 import { createDatabaseBackupRestoreRepository, createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
@@ -24,7 +24,7 @@ export const BACKUP_SOURCES = [
   { category: "Items", key: "ledgerly:customUnits.v1", shape: "array" },
   { category: "Items", key: "ledgerly:unitConversions.v1", shape: "array" },
   { category: "Parties", key: partiesStorageKey, shape: "array" },
-  { category: "Sales", key: saleInvoicesStorageKey, shape: "array" },
+  { category: "Sales", key: transactionStorageKeys.sales, shape: "array" },
   { category: "Sales", key: "ledgerly:saleInvoiceUiActions.v1", shape: "object" },
   { category: "Sales", key: "ledgerly:estimateQuotations.v1", shape: "array" },
   { category: "Sales", key: "ledgerly:proformaInvoices.v1", shape: "array" },

@@ -2,6 +2,7 @@ import { notifyBusinessDataChanged } from "./businessDataChanged.js";
 import { isDatabaseMode } from "./dataStorageConfig.js";
 import { expenseCategoriesDb } from "./databaseRepository.js";
 import { getScopedStorageKey } from "../config/businessConfig.js";
+import { transactionStorageKeys } from "../constants/transactionStorageKeys.js";
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   parseYMD,
@@ -15,19 +16,7 @@ import {
 // Storage adapter seam for persisted business transactions. UI and business
 // services use these operations; a future API adapter can implement the same
 // contract without changing consumers.
-const PREFIX = "ledgerly:";
-export const transactionStorageKeys = Object.freeze({
-  sales: `${PREFIX}saleInvoices.v1`,
-  purchases: `${PREFIX}purchaseBills.v1`,
-  paymentIns: `${PREFIX}paymentIns.v1`,
-  paymentOuts: `${PREFIX}paymentOuts.v1`,
-  saleOrders: `${PREFIX}saleOrders.v1`,
-  purchaseOrders: `${PREFIX}purchaseOrders.v1`,
-  saleInvoiceUi: `${PREFIX}saleInvoiceUiActions.v1`,
-  expenses: `${PREFIX}expenses.v1`,
-  expenseCategories: `${PREFIX}expenseCategories.v1`,
-  expenseItems: `${PREFIX}expenseItems.v1`,
-});
+export { transactionStorageKeys };
 
 // In-memory single source of truth store for active database session
 const memoryStore = new Map();

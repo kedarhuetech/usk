@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { jsPDF } from "jspdf";
 import {
   FiAlertCircle,
+  FiArrowLeft,
   FiCheck,
   FiCheckCircle,
   FiDownload,
@@ -1267,33 +1269,95 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 p-2 sm:p-4 backdrop-blur-[1px]">
-      <div className="relative flex max-h-[95vh] w-full max-w-5xl flex-col rounded-xl bg-white shadow-2xl ring-1 ring-black/10 overflow-hidden">
-        {/* Modal Top Bar */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-3.5 bg-white shrink-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              Preview
-            </h2>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
-              {effectiveRecords.length} record
-              {effectiveRecords.length === 1 ? "" : "s"}
-            </span>
+  const modalContent = (
+    <div className="fixed inset-0 z-[999999] flex flex-col bg-slate-100 overflow-y-auto font-sans text-slate-900">
+      {/* Sticky Top Bar - ALWAYS PINNED AT TOP */}
+      <header className="sticky top-0 z-50 flex flex-wrap items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 py-3 shadow-xs shrink-0 gap-3">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer shadow-2xs"
+            title="Go back to report"
+          >
+            <FiArrowLeft className="h-4 w-4" />
+            <span>Back</span>
+          </button>
+          <div className="h-5 w-px bg-slate-200 hidden sm:block" />
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+              {title} Preview
+            </h1>
+            <p className="text-[11px] text-slate-500 font-medium">
+              {durationStr} • {effectiveRecords.length} record{effectiveRecords.length === 1 ? "" : "s"}
+            </p>
           </div>
+        </div>
+
+        {/* Action buttons directly in Header Bar */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          <button
+            type="button"
+            disabled={isGeneratingPdf}
+            onClick={handleSavePdf}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:bg-blue-700 transition cursor-pointer disabled:opacity-50"
+            title="Download PDF directly to your device"
+          >
+            {isGeneratingPdf ? (
+              <FiLoader className="h-4 w-4 animate-spin" />
+            ) : (
+              <FiDownload className="h-4 w-4" />
+            )}
+            <span>Download PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            style={{ backgroundColor: themeColor }}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-white shadow-xs hover:opacity-90 transition cursor-pointer"
+            title="Print report directly"
+          >
+            <FiPrinter className="h-4 w-4" />
+            <span>Print</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={isGeneratingPdf}
+            onClick={handleOpenPdf}
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
+            title="Open printable PDF document in a new browser tab"
+          >
+            <FiExternalLink className="h-3.5 w-3.5 text-slate-500" />
+            <span>Open Tab</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setEmailModalOpen(true)}
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs sm:text-sm font-semibold text-rose-700 hover:bg-rose-100 transition cursor-pointer"
+            title="Send report with attached PDF via email"
+          >
+            <FiMail className="h-3.5 w-3.5" />
+            <span>Email</span>
+          </button>
+
           <button
             type="button"
             onClick={onClose}
             aria-label="Close preview"
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition cursor-pointer ml-1"
+            title="Close preview"
           >
             <FiX className="h-5 w-5" />
           </button>
         </div>
+      </header>
 
-        {/* Modal Scrollable Printable Document */}
-        <div className="flex-1 overflow-y-auto p-6 sm:p-8 bg-white font-sans text-slate-900 text-sm">
-          <div id="report-printable-area" className="mx-auto w-full max-w-4xl">
+      {/* Main Printable Document Scroll Area */}
+      <main className="flex-1 p-3 sm:p-6 md:p-8 flex flex-col items-center">
+        <div id="report-printable-area" className="w-full max-w-4xl bg-white rounded-xl shadow-md border border-slate-200 p-6 sm:p-10 mb-8">
             {/* Header: Company & Title */}
             <div className="text-center mb-6">
               <h1 className="text-xl font-bold text-slate-950 tracking-tight">
@@ -1805,70 +1869,70 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Modal Bottom Action Pill Buttons */}
-        <div className="border-t border-slate-200 bg-white px-6 py-4 flex flex-wrap items-center justify-end gap-3 shrink-0">
-          <button
-            type="button"
-            disabled={isGeneratingPdf}
-            onClick={handleOpenPdf}
-            style={{ borderColor: themeColor, color: themeColor }}
-            className="rounded-full border bg-white px-5 py-2 text-sm font-semibold hover:bg-slate-50 transition shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-            title="Open printable PDF document in a new browser tab"
-          >
-            {isGeneratingPdf ? (
-              <FiLoader className="h-4 w-4 animate-spin" />
-            ) : (
-              <FiExternalLink className="h-4 w-4" />
-            )}
-            <span>Open PDF</span>
-          </button>
-          <button
-            type="button"
-            onClick={handlePrint}
-            style={{
-              backgroundColor: themeColor,
-              borderColor: themeColor,
-              color: "#ffffff",
-            }}
-            className="rounded-full border px-6 py-2 text-sm font-semibold transition shadow-xs cursor-pointer hover:opacity-95 flex items-center gap-1.5"
-            title="Print report directly"
-          >
-            <FiPrinter className="h-4 w-4" /> Print
-          </button>
-          <button
-            type="button"
-            disabled={isGeneratingPdf}
-            onClick={handleSavePdf}
-            style={{ borderColor: themeColor, color: themeColor }}
-            className="rounded-full border bg-white px-5 py-2 text-sm font-semibold hover:bg-slate-50 transition shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
-            title="Download PDF document directly to your computer"
-          >
-            {isGeneratingPdf ? (
-              <FiLoader className="h-4 w-4 animate-spin" />
-            ) : (
-              <FiDownload className="h-4 w-4" />
-            )}
-            <span>Save PDF</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setEmailModalOpen(true)}
-            className="rounded-full border border-rose-500 bg-white px-5 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 transition shadow-sm cursor-pointer flex items-center gap-1.5"
-            title="Send report with attached PDF via email"
-          >
-            <FiMail className="h-4 w-4" /> Email PDF
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full bg-rose-600 px-7 py-2 text-sm font-semibold text-white hover:bg-rose-700 transition shadow-sm cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
-      </div>
+          {/* Document Bottom Action Bar */}
+          <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-xl px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-md mb-12">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+            >
+              <FiArrowLeft className="h-3.5 w-3.5" />
+              <span>Back</span>
+            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isGeneratingPdf}
+                onClick={handleSavePdf}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-blue-700 transition cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                title="Download PDF document directly to your computer"
+              >
+                {isGeneratingPdf ? (
+                  <FiLoader className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FiDownload className="h-4 w-4" />
+                )}
+                <span>Download PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                style={{
+                  backgroundColor: themeColor,
+                  borderColor: themeColor,
+                  color: "#ffffff",
+                }}
+                className="rounded-lg border px-5 py-2 text-xs sm:text-sm font-semibold transition shadow-xs cursor-pointer hover:opacity-95 flex items-center gap-1.5"
+                title="Print report directly"
+              >
+                <FiPrinter className="h-4 w-4" /> Print
+              </button>
+              <button
+                type="button"
+                disabled={isGeneratingPdf}
+                onClick={handleOpenPdf}
+                className="rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-100 transition shadow-2xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                title="Open printable PDF document in a new browser tab"
+              >
+                {isGeneratingPdf ? (
+                  <FiLoader className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FiExternalLink className="h-4 w-4 text-slate-500" />
+                )}
+                <span>Open PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmailModalOpen(true)}
+                className="rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs sm:text-sm font-semibold text-rose-700 hover:bg-rose-100 transition shadow-2xs cursor-pointer flex items-center gap-1.5"
+                title="Send report with attached PDF via email"
+              >
+                <FiMail className="h-4 w-4" /> Email PDF
+              </button>
+            </div>
+          </div>
+      </main>
 
       {/* Email PDF Modal Dialog */}
       {emailModalOpen && (
@@ -2172,4 +2236,8 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
       )}
     </div>
   );
+
+  return typeof document !== "undefined"
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 }

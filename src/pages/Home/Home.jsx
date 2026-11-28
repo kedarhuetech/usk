@@ -28,7 +28,7 @@ const currencyFormatter = new Intl.NumberFormat("en-IN", {
 });
 
 const quickActions = [
-  { label: "Add Sale", path: "/sales/sale-invoices/new", icon: FiPlus, tone: "rose" },
+  { label: "Add Sale", path: "/sales/sale-invoices/new", icon: FiPlus, tone: "blue" },
   { label: "Add Purchase", path: "/purchase-expense/purchase-bills/new", icon: FiShoppingCart, tone: "blue" },
   { label: "Party Details", path: "/parties/party-details", icon: FiUsers, tone: "violet" },
   { label: "Sale Invoices", path: "/sales/sale-invoices", icon: FiFileText, tone: "emerald" },
