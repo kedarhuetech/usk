@@ -325,9 +325,9 @@ export default function StockSummaryReport() {
       totals: [
         { label: "Total Stock Items", value: String(rows.length) },
         { label: "Total Stock Qty", value: String(totals.stockQty) },
-        { label: "TOTAL STOCK VALUE", value: fmt(totals.stockValue), isGrand: true },
+        { label: "TOTAL STOCK VALUE", value: fmtMoney(totals.stockValue), isGrand: true },
       ],
-      notes: `Category: ${categoryFilter} | Total Value: ${fmt(totals.stockValue)}`,
+      notes: `Category: ${categoryFilter} | Total Value: ${fmtMoney(totals.stockValue)}`,
       autoPrint: true,
     });
     openPrintWindow(html, true);

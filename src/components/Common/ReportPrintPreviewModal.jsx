@@ -481,14 +481,18 @@ function printReportDocument(html) {
     iframe.style.border = "none";
     document.body.appendChild(iframe);
   }
-  const doc = iframe.contentWindow.document;
+  const doc = iframe.contentDocument || iframe.contentWindow?.document;
+  if (!doc) {
+    openReportInNewTab(html);
+    return;
+  }
   doc.open();
   doc.write(html);
   doc.close();
   setTimeout(() => {
     try {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
     } catch {
       openReportInNewTab(html);
     }

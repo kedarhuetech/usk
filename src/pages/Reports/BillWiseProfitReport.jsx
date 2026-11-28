@@ -496,11 +496,11 @@ export default function BillWiseProfitReport() {
       status: inv.hasMissingCost ? "Cost Missing" : (inv.profit < 0 ? "Loss" : "Profit"),
     }));
 
-    const dateSub = fromDate && toDate ? `Period: ${fromDate} to ${toDate}` : "Period: All Time";
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
 
     const html = buildUnifiedDocumentHtml({
       title: "Bill Wise Profit & Loss Report",
-      documentNumber: `BILL-PROF-${fromDate ? fromDate.replace(/-/g, "") : "ALL"}`,
+      documentNumber: `BILL-PROF-${from ? from.replace(/-/g, "") : "ALL"}`,
       date: new Date().toISOString().slice(0, 10),
       status: `${filteredInvoices.length} Invoices`,
       partyName: selectedParty || "All Parties",

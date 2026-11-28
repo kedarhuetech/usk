@@ -277,7 +277,7 @@ export default function LoanStatementReport() {
 
   const handleDirectPrint = () => {
     const loanName = selectedLoanName || "All Loan Accounts";
-    const rows = processedEntries.map((e, idx) => ({
+    const rows = visibleEntries.map((e, idx) => ({
       index: idx + 1,
       date: e.date || "—",
       type: e.transactionType || e.type || "—",
@@ -288,7 +288,7 @@ export default function LoanStatementReport() {
       balance: e.runningBalance ?? 0,
     }));
 
-    const dateSub = fromDate && toDate ? `Period: ${fromDate} to ${toDate}` : "Period: All Time";
+    const dateSub = from && to ? `Period: ${from} to ${to}` : "Period: All Time";
 
     const html = buildUnifiedDocumentHtml({
       title: "Loan Account Statement",
