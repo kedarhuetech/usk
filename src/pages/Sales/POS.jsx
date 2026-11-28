@@ -20,20 +20,7 @@ import {
   FiUser,
   FiX,
 } from "react-icons/fi";
-import {
-  getInventoryItems,
-  saveInventoryItem,
-  inventoryItemsStorageKey,
-} from "../../services/itemsStorage";
-import { getParties, saveParty, partiesStorageKey } from "../../services/partiesStorage";
-import { getSaleInvoices, saveSaleInvoice, saleInvoicesStorageKey } from "../../services/salesStorage";
-import {
-  saveBusinessSaleInvoice,
-  saveBusinessItem,
-  loadBusinessItems,
-  saveBusinessParty,
-  loadBusinessParties,
-} from "../../services/businessRecords";
+import { posRepository } from "../../services/posRepository.js";
 import AddItem from "../Items/AddItem";
 import AddPartyModal from "../Parties/AddPartyModal";
 import BarcodeScanModal from "../../components/items/BarcodeScanModal";
@@ -53,52 +40,6 @@ import {
   buildTransactionMessage,
   sendMetaWhatsAppMessage,
 } from "../../services/transactionMessageService.js";
-import { getScopedStorageKey } from "../../config/businessConfig.js";
-
-const STORAGE = {
-  get draft() { return getScopedStorageKey("ledgerly:pos_draft_v1"); },
-  get bills() { return getScopedStorageKey("ledgerly:pos_saved_bills_v1"); },
-  get openBills() { return getScopedStorageKey("ledgerly:pos_open_bills_v1"); },
-  get activeBillId() { return getScopedStorageKey("ledgerly:pos_active_bill_id_v1"); },
-};
-
-function validatePosStorage() {
-  try {
-    for (const key of [inventoryItemsStorageKey, partiesStorageKey, saleInvoicesStorageKey, STORAGE.bills, STORAGE.openBills]) {
-      const raw = localStorage.getItem(key);
-      if (raw === null) continue;
-      if (!Array.isArray(JSON.parse(raw))) return `Saved data in ${key} is not a valid list.`;
-    }
-    for (const key of [STORAGE.activeBillId, STORAGE.draft]) {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) JSON.parse(raw);
-    }
-  } catch (error) {
-    return `Could not read saved POS data: ${error.message}`;
-  }
-  return "";
-}
-
-function readStorage(key, fallback) {
-  try {
-    const value = localStorage.getItem(key);
-    return value === null ? fallback : JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
-
-function persist(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    window.dispatchEvent(new CustomEvent("pos-storage-saved"));
-    return true;
-  } catch (error) {
-    console.error("Could not save POS data:", error);
-    window.dispatchEvent(new CustomEvent("pos-storage-error", { detail: `Could not save ${key} in browser storage.` }));
-    return false;
-  }
-}
 
 const money = (value) =>
   Number(value || 0).toLocaleString("en-IN", {
@@ -106,16 +47,6 @@ const money = (value) =>
     maximumFractionDigits: 2,
   });
 
-function readPosBillSession() {
-  const savedBills = readStorage(STORAGE.openBills, null);
-  const savedActive = readStorage(STORAGE.activeBillId, null);
-  if (Array.isArray(savedBills)) return createPosBillSession({ bills: savedBills, activeBillId: savedActive });
-  const legacyDraft = readStorage(STORAGE.draft, null);
-  const migrated = legacyDraft && typeof legacyDraft === "object" && legacyDraft.id
-    ? [{ ...legacyDraft, id: legacyDraft.id }]
-    : [];
-  return createPosBillSession({ bills: migrated, activeBillId: migrated[0]?.id || null });
-}
 
 function billDraftSignature(bill) {
   return JSON.stringify({
@@ -460,7 +391,6 @@ export default function PointOfSale() {
   const appSettings = useAppSettings() || {};
   const enableBarcodeScanning = appSettings.enableBarcodeScanning ?? true;
   const enableItemCategory = appSettings.enableItemCategory ?? true;
-  const [initialStorageError] = useState(validatePosStorage);
 
   const handleClosePOS = useCallback(() => {
     if (window.history.state && window.history.state.idx > 0) {
@@ -470,10 +400,7 @@ export default function PointOfSale() {
     }
   }, [navigate]);
 
-  // Load products from localStorage (getInventoryItems)
-  const loadProducts = useCallback(() => {
-    const inventory = getInventoryItems();
-    return inventory.map((item) => ({
+  const mapProduct = useCallback((item) => ({
       id: item.id,
       isActive: item.isActive !== false,
       code: item.itemCode || item.code || `ITM-${String(item.id || "").slice(-4)}`,
@@ -481,39 +408,99 @@ export default function PointOfSale() {
       price: Number(item.salePrice ?? item.price ?? 0),
       taxRate: (appSettings.enableGst === false || appSettings.compositeScheme) ? 0 : Number(String(item.taxRate ?? "0").match(/\d+(?:\.\d+)?/)?.[0] || 0),
       unit: item.unit || item.baseUnit || "Pcs",
-      stock: Number(item.stock ?? item.openingQuantity ?? 0),
+      stock: Number(item.currentStock ?? item.current_stock ?? item.stock ?? item.openingQuantity ?? 0),
       discount: Number(item.discount || 0),
       discountType: item.discountType || "Percentage",
       category: item.category || "",
       barcode: item.barcode || item.barCode || item.itemBarcode || "",
       type: item.type || item.itemType || "product",
-    }));
-  }, [appSettings.enableGst, appSettings.compositeScheme]);
+    }), [appSettings.enableGst, appSettings.compositeScheme]);
 
-  // Load customers from localStorage (getParties)
-  const loadCustomers = useCallback(() => {
-    const parties = getParties();
-    return parties.map((p) => ({
+  const mapCustomer = useCallback((p) => ({
       id: p.id,
-      name: p.partyName || p.name || "Customer",
+      name: p.partyName || p.name || p.party_name || "Customer",
       phone: p.phoneNumber || p.phone || "",
       address: p.billingAddress || p.address || "",
       loyaltyPoints: Number(p.loyaltyPoints || p.points || 0),
       status: p.status || (p.isActive === false ? "inactive" : "active"),
       isActive: p.isActive !== false && String(p.status).toLowerCase() !== "inactive",
-    }));
-  }, []);
+    }), []);
 
-  const [products, setProducts] = useState(loadProducts);
-  const [customers, setCustomers] = useState(loadCustomers);
-  const [bills, setBills] = useState(() => {
-    const value = readStorage(STORAGE.bills, []);
-    return Array.isArray(value) ? value : [];
-  });
-  const [billSession, setBillSession] = useState(readPosBillSession);
+  const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [bills, setBills] = useState([]);
+  const [billSession, setBillSession] = useState(() => createPosBillSession());
+  const [legacyRecords] = useState(() => posRepository.inspectLegacyData());
+  const [databaseReady, setDatabaseReady] = useState(false);
+  const [persistenceError, setPersistenceError] = useState("");
+  const [dataLoadError, setDataLoadError] = useState("");
+  const draftPersistenceRef = useRef({ versions: new Map(), snapshots: new Map() });
   const [emptyDraft] = useState(createPosDraft);
   const activeBill = billSession.bills.find((bill) => bill.id === billSession.activeBillId);
   const draft = activeBill || emptyDraft;
+
+  /*
+   * POS business data is loaded directly from the authenticated API. Legacy
+   * browser data is only inspected and exported; it is never modified here.
+   */
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([
+      posRepository.loadProducts(),
+      posRepository.loadCustomers(),
+      posRepository.loadDrafts(),
+      posRepository.loadCompletedBills(),
+    ]).then(([items, parties, drafts, completed]) => {
+      if (!mounted) return;
+      setProducts(items.map(mapProduct));
+      setCustomers(parties.map(mapCustomer));
+      const restored = drafts.map((bill) => ({ ...createPosDraft(), ...bill, items: (bill.items || []).map((item) => ({ ...item, lineId: item.lineId || crypto.randomUUID() })) }));
+      for (const bill of restored) {
+        draftPersistenceRef.current.versions.set(bill.id, bill.updatedAt || null);
+        draftPersistenceRef.current.snapshots.set(bill.id, JSON.stringify(bill));
+      }
+      setBillSession(createPosBillSession({ bills: restored, activeBillId: restored[0]?.id || null }));
+      setBills(completed
+        .filter((entry) => String(entry.transactionType || entry.transaction_type || "").toLowerCase() === "pos")
+        .map((entry) => ({ ...entry, invoiceNo: entry.invoiceNo || entry.invoiceNumber || entry.documentNumber, total: entry.total ?? entry.totalAmount, customer: entry.customer || entry.partyName })));
+      setDatabaseReady(true);
+      setDataLoadError("");
+    }).catch((error) => {
+      if (mounted) setDataLoadError(`POS database connectivity is unavailable: ${error.message}`);
+    });
+    return () => { mounted = false; };
+  }, [mapProduct, mapCustomer]);
+
+  useEffect(() => {
+    if (!databaseReady) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        let firstError = "";
+        for (const bill of billSession.bills) {
+          const snapshot = JSON.stringify(bill);
+          if (draftPersistenceRef.current.snapshots.get(bill.id) === snapshot) continue;
+          try {
+            const saved = await posRepository.saveDraft(bill, draftPersistenceRef.current.versions.get(bill.id));
+            draftPersistenceRef.current.versions.set(bill.id, saved.updatedAt || null);
+            draftPersistenceRef.current.snapshots.set(bill.id, snapshot);
+          } catch (error) {
+            firstError ||= error.message;
+          }
+        }
+        setPersistenceError(firstError ? `Draft changes remain in this page but were not saved: ${firstError}` : "");
+      } catch (error) {
+        setPersistenceError(`Draft is still in this page but was not saved to the database: ${error.message}`);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [billSession.bills, databaseReady]);
+
+  const loadProducts = useCallback(async () => {
+    const inventory = await posRepository.loadProducts();
+    const mapped = inventory.map(mapProduct);
+    setProducts(mapped);
+    return mapped;
+  }, [mapProduct]);
 
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState("");
@@ -525,7 +512,7 @@ export default function PointOfSale() {
   // Modal State Management
   const [modal, setModal] = useState(null); // { type: string, data?: any }
   const [toast, setToast] = useState(null); // { message: string, type: 'success' | 'warning' | 'info' }
-  const [storageError, setStorageError] = useState(initialStorageError);
+  const storageError = dataLoadError || persistenceError;
 
   const searchRef = useRef(null);
   const toastTimeoutRef = useRef(null);
@@ -538,32 +525,15 @@ export default function PointOfSale() {
     toastTimeoutRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // Sync with storage & database changes
+  // Refresh required lookup data from MySQL when shared modules notify changes.
   useEffect(() => {
-    let mounted = true;
-    async function syncFromDb() {
+    const handleDataChanged = async () => {
       try {
-        const [items, parties] = await Promise.all([
-          loadBusinessItems(),
-          loadBusinessParties(),
-        ]);
-        if (!mounted) return;
-        if (Array.isArray(items)) {
-          setProducts(loadProducts());
-        }
-        if (Array.isArray(parties)) {
-          setCustomers(loadCustomers());
-        }
-      } catch (err) {
-        console.warn("POS syncFromDb fallback:", err);
-      }
-    }
-    syncFromDb();
-
-    const handleDataChanged = () => {
-      setProducts(loadProducts());
-      setCustomers(loadCustomers());
-      setStorageError(validatePosStorage());
+        const [items, parties] = await Promise.all([posRepository.loadProducts(), posRepository.loadCustomers()]);
+        setProducts(items.map(mapProduct));
+        setCustomers(parties.map(mapCustomer));
+        setDataLoadError("");
+      } catch (error) { setDataLoadError(`POS database connectivity is unavailable: ${error.message}`); }
     };
 
     window.addEventListener("storage", handleDataChanged);
@@ -572,33 +542,12 @@ export default function PointOfSale() {
     window.addEventListener("ledgerly:business-data-changed", handleDataChanged);
 
     return () => {
-      mounted = false;
       window.removeEventListener("storage", handleDataChanged);
       window.removeEventListener("inventory-items-changed", handleDataChanged);
       window.removeEventListener("parties-changed", handleDataChanged);
       window.removeEventListener("ledgerly:business-data-changed", handleDataChanged);
     };
-  }, [loadProducts, loadCustomers]);
-
-  useEffect(() => {
-    const onError = (event) => setStorageError(event.detail || "POS data could not be saved in browser storage.");
-    const onSaved = () => setStorageError(validatePosStorage());
-    window.addEventListener("pos-storage-error", onError);
-    window.addEventListener("pos-storage-saved", onSaved);
-    return () => {
-      window.removeEventListener("pos-storage-error", onError);
-      window.removeEventListener("pos-storage-saved", onSaved);
-    };
-  }, []);
-
-  // Persist POS state to localStorage.
-  useEffect(() => {
-    persist(STORAGE.bills, bills);
-  }, [bills]);
-  useEffect(() => {
-    persist(STORAGE.openBills, billSession.bills);
-    persist(STORAGE.activeBillId, billSession.activeBillId);
-  }, [billSession]);
+  }, [mapProduct, mapCustomer]);
 
   const updateDraft = useCallback((changes) => {
     setBillSession((current) => updatePosBill(current, current.activeBillId, changes));
@@ -820,6 +769,7 @@ export default function PointOfSale() {
       type: "otherPayment",
       paymentMode: draft.paymentMode || "Cash",
       amountReceived: String(draft.amountReceived === "" ? calculations.received : draft.amountReceived),
+      paymentComponents: draft.paymentComponents || [{ method: draft.paymentMode || "Cash", amount: String(draft.amountReceived === "" ? calculations.received : draft.amountReceived), referenceNumber: "" }],
       reference: "",
       notes: "",
     });
@@ -868,7 +818,9 @@ export default function PointOfSale() {
     removeOpenBill(billId);
   }
 
-  function removeOpenBill(billId) {
+  async function removeOpenBill(billId) {
+    try { await posRepository.deleteDraft(billId); }
+    catch (error) { setPersistenceError(`Draft could not be deleted from the database: ${error.message}`); return; }
     setBillSession((current) => closePosBill(current, billId));
     setSelectedId("");
     setSearch("");
@@ -885,24 +837,34 @@ export default function PointOfSale() {
   }
 
   function openSavedBill(bill) {
-    const existing = billSession.bills.find((entry) => entry.id === bill.id);
-    if (existing) {
-      setBillSession((current) => ({ ...current, activeBillId: existing.id }));
-    } else {
-      const reopened = {
-        ...bill,
-        id: bill.id || crypto.randomUUID(),
-        items: (bill.items || []).map((item) => ({ ...item, lineId: item.lineId || crypto.randomUUID() })),
-        savedSnapshot: billDraftSignature(bill),
-      };
-      setBillSession((current) => addPosBill(current, reopened));
-    }
-    setSelectedId("");
-    setSearch("");
-    showToast(`Loaded ${bill.invoiceNo}`);
+    const receipt = {
+      ...bill,
+      invoiceNo: bill.invoiceNo || bill.invoiceNumber || bill.documentNumber,
+      date: bill.date || bill.invoiceDate || bill.transactionDate,
+      customer: bill.customer || bill.partyName || "Walk-in Customer",
+      customerPhone: bill.customerPhone || bill.phone || "",
+      paymentMode: bill.paymentMode || bill.paymentType || "Cash",
+      total: bill.total ?? bill.totalAmount ?? 0,
+      amountReceived: bill.amountReceived ?? bill.received ?? bill.paidAmount ?? 0,
+      items: (bill.items || bill.rows || []).map((item) => ({
+        ...item,
+        lineId: item.lineId || item.id || crypto.randomUUID(),
+        productId: item.productId || item.itemId || item.sourceItemId,
+        name: item.name || item.itemName || item.item,
+        qty: item.qty ?? item.quantity,
+        price: item.price ?? item.unitPrice,
+        total: item.total ?? item.totalAmount ?? item.amount,
+      })),
+    };
+    printPosBill(receipt, calculatePosBill(receipt));
+    showToast(`Opened saved receipt ${receipt.invoiceNo || receipt.id}`, "info");
   }
 
   async function saveBill(print = false) {
+    if (!databaseReady) {
+      showToast("POS database connectivity is unavailable. The bill remains unsaved in this page.", "warning");
+      return;
+    }
     if (!activeBill) {
       showToast("Start a new bill before saving.", "warning");
       return;
@@ -916,19 +878,10 @@ export default function PointOfSale() {
       showToast("Add at least one item before saving the bill.", "warning");
       return;
     }
-    const inventory = getInventoryItems();
     for (const line of calculations.lines) {
-      const product = inventory.find((item) => item.id === line.productId);
+      const product = products.find((item) => item.id === line.productId);
       if (!product) {
         showToast(`Product "${line.name}" is no longer available in inventory.`, "warning");
-        return;
-      }
-      const stock = Number(product.stock ?? product.openingQuantity ?? 0);
-      const quantityInBill = calculations.lines
-        .filter((entry) => entry.productId === line.productId)
-        .reduce((sum, entry) => sum + entry.qty, 0);
-      if (appSettings.stopSaleOnNegativeStock && (product.type || product.itemType) !== "service" && quantityInBill > stock) {
-        showToast(`Insufficient stock for ${line.name}. Available: ${stock}.`, "warning");
         return;
       }
       if (appSettings.enableItemSerialTracking && (product.hasSerialTracking || product.enableSerialTracking || (Array.isArray(product.serialNumbers) && product.serialNumbers.length > 0))) {
@@ -957,55 +910,21 @@ export default function PointOfSale() {
     const transactionId = `pos-sale-${draft.id}`;
     const invoiceTotal = bill.total;
     const received = Math.min(bill.total, bill.amountReceived);
-    const saleType = bill.due > 0 || bill.paymentMode === "Credit" ? "credit" : "cash";
 
     try {
-      const savedInvoice = await saveBusinessSaleInvoice({
-        id: transactionId,
-        transactionType: "sale",
-        saleType,
-        invoiceNumber: bill.invoiceNo,
-        form: {
-          invoiceNumber: bill.invoiceNo,
-          invoiceDate: bill.date,
-          customer: bill.customer || "",
-          phone: bill.customerPhone || "",
-          paymentType: bill.paymentMode,
-        },
-        totals: {
-          subTotal: bill.subtotal,
-          discount: bill.itemDiscount + bill.billDiscount + bill.loyaltyDiscount,
-          tax: bill.tax,
-          additionalCharges: bill.charges,
-          finalTotal: invoiceTotal,
-          grandTotal: invoiceTotal,
-          received,
-          balance: bill.due,
-        },
-        status: bill.due === 0 ? "Paid" : received > 0 ? "Partially Paid" : "Unpaid",
-        rows: bill.items.map((it) => ({
-          id: it.lineId,
-          sourceItemId: it.productId,
-          itemId: it.productId,
-          item: it.name,
-          itemCode: it.code || "",
-          barcode: it.barcode || it.code || "",
-          qty: it.qty,
-          price: it.price,
-          unit: it.unit,
-          discount: it.discount,
-          taxRate: it.taxRate,
-          amount: it.total,
-        })),
+      const savedInvoice = await posRepository.finalizeDraft(draft.id, {
+        ...bill,
+        transactionId,
+        subtotal: bill.subtotal,
+        total: invoiceTotal,
+        amountReceived: received,
+        items: bill.items.map((it) => ({ ...it, itemId: it.productId, productId: it.productId })),
       });
-      if (!savedInvoice?.id) {
-        throw new Error("The sale invoice could not be verified after saving.");
-      }
+      if (!savedInvoice?.id) throw new Error("The database did not confirm the completed sale.");
 
-      const savedBill = { ...bill, id: draft.id, invoiceId: savedInvoice.id, savedAt: new Date().toISOString(), savedSnapshot: billDraftSignature(draft) };
-      setBills((current) => [savedBill, ...current.filter((entry) => entry.id !== savedBill.id && entry.invoiceNo !== savedBill.invoiceNo)]);
-      updateDraft({ savedAt: savedBill.savedAt, invoiceId: savedInvoice.id });
-      setProducts(loadProducts());
+      setBills((current) => [{ ...savedInvoice, ...bill, id: savedInvoice.id, transactionType: "pos" }, ...current.filter((entry) => entry.id !== savedInvoice.id)]);
+      setBillSession((current) => closePosBill(current, draft.id));
+      await loadProducts();
       showToast(`Bill ${bill.invoiceNo} saved successfully!`);
 
       // Auto-dispatch Meta WhatsApp transaction message if enabled in settings
@@ -1028,7 +947,7 @@ export default function PointOfSale() {
         // Background dispatch does not interrupt POS checkout
       }
     } catch (e) {
-      showToast(`Could not save bill: ${e.message || "Local storage write failed."}`, "warning");
+      showToast(`Could not complete bill: ${e.message || "Database request failed."}`, "warning");
       saveBillLockRef.current = false;
       return;
     }
@@ -1040,7 +959,7 @@ export default function PointOfSale() {
   }
 
   function selectCustomer(customer) {
-    updateDraft({ customer: customer.name, customerPhone: customer.phone || "" });
+    updateDraft({ customer: customer.name, customerId: customer.id, customerPhone: customer.phone || "" });
     setCustomerSearch("");
     setCustomerOpen(false);
     showToast(`Customer set to ${customer.name}`);
@@ -1189,6 +1108,14 @@ export default function PointOfSale() {
       </nav>
 
       {storageError && <p role="alert" className="shrink-0 border-b border-rose-200 bg-rose-50 px-3 py-1 text-xs text-rose-700">{storageError}</p>}
+      {legacyRecords.length > 0 && <div className="flex shrink-0 items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+        <span>Legacy POS data was found in this browser ({legacyRecords.reduce((sum, entry) => sum + entry.records.length, 0)} records). It remains untouched; export it before reconciliation.</span>
+        <button type="button" onClick={() => posRepository.exportLegacyData(legacyRecords)} className="shrink-0 rounded border border-amber-500 px-2 py-1 font-semibold">Export legacy data</button>
+      </div>}
+      {!databaseReady && <div className="flex shrink-0 items-center justify-between gap-2 border-b border-rose-300 bg-rose-50 px-3 py-1.5 text-xs text-rose-800">
+        <span>{dataLoadError || "Connecting to the POS database…"}</span>
+        <button type="button" onClick={() => window.location.reload()} className="shrink-0 rounded border border-rose-400 px-2 py-1 font-semibold">Retry</button>
+      </div>}
 
       {/* Main Split Grid */}
       <div className="flex-1 min-h-0 w-full max-w-full flex flex-col lg:flex-row gap-1 p-1 overflow-hidden">
@@ -1609,7 +1536,7 @@ export default function PointOfSale() {
                       <button
                         type="button"
                         onClick={() => {
-                          updateDraft({ customer: "", customerPhone: "" });
+                          updateDraft({ customer: "", customerId: "", customerPhone: "" });
                           setCustomerOpen(false);
                           showToast("Set as Walk-in Customer");
                         }}
@@ -1664,6 +1591,7 @@ export default function PointOfSale() {
                     <option>Card</option>
                     <option>Bank Transfer</option>
                     <option>Credit</option>
+                    <option>Mixed</option>
                   </select>
                 </label>
                 <label className="text-[10px] font-semibold text-slate-600">
@@ -1780,15 +1708,6 @@ export default function PointOfSale() {
                 ))}
                 {bills.length === 0 && <p className="text-slate-400">No saved bills yet.</p>}
               </div>
-              {bills.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setModal({ type: "clearBills" })}
-                  className="mt-1 text-[10px] font-semibold text-rose-600 underline"
-                >
-                  Clear saved bills
-                </button>
-              )}
             </details>
           </aside>
         </> : <section className="col-span-full flex min-h-[300px] flex-col items-center justify-center rounded-md border border-slate-200 bg-white text-center shadow-xs">
@@ -2474,7 +2393,7 @@ export default function PointOfSale() {
                 onClose={() => setModal(null)}
                 onSave={async (partyData) => {
                   try {
-                    const saved = await saveBusinessParty(partyData);
+                    const saved = await posRepository.saveCustomer(partyData);
                     const mapped = {
                       id: saved.id,
                       name: saved.partyName || saved.name || "Customer",
@@ -2488,6 +2407,7 @@ export default function PointOfSale() {
                     setCustomers((curr) => [...curr.filter((c) => c.id !== mapped.id), mapped]);
                     updateDraft({
                       customer: mapped.name,
+                      customerId: mapped.id,
                       customerPhone: mapped.phone,
                     });
                     showToast(`Saved party "${mapped.name}" and selected for bill!`);
@@ -2520,7 +2440,7 @@ export default function PointOfSale() {
                 onClose={() => setModal(null)}
                 onSave={async (itemPayload) => {
                   try {
-                    const saved = await saveBusinessItem(itemPayload);
+                    const saved = await posRepository.saveProduct(itemPayload);
                     const normalized = {
                       id: saved.id,
                       isActive: saved.isActive !== false,
@@ -2671,7 +2591,12 @@ export default function PointOfSale() {
                   e.preventDefault();
                   updateDraft({
                     paymentMode: modal.paymentMode,
-                    amountReceived: modal.amountReceived,
+                    amountReceived: modal.paymentMode === "Mixed"
+                      ? modal.paymentComponents.filter((component) => component.method !== "Credit").reduce((sum, component) => sum + (Number(component.amount) || 0), 0)
+                      : modal.amountReceived,
+                    paymentComponents: modal.paymentMode === "Mixed"
+                      ? modal.paymentComponents.map((component) => ({ ...component, amount: Number(component.amount) || 0 })).filter((component) => component.amount > 0)
+                      : (Number(modal.amountReceived) > 0 ? [{ method: modal.paymentMode === "Bank Transfer" ? "Bank" : modal.paymentMode, amount: Number(modal.amountReceived), referenceNumber: modal.reference || "" }] : []),
                   });
                   showToast(`Payment mode set to ${modal.paymentMode}`);
                   setModal(null);
@@ -2688,7 +2613,7 @@ export default function PointOfSale() {
                     Select Payment Method
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {["Cash", "UPI", "Card", "Bank Transfer", "Credit"].map((mode) => (
+                    {["Cash", "UPI", "Card", "Bank Transfer", "Credit", "Mixed"].map((mode) => (
                       <button
                         key={mode}
                         type="button"
@@ -2708,7 +2633,15 @@ export default function PointOfSale() {
                   </div>
                 </div>
 
-                <div>
+                {modal.paymentMode === "Mixed" ? <div className="space-y-2">
+                  <div className="flex items-center justify-between"><label className="text-xs font-semibold text-slate-600">Payment components</label><button type="button" onClick={() => setModal((m) => ({ ...m, paymentComponents: [...m.paymentComponents, { method: "Cash", amount: "", referenceNumber: "" }] }))} className="text-xs font-semibold text-blue-700">Add component</button></div>
+                  {modal.paymentComponents.map((component, index) => <div key={index} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-1">
+                    <select aria-label={`Component ${index + 1} method`} value={component.method} onChange={(event) => setModal((m) => ({ ...m, paymentComponents: m.paymentComponents.map((row, rowIndex) => rowIndex === index ? { ...row, method: event.target.value } : row) }))} className="rounded border px-2 py-1 text-xs"><option>Cash</option><option>UPI</option><option>Bank</option><option>Credit</option></select>
+                    <input aria-label={`Component ${index + 1} amount`} type="number" min="0" step="0.01" value={component.amount} onChange={(event) => setModal((m) => ({ ...m, paymentComponents: m.paymentComponents.map((row, rowIndex) => rowIndex === index ? { ...row, amount: event.target.value } : row) }))} placeholder="Amount" className="rounded border px-2 py-1 text-xs" />
+                    <input aria-label={`Component ${index + 1} reference`} value={component.referenceNumber || ""} onChange={(event) => setModal((m) => ({ ...m, paymentComponents: m.paymentComponents.map((row, rowIndex) => rowIndex === index ? { ...row, referenceNumber: event.target.value } : row) }))} placeholder="Reference" className="rounded border px-2 py-1 text-xs" />
+                    <button type="button" aria-label={`Remove component ${index + 1}`} disabled={modal.paymentComponents.length < 2} onClick={() => setModal((m) => ({ ...m, paymentComponents: m.paymentComponents.filter((_, rowIndex) => rowIndex !== index) }))} className="px-1 text-rose-600 disabled:opacity-30"><FiTrash2 size={13} /></button>
+                  </div>)}
+                </div> : <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                     Amount Received (₹)
                   </label>
@@ -2721,7 +2654,7 @@ export default function PointOfSale() {
                     onChange={(e) => setModal((m) => ({ ...m, amountReceived: e.target.value }))}
                     className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-800 outline-blue-500"
                   />
-                </div>
+                </div>}
 
                 <div className="flex justify-end gap-2.5 pt-2 border-t">
                   <button
@@ -2898,40 +2831,6 @@ export default function PointOfSale() {
             </div>
           )}
 
-          {/* 16. Clear Saved Bills Confirmation */}
-          {modal.type === "clearBills" && (
-            <div className="w-full max-w-sm rounded-xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-              <div className="p-5 text-center">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100 text-rose-600 mb-3">
-                  <FiTrash2 size={24} />
-                </div>
-                <h3 className="text-base font-bold text-slate-800">Clear All Saved Bills?</h3>
-                <p className="mt-1 text-xs text-slate-500">
-                  This will remove all {bills.length} saved POS bills from this browser.
-                </p>
-                <div className="mt-5 flex justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setModal(null)}
-                    className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBills([]);
-                      showToast("All saved bills cleared");
-                      setModal(null);
-                    }}
-                    className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 shadow-sm"
-                  >
-                    Clear Bills
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

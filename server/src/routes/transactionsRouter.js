@@ -1129,6 +1129,73 @@ const saveTransactionHandler = async (req, res) => {
       }
     }
 
+    // Server-Side Negative Stock Validation (when stopSaleOnNegativeStock is enabled on business settings)
+    const normTypeForStock = String(transactionType || "").toLowerCase();
+    const isStockReducingTxn = normTypeForStock === "sale" || normTypeForStock === "pos" || normTypeForStock === "delivery_challan" || normTypeForStock === "purchase_return" || normTypeForStock === "debit note" || normTypeForStock === "debit_note";
+    if (isStockReducingTxn && !isCancelled) {
+      const [settingRows] = await conn.query(
+        `SELECT setting_value FROM app_settings WHERE business_id = ? AND setting_key = 'stopSaleOnNegativeStock'`,
+        [businessId]
+      );
+      const stopSaleOnNegativeStock = settingRows.length > 0 && (settingRows[0].setting_value === "true" || settingRows[0].setting_value === "1" || settingRows[0].setting_value === true);
+
+      if (stopSaleOnNegativeStock) {
+        // Aggregate required quantities across line items
+        const itemDemands = new Map();
+        for (const item of rawItems) {
+          const itemId = item.itemId || item.sourceItemId || item.inventoryItemId || item.item_id || null;
+          if (!itemId) continue;
+          const quantity = parseFloat(item.qty ?? item.quantity ?? 1) || 1;
+          const freeQty = parseFloat(item.freeQty ?? 0) || 0;
+          const unit = item.unit || "PCS";
+          const multiplier = await resolveUnitMultiplier(conn, businessId, itemId, unit);
+          const baseQty = (quantity + freeQty) * multiplier;
+          itemDemands.set(itemId, (itemDemands.get(itemId) || 0) + baseQty);
+        }
+
+        // Account for stock already deducted by this transaction if it was an update
+        if (existingTxn && !isCancelledStatus(existingTxn.payment_status)) {
+          const [oldLines] = await conn.query(
+            `SELECT item_id, unit, quantity, free_qty FROM transaction_items WHERE business_id = ? AND transaction_id = ?`,
+            [businessId, id]
+          );
+          for (const line of oldLines) {
+            if (line.item_id && itemDemands.has(line.item_id)) {
+              const multiplier = await resolveUnitMultiplier(conn, businessId, line.item_id, line.unit);
+              const oldQty = ((parseFloat(line.quantity) || 0) + (parseFloat(line.free_qty) || 0)) * multiplier;
+              // Stock will be credited back by oldQty, so net new demand is (itemDemands - oldQty)
+              itemDemands.set(line.item_id, itemDemands.get(line.item_id) - oldQty);
+            }
+          }
+        }
+
+        for (const [itemId, netDemand] of itemDemands.entries()) {
+          if (netDemand <= 0) continue;
+          const [stockCheck] = await conn.query(
+            `SELECT id, name, current_stock, item_type FROM inventory_items WHERE business_id = ? AND id = ? FOR UPDATE`,
+            [businessId, itemId]
+          );
+          if (stockCheck.length > 0) {
+            const itemMaster = stockCheck[0];
+            if (String(itemMaster.item_type || "product").toLowerCase() !== "service") {
+              const available = parseFloat(itemMaster.current_stock) || 0;
+              if (netDemand > available) {
+                await conn.rollback();
+                return res.status(400).json({
+                  success: false,
+                  code: "INSUFFICIENT_STOCK",
+                  message: `Insufficient stock for "${itemMaster.name || itemId}". Available: ${available}, Required: ${netDemand}.`,
+                  itemId,
+                  availableStock: available,
+                  requiredStock: netDemand,
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+
     // 1. Upsert Transaction Header (Pure SQL columns)
     await conn.query(
       `INSERT INTO transactions (

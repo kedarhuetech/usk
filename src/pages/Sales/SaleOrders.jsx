@@ -737,7 +737,7 @@ export default function SaleOrders() {
           : "text-slate-600";
 
         return (
-          <tr key={order.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white">
+          <tr key={order.id} className="border-b border-slate-100 bg-white hover:bg-slate-50/80 transition-colors">
             <td className="px-3 py-4 font-medium">{order.customer}</td>
             <td className="px-3 py-4 font-mono font-medium">{order.number}</td>
             <td className="px-3 py-4">{displayDate(order.date)}</td>

@@ -178,7 +178,7 @@ function printCreditNote(record) {
     company: info,
     autoPrint: true,
   });
-  openPrintWindow(html, `CreditNote_${record.number}`);
+  openPrintWindow(html, true);
 }
 
 function CreditNoteEditor({ value, mode, records, parties, invoices, onChange, onClose, onSave }) {

@@ -229,34 +229,60 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
   const getX = (index) => padding.left + (buckets.length <= 1 ? plotW / 2 : (index / (buckets.length - 1)) * plotW);
   const getY = (val) => padding.top + plotH - (val / scale) * plotH;
 
-  // Build SVG path
-  const linePath = useMemo(() => {
-    if (buckets.length === 0) return "";
-    return buckets.map((b, i) => `${i === 0 ? "M" : "L"} ${getX(i).toFixed(1)} ${getY(b.total).toFixed(1)}`).join(" ");
+  // Build smooth bezier points and curve
+  const points = useMemo(() => {
+    return buckets.map((b, i) => ({
+      x: getX(i),
+      y: getY(b.total),
+    }));
   }, [buckets, scale]);
 
+  const linePath = useMemo(() => {
+    if (points.length === 0) return "";
+    if (points.length === 1) return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    if (points.length === 2) {
+      return `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)} L ${points[1].x.toFixed(1)} ${points[1].y.toFixed(1)}`;
+    }
+
+    let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[i === 0 ? 0 : i - 1];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+  }, [points]);
+
   const areaPath = useMemo(() => {
-    if (buckets.length === 0) return "";
-    const firstX = getX(0).toFixed(1);
-    const lastX = getX(buckets.length - 1).toFixed(1);
+    if (points.length === 0) return "";
+    const firstX = points[0].x.toFixed(1);
+    const lastX = points[points.length - 1].x.toFixed(1);
     const baselineY = (padding.top + plotH).toFixed(1);
     return `${linePath} L ${lastX} ${baselineY} L ${firstX} ${baselineY} Z`;
-  }, [linePath, buckets]);
+  }, [linePath, points]);
 
   const activePoint = hoveredIndex !== null ? buckets[hoveredIndex] : null;
 
   return (
-    <Card className="p-6 select-none shadow-sm">
+    <Card className="p-5 sm:p-6 select-none shadow-2xs rounded-xl border border-slate-200/90 bg-white">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium text-slate-500">Total Sale</p>
-            <span className="flex items-center gap-0.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+            <p className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-slate-500">Total Sale</p>
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full">
               <FiTrendingUp className="h-3 w-3" /> Live
             </span>
           </div>
-          <p className="mt-1.5 text-2xl font-bold text-slate-950">
+          <p className="mt-1 text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             {summaryLoading && !summary && salesLoading ? "Loading…" : salesError ? "—" : `₹ ${periodTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
           </p>
         </div>
@@ -267,11 +293,11 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
             <button
               type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
-              className="flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-medium text-[#FF5A1F] font-semibold hover:bg-blue-100 transition cursor-pointer"
+              className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition cursor-pointer"
             >
               <FiCalendar className="h-3.5 w-3.5 text-blue-600" />
-              {selectedPeriod}
-              <FiChevronDown className={`h-4 w-4 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
+              <span>{selectedPeriod}</span>
+              <FiChevronDown className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
             </button>
 
             {dropdownOpen && (
@@ -301,15 +327,15 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
             type="button"
             onClick={() => navigate("/sales/sale-invoices")}
             title="View Sale Invoices"
-            className="flex items-center gap-1 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition cursor-pointer"
+            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200 transition cursor-pointer"
           >
-            Invoices <FiArrowUpRight className="h-3.5 w-3.5" />
+            <span>Invoices</span> <FiArrowUpRight className="h-3.5 w-3.5 text-slate-400" />
           </button>
         </div>
       </div>
 
       {/* Chart Canvas Area */}
-      <div className="relative mt-8 h-72 border-l border-b border-slate-200 bg-[linear-gradient(to_bottom,#e5e7eb_1px,transparent_1px)] bg-[length:100%_56px] transition">
+      <div className="relative mt-6 sm:mt-8 h-72 border-b border-slate-200 transition overflow-hidden">
         {/* SVG Visualization */}
         <svg
           viewBox={`0 0 ${viewWidth} ${height}`}
@@ -318,10 +344,28 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
         >
           <defs>
             <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#FF5A1F" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#FF5A1F" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#0d9488" stopOpacity="0.25" />
+              <stop offset="60%" stopColor="#0d9488" stopOpacity="0.06" />
+              <stop offset="100%" stopColor="#0d9488" stopOpacity="0.0" />
             </linearGradient>
           </defs>
+
+          {/* Horizontal grid lines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((pct) => {
+            const y = padding.top + plotH * (1 - pct);
+            return (
+              <line
+                key={pct}
+                x1={padding.left}
+                y1={y}
+                x2={viewWidth - padding.right}
+                y2={y}
+                stroke="#f1f5f9"
+                strokeWidth="1"
+                strokeDasharray={pct > 0 ? "4 4" : "none"}
+              />
+            );
+          })}
 
           {/* Area fill */}
           {peakAmount > 0 && <path d={areaPath} fill="url(#salesGradient)" />}
@@ -332,16 +376,16 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
             y1={padding.top + plotH}
             x2={viewWidth - padding.right}
             y2={padding.top + plotH}
-            stroke="rgba(255, 90, 31, 0.4)"
-            strokeWidth="2"
+            stroke="#e2e8f0"
+            strokeWidth="1.5"
           />
 
-          {/* Trend line */}
+          {/* Smooth trend curve */}
           {peakAmount > 0 && (
             <path
               d={linePath}
               fill="none"
-              stroke="#FF5A1F"
+              stroke="#0f766e"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -388,10 +432,10 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
                   <circle
                     cx={cx}
                     cy={cy}
-                    r={isHovered ? 5.5 : 4}
-                    fill={isHovered ? "#E84E0F" : "#FF5A1F"}
+                    r={isHovered ? 6 : 4}
+                    fill={isHovered ? "#115e59" : "#0d9488"}
                     stroke="#ffffff"
-                    strokeWidth="2"
+                    strokeWidth="2.5"
                     className="transition-all duration-150"
                   />
                 )}
@@ -417,25 +461,23 @@ function GraphPlaceholder({ summary, loading: summaryLoading = false }) {
         {/* Dynamic Badge (reacts to hover or shows total) */}
         <div
           onClick={() => navigate("/sales/sale-invoices")}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-md bg-emerald-500 px-3.5 py-2 text-center text-xs font-semibold text-white shadow-md cursor-pointer hover:bg-emerald-600 transition"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-lg bg-teal-700 hover:bg-teal-800 px-4 py-2 text-center text-xs font-semibold text-white shadow-md cursor-pointer transition flex items-center gap-2"
         >
           {activePoint ? (
-            <>
-              <span>{activePoint.label}</span>
-              <br />
-              <span className="font-bold text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-teal-100">{activePoint.label}:</span>
+              <span className="font-bold text-sm text-white">
                 ₹ {activePoint.total.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
               </span>
-              {activePoint.count > 0 && <span className="opacity-90"> ({activePoint.count} sale{activePoint.count > 1 ? "s" : ""})</span>}
-            </>
+              {activePoint.count > 0 && <span className="text-teal-200 text-[11px]">({activePoint.count} sale{activePoint.count > 1 ? "s" : ""})</span>}
+            </div>
           ) : (
-            <>
-              <span>Total Sales</span>
-              <br />
-              <span className="font-bold text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-teal-100">Total Sales:</span>
+              <span className="font-bold text-sm text-white">
                 {salesError ? "Sales data unavailable" : `₹ ${periodTotal.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`}
               </span>
-            </>
+            </div>
           )}
         </div>
       </div>

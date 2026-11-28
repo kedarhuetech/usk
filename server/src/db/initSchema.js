@@ -922,6 +922,37 @@ export async function initializeDatabaseSchema() {
       locked_until DATETIME(3) DEFAULT NULL,
       INDEX idx_login_attempts_locked (locked_until),
       INDEX idx_login_attempts_last (last_attempt_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
+
+    // 38. POS Drafts Table (Dedicated Persistent POS Tabs & Carts)
+    `CREATE TABLE IF NOT EXISTS pos_drafts (
+      id VARCHAR(64) NOT NULL,
+      business_id VARCHAR(64) NOT NULL,
+      invoice_number VARCHAR(100) NULL,
+      draft_name VARCHAR(100) NULL,
+      payload JSON NOT NULL,
+      is_finalized TINYINT(1) NOT NULL DEFAULT 0,
+      finalized_transaction_id VARCHAR(64) NULL,
+      created_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (business_id, id),
+      INDEX idx_pos_drafts_biz (business_id),
+      INDEX idx_pos_drafts_finalized (business_id, is_finalized),
+      INDEX idx_pos_drafts_updated (business_id, updated_at DESC)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`,
+
+    `CREATE TABLE IF NOT EXISTS transaction_payments (
+      id VARCHAR(96) NOT NULL,
+      business_id VARCHAR(64) NOT NULL,
+      transaction_id VARCHAR(64) NOT NULL,
+      payment_method VARCHAR(32) NOT NULL,
+      amount DECIMAL(12,2) NOT NULL,
+      reference_number VARCHAR(100) NULL,
+      paid_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (business_id, id),
+      UNIQUE KEY uq_transaction_payment_component (business_id, transaction_id, id),
+      INDEX idx_transaction_payments_txn (business_id, transaction_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;`
   ];
 
@@ -931,6 +962,39 @@ export async function initializeDatabaseSchema() {
     } catch (err) {
       console.error("[MySQL Schema Error]", err.message);
       throw err;
+    }
+  }
+
+  // Upgrade legacy POS draft tables without changing or discarding draft rows.
+  // Refuse to proceed if tenant ownership is missing or ambiguous.
+  const [draftKeys] = await pool.query(
+    `SELECT business_id, id, COUNT(*) AS row_count
+       FROM pos_drafts
+      GROUP BY business_id, id
+     HAVING COUNT(*) > 1 OR business_id IS NULL OR TRIM(business_id) = '' OR business_id = 'default'`
+  );
+  if (draftKeys.length) {
+    throw new Error(`Unsafe POS draft schema upgrade: ${draftKeys.length} draft row(s) have duplicate IDs or missing/default business ownership. Resolve ownership before retrying.`);
+  }
+  const [draftColumns] = await pool.query(
+    `SELECT COLUMN_NAME, COLUMN_DEFAULT, IS_NULLABLE
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pos_drafts'`
+  );
+  if (draftColumns.length) {
+    const businessColumn = draftColumns.find((column) => column.COLUMN_NAME === 'business_id');
+    if (!businessColumn) throw new Error('Unsafe POS draft schema upgrade: business_id column is missing.');
+    const [primaryColumns] = await pool.query(
+      `SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pos_drafts' AND CONSTRAINT_NAME = 'PRIMARY'
+        ORDER BY ORDINAL_POSITION`
+    );
+    const primary = primaryColumns.map((column) => column.COLUMN_NAME);
+    if (primary.length !== 2 || primary[0] !== 'business_id' || primary[1] !== 'id') {
+      const dropPrimary = primary.length ? 'DROP PRIMARY KEY,' : '';
+      await pool.query(`ALTER TABLE pos_drafts ${dropPrimary} MODIFY id VARCHAR(64) NOT NULL, MODIFY business_id VARCHAR(64) NOT NULL, ADD PRIMARY KEY (business_id, id)`);
+    } else if (businessColumn.IS_NULLABLE !== 'NO' || businessColumn.COLUMN_DEFAULT !== null) {
+      await pool.query('ALTER TABLE pos_drafts MODIFY business_id VARCHAR(64) NOT NULL');
     }
   }
 

@@ -197,7 +197,7 @@ function EmptyOnlineStore({ onAddItem }) {
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">
               Add your first inventory item, then choose which existing items should appear online.
             </p>
-            <Button onClick={onAddItem} className="mt-7 bg-rose-600 text-white shadow-sm hover:bg-rose-700">
+            <Button onClick={onAddItem} className="mt-7 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold">
               <FiPlus className="h-5 w-5" /> Add Item
             </Button>
           </section>
@@ -284,7 +284,7 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
         <button type="button" onClick={onRefresh} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
           <FiRefreshCw className="h-4 w-4" />
         </button>
-        <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+        <Button onClick={onAddItem} className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold">
           <FiPlus className="h-4 w-4" /> Add Item
         </Button>
         <Button onClick={onPreview} className="bg-[#1A1F71] text-white hover:bg-[#14185D]">
@@ -368,7 +368,7 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
               <p className="text-xs text-slate-500">Items currently published in your customer storefront.</p>
             </div>
             <div className="flex items-center gap-2">
-              <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+              <Button onClick={onAddItem} className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold">
                 <FiPlus className="h-4 w-4" /> Add Item
               </Button>
               <Button onClick={onManageItems} className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
@@ -386,7 +386,7 @@ function StoreDashboard({ items, onlineItems, orders, storeState, onPreview, onM
               <p className="mt-3 text-sm font-semibold text-slate-600">No online items selected yet.</p>
               <p className="mt-1 text-xs text-slate-400">Add an item to your inventory or select from existing items to sell online.</p>
               <div className="mt-4 flex justify-center gap-2">
-                <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+                <Button onClick={onAddItem} className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold">
                   <FiPlus className="h-4 w-4" /> Add Item
                 </Button>
                 <Button onClick={onManageItems} className="border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
@@ -493,7 +493,7 @@ function StoreBuilder({ items, storeState, setStoreState, onAddItem, onEditItem,
         <button type="button" onClick={onRefresh} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50">
           <FiRefreshCw className="h-4 w-4" />
         </button>
-        <Button onClick={onAddItem} className="bg-rose-600 text-white hover:bg-rose-700">
+        <Button onClick={onAddItem} className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold">
           <FiPlus className="h-4 w-4" /> Add Item
         </Button>
       </AdminHeader>
@@ -587,7 +587,7 @@ function StoreBuilder({ items, storeState, setStoreState, onAddItem, onEditItem,
                   <FiPackage className="mx-auto h-8 w-8 text-slate-300" />
                   <h3 className="mt-3 font-bold text-slate-800">No matching items</h3>
                   <p className="mt-1 text-sm text-slate-500">Try another search or add a new item.</p>
-                  <Button onClick={onAddItem} className="mt-4 bg-rose-600 text-white hover:bg-rose-700">
+                  <Button onClick={onAddItem} className="mt-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold">
                     <FiPlus className="h-4 w-4" /> Add Item
                   </Button>
                 </div>

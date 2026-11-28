@@ -207,7 +207,7 @@ export default function MobileNavDrawer({
             <button
               type="button"
               onClick={() => handleNavigate("/sales/sale-invoices/new")}
-              className="flex items-center justify-center gap-1.5 rounded-lg bg-[#FF5A1F] hover:bg-[#E84E0F] active:bg-[#D4430B] py-2.5 px-3 text-xs font-bold text-white shadow-[0_2px_10px_rgba(255,90,31,0.35)] transition cursor-pointer"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 py-2.5 px-3 text-xs font-semibold text-white shadow-xs transition cursor-pointer"
             >
               <FiPlus className="h-3.5 w-3.5" />
               <span>Add Sale</span>
@@ -215,7 +215,7 @@ export default function MobileNavDrawer({
             <button
               type="button"
               onClick={() => handleNavigate("/purchase-expense/purchase-bills/new")}
-              className="flex items-center justify-center gap-1.5 rounded-lg bg-[#1A1E27] hover:bg-[#202530] border border-[#2B313F] hover:border-[#FF5A1F]/50 py-2.5 px-3 text-xs font-semibold text-white transition cursor-pointer"
+              className="flex items-center justify-center gap-1.5 rounded-lg bg-[#1A1E27] hover:bg-[#202530] border border-[#2B313F] hover:border-blue-500/50 py-2.5 px-3 text-xs font-semibold text-white transition cursor-pointer"
             >
               <FiPlus className="h-3.5 w-3.5" />
               <span>Add Purchase</span>

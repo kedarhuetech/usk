@@ -904,9 +904,9 @@ function ItemsDashboard() {
                   </button>
                 )}
               </div>
-              <div ref={menuRef} className="relative ml-auto flex h-11 overflow-visible rounded-md bg-amber-500 text-white shadow-sm">
-                <button type="button" onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="flex items-center gap-2 px-3 text-sm font-bold hover:bg-amber-600"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</button>
-                <button type="button" aria-label="Choose item type" onClick={() => setRowMenu((current) => current === "create-menu" ? "" : "create-menu")} className="grid w-10 place-items-center border-l border-amber-600/50 hover:bg-amber-600"><FiChevronDown /></button>
+              <div ref={menuRef} className="relative ml-auto flex h-10 overflow-visible rounded-lg bg-blue-600 text-white shadow-xs">
+                <button type="button" onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="flex items-center gap-2 px-3.5 text-xs sm:text-sm font-semibold hover:bg-blue-700 cursor-pointer"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</button>
+                <button type="button" aria-label="Choose item type" onClick={() => setRowMenu((current) => current === "create-menu" ? "" : "create-menu")} className="grid w-9 place-items-center border-l border-blue-500 hover:bg-blue-700 cursor-pointer"><FiChevronDown /></button>
                 {rowMenu === "create-menu" && <div className="absolute right-0 top-12 z-40 w-56 rounded-md border border-slate-200 bg-white py-1 text-slate-700 shadow-xl"><button type="button" onClick={() => { setActiveTab("product"); setItemModal({ mode: "create", initialItem: { type: "product" } }); setRowMenu(""); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Add Product</button><button type="button" onClick={() => { setActiveTab("service"); setItemModal({ mode: "create", initialItem: { type: "service" } }); setRowMenu(""); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Add Service</button><div className="my-1 border-t border-slate-100" /><button type="button" onClick={() => { setRowMenu(""); csvInputRef.current?.click(); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Import Items via Excel / CSV</button></div>}
               </div>
               <div className="relative" data-item-bulk-menu>
@@ -1081,7 +1081,7 @@ function ItemsDashboard() {
                   </div>
                 )}
               </div>)}
-              {!filteredItems.length && <div className="grid min-h-60 place-items-center px-6 text-center"><div><p className="font-semibold text-slate-700">{search ? "No items match your search" : `No ${activeTab}s yet`}</p><p className="mt-1 text-sm text-slate-500">Add a {activeTab} to get started.</p><Button onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="mt-4 bg-amber-500 text-white hover:bg-amber-600"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</Button></div></div>}
+              {!filteredItems.length && <div className="grid min-h-60 place-items-center px-6 text-center"><div><p className="font-semibold text-slate-700">{search ? "No items match your search" : `No ${activeTab}s yet`}</p><p className="mt-1 text-sm text-slate-500">Add a {activeTab} to get started.</p><Button onClick={() => setItemModal({ mode: "create", initialItem: { type: activeTab } })} className="mt-4 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-xs sm:text-sm font-semibold text-white shadow-xs cursor-pointer"><FiPlus /> Add {activeTab === "product" ? "Item" : "Service"}</Button></div></div>}
             </div>
           </Card>
 

@@ -42,6 +42,7 @@ import expenseCategoriesRoutes from "./routes/expenseCategoriesRouter.js";
 import expenseItemsRoutes from "./routes/expenseItemsRouter.js";
 import maintenanceRoutes from "./routes/maintenanceRouter.js";
 import tallyRoutes from "./routes/tallyRouter.js";
+import posRoutes from "./routes/posRouter.js";
 import { runDatabaseMaintenance } from "./services/dbMaintenanceService.js";
 import { startSecurityCleanupScheduler } from "./services/rateLimiterService.js";
 import { seedDefaultHsnCodes } from "./services/hsnService.js";
@@ -119,6 +120,7 @@ const requireAuthForSettings = (req, res, next) => {
 
 app.use("/api/parties", requireAuth, partiesRoutes);
 app.use("/api/items", requireAuth, itemsRoutes);
+app.use("/api/pos", requireAuth, posRoutes);
 app.use("/api/transactions", requireAuth, transactionsRoutes);
 app.use("/api/service-reminders", requireAuth, serviceRemindersRoutes);
 app.use("/api/bank-accounts", requireAuth, bankAccountsRoutes);

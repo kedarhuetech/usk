@@ -536,7 +536,7 @@ export default function Topbar({ onRefresh }) {
           <button
             type="button"
             onClick={() => openTransaction("/sales/sale-invoices/new")}
-            className="hidden rounded-full bg-[#FF5A1F] hover:bg-[#E84E0F] active:bg-[#D4430B] px-2.5 xl:px-4 py-1.5 xl:py-2 text-xs xl:text-[13px] font-bold text-white md:inline-flex items-center gap-1 transition-all shadow-[0_3px_12px_rgba(255,90,31,0.35)] hover:shadow-[0_4px_16px_rgba(255,90,31,0.5)] hover:scale-[1.02] active:scale-95 cursor-pointer tracking-wide whitespace-nowrap shrink-0"
+            className="hidden rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 px-3 xl:px-4 py-1.5 xl:py-2 text-xs xl:text-[13px] font-semibold text-white md:inline-flex items-center gap-1 transition-all shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer tracking-wide whitespace-nowrap shrink-0"
           >
             + Add Sale
           </button>
@@ -545,7 +545,7 @@ export default function Topbar({ onRefresh }) {
             onClick={() =>
               openTransaction("/purchase-expense/purchase-bills/new")
             }
-            className="hidden rounded-full bg-[#161921] hover:bg-[#202530] border border-[#2F3646] hover:border-[#FF5A1F]/60 px-2.5 xl:px-4 py-1.5 xl:py-2 text-xs xl:text-[13px] font-semibold text-white lg:inline-flex items-center gap-1 transition-all shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+            className="hidden rounded-lg bg-[#161921] hover:bg-[#202530] border border-[#2F3646] hover:border-blue-500/60 px-3 xl:px-4 py-1.5 xl:py-2 text-xs xl:text-[13px] font-semibold text-white lg:inline-flex items-center gap-1 transition-all shadow-xs hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
           >
             + Add Purchase
           </button>
