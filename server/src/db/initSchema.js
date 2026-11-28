@@ -147,6 +147,10 @@ export async function initializeDatabaseSchema() {
       await addCol("transactions", "shipping_charges DECIMAL(12,2) DEFAULT 0.00");
       await addCol("transactions", "packaging_charges DECIMAL(12,2) DEFAULT 0.00");
       await addCol("transactions", "other_charges DECIMAL(12,2) DEFAULT 0.00");
+      await addCol("transactions", "transporter_name VARCHAR(255) NULL");
+      await addCol("transactions", "lr_number VARCHAR(100) NULL");
+      await addCol("transactions", "delivery_date DATE NULL");
+      await addCol("transactions", "additional_fields TEXT DEFAULT NULL");
       await addCol("transactions", "image_url LONGTEXT NULL");
       await addCol("transactions", "image_id VARCHAR(64) NULL");
       await addCol("transactions", "image_name VARCHAR(255) NULL");
@@ -417,6 +421,10 @@ export async function initializeDatabaseSchema() {
       shipping_charges DECIMAL(12,2) DEFAULT 0.00,
       packaging_charges DECIMAL(12,2) DEFAULT 0.00,
       other_charges DECIMAL(12,2) DEFAULT 0.00,
+      transporter_name VARCHAR(255) NULL,
+      lr_number VARCHAR(100) NULL,
+      delivery_date DATE NULL,
+      additional_fields TEXT DEFAULT NULL,
       image_url LONGTEXT NULL,
       image_id VARCHAR(64) NULL,
       image_name VARCHAR(255) NULL,

@@ -980,14 +980,39 @@ function CustomerDetails({ appSettings = {}, saleType, form, errors, setField, c
         {["txnField1", "txnField2", "txnField3", "dateField"].map((fKey) => {
           const field = appSettings.additionalFieldsSetup?.[fKey];
           if (!field?.enabled) return null;
+          const showOn = appSettings.additionalFieldsSetup?.showOn;
+          if (showOn) {
+            const isPurchase = mode === "purchase";
+            const isSaleOrder = mode === "sale_order";
+            const isPurchaseOrder = mode === "purchase_order";
+            if (isPurchase && showOn.purchase === false) return null;
+            if (isSaleOrder && showOn.saleOrder === false) return null;
+            if (isPurchaseOrder && showOn.purchaseOrder === false) return null;
+            if (!isPurchase && !isSaleOrder && !isPurchaseOrder && showOn.sales === false) return null;
+          }
           return (
             <div key={fKey} className="contents">
               <span className="pt-2 text-[13px] text-slate-500">{field.name || "Extra Field"}</span>
-              <TextInput
-                value={form[fKey] ?? field.value ?? ""}
-                onChange={(e) => setField(fKey, e.target.value)}
-                placeholder={`Enter ${field.name || "value"}`}
-              />
+              {fKey === "dateField" ? (
+                <DatePicker
+                  value={form[fKey] || form.deliveryDate || field.value || ""}
+                  onChange={(val) => {
+                    setField(fKey, val);
+                    setField("deliveryDate", val);
+                  }}
+                />
+              ) : (
+                <TextInput
+                  value={form[fKey] ?? field.value ?? ""}
+                  onChange={(e) => {
+                    setField(fKey, e.target.value);
+                    if (fKey === "txnField1") setField("vehicleNumber", e.target.value);
+                    if (fKey === "txnField2") setField("driverName", e.target.value);
+                    if (fKey === "txnField3") setField("lrNumber", e.target.value);
+                  }}
+                  placeholder={`Enter ${field.name || "value"}`}
+                />
+              )}
             </div>
           );
         })}

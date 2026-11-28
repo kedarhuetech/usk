@@ -319,7 +319,7 @@ export default function ProformaInvoices() {
       company: info,
       autoPrint: printNow,
     });
-    openPrintWindow(html, `Proforma_${entry.number}`);
+    openPrintWindow(html, printNow);
   };
 
   const runAction = (action, entry) => {

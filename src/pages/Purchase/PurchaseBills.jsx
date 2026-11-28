@@ -205,6 +205,7 @@ export default function PurchaseBills() {
     }
 
     const html = buildUnifiedDocumentHtml({
+      doc: bill,
       title: "Purchase Bill",
       documentNumber: billNum,
       date: billDate,
@@ -212,6 +213,13 @@ export default function PurchaseBills() {
       partyPhone: bill.form?.phone || bill.phone || "",
       partyBillingAddress: bill.form?.billingAddress || bill.billingAddress || "",
       partyGstin: bill.form?.gstin || bill.partyGstin || bill.gstin || "",
+      vehicleNumber: bill.vehicleNumber || bill.vehicleNo || bill.form?.vehicleNumber || "",
+      driverName: bill.driverName || bill.form?.driverName || "",
+      lrNumber: bill.lrNumber || bill.lr_number || bill.txnField3 || bill.form?.lrNumber || "",
+      txnField1: bill.txnField1 || bill.form?.txnField1 || bill.vehicleNumber || "",
+      txnField2: bill.txnField2 || bill.form?.txnField2 || bill.driverName || "",
+      txnField3: bill.txnField3 || bill.form?.txnField3 || bill.lrNumber || "",
+      dateField: bill.dateField || bill.deliveryDate || bill.form?.dateField || "",
       status: billSettlement(bill).paymentStatus,
       rows,
       totals: { subtotal: amount, total: amount, received, balance },

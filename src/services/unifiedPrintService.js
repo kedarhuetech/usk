@@ -1009,23 +1009,31 @@ export function buildUnifiedStatementHtml({
  * Opens a print popup window with the provided HTML string.
  */
 export function openPrintWindow(html, autoPrint = false) {
-  // If autoPrint is requested, print directly via hidden isolated iframe so popup blockers NEVER block it
-  if (autoPrint && typeof document !== "undefined") {
+  // Only auto-print if explicitly a boolean true (prevent truthy title strings from forcing hidden autoPrint)
+  const shouldAutoPrint = autoPrint === true;
+
+  // If autoPrint is requested, print via an off-screen isolated iframe so popup blockers NEVER block it
+  if (shouldAutoPrint && typeof document !== "undefined") {
     try {
-      let iframe = document.getElementById("unified-print-isolated-iframe");
-      if (!iframe) {
-        iframe = document.createElement("iframe");
-        iframe.id = "unified-print-isolated-iframe";
-        iframe.style.position = "fixed";
-        iframe.style.right = "0";
-        iframe.style.bottom = "0";
-        iframe.style.width = "0";
-        iframe.style.height = "0";
-        iframe.style.border = "none";
-        iframe.style.visibility = "hidden";
-        iframe.setAttribute("aria-hidden", "true");
-        document.body.appendChild(iframe);
+      const old = document.getElementById("unified-print-isolated-iframe");
+      if (old && old.parentNode) {
+        old.parentNode.removeChild(old);
       }
+
+      const iframe = document.createElement("iframe");
+      iframe.id = "unified-print-isolated-iframe";
+      iframe.setAttribute("aria-hidden", "true");
+      // Use opacity 0 and offscreen positioning with real dimensions so browser engines render full page layout
+      iframe.style.position = "fixed";
+      iframe.style.top = "-9999px";
+      iframe.style.left = "-9999px";
+      iframe.style.width = "1024px";
+      iframe.style.height = "768px";
+      iframe.style.border = "none";
+      iframe.style.opacity = "0";
+      iframe.style.pointerEvents = "none";
+      document.body.appendChild(iframe);
+
       const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
       if (iframeDoc) {
         iframeDoc.open();
@@ -1055,37 +1063,49 @@ export function openPrintWindow(html, autoPrint = false) {
     }
   }
 
-  fallbackToWindow(html, autoPrint);
+  fallbackToWindow(html, shouldAutoPrint);
 }
 
 function fallbackToWindow(html, autoPrint = false) {
+  const shouldAutoPrint = autoPrint === true;
   const printWindow = window.open("", "_blank");
   if (!printWindow) {
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-    iframe.style.border = "0";
-    document.body.appendChild(iframe);
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(html);
-    doc.close();
-    setTimeout(() => {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
+    try {
+      const old = document.getElementById("unified-print-fallback-iframe");
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+
+      const iframe = document.createElement("iframe");
+      iframe.id = "unified-print-fallback-iframe";
+      iframe.style.position = "fixed";
+      iframe.style.top = "-9999px";
+      iframe.style.left = "-9999px";
+      iframe.style.width = "1024px";
+      iframe.style.height = "768px";
+      iframe.style.border = "none";
+      iframe.style.opacity = "0";
+      iframe.style.pointerEvents = "none";
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(html);
+      doc.close();
       setTimeout(() => {
-        if (iframe.parentNode) document.body.removeChild(iframe);
-      }, 3000);
-    }, 400);
-    return;
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+        setTimeout(() => {
+          if (iframe.parentNode) document.body.removeChild(iframe);
+        }, 5000);
+      }, 400);
+      return;
+    } catch (e) {
+      console.error("Print fallback failed:", e);
+      return;
+    }
   }
   printWindow.document.open();
   printWindow.document.write(html);
   printWindow.document.close();
-  if (autoPrint) {
+  if (shouldAutoPrint) {
     const trigger = () => {
       try {
         printWindow.focus();

@@ -1,14 +1,16 @@
-import { CASH_ADJUSTMENTS_STORAGE_KEY } from "./cashInHand.js";
-import { getChequeStorageKey, CHEQUE_STORAGE_KEY } from "./chequesRepository.js";
-import { inventoryItemsStorageKey } from "./itemsStorage.js";
-import { getLoanAccountsStorageKey, LOAN_ACCOUNTS_STORAGE_KEY } from "./loanAccountsRepository.js";
-import { partiesStorageKey } from "./partiesStorage.js";
-import { purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
-import { saleInvoicesStorageKey } from "./salesStorage.js";
-import { SERVICE_REMINDER_RECORDS_KEY } from "./serviceRemindersStorage.js";
+import { transactionStorageKeys } from "./transactionRepository.js";
 import { getScopedStorageKey, getActiveBusinessId } from "../config/businessConfig.js";
 import { createDatabaseBackupRestoreRepository, createLocalStorageBackupRestoreRepository } from "./backupRestoreRepository.js";
 import { notifyBusinessDataChanged } from "./businessDataChanged.js";
+
+export const CASH_ADJUSTMENTS_STORAGE_KEY = "ledgerly:cashAdjustments.v1";
+export const CHEQUE_STORAGE_KEY = "usv.cheques.v1";
+export const LOAN_ACCOUNTS_STORAGE_KEY = "usv.loanAccounts.v1";
+export const inventoryItemsStorageKey = "ledgerly:inventoryItems.v1";
+export const partiesStorageKey = "ledgerly:parties.v1";
+export const saleInvoicesStorageKey = transactionStorageKeys.sales;
+export const purchaseBillsStorageKey = transactionStorageKeys.purchases;
+export const SERVICE_REMINDER_RECORDS_KEY = "ledgerly:serviceReminderRecords.v1";
 
 export const BACKUP_LAST_CREATED_KEY = "usv:backupToComputer.lastCreated.v1";
 export const BACKUP_FORMAT = "usv-backup";

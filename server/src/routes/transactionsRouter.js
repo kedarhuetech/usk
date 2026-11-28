@@ -109,6 +109,16 @@ async function persistBase64Attachment(val, originalFilename, businessId, transa
   }
 }
 
+function parseTxnAdditionalFields(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * POST /api/transactions/attachments
  * Uploads a transaction attachment directly to private filesystem storage with metadata in business_files.
@@ -513,6 +523,16 @@ router.get("/", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         vehicleNumber: row.vehicle_no || "",
         driverName: row.driver_name || "",
+        transporterName: row.transporter_name || "",
+        lrNumber: row.lr_number || "",
+        lr_number: row.lr_number || "",
+        txnField1: row.vehicle_no || "",
+        txnField2: row.driver_name || "",
+        txnField3: row.lr_number || "",
+        deliveryDate: toSqlDate(row.delivery_date),
+        delivery_date: toSqlDate(row.delivery_date),
+        dateField: toSqlDate(row.delivery_date),
+        additionalFields: parseTxnAdditionalFields(row.additional_fields),
         eWayBillNo: row.e_way_bill_no || "",
         ewayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
@@ -783,6 +803,16 @@ router.get("/:id", async (req, res) => {
         vehicleNo: row.vehicle_no || "",
         vehicleNumber: row.vehicle_no || "",
         driverName: row.driver_name || "",
+        transporterName: row.transporter_name || "",
+        lrNumber: row.lr_number || "",
+        lr_number: row.lr_number || "",
+        txnField1: row.vehicle_no || "",
+        txnField2: row.driver_name || "",
+        txnField3: row.lr_number || "",
+        deliveryDate: toSqlDate(row.delivery_date),
+        delivery_date: toSqlDate(row.delivery_date),
+        dateField: toSqlDate(row.delivery_date),
+        additionalFields: parseTxnAdditionalFields(row.additional_fields),
         eWayBillNo: row.e_way_bill_no || "",
         ewayBillNo: row.e_way_bill_no || "",
         poNumber: row.po_number || "",
@@ -971,8 +1001,26 @@ const saveTransactionHandler = async (req, res) => {
     const paymentRefNo = body.paymentRefNo || body.refNo || null;
     const cashTendered = parseFloat(body.cashTendered ?? body.tendered ?? 0) || 0;
     const changeReturned = parseFloat(body.changeReturned ?? body.change ?? 0) || 0;
-    const vehicleNo = body.vehicleNo || body.vehicle_no || body.vehicleNumber || body.form?.vehicleNumber || null;
-    const driverName = body.driverName || body.driver_name || body.form?.driverName || null;
+    const vehicleNo = body.vehicleNo || body.vehicle_no || body.vehicleNumber || body.form?.vehicleNumber || body.txnField1 || body.form?.txnField1 || null;
+    const driverName = body.driverName || body.driver_name || body.form?.driverName || body.txnField2 || body.form?.txnField2 || null;
+    const transporterName = body.transporterName || body.transporter_name || body.form?.transporterName || null;
+    const lrNumber = body.lrNumber || body.lr_number || body.txnField3 || body.form?.lrNumber || body.form?.txnField3 || null;
+    const deliveryDate = toSqlDate(body.deliveryDate || body.delivery_date || body.dateField || body.form?.deliveryDate || body.form?.dateField);
+
+    let additionalFieldsJson = null;
+    const rawAf = body.additionalFields || body.additional_fields || body.additionalFieldsSetup;
+    if (rawAf) {
+      additionalFieldsJson = typeof rawAf === "string" ? rawAf : JSON.stringify(rawAf);
+    } else {
+      const customObj = {};
+      if (body.txnField1 || body.form?.txnField1) customObj.txnField1 = body.txnField1 || body.form?.txnField1;
+      if (body.txnField2 || body.form?.txnField2) customObj.txnField2 = body.txnField2 || body.form?.txnField2;
+      if (body.txnField3 || body.form?.txnField3) customObj.txnField3 = body.txnField3 || body.form?.txnField3;
+      if (body.dateField || body.form?.dateField) customObj.dateField = body.dateField || body.form?.dateField;
+      if (Object.keys(customObj).length > 0) {
+        additionalFieldsJson = JSON.stringify(customObj);
+      }
+    }
     const eWayBillNo = body.eWayBillNo || body.e_way_bill_no || body.ewayBillNo || body.form?.ewayBillNo || null;
     const poNumber = body.poNumber || body.po_number || body.customerPoNumber || body.form?.poNumber || body.linkedInvoiceId || null;
     const poDate = toSqlDate(body.poDate || body.po_date || body.customerPoDate || body.form?.poDate);
@@ -1139,8 +1187,9 @@ const saveTransactionHandler = async (req, res) => {
         cash_tendered, change_returned, vehicle_no, e_way_bill_no, po_number, po_date,
         notes, terms, terms_title, driver_name, state_of_supply, reverse_charge, payment_terms,
         shipping_charges, packaging_charges, other_charges,
+        transporter_name, lr_number, delivery_date, additional_fields,
         image_id, image_url, image_name, document_id, document_url, document_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         transaction_type = VALUES(transaction_type),
         document_number = VALUES(document_number),
@@ -1179,6 +1228,10 @@ const saveTransactionHandler = async (req, res) => {
         shipping_charges = VALUES(shipping_charges),
         packaging_charges = VALUES(packaging_charges),
         other_charges = VALUES(other_charges),
+        transporter_name = VALUES(transporter_name),
+        lr_number = VALUES(lr_number),
+        delivery_date = VALUES(delivery_date),
+        additional_fields = VALUES(additional_fields),
         image_id = VALUES(image_id),
         image_url = VALUES(image_url),
         image_name = VALUES(image_name),
@@ -1194,6 +1247,7 @@ const saveTransactionHandler = async (req, res) => {
         cashTendered, changeReturned, vehicleNo, eWayBillNo, poNumber, poDate,
         notes, terms, termsTitle, driverName, stateOfSupply, reverseCharge, paymentTerms,
         shippingCharges, packagingCharges, otherCharges,
+        transporterName, lrNumber, deliveryDate, additionalFieldsJson,
         imageId, imageUrl, imageName, documentId, documentUrl, documentName
       ]
     );

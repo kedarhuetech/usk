@@ -337,7 +337,7 @@ export default function EstimateQuotation() {
       company: info,
       autoPrint: printNow,
     });
-    openPrintWindow(html, `Estimate_${estimate.number}`);
+    openPrintWindow(html, printNow);
   };
 
   const runEstimateAction = (action, estimate) => {
