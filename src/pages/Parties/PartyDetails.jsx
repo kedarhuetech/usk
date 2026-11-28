@@ -980,7 +980,7 @@ ${phone ? `Phone: ${phone}\n` : ""}${senderEmail ? `Email: ${senderEmail}\n` : "
     <div className="flex h-full flex-col bg-slate-200 overflow-hidden">
       <div className="flex h-14 sm:h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
         <h1 className="flex items-center gap-2 text-xl font-bold text-slate-700">Parties</h1>
-        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="bg-rose-600 text-white hover:bg-rose-700 text-xs sm:text-sm"><FiPlus /> Add Party</Button></div>
+        <div className="flex items-center gap-4"><Button onClick={() => { setPartyBeingEdited(null); setIsModalOpen(true); }} className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"><FiPlus className="h-4 w-4" /> Add Party</Button></div>
       </div>
       {isLoading && (
         <div className="bg-blue-50 px-5 py-2 text-xs font-semibold text-blue-700 border-b border-blue-200">

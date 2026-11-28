@@ -637,7 +637,7 @@ export default function DeliveryChallans() {
             </thead>
             <tbody>
               {filtered.map((challan) => (
-                <tr key={challan.id} className="border-b border-slate-100 odd:bg-sky-100 even:bg-white">
+                <tr key={challan.id} className="border-b border-slate-100 bg-white hover:bg-slate-50/80 transition-colors">
                   <td className="px-3 py-4">{dateLabel(challan.date)}</td>
                   <td className="px-3 py-4 font-medium">{challan.party}</td>
                   <td className="px-3 py-4">{challan.number}</td>

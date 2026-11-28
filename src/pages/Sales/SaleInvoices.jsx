@@ -142,7 +142,7 @@ function downloadCsv(rows) {
 
 // Renders the empty state interface.
 function EmptyState({ onAddSale }) {
-  return <div className="flex min-h-[420px] flex-1 items-center justify-center px-5 py-12 text-center"><div className="max-w-sm"><div className="mx-auto grid h-32 w-32 place-items-center rounded-full bg-blue-50 text-blue-500"><FiTrendingUp className="h-16 w-16" /></div><h2 className="mt-6 text-lg font-bold text-slate-800">No sales recorded yet</h2><p className="mt-2 text-sm leading-6 text-slate-500">Create your first sale invoice to get started.</p><Button onClick={onAddSale} className="mt-6 bg-rose-600 text-white shadow-sm hover:bg-rose-700"><FiPlus className="h-5 w-5" /> Add Sale</Button></div></div>;
+  return <div className="flex min-h-[420px] flex-1 items-center justify-center px-5 py-12 text-center"><div className="max-w-sm"><div className="mx-auto grid h-32 w-32 place-items-center rounded-full bg-blue-50 text-blue-500"><FiTrendingUp className="h-16 w-16" /></div><h2 className="mt-6 text-lg font-bold text-slate-800">No sales recorded yet</h2><p className="mt-2 text-sm leading-6 text-slate-500">Create your first sale invoice to get started.</p><Button onClick={onAddSale} className="mt-6 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"><FiPlus className="h-5 w-5" /> Add Sale</Button></div></div>;
 }
 
 const graphPeriods = ["Daily", "Weekly", "Monthly", "Yearly"];
@@ -501,7 +501,7 @@ function SaleInvoices() {
     <div className="w-full max-w-full min-h-full bg-slate-200 p-1 flex flex-col">
       <div className="mb-1 flex flex-wrap gap-3 bg-white px-4 sm:px-5 py-3 sm:py-4 items-center justify-between">
         <h1 className="inline-flex items-center gap-2 sm:gap-3 text-lg sm:text-xl font-bold text-slate-800">Sale Invoices <FiChevronDown className="h-5 w-5 text-slate-500" /></h1>
-        <div className="flex items-center gap-3 shrink-0"><Button onClick={openAddSale} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700 whitespace-nowrap"><FiPlus className="h-5 w-5" /> Add Sale</Button></div>
+        <div className="flex items-center gap-3 shrink-0"><Button onClick={openAddSale} className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-xs transition whitespace-nowrap inline-flex items-center gap-1.5 cursor-pointer"><FiPlus className="h-4 w-4" /> Add Sale</Button></div>
       </div>
 
       <Card className="mb-1 p-3 sm:p-4 shadow-sm w-full min-w-0 max-w-full">

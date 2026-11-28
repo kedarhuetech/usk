@@ -381,7 +381,7 @@ export function buildUnifiedDocumentHtml(opts = {}) {
   <!-- Print and Close Actions Toolbar -->
   <div class="btn-bar">
     <button class="btn btn-primary" onclick="window.print()">
-      🖨️ Print Document
+      🖨️ Print / Save as PDF
     </button>
     <button class="btn" onclick="window.close()">
       ✕ Close
@@ -914,7 +914,7 @@ export function buildUnifiedStatementHtml({
 </head>
 <body>
   <div class="btn-bar">
-    <button class="btn btn-primary" onclick="window.print()">🖨️ Print Statement</button>
+    <button class="btn btn-primary" onclick="window.print()">🖨️ Print / Save as PDF</button>
     <button class="btn" onclick="window.close()">✕ Close</button>
   </div>
 

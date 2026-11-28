@@ -15,12 +15,12 @@
   --brand-charcoal-border: #252B37;
   --brand-charcoal-muted: #8F99AC;
 
-  --brand-orange: #FF5A1F;
-  --brand-orange-hover: #E84E0F;
-  --brand-orange-active: #D4430B;
-  --brand-orange-glow: rgba(255, 90, 31, 0.35);
-  --brand-orange-tint: rgba(255, 90, 31, 0.08);
-  --brand-orange-border: rgba(255, 90, 31, 0.25);
+  --brand-orange: #2563eb;
+  --brand-orange-hover: #1d4ed8;
+  --brand-orange-active: #1e40af;
+  --brand-orange-glow: rgba(37, 99, 235, 0.35);
+  --brand-orange-tint: rgba(37, 99, 235, 0.08);
+  --brand-orange-border: rgba(37, 99, 235, 0.25);
 }
 
 /* ── Baseline High-Contrast Typography (Light vs Dark Mode) ── */
@@ -65,9 +65,9 @@ html.dark table thead th {
 button.bg-blue-600,
 a.bg-blue-600,
 .bg-blue-600:not(.theme-exempt) {
-  background-color: #FF5A1F !important;
+  background-color: #2563eb !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 10px rgba(255, 90, 31, 0.28) !important;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25) !important;
   transition: all 0.15s ease-in-out !important;
 }
 
@@ -75,17 +75,17 @@ button.bg-blue-600:hover,
 a.bg-blue-600:hover,
 .hover\:bg-blue-700:hover,
 .hover\:bg-blue-600:hover {
-  background-color: #E84E0F !important;
-  box-shadow: 0 4px 14px rgba(255, 90, 31, 0.40) !important;
+  background-color: #1d4ed8 !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35) !important;
 }
 
 button.bg-blue-600:active,
 a.bg-blue-600:active,
 .active\:bg-blue-800:active {
-  background-color: #D4430B !important;
+  background-color: #1e40af !important;
 }
 
-/* ── Navy, Indigo & Hardcoded Brand Blue CTAs -> Bold Orange ── */
+/* ── Navy, Indigo & Hardcoded Brand Blue CTAs ── */
 button.bg-\[\#1A1F71\],
 button.bg-\[\#27308F\],
 button.bg-\[\#1a1f71\],
@@ -99,9 +99,9 @@ a.bg-indigo-600,
 .bg-\[\#27308F\]:not(.theme-exempt),
 .bg-\[\#1a1f71\]:not(.theme-exempt),
 .bg-indigo-600:not(.theme-exempt) {
-  background-color: #FF5A1F !important;
+  background-color: #2563eb !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 10px rgba(255, 90, 31, 0.28) !important;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25) !important;
   transition: all 0.15s ease-in-out !important;
 }
 
@@ -112,66 +112,66 @@ button.bg-indigo-600:hover,
 .hover\:bg-\[\#1A1F71\]:hover,
 .hover\:bg-\[\#27308F\]:hover,
 .hover\:bg-indigo-700:hover {
-  background-color: #E84E0F !important;
-  box-shadow: 0 4px 14px rgba(255, 90, 31, 0.40) !important;
+  background-color: #1d4ed8 !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35) !important;
 }
 
 .border-\[\#1A1F71\],
 .border-\[\#27308F\],
 .border-indigo-600 {
-  border-color: #FF5A1F !important;
+  border-color: #2563eb !important;
 }
 
 /* Secondary CTA / Outline buttons hover */
 .hover\:border-blue-500:hover,
 .hover\:border-blue-400:hover {
-  border-color: #FF5A1F !important;
+  border-color: #2563eb !important;
 }
 
 /* ── Form Controls, Focus States & Accents ── */
 input[type="checkbox"],
 input[type="radio"],
 .accent-blue-600 {
-  accent-color: #FF5A1F !important;
+  accent-color: #2563eb !important;
 }
 
 .focus\:border-blue-500:focus,
 .focus\:border-blue-600:focus,
 .focus\:border-blue-400:focus {
-  border-color: #FF5A1F !important;
+  border-color: #2563eb !important;
 }
 
 .focus-within\:border-blue-500:focus-within {
-  border-color: #FF5A1F !important;
+  border-color: #2563eb !important;
 }
 
 .focus\:ring-blue-100:focus,
 .focus\:ring-blue-500:focus {
-  --tw-ring-color: rgba(255, 90, 31, 0.25) !important;
+  --tw-ring-color: rgba(37, 99, 235, 0.25) !important;
 }
 
 /* ── Text Accents & Active Links ── */
 .text-blue-600:not(.theme-exempt),
 .hover\:text-blue-600:hover,
 .hover\:text-blue-700:hover {
-  color: #FF5A1F !important;
+  color: #2563eb !important;
 }
 
 /* ── Active Tab Indicators ── */
 .border-b-2.border-blue-600,
 .border-blue-600:not(table) {
-  border-color: #FF5A1F !important;
+  border-color: #2563eb !important;
 }
 
-/* ── Subtle Orange Tints for Selected Rows & Soft Accents ── */
+/* ── Subtle Tints for Selected Rows & Soft Accents ── */
 .bg-blue-50:not(.theme-exempt),
 .bg-sky-50:not(.theme-exempt) {
-  background-color: rgba(255, 90, 31, 0.06) !important;
+  background-color: rgba(37, 99, 235, 0.05) !important;
 }
 
 .hover\:bg-blue-50:hover,
 .hover\:bg-sky-50:hover {
-  background-color: rgba(255, 90, 31, 0.10) !important;
+  background-color: rgba(37, 99, 235, 0.08) !important;
 }
 
 /* Custom Scrollbars in Light & Dark ── Charcoal & Orange Accent */
@@ -187,7 +187,7 @@ input[type="radio"],
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #FF5A1F;
+  background: #2563eb;
 }
 
 /* Thicker, easy-to-grab scrollbar specifically for the Items list */
@@ -208,7 +208,7 @@ input[type="radio"],
   border: 2px solid #f1f5f9;
 }
 .item-list-scroll::-webkit-scrollbar-thumb:hover {
-  background: #FF5A1F;
+  background: #2563eb;
 }
 html.dark .item-list-scroll {
   scrollbar-color: #475569 #151821;
@@ -221,7 +221,7 @@ html.dark .item-list-scroll::-webkit-scrollbar-thumb {
   border-color: #151821;
 }
 html.dark .item-list-scroll::-webkit-scrollbar-thumb:hover {
-  background: #FF5A1F;
+  background: #2563eb;
 }
 
 
@@ -763,7 +763,7 @@ html.dark .text-\[\#107c41\] {
 }
 html.dark .bg-\[\#0078d4\],
 html.dark .hover\:bg-\[\#006abc\]:hover {
-  background-color: #FF5A1F !important;
+  background-color: #2563eb !important;
 }
 html.dark .bg-\[\#9da8b6\] {
   background-color: #334155 !important;
@@ -856,7 +856,7 @@ html.dark .bg-\[\#f4f4f4\] {
 /* PurchaseReturns hover MS-blue */
 html.dark .bg-\[\#006abc\],
 html.dark .hover\:bg-\[\#006abc\]:hover {
-  background-color: #FF5A1F !important;
+  background-color: #2563eb !important;
 }
 /* EditProfile delete button hover */
 html.dark .bg-\[\#be123c\],

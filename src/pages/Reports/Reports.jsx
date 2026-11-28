@@ -25,7 +25,9 @@ import SalePurchaseOrdersReport from "./SalePurchaseOrdersReport";
 import ExpenseReport from "./ExpenseReport";
 import GSTRateReport from "./GSTRateReport";
 import GSTReport from "./GSTReport";
-import ReportPrintPreviewModal from "../../components/Common/ReportPrintPreviewModal";
+import ReportPrintPreviewModal, { generateReportPdfBlob } from "../../components/Common/ReportPrintPreviewModal";
+import { getEffectiveCompanyInfo } from "../../services/unifiedPrintService.js";
+import { getCompanyProfile } from "../../services/companyProfileStorage.js";
 import { calculateInvoiceSettlement } from "../../services/partyBalances.js";
 import { getFinancialYearRange } from "../../utils/dateUtils.js";
 import { readTransactionCollection, readTransactionValue, transactionStorageKeys } from "../../services/transactionRepository.js";
@@ -36,6 +38,7 @@ import { toast } from "../../components/Common/Toast.jsx";
 import { isReportGroupVisible, isReportVisible } from "../../config/reportVisibility.js";
 import {
   FiBarChart2,
+  FiDownload,
   FiPrinter,
   FiSearch,
   FiShare2,
@@ -392,6 +395,7 @@ function Reports({ defaultReport }) {
   const [transactionType, setTransactionType] = useState("All Transaction");
   const [paymentFilter, setPaymentFilter] = useState("All Payment");
   const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [singlePrintRecord, setSinglePrintRecord] = useState(null);
 
   const isAllTransactions = activeReport === "All Transactions";
   const isPurchase = ["Purchase", "Purchase Bills"].includes(activeReport);
@@ -1052,7 +1056,7 @@ function Reports({ defaultReport }) {
               <button
                 type="button"
                 onClick={() => navigate("/sales/sale-invoices/new")}
-                className="rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-700"
+                className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition cursor-pointer"
               >
                 ＋ Add Sale
               </button>
@@ -1067,7 +1071,7 @@ function Reports({ defaultReport }) {
                   onClick={() =>
                     navigate("/purchase-expense/purchase-bills/new")
                   }
-                  className="rounded-full bg-rose-600 px-5 py-2 text-sm font-semibold text-white"
+                  className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition cursor-pointer"
                 >
                   ＋ Add Purchase
                 </button>
@@ -1306,9 +1310,51 @@ function Reports({ defaultReport }) {
                   title="Download Excel-compatible CSV"
                   aria-label="Download report"
                   onClick={exportCsv}
-                  className="rounded bg-emerald-600 px-1.5 py-1 text-xs font-bold text-white"
+                  className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white hover:bg-emerald-700 transition"
                 >
                   xls
+                </button>
+
+                <button
+                  type="button"
+                  title="Download PDF report"
+                  aria-label="Download PDF report"
+                  onClick={() => {
+                    try {
+                      const company = getEffectiveCompanyInfo();
+                      const profile = getCompanyProfile();
+                      const durationStr = !from && !to
+                        ? "All Dates"
+                        : from && to
+                        ? `From ${from} to ${to}`
+                        : from
+                        ? `From ${from}`
+                        : `Up to ${to}`;
+                      const res = generateReportPdfBlob({
+                        title: `${activeReport} Report`,
+                        companyName: company.name || "My Business",
+                        phone: company.phone || "",
+                        email: profile.emailId || profile.email || company.email || "",
+                        gstin: company.gstin || "",
+                        durationStr,
+                        user,
+                        records: visible,
+                        totalLabel: `Total ${activeReport}:`,
+                        calculatedTotal: totals.amount,
+                        timestampStr: new Date().toLocaleDateString("en-IN"),
+                        themeColor: company.themeColor || "#881337",
+                        filename: `${(activeReport || "Report").replace(/[^a-zA-Z0-9_-]/g, "_")}_Report.pdf`,
+                      });
+                      res.save();
+                      toast.success(`✓ ${activeReport} Report PDF downloaded!`);
+                    } catch {
+                      setPrintModalOpen(true);
+                    }
+                  }}
+                  className="flex items-center gap-1 rounded bg-rose-600 px-2 py-1 text-xs font-bold text-white hover:bg-rose-700 transition"
+                >
+                  <FiDownload size={13} />
+                  <span>PDF</span>
                 </button>
 
                 <button
@@ -1316,9 +1362,10 @@ function Reports({ defaultReport }) {
                   title="Print report"
                   aria-label="Print report"
                   onClick={() => setPrintModalOpen(true)}
-                  className="text-xl"
+                  className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition"
                 >
-                  <FiPrinter />
+                  <FiPrinter size={14} />
+                  <span>Print</span>
                 </button>
               </div>
             </div>
@@ -1467,7 +1514,16 @@ function Reports({ defaultReport }) {
                               <div className="flex items-center gap-3 text-slate-500">
                                 <button
                                   type="button"
-                                  onClick={() => setPrintModalOpen(true)}
+                                  onClick={() => {
+                                    const inv = row.raw || row.source || row;
+                                    if (inv) {
+                                      navigate("/sales/sale-invoices/preview", {
+                                        state: { invoice: inv, printAfterOpen: true },
+                                      });
+                                    } else {
+                                      setPrintModalOpen(true);
+                                    }
+                                  }}
                                   title="Print transaction"
                                   aria-label="Print transaction"
                                   className="hover:text-sky-600"
@@ -1536,7 +1592,11 @@ function Reports({ defaultReport }) {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setPrintModalOpen(true)}
+                                  onClick={() => {
+                                    const inv = row.raw || row.source || row;
+                                    setSinglePrintRecord(inv);
+                                    setPrintModalOpen(true);
+                                  }}
                                   className="text-slate-500 hover:text-sky-600 font-medium"
                                   title="Print purchase bill"
                                 >
@@ -1592,14 +1652,17 @@ function Reports({ defaultReport }) {
           </section>
           <ReportPrintPreviewModal
             isOpen={printModalOpen}
-            onClose={() => setPrintModalOpen(false)}
-            title={`${activeReport} Report`}
-            dateFrom={from}
-            dateTo={to}
+            onClose={() => {
+              setPrintModalOpen(false);
+              setSinglePrintRecord(null);
+            }}
+            title={singlePrintRecord ? (isPurchase ? "Purchase Bill" : "Sale Invoice") : `${activeReport} Report`}
+            dateFrom={singlePrintRecord ? undefined : from}
+            dateTo={singlePrintRecord ? undefined : to}
             user={user}
-            records={visible}
-            totalLabel={`Total ${activeReport}:`}
-            totalAmount={totals.amount}
+            records={singlePrintRecord ? [singlePrintRecord] : visible}
+            totalLabel={singlePrintRecord ? "Total Amount:" : `Total ${activeReport}:`}
+            totalAmount={singlePrintRecord ? amountOf(singlePrintRecord) : totals.amount}
           />
         </div>
       )}

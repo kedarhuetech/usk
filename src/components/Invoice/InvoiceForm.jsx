@@ -30,7 +30,7 @@ function InvoiceForm({ invoice, form, onChange, onSubmit }) {
         </button>
         <InvoiceCalculation form={form} onChange={onChange} />
         <div className="flex justify-center">
-          <Button onClick={onSubmit} className="bg-rose-600 text-white shadow-sm hover:bg-rose-700">
+          <Button onClick={onSubmit} className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold px-6 py-2.5 transition">
             <FiFilePlus /> Create Your First Invoice
           </Button>
         </div>

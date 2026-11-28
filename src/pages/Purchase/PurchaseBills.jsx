@@ -226,7 +226,7 @@ export default function PurchaseBills() {
       notes: bill.form?.notes || bill.notes || "",
       autoPrint: printNow,
     });
-    openPrintWindow(html, `Purchase_Bill_${billNum}`);
+    openPrintWindow(html, printNow);
   };
 
   const print = () => setPrintModalOpen(true);
@@ -239,29 +239,236 @@ export default function PurchaseBills() {
     const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" })); link.download = "purchase-bills.csv"; link.click(); URL.revokeObjectURL(link.href);
   };
 
-  return <div className="flex h-full min-h-0 w-full max-w-full flex-col gap-1.5 bg-slate-100 p-1.5 text-slate-700">
-    <header className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 bg-white px-4 sm:px-5 py-3"><h1 className="text-xl sm:text-2xl font-bold">Purchase Bills</h1><div className="flex gap-3 shrink-0"><Button onClick={addPurchase} className="rounded-full bg-rose-600 px-5 sm:px-6 text-white whitespace-nowrap"><FiPlus /> Add Purchase</Button></div></header>
-    <Card className="shrink-0 p-4 sm:p-5 w-full min-w-0 max-w-full"><div className="flex flex-wrap items-center gap-3 sm:gap-4"><label className="flex items-center gap-2 text-lg sm:text-xl font-semibold">{statusFilter}<FiChevronDown/><select aria-label="Invoice filter" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="absolute h-8 w-64 cursor-pointer opacity-0"><option>All Purchase Invoices</option><option>Paid</option><option>Unpaid</option></select></label><span className="flex items-center gap-2 rounded border px-3 py-2 text-sm"><FiCalendar/><input aria-label="From date" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />To<input aria-label="To date" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} /></span><button onClick={exportCsv} className="ml-auto flex flex-col items-center text-xs sm:text-sm"><span className="text-xl sm:text-2xl font-bold text-emerald-700">▦</span>Excel Report</button><button onClick={print} className="flex flex-col items-center text-xs sm:text-sm"><FiPrinter className="text-xl sm:text-2xl"/>Print</button></div><div className="mt-4 flex flex-wrap items-center gap-3 sm:gap-5"><div className="min-w-44 rounded-xl bg-teal-100 px-4 py-3 dark:bg-[#1d3354]"><p className="text-xs">Paid</p><strong className="text-xl sm:text-2xl">{money(paid)}</strong></div><span className="text-xl font-bold">+</span><div className="min-w-44 rounded-xl bg-blue-100 px-4 py-3 dark:bg-[#1d3354]"><p className="text-xs">Unpaid</p><strong className="text-xl sm:text-2xl">{money(unpaid)}</strong></div><span className="text-xl font-bold">=</span><div className="min-w-44 rounded-xl bg-orange-200 px-4 py-3 dark:bg-[#1d3354]"><p className="text-xs">Total</p><strong className="text-xl sm:text-2xl">{money(total)}</strong></div></div></Card>
-    <Card className="flex min-h-0 flex-1 flex-col overflow-hidden w-full min-w-0 max-w-full"><div className="flex shrink-0 items-center justify-between px-4 py-3"><h2 className="text-base sm:text-lg font-semibold">TRANSACTIONS</h2><label className="relative"><FiSearch className="absolute left-3 top-3 text-slate-400"/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search purchases" className="h-9 sm:h-10 w-48 sm:w-80 rounded border pl-9 pr-3 text-sm"/></label></div><div className="min-h-0 flex-1 w-full max-w-full overflow-x-auto overflow-y-auto"><table className="w-full min-w-[760px] border-collapse text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs font-bold text-slate-500"><tr>{["DATE", "INVOICE NO.", "PARTY NAME", "PAYMENT TYPE", "AMOUNT", "BALANCE DUE", "STATUS", "ACTIONS"].map((heading) => <th key={heading} className="border-y px-2.5 py-3 whitespace-nowrap">{heading}{heading !== "ACTIONS" && <FiFilter className="ml-1.5 inline"/>}</th>)}</tr></thead><tbody>{visible.map((bill) => { const amount = billTotal(bill), received = billPaid(bill), status = billSettlement(bill).paymentStatus; return <tr key={bill.id} className="border-b odd:bg-sky-100 even:bg-white"><td className="px-2.5 py-3 whitespace-nowrap">{dateText(bill.form?.invoiceDate || bill.date)}</td><td className="px-2.5 py-3 text-right font-medium">{bill.form?.invoiceNumber || bill.invoiceNumber || "—"}</td><td className="px-2.5 py-3 font-medium">{bill.form?.customer || bill.partyName || "Cash Purchase"}</td><td className="px-2.5 py-3">{bill.form?.paymentType || "Cash"}</td><td className="px-2.5 py-3 text-right whitespace-nowrap">{money(amount)}</td><td className="px-2.5 py-3 text-right whitespace-nowrap">{money(Math.max(0, amount - received))}</td><td className={`px-2.5 py-3 font-medium ${status === "Paid" ? "text-emerald-600" : status === "Partially Paid" ? "text-amber-600" : "text-rose-500"}`}>{status}</td><td className="relative px-2.5 py-3"><button aria-label="Purchase bill actions" onClick={() => setMenuId(menuId === bill.id ? "" : bill.id)} className="p-1.5 text-slate-500 hover:text-slate-800"><FiMoreVertical/></button>{menuId === bill.id && <div className="absolute right-3 top-10 z-30 w-44 rounded-lg bg-white p-1 shadow-xl border border-slate-200">{["View/Edit", "Open PDF", "Print", "Delete"].map((action) => <button key={action} onClick={() => { if (action === "Delete") remove(bill); else if (action === "Print") printSingleBill(bill, true); else if (action === "Open PDF") printSingleBill(bill, false); else { setMenuId(""); navigate("/purchase-expense/purchase-bills/new", { state: { from: "/purchase-expense/purchase-bills", editPurchase: bill } }); } }} className={`block w-full rounded px-3 py-2.5 text-left text-sm hover:bg-blue-50 ${action === "Delete" ? "text-rose-600 hover:bg-rose-50" : "text-slate-700"}`}>{action}</button>)}</div>}</td></tr>; })}</tbody></table>{!visible.length && <div className="flex h-full min-h-64 flex-col items-center justify-center text-slate-400"><div className="grid h-28 w-28 place-items-center rounded-full bg-blue-50 text-5xl text-blue-400">▤</div><h3 className="mt-5 text-lg font-semibold text-slate-700">No Transactions to show</h3><p className="mt-2">You haven't added any purchase bills yet.</p><Button onClick={addPurchase} className="mt-5 rounded-full bg-rose-600 px-6 text-white"><FiPlus/> Add Purchase</Button></div>}</div></Card>
-    <ConfirmModal
-      isOpen={confirmModal.isOpen}
-      title={confirmModal.title}
-      message={confirmModal.message}
-      confirmText={confirmModal.confirmText}
-      confirmColor={confirmModal.confirmColor}
-      onConfirm={confirmModal.onConfirm}
-      onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
-    />
-    <ReportPrintPreviewModal
-      isOpen={printModalOpen}
-      title="Purchase Bills Report"
-      dateFrom={fromDate}
-      dateTo={toDate}
-      user="Admin"
-      records={printRecords}
-      totalLabel="Total Purchase:"
-      totalAmount={total}
-      onClose={() => setPrintModalOpen(false)}
-    />
-  </div>;
+  return (
+    <div className="flex h-full min-h-0 w-full max-w-full flex-col gap-2.5 bg-slate-50/70 p-2 sm:p-4 text-slate-800">
+      {/* Top Header */}
+      <header className="flex min-h-[56px] flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-4 sm:px-6 py-3 shadow-2xs">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Purchase Bills</h1>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Manage and track your vendor bills, purchases, and payables</p>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <Button
+            onClick={addPurchase}
+            className="rounded-lg bg-blue-600 hover:bg-blue-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white shadow-xs transition inline-flex items-center gap-1.5 cursor-pointer"
+          >
+            <FiPlus className="h-4 w-4" /> Add Purchase
+          </Button>
+        </div>
+      </header>
+
+      {/* Filter and Metric Summary Card */}
+      <Card className="shrink-0 p-4 sm:p-5 w-full min-w-0 max-w-full border border-slate-200/80 bg-white shadow-2xs rounded-xl">
+        {/* Controls Toolbar */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+          <div className="relative inline-flex items-center">
+            <select
+              aria-label="Invoice filter"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="appearance-none rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-white pl-3.5 pr-8 py-2 text-xs sm:text-sm font-semibold text-slate-800 shadow-2xs hover:border-slate-300 focus:border-blue-500 focus:outline-none cursor-pointer transition"
+            >
+              <option>All Purchase Invoices</option>
+              <option>Paid</option>
+              <option>Unpaid</option>
+            </select>
+            <FiChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+          </div>
+
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/60 px-3 py-1.5 text-xs sm:text-sm text-slate-700 shadow-2xs">
+            <FiCalendar className="text-slate-400 h-4 w-4 shrink-0" />
+            <input
+              aria-label="From date"
+              type="date"
+              value={fromDate}
+              onChange={(event) => setFromDate(event.target.value)}
+              className="bg-transparent text-slate-700 outline-none text-xs sm:text-sm"
+            />
+            <span className="text-slate-400 font-medium">To</span>
+            <input
+              aria-label="To date"
+              type="date"
+              value={toDate}
+              onChange={(event) => setToDate(event.target.value)}
+              className="bg-transparent text-slate-700 outline-none text-xs sm:text-sm"
+            />
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exportCsv}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition cursor-pointer"
+              title="Export to Excel CSV"
+            >
+              <span className="font-bold text-emerald-600">xls</span>
+              <span>Excel Report</span>
+            </button>
+            <button
+              type="button"
+              onClick={print}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition cursor-pointer"
+              title="Print Purchase Bills Report"
+            >
+              <FiPrinter className="h-4 w-4 text-slate-500" />
+              <span>Print</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Clean, Modern Metric Cards (Light, Professional Theme) */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 items-stretch">
+          {/* Paid Card */}
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 transition hover:bg-emerald-50/60">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700">Paid Amount</span>
+              <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Paid</span>
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">{money(paid)}</p>
+          </div>
+
+          {/* Unpaid Card */}
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-4 transition hover:bg-amber-50/60">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Unpaid Balance</span>
+              <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">Due</span>
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">{money(unpaid)}</p>
+          </div>
+
+          {/* Total Card */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 transition hover:bg-slate-100/60">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Total Purchase</span>
+              <span className="inline-flex items-center rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700">{visible.length} bills</span>
+            </div>
+            <p className="mt-2 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">{money(total)}</p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Transactions Table Card */}
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden w-full min-w-0 max-w-full border border-slate-200/80 bg-white shadow-2xs rounded-xl">
+        <div className="flex shrink-0 items-center justify-between px-4 sm:px-5 py-3 border-b border-slate-100 bg-white">
+          <h2 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700">TRANSACTIONS</h2>
+          <label className="relative">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search purchases..."
+              className="h-9 w-48 sm:w-72 rounded-lg border border-slate-200 bg-slate-50/60 pl-9 pr-3 text-xs sm:text-sm text-slate-700 placeholder-slate-400 outline-none transition focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </label>
+        </div>
+
+        <div className="min-h-0 flex-1 w-full max-w-full overflow-x-auto overflow-y-auto">
+          <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+            <thead className="sticky top-0 z-10 bg-slate-50/90 backdrop-blur-xs text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+              <tr>
+                {["DATE", "INVOICE NO.", "PARTY NAME", "PAYMENT TYPE", "AMOUNT", "BALANCE DUE", "STATUS", "ACTIONS"].map((heading) => (
+                  <th key={heading} className="px-3 py-3 whitespace-nowrap">
+                    {heading}
+                    {heading !== "ACTIONS" && <FiFilter className="ml-1.5 inline text-slate-400" />}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {visible.map((bill) => {
+                const amount = billTotal(bill);
+                const received = billPaid(bill);
+                const status = billSettlement(bill).paymentStatus;
+                return (
+                  <tr key={bill.id} className="bg-white hover:bg-slate-50/80 transition-colors">
+                    <td className="px-3 py-3.5 text-xs text-slate-600 whitespace-nowrap">{dateText(bill.form?.invoiceDate || bill.date)}</td>
+                    <td className="px-3 py-3.5 text-xs font-semibold text-slate-800 text-right whitespace-nowrap">{bill.form?.invoiceNumber || bill.invoiceNumber || "—"}</td>
+                    <td className="px-3 py-3.5 text-xs font-semibold text-slate-900">{bill.form?.customer || bill.partyName || "Cash Purchase"}</td>
+                    <td className="px-3 py-3.5 text-xs text-slate-600">{bill.form?.paymentType || "Cash"}</td>
+                    <td className="px-3 py-3.5 text-xs text-right font-bold text-slate-900 whitespace-nowrap">{money(amount)}</td>
+                    <td className="px-3 py-3.5 text-xs text-right font-semibold text-slate-700 whitespace-nowrap">{money(Math.max(0, amount - received))}</td>
+                    <td className="px-3 py-3.5 whitespace-nowrap">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                        status === "Paid"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                          : status === "Partially Paid"
+                          ? "bg-amber-50 text-amber-700 border border-amber-200/60"
+                          : "bg-rose-50 text-rose-700 border border-rose-200/60"
+                      }`}>
+                        {status}
+                      </span>
+                    </td>
+                    <td className="relative px-3 py-3.5">
+                      <button
+                        aria-label="Purchase bill actions"
+                        onClick={() => setMenuId(menuId === bill.id ? "" : bill.id)}
+                        className="rounded-md p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                      >
+                        <FiMoreVertical className="h-4 w-4" />
+                      </button>
+                      {menuId === bill.id && (
+                        <div className="absolute right-3 top-10 z-30 w-44 rounded-lg bg-white p-1 shadow-xl border border-slate-200">
+                          {["View/Edit", "Open PDF", "Print", "Delete"].map((action) => (
+                            <button
+                              key={action}
+                              onClick={() => {
+                                if (action === "Delete") remove(bill);
+                                else if (action === "Print") printSingleBill(bill, true);
+                                else if (action === "Open PDF") printSingleBill(bill, false);
+                                else {
+                                  setMenuId("");
+                                  navigate("/purchase-expense/purchase-bills/new", {
+                                    state: { from: "/purchase-expense/purchase-bills", editPurchase: bill },
+                                  });
+                                }
+                              }}
+                              className={`block w-full rounded px-3 py-2 text-left text-xs sm:text-sm font-medium hover:bg-slate-50 transition cursor-pointer ${
+                                action === "Delete" ? "text-rose-600 hover:bg-rose-50" : "text-slate-700"
+                              }`}
+                            >
+                              {action}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {!visible.length && (
+            <div className="flex h-full min-h-64 flex-col items-center justify-center text-slate-400">
+              <div className="grid h-24 w-24 place-items-center rounded-full bg-slate-100 text-4xl text-slate-400">▤</div>
+              <h3 className="mt-4 text-base font-semibold text-slate-700">No Transactions to show</h3>
+              <p className="mt-1 text-xs text-slate-500">You haven't added any purchase bills yet.</p>
+              <Button onClick={addPurchase} className="mt-4 rounded-lg bg-blue-600 hover:bg-blue-700 px-5 text-xs sm:text-sm text-white font-semibold">
+                <FiPlus className="h-4 w-4" /> Add Purchase
+              </Button>
+            </div>
+          )}
+        </div>
+      </Card>
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        confirmColor={confirmModal.confirmColor}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+      <ReportPrintPreviewModal
+        isOpen={printModalOpen}
+        title="Purchase Bills Report"
+        dateFrom={fromDate}
+        dateTo={toDate}
+        user="Admin"
+        records={printRecords}
+        totalLabel="Total Purchase:"
+        totalAmount={total}
+        onClose={() => setPrintModalOpen(false)}
+      />
+    </div>
+  );
 }

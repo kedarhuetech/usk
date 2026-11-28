@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   BACKUP_FORMAT,
   BACKUP_LAST_CREATED_KEY,
+  BACKUP_SOURCES,
   collectBackupData,
   createBackupPayload,
   downloadBackupFile,
@@ -18,6 +19,12 @@ import { getLoanAccountsStorageKey } from "./loanAccountsRepository.js";
 import { partiesStorageKey } from "./partiesStorage.js";
 import { purchaseBillsStorageKey } from "./purchaseBillsStorage.js";
 import { saleInvoicesStorageKey } from "./salesStorage.js";
+import { transactionStorageKeys } from "../constants/transactionStorageKeys.js";
+
+test("backup and sales storage share the dependency-free invoice key", () => {
+  assert.equal(saleInvoicesStorageKey, transactionStorageKeys.sales);
+  assert.ok(BACKUP_SOURCES.some((source) => source.key === transactionStorageKeys.sales));
+});
 
 const now = new Date("2026-10-28T12:30:45.000Z");
 
